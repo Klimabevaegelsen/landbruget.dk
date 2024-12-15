@@ -1,0 +1,466 @@
+2024-12-15 | Merge pull request #204 from martincollignon/fix/geometry-validation-logging-v2
+2024-12-15 | feat: improve geometry validation logging
+2024-12-15 | feat: improve geometry validation and logging
+2024-12-15 | Merge pull request #203 from martincollignon/fix/improve-geometry-validation
+2024-12-15 | fix: update geometry validator import in water_projects
+2024-12-15 | Merge pull request #202 from martincollignon/fix/improve-geometry-validation
+2024-12-15 | fix: consolidate geometry validation into single robust function
+2024-12-15 | Merge pull request #201 from martincollignon/fix/geometry-validation-utm
+2024-12-15 | fix: improve geometry validation by working in UTM
+2024-12-14 | Merge pull request #200 from martincollignon/debug/water-projects-invalid-geometries
+2024-12-14 | debug: Add detailed logging for invalid geometries
+2024-12-14 | Merge pull request #199 from martincollignon/fix/water-projects-final-bigquery-check
+2024-12-14 | fix: Add final BigQuery validity check for water projects
+2024-12-14 | Merge pull request #198 from martincollignon/fix/water-projects-dissolve-in-wgs84
+2024-12-14 | fix: Dissolve water projects in WGS84
+2024-12-14 | Merge pull request #197 from martincollignon/fix/improve-water-projects-geometry-cleaning
+2024-12-14 | fix: Improve geometry cleaning in water projects
+2024-12-14 | Merge pull request #196 from martincollignon/fix/improve-water-projects-geometry-cleaning
+2024-12-14 | fix: Improve geometry cleaning in water projects
+2024-12-14 | Merge pull request #195 from martincollignon/fix/remove-duplicate-crs-conversion
+2024-12-14 | fix: Remove duplicate CRS conversion in water projects
+2024-12-14 | Merge pull request #194 from martincollignon/fix/water-projects-validation-order
+2024-12-14 | fix: Reorder geometry operations to maintain validity
+2024-12-14 | Merge pull request #193 from martincollignon/fix/water-projects-dissolve-cleaning
+2024-12-14 | fix: Add geometry cleaning after dissolve operation to fix BigQuery invalid geometries
+2024-12-14 | Merge pull request #192 from martincollignon/fix/geometry-orientation
+2024-12-14 | fix: ensure proper geometry orientation for BigQuery
+2024-12-14 | Merge pull request #191 from martincollignon/fix/geometry-orientation
+2024-12-14 | fix: ensure proper geometry orientation for BigQuery
+2024-12-14 | Merge pull request #190 from martincollignon/fix/water-projects-geometry
+2024-12-14 | fix: add buffer(0) to fix self-intersecting geometries in water projects dissolve
+2024-12-14 | Merge pull request #189 from martincollignon/fix/water-projects-dissolve
+2024-12-14 | fix: improve water projects dissolve process
+2024-12-14 | Merge pull request #188 from martincollignon/fix/remove-double-dissolve
+2024-12-14 | fix: remove double dissolve operation
+2024-12-14 | Merge pull request #187 from martincollignon/fix/debug-dissolve-operation
+2024-12-14 | fix: improve CRS handling in water projects dissolve
+2024-12-14 | Merge pull request #185 from martincollignon/fix/handle-multipolygon-dissolve
+2024-12-14 | fix: handle multipolygon dissolve results
+2024-12-14 | Merge pull request #184 from martincollignon/fix/add-geometry-debugging
+2024-12-14 | fix: add geometry debugging info
+2024-12-14 | Merge pull request #182 from martincollignon/fix/geometry-validator-crs
+2024-12-14 | fix: improve CRS handling in geometry validator
+2024-12-14 | Merge pull request #181 from martincollignon/fix/water-projects-geometry-validation
+2024-12-14 | fix: use geometry validator for dissolved water projects
+2024-12-14 | Merge pull request #180 from martincollignon/fix/arcgis-ssl-handling
+2024-12-14 | fix: add SSL handling for ArcGIS requests and optimize aiohttp
+2024-12-14 | Update water_projects.py
+2024-12-12 | Merge pull request #179 from martincollignon/fix/water-projects-connection-resets
+2024-12-12 | fix: improve connection reset handling in water projects parser
+2024-12-12 | Merge pull request #178 from martincollignon/feat/water-projects-parser
+2024-12-12 | feat: add water projects parser implementation
+2024-12-10 | Merge pull request #176 from martincollignon/fix/wetlands-efficient-merge
+2024-12-10 | feat(wetlands): implement efficient edge-based polygon merging
+2024-12-10 | Merge pull request #175 from martincollignon/fix/wetlands-efficient-merge
+2024-12-10 | feat(wetlands): implement efficient edge-based polygon merging
+2024-12-10 | Merge pull request #174 from martincollignon/fix/wetlands-efficient-merge
+2024-12-10 | fix(wetlands): add missing _fetch_chunk method for batch processing
+2024-12-10 | Merge pull request #173 from martincollignon/fix/wetlands-efficient-merge
+2024-12-10 | feat(wetlands): improve geometry merging and add detailed statistics
+2024-12-10 | Merge pull request #172 from martincollignon/fix/wetlands-efficient-merge
+2024-12-10 | Implement efficient wetland feature merging
+2024-12-10 | Implement efficient wetland feature merging
+2024-12-10 | Merge pull request #171 from martincollignon/fix/adjacent-wetlands-merge
+2024-12-10 | Fix wetlands merge for adjacent features
+2024-12-10 | Merge pull request #170 from martincollignon/feature/separate-dissolved-polygons
+2024-12-10 | Keep dissolved wetland polygons separate
+2024-12-10 | Merge pull request #169 from martincollignon/feature/optimize-grid-boundaries
+2024-12-10 | Optimize grid cell boundary merging
+2024-12-10 | Merge pull request #168 from martincollignon/feature/optimize-grid-merge
+2024-12-10 | Optimize wetlands grid cell merging
+2024-12-10 | Add comprehensive geometry fixes before union
+2024-12-09 | Merge pull request #167 from martincollignon/feature/optimize-wetlands-union
+2024-12-09 | Optimize wetlands union process
+2024-12-08 | Merge pull request #166 from martincollignon/feature/optimize-wetlands-dissolution
+2024-12-08 | Optimize wetlands dissolution using gridcode
+2024-12-08 | Merge pull request #165 from martincollignon/feature/optimize-wetlands-dissolution
+2024-12-08 | Optimize wetlands dissolution using gridcode
+2024-12-08 | Merge pull request #164 from martincollignon/feature/wetlands-memory-cleanup
+2024-12-08 | Optimize wetlands processing
+2024-12-08 | Merge pull request #163 from martincollignon/feature/add-dask-parallel
+2024-12-08 | Add Dask parallel processing for wetlands dissolution
+2024-12-08 | Merge pull request #162 from martincollignon/fix/cadastral-parser
+2024-12-08 | fix(cadastral): Improve feature parsing and error handling
+2024-12-08 | Merge pull request #161 from martincollignon/fix/cadastral-parser
+2024-12-08 | fix(cadastral): Improve feature parsing and error handling
+2024-12-08 | Merge pull request #160 from martincollignon/feature/add-geometry-dissolution
+2024-12-08 | Add geometry dissolution to wetlands and water projects parsers
+2024-12-08 | Refactor wetlands parser with working file approach
+2024-12-08 | Add working file handling to wetlands parser
+2024-12-08 | Add feature fetching methods to Wetlands parser
+2024-12-08 | Fix wetlands sync timeout handling
+2024-12-08 | Implement safe data accumulation with working files
+2024-12-07 | Implement safe data accumulation with working files
+2024-12-07 | Fix import path in base.py
+2024-12-07 | Implement safe data accumulation with temporary files
+2024-12-07 | Fix data accumulation in parsers
+2024-12-07 | Fix import path in crop codes parser
+2024-12-07 | Remove crops from main sync process
+2024-12-07 | Add crop codes support and dependencies
+2024-12-07 | Add crop codes handler to parser registry
+2024-12-07 | Change crop codes storage format to Parquet
+2024-12-07 | Fix column names in agricultural fields parser
+2024-12-07 | Fix geometry handling in wetlands parser
+2024-12-07 | Merge pull request #159 from martincollignon/feat/parallel-builds
+2024-12-07 | Add geometry validator and update parsers to transform CRS for BigQuery compatibility
+2024-12-06 | Merge pull request #158 from martincollignon/feat/parallel-builds
+2024-12-06 | perf: parallelize container builds in GitHub Actions workflow
+2024-12-06 | Merge pull request #157 from martincollignon/feat/add-nst-climate-projects
+2024-12-06 | feat: add NST climate lowland projects via ArcGIS REST API
+2024-12-04 | Add crop codes data source and sync job
+2024-12-04 | Add crop codes parser and reference PDF data
+2024-12-04 | Fix crop codes parser to handle multi-line entries and improve category detection
+2024-12-04 | Switch agricultural fields source from WFS to ArcGIS REST API
+2024-12-04 | Delete backend/src/sources/static/pesticides directory
+2024-12-03 | fix: improve agricultural fields sync robustness
+2024-12-03 | perf: optimize agricultural fields sync with concurrent requests and better batch sizes
+2024-12-03 | refactor: consolidate base Source class and fix imports
+2024-12-03 | fix: initialize bucket from config in agricultural fields parser
+2024-12-03 | fix: use config values and improve error logging for agricultural fields parser
+2024-12-03 | fix: handle session closure and simplify sync process for agricultural fields
+2024-12-03 | fix: add custom write_to_storage implementation for agricultural fields to handle GeoDataFrame
+2024-12-03 | refactor: remove unused Airflow installation from sync Dockerfile
+2024-12-03 | fix: use pipe separator for job configs to handle secret versions correctly
+2024-12-03 | refactor: consolidate source handlers and sync logic
+2024-12-03 | refactor: update deploy workflow to use consolidated data-sync image
+2024-12-03 | refactor: update build configs to use consolidated data-sync image
+2024-12-03 | refactor: consolidate sync jobs into single container image and remove Airflow
+2024-12-03 | Merge pull request #155 from martincollignon/feature/agricultural-fields-sync
+2024-12-03 | feat: add agricultural fields sync
+2024-12-01 | Add dataset-specific validation pipelines, update DAG and Dockerfile, remove old validation file
+2024-12-01 | Add dataset-specific validation pipelines, update Dockerfile.processing, and remove old validation file
+2024-12-01 | Add dataset-specific validation pipelines and update Dockerfile.processing
+2024-12-01 | feat: add fsspec and gcsfs dependencies for GCS file handling
+2024-12-01 | refactor: restructure Dataflow pipeline with proper DoFn classes
+2024-12-01 | refactor: simplify Dataflow code following Beam examples
+2024-12-01 | fix: add setup_file option to Dataflow job for dependencies
+2024-12-01 | fix: move imports inside functions for Dataflow launcher compatibility
+2024-12-01 | fix: update Dockerfile.processing to use correct setup.py path
+2024-12-01 | fix: restructure dataflow code and container setup
+2024-12-01 | Merge pull request #154 from martincollignon/fix/remove-value-provider-get
+2024-12-01 | fix: remove .get() calls from options
+2024-12-01 | Merge pull request #153 from martincollignon/fix/dataflow-script-fixes
+2024-12-01 | fix: correct Dataflow script issues
+2024-12-01 | Merge pull request #152 from martincollignon/fix/beam-version-match
+2024-12-01 | fix: match Beam versions between environments
+2024-12-01 | Merge pull request #151 from martincollignon/fix/remove-container-entrypoint
+2024-12-01 | fix: remove container entrypoint for Dataflow compatibility
+2024-12-01 | Merge pull request #150 from martincollignon/fix/remove-requirements-options
+2024-12-01 | fix: remove setup and requirements options from Dataflow job
+2024-12-01 | Merge pull request #149 from martincollignon/fix/dataflow-imports
+2024-12-01 | fix: refactor dataflow script for worker imports
+2024-12-01 | Merge pull request #148 from martincollignon/fix/dataflow-requirements
+2024-12-01 | fix: add setup and requirements files to Dataflow job
+2024-12-01 | Merge pull request #147 from martincollignon/fix/dataflow-processing-setup
+2024-12-01 | fix: setup dataflow processing container and update DAG to use it
+2024-12-01 | Merge pull request #146 from martincollignon/feature/add-dataflow-processing
+2024-12-01 | feat: add dataflow-processing service to deployment workflow
+2024-12-01 | Restore explicit setup.py sync in workflow
+2024-12-01 | Update sync workflow to use correct bucket and rsync for clean syncs
+2024-12-01 | Simplify DAG configuration and use container directly
+2024-12-01 | Add project ID to Dataflow options
+2024-12-01 | Add setup.py and update DAG configuration for Dataflow jobs
+2024-12-01 | Merge pull request #145 from martincollignon/cleanup/remove-wetland-analysis
+2024-12-01 | refactor: remove wetland analysis service - Remove wetland-analysis from deploy jobs - Remove wetland analysis from sync_app.py - Delete wetland analysis source and script
+2024-12-01 | Merge pull request #144 from martincollignon/feature/dataflow-processing
+2024-12-01 | feat: update workflow to use Dockerfile.processing for Dataflow jobs
+2024-12-01 | Merge pull request #143 from martincollignon/feature/dataflow-processing
+2024-12-01 | feat: add Dataflow processing pipeline - Add Dataflow container with geospatial support - Update DAG to use custom container - Configure geometry validation pipeline
+2024-12-01 | Merge pull request #142 from martincollignon/feature/update-processing-dag
+2024-12-01 | fix: update Dataflow operator to use DataflowCreatePythonJobOperator
+2024-12-01 | Merge pull request #141 from martincollignon/feature/update-processing-dag
+2024-12-01 | feat: update data processing DAG with improved configuration
+2024-12-01 | Merge pull request #140 from martincollignon/feature/docker-optimizations
+2024-12-01 | optimize: improve docker layer caching for all dockerfiles
+2024-12-01 | optimize: improve docker layer caching for all dockerfiles
+2024-12-01 | Merge pull request #139 from martincollignon/feat/dataflow-sync-workflow
+2024-12-01 | Refactor: Rename Dockerfile.validation to Dockerfile.processing for clarity
+2024-12-01 | Update: Add requirements.txt sync and reference in DAG
+2024-12-01 | Refactor: Replace individual workflows with combined GCS sync and unified DAG
+2024-12-01 | Refactor: Replace individual workflows with combined GCS sync and unified DAG
+2024-11-30 | Merge pull request #138 from martincollignon/feat/dataflow-sync-workflow
+2024-11-30 | Fix: Update GCP authentication in Dataflow sync workflow
+2024-11-30 | Merge pull request #137 from martincollignon/feat/dataflow-sync-workflow
+2024-11-30 | Add manual trigger to Dataflow sync workflow
+2024-11-30 | Merge pull request #136 from martincollignon/feat/dataflow-sync-workflow
+2024-11-30 | Add workflow to sync Dataflow scripts to GCS and remove geometry-validation from Cloud Run jobs
+2024-11-30 | Merge pull request #135 from martincollignon/fix/geometry-validation-dockerfile
+2024-11-30 | Fix: Add conditional Dockerfile selection for geometry-validation service
+2024-11-30 | Merge pull request #134 from martincollignon/fix/geometry-validation-dockerfile
+2024-11-30 | Fix: Add conditional Dockerfile selection for geometry-validation service
+2024-11-30 | Merge pull request #133 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Add scripts directory to Dockerfile.validation for sync_app module
+2024-11-30 | Merge pull request #132 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Remove empty secrets from geometry-validation job to resolve clear_secrets error
+2024-11-30 | Merge pull request #131 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Remove empty secrets from geometry-validation job to resolve clear_secrets error
+2024-11-30 | Merge pull request #130 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Update apache-beam to 2.61.0 for Python 3.12 support (ref: cloud.google.com/dataflow/docs/support/beam-runtime-support)
+2024-11-30 | Merge pull request #129 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Apply numpy>=1.26.4 fix to sync Dockerfile as well
+2024-11-30 | Fix: Force numpy>=1.26.4 for Python 3.12 compatibility
+2024-11-30 | Merge pull request #128 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Install numpy>=1.26.4 first to resolve Python 3.12 compatibility (ref: SO#77364550)
+2024-11-30 | Merge pull request #127 from martincollignon/fix/python-3.12-compatibility
+2024-11-30 | Fix: Update package versions and installation order for Python 3.12 compatibility
+2024-11-30 | Merge pull request #126 from martincollignon/1.26.4
+2024-11-30 | Update package versions for Python 3.12 compatibility
+2024-11-30 | Merge pull request #125 from martincollignon/feature/geoparquet-storage
+2024-11-30 | Update package versions for Python 3.12 compatibility
+2024-11-30 | Merge pull request #124 from martincollignon/feature/geoparquet-storage
+2024-11-30 | Optimize Dockerfiles with GDAL base image
+2024-11-30 | Merge pull request #123 from martincollignon/feature/geoparquet-storage
+2024-11-30 | Fix: Add python3-distutils to Dockerfile.validation
+2024-11-30 | Fix: Add python3-distutils to Dockerfile.validation
+2024-11-30 | Merge pull request #122 from martincollignon/feature/geoparquet-storage
+2024-11-30 | Add geometry validation pipeline
+2024-11-30 | Merge pull request #121 from martincollignon/feature/geoparquet-storage
+2024-11-30 | refactor: remove database connections from sync scripts
+2024-11-30 | Merge pull request #120 from martincollignon/feature/geoparquet-storage
+2024-11-30 | fix: add geopandas and GDAL dependencies
+2024-11-30 | Merge pull request #119 from martincollignon/feature/geoparquet-storage
+2024-11-30 | Migrate parsers to GeoParquet and Cloud Storage
+2024-11-27 | Merge pull request #118 from martincollignon/feature/water-projects-combined-polygons
+2024-11-27 | refactor: split water projects combined layer into individual polygons
+2024-11-27 | Merge pull request #117 from martincollignon/feature/wetland-analysis
+2024-11-27 | feat: add wetland analysis job and update ignore files
+2024-11-27 | Merge pull request #116 from martincollignon/feature/wetland-analysis
+2024-11-27 | feat: add wetland analysis job and update ignore files
+2024-11-27 | Merge pull request #115 from martincollignon/feature/wetland-analysis
+2024-11-27 | feat: add wetland analysis job and update ignore files
+2024-11-27 | feat: add wetland analysis job and update ignore files
+2024-11-27 | Merge pull request #114 from martincollignon/feature/wetland-analysis
+2024-11-27 | feat: add wetland analysis job and update ignore files
+2024-11-27 | Merge pull request #113 from martincollignon/fix/water-projects-type-conversion
+2024-11-27 | fix: improve type conversion for water projects data
+2024-11-27 | Merge pull request #112 from martincollignon/fix/water-projects-type-conversion
+2024-11-27 | fix: improve type conversion for water projects data
+2024-11-27 | Merge pull request #111 from martincollignon/fix/water-projects-type-conversion
+2024-11-27 | fix: improve type conversion for water projects data
+2024-11-27 | Merge pull request #110 from martincollignon/fix/water-projects-type-conversion
+2024-11-27 | fix: improve geometry parsing in water projects parser
+2024-11-27 | Merge pull request #109 from martincollignon/fix/water-projects-geometry-parsing
+2024-11-27 | fix: improve geometry parsing in water projects parser
+2024-11-26 | Merge pull request #108 from martincollignon/fix/water-projects-geometry-parsing
+2024-11-26 | fix: improve geometry parsing in water projects parser
+2024-11-26 | Merge pull request #107 from martincollignon/fix/water-projects-geometry-parsing
+2024-11-26 | fix: improve geometry parsing in water projects parser
+2024-11-26 | Merge pull request #106 from martincollignon/fix/water-projects-geometry-parsing
+2024-11-26 | fix: improve geometry parsing in water projects parser
+2024-11-26 | Merge pull request #105 from martincollignon/feature/water-projects-combined-layer
+2024-11-26 | Add detailed logging for water projects sync
+2024-11-26 | Merge pull request #104 from martincollignon/feature/water-projects-combined-layer
+2024-11-26 | Add additional logging for combined layer creation process
+2024-11-26 | Merge pull request #103 from martincollignon/feature/water-projects-combined-layer
+2024-11-26 | Fix: Initialize create_combined attribute in WaterProjects class
+2024-11-26 | Merge pull request #102 from martincollignon/feature/water-projects-combined-layer
+2024-11-26 | Add combined layer functionality to water projects
+2024-11-26 | Merge pull request #101 from martincollignon/feature/add-kla-water-projects
+2024-11-26 | feat: add KLA water project layers from MIM endpoint
+2024-11-26 | Merge pull request #100 from martincollignon/feature/add-kla-water-projects
+2024-11-26 | feat: add KLA water project layers from MIM endpoint
+2024-11-26 | Merge pull request #99 from martincollignon/feature/water-projects-parser
+2024-11-26 | fix: add detailed XML parsing diagnostics and better namespace handling
+2024-11-26 | Merge pull request #98 from martincollignon/feature/water-projects-parser
+2024-11-26 | fix: add detailed XML parsing diagnostics and better namespace handling
+2024-11-26 | Merge pull request #97 from martincollignon/feature/water-projects-parser
+2024-11-26 | fix: add detailed XML parsing diagnostics and better namespace handling
+2024-11-26 | Merge pull request #96 from martincollignon/feature/water-projects-parser
+2024-11-26 | fix: improve XML parsing to handle all water project layers including N2000
+2024-11-26 | Merge pull request #95 from martincollignon/feature/water-projects-parser
+2024-11-26 | feat: add comprehensive logging to water projects parser
+2024-11-26 | Merge pull request #94 from martincollignon/feature/water-projects-parser
+2024-11-26 | feat: add water projects parser and sync functionality
+2024-11-26 | feat: add water projects parser and sync functionality
+2024-11-26 | Merge pull request #93 from martincollignon/fix/wetlands-sync
+2024-11-26 | Fix timeout configuration in wetlands parser
+2024-11-26 | Merge pull request #92 from martincollignon/fix/wetlands-sync
+2024-11-26 | Update wetlands parser to use shapely directly
+2024-11-26 | Merge branch 'feature/wetlands-sync'
+2024-11-26 | Consolidate sync jobs into single workflow
+2024-11-26 | Consolidate sync jobs into single workflow
+2024-11-26 | Consolidate sync jobs into single workflow
+2024-11-26 | Merge pull request #91 from martincollignon/feature/wetlands-sync
+2024-11-26 | Consolidate sync job deployments into single workflow
+2024-11-26 | Consolidate sync job deployments into single workflow
+2024-11-26 | Consolidate sync job deployments into single workflow
+2024-11-26 | Merge pull request #90 from martincollignon/feature/wetlands-sync
+2024-11-26 | Add wetlands sync Cloud Run job workflow
+2024-11-26 | Merge pull request #89 from martincollignon/feature/wetlands-sync
+2024-11-26 | Add wetlands sync parser and script
+2024-11-26 | Merge pull request #88 from martincollignon/feature/wetlands-sync
+2024-11-26 | Add wetlands sync parser and script
+2024-11-26 | fix: improve cloud run job configuration and syntax
+2024-11-26 | fix: improve cloud run job configuration and syntax
+2024-11-26 | Merge pull request #87 from martincollignon/fix/optimize-requirements
+2024-11-26 | fix: remove pandas dependency from base class
+2024-11-26 | Merge pull request #86 from martincollignon/fix/optimize-requirements
+2024-11-26 | fix: optimize requirements.txt for cadastral sync service
+2024-11-26 | Merge pull request #85 from martincollignon/feat/cadastral-rate-limiting
+2024-11-26 | feat: add rate limiting and retry logic to cadastral parser
+2024-11-26 | Merge pull request #84 from martincollignon/fix/cadastral-logging
+2024-11-26 | feat: implement cadastral sync with correct total count and chunking
+2024-11-26 | Merge pull request #83 from martincollignon/fix/cadastral-logging
+2024-11-26 | Add detailed logging for WFS requests
+2024-11-26 | Merge pull request #82 from martincollignon/fix/cadastral-pagination
+2024-11-25 | Fix cadastral pagination to match working test script
+2024-11-25 | Merge pull request #81 from martincollignon/fix/cadastral-count-limit
+2024-11-25 | Fix cadastral total count to return full dataset
+2024-11-25 | Fix cadastral total count to handle full 2.1M+ features
+2024-11-25 | Merge pull request #80 from martincollignon/fix/cadastral-count
+2024-11-25 | Fix cadastral total count to handle full 2.1M+ features
+2024-11-25 | Merge pull request #79 from martincollignon/feature/optimize-cadastral-sync
+2024-11-25 | Optimize Cadastral sync with better timeouts and pagination handling
+2024-11-25 | Add test files and update gitignore
+2024-11-25 | Add test files and update gitignore
+2024-11-25 | Clean up requirements.txt location and add test files
+2024-11-25 | Fix requirements.txt path in Dockerfile.sync
+2024-11-25 | Add psutil dependency and update sync implementation for Cloud Run
+2024-11-25 | Update cadastral sync implementation and base class for Cloud Run compatibility
+2024-11-25 | Merge pull request #78 from martincollignon/fix/cadastral-parser-errors
+2024-11-25 | Fix str get error and total features count in cadastral parser
+2024-11-25 | Merge pull request #77 from martincollignon/fix/field-mapping-instance-attribute
+2024-11-25 | Fix field_mapping availability by making it an instance attribute
+2024-11-25 | Fix field_mapping availability by making it a class attribute
+2024-11-25 | Merge pull request #75 from martincollignon/fix/cadastral-improvements
+2024-11-25 | Improve Cadastral parser efficiency and reliability
+2024-11-25 | Merge pull request #74 from martincollignon/feature/improve-geometry-logging
+2024-11-25 | Add comprehensive geometry logging
+2024-11-25 | Merge pull request #73 from martincollignon/feature/improve-geometry-handling
+2024-11-25 | Improve geometry handling in cadastral parser
+2024-11-25 | Merge pull request #72 from martincollignon/fix/add-wfs-debug-logging
+2024-11-25 | Add debug logging for WFS parameters
+2024-11-25 | Merge pull request #71 from martincollignon/fix/wfs-2-compatibility
+2024-11-25 | Update WFS endpoint and improve WFS 2.0.0 compatibility
+2024-11-25 | Merge pull request #70 from martincollignon/fix/batch-insert-accumulation
+2024-11-25 | fix: improve batch insert handling
+2024-11-25 | Merge pull request #69 from martincollignon/fix/debug-batch-insert
+2024-11-25 | fix: improve streaming and batch handling
+2024-11-25 | fix: add batch insert debugging
+2024-11-24 | Merge pull request #68 from martincollignon/fix/transaction-handling
+2024-11-24 | fix: proper transaction handling
+2024-11-24 | Merge pull request #67 from martincollignon/fix/cadastral-transaction-handling
+2024-11-24 | fix: improve transaction handling and verification
+2024-11-24 | Merge pull request #66 from martincollignon/fix/cadastral-chunk-tracking
+2024-11-24 | fix: add chunk tracking to prevent data loss
+2024-11-24 | Merge pull request #65 from martincollignon/fix/cadastral-nan-values
+2024-11-24 | fix: handle NaN values in cadastral data
+2024-11-24 | Merge pull request #64 from martincollignon/fix/cadastral-datetime
+2024-11-24 | fix: convert timestamp strings to datetime objects
+2024-11-24 | Merge pull request #63 from martincollignon/fix/cadastral-id-type
+2024-11-24 | fix: convert id_local to string before database insertion
+2024-11-24 | Merge pull request #62 from martincollignon/feature/cadastral-streaming
+2024-11-24 | feat: implement streaming for cadastral sync
+2024-11-24 | Merge pull request #61 from martincollignon/fix/reduce-logging
+2024-11-24 | fix: reduce excessive logging
+2024-11-24 | Merge pull request #60 from martincollignon/fix/latest-case-id-type
+2024-11-24 | fix: ensure latest_case_id stays as string and clean up logging
+2024-11-24 | Merge pull request #59 from martincollignon/fix/add-debug-logging
+2024-11-24 | fix: add comprehensive debug logging
+2024-11-24 | Merge pull request #58 from martincollignon/fix/cloud-run-sync
+2024-11-24 | fix: optimize cloud run sync process
+2024-11-24 | Merge pull request #57 from martincollignon/feat/parallel-streaming-sync
+2024-11-24 | feat: switch to parallel streaming sync
+2024-11-24 | fix: optimize for Cloud Run and add retry mechanism - Add proper cleanup in fetch_chunk - Improve logging for Cloud Run - Add retry mechanism for chunk fetching - Keep all core functionality intact
+2024-11-24 | Merge pull request #56 from martincollignon/fix/cloud-run-optimizations
+2024-11-24 | fix: optimize cadastral sync for Cloud Run environment
+2024-11-24 | Merge pull request #55 from martincollignon/fix/remove-timeout
+2024-11-24 | fix: remove timeout limit for long-running requests
+2024-11-24 | feat: add verbose logging for better job monitoring
+2024-11-24 | Merge pull request #54 from martincollignon/fix/datafordeler-auth
+2024-11-24 | fix: move datafordeler credentials to URL parameters
+2024-11-24 | Merge pull request #53 from martincollignon/fix/python-venv-docker
+2024-11-24 | fix: use virtual environment for Python packages in Docker
+2024-11-24 | Merge pull request #52 from martincollignon/fix/python-version-docker
+2024-11-24 | fix: use default python3 version from Ubuntu repositories
+2024-11-24 | Merge pull request #51 from martincollignon/fix/python-packages-docker
+2024-11-24 | fix: improve python package installation and accessibility
+2024-11-24 | fix: correct python package installation and paths in docker image
+2024-11-24 | Merge pull request #50 from martincollignon/fix/optimize-docker-build
+2024-11-24 | fix: remove redundant GDAL installation from requirements
+2024-11-24 | Merge pull request #49 from martincollignon/fix/python3.12-noble
+2024-11-24 | fix: update to python 3.12 for Ubuntu Noble compatibility
+2024-11-24 | Merge pull request #48 from martincollignon/fix/python-version-noble
+2024-11-24 | fix: update to python 3.10 for Ubuntu Noble compatibility
+2024-11-24 | Merge pull request #47 from martincollignon/feat/optimize-docker-build-ghcr
+2024-11-24 | feat: use ghcr.io GDAL image and optimize build
+2024-11-24 | Merge pull request #46 from martincollignon/fix/cloudbuild-continue-on-error
+2024-11-24 | fix: replace continue-on-error with bash command in cloudbuild
+2024-11-24 | Merge pull request #45 from martincollignon/feat/optimize-docker-build
+2024-11-24 | feat: optimize docker build with better caching and smaller images
+2024-11-24 | Merge pull request #44 from martincollignon/feat/optimize-docker-build
+2024-11-24 | test
+2024-11-24 | Merge pull request #42 from martincollignon/fix/db-connection
+2024-11-24 | feat: implement cadastral data sync with Datafordeleren WFS
+2024-11-24 | Merge pull request #41 from martincollignon/fix/db-connection
+2024-11-24 | Update deployment configuration: - Move workflow file to correct location - Configure Cloud SQL connection - Use cadastral-sync-sa service account - Remove execution step from workflow
+2024-11-24 | Update deployment workflow to use Cloud Scheduler and fix service account permissions
+2024-11-24 | Merge pull request #40 from martincollignon/fix/db-connection
+2024-11-24 | Update sync process to use Cloud SQL Auth proxy and improve logging
+2024-11-24 | Merge pull request #39 from martincollignon/fix/sync-process
+2024-11-24 | Update sync process to run directly without FastAPI
+2024-11-24 | Merge pull request #38 from martincollignon/fix/docker-gdal
+2024-11-24 | Update Docker build with proper GDAL dependencies
+2024-11-24 | Merge pull request #37 from martincollignon/fix/docker-gdal
+2024-11-24 | Fix GDAL dependencies in Docker multi-stage build
+2024-11-24 | Merge pull request #36 from martincollignon/feature/optimize-build
+2024-11-24 | Optimize build and fix clean_value import: - Add multi-stage Docker build - Enable Docker layer caching - Add .dockerignore - Add clean_value function to base.py
+2024-11-24 | Merge pull request #35 from martincollignon/fix/cleanup-structure
+2024-11-24 | Fix project structure and imports: - Move base.py to correct location - Add __init__.py files for proper Python packaging - Rename main.py to sync_app.py - Add proper logging to sync service - Clean up import paths
+2024-11-24 | Merge pull request #34 from martincollignon/fix/import-paths
+2024-11-24 | Fix Python import paths and file structure
+2024-11-24 | Add asyncpg dependency and cleanup workflow
+2024-11-24 | Merge pull request #33 from martincollignon/feature/enable-cloud-scheduler
+2024-11-24 | Enable Cloud Scheduler API and update workflow
+2024-11-24 | Merge pull request #32 from martincollignon/feature/cadastral-sync-service
+2024-11-24 | Add dedicated FastAPI app for cadastral sync service
+2024-11-24 | Merge pull request #31 from martincollignon/feature/cloud-run-job
+2024-11-24 | Update for Cloud Run job deployment
+2024-11-24 | Update requirements.txt
+2024-11-24 | Merge pull request #30 from martincollignon/fix/cloud-build-logs
+2024-11-24 | fix: improve Cloud Build logging and status checks
+2024-11-24 | Merge pull request #29 from martincollignon/feat/add-cloud-build
+2024-11-24 | feat: add Cloud Build configuration
+2024-11-24 | Merge pull request #28 from martincollignon/fix/cadastral-sync-updates-clean
+2024-11-24 | fix: update cadastral sync for PostgreSQL and complete workflow
+2024-11-24 | Merge pull request #27 from martincollignon/fix/cloud-build-config
+2024-11-23 | Merge pull request #26 from martincollignon/feature/cadastral-sync-deployment
+2024-11-23 | feat: add Cloud Run deployment workflow for cadastral sync
+2024-11-23 | feat: add Cloud Run deployment workflow for cadastral sync
+2024-11-23 | Merge pull request #25 from martincollignon/fix/remove-supabase
+2024-11-23 | refactor: remove unused Supabase dependencies
+2024-11-23 | Merge pull request #24 from martincollignon/feature/cloud-run-sync
+2024-11-23 | Migrate cadastral sync to Cloud Run - Remove Supabase dependencies - Add Cloud Run job configuration - Add Cloud SQL connection - Update sync script for Cloud SQL
+2024-11-23 | Update cadastral sync with improved concurrency handling and dependencies - Optimize concurrency for end of batch processing - Update GitHub Actions workflow with better GDAL handling - Update dependencies in requirements.txt - Add better error handling in sync script
+2024-11-23 | Add asyncpg dependency for cadastral sync
+2024-11-23 | Fix GDAL installation in GitHub Actions workflow
+2024-11-23 | Merge pull request #22 from martincollignon/wetland
+2024-11-23 | Move to GitHub Actions for cadastral sync
+2024-11-20 | Fix slack badge 😂
+2024-11-20 | Add Slack badge
+2024-11-19 | add fertiliser data and fixes issue #13
+2024-11-17 | update pesticie data
+2024-11-17 | Update README.md
+2024-11-17 | Update README.md
+2024-11-17 | Tak Energistyrelsen
+2024-11-17 | Improve README.md
+2024-11-17 | fix architecture
+2024-11-17 | Update README.md
+2024-11-17 | update readme
+2024-11-17 | feat: organize static data sources into thematic directories
+2024-11-17 | Clean up frontend structure, keep minimal setup with MapLibre
+2024-11-16 | Reorganize: Restructure data sources for clarity
+2024-11-16 | Clean up: Remove unused files and example code
+2024-11-16 | added wetlands
+2024-11-16 | Update .gitignore to exclude large data files
+2024-11-16 | Initial commit
+2024-11-16 | Add Dockerfile and update deployment workflow
+2024-11-16 | Update dependencies and environment setup for M1 Mac
+2024-11-16 | refactor: implement modular pipeline architecture
+2024-11-16 | Initial setup: Add backend API and frontend map view
+2024-11-16 | Remove all venv directories from Git tracking
+2024-11-16 | Remove venv directory from Git tracking
+2024-11-16 | Clean up repository: add gitignore and requirements.txt
+2024-11-16 | initial commit!
+2024-11-16 | Initial commit

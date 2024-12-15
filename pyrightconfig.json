@@ -1,0 +1,12 @@
+{
+    "include": [
+        "backend"
+    ],
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        "backend/tests"
+    ],
+    "typeCheckingMode": "off",
+    "useLibraryCodeForTypes": true
+}

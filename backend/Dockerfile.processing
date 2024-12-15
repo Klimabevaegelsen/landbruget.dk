@@ -1,0 +1,37 @@
+# backend/Dockerfile.processing
+FROM apache/beam_python3.11_sdk:2.60.0
+
+# Install system dependencies including GDAL
+RUN apt-get update && apt-get install -y \
+    gdal-bin \
+    libgdal-dev \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set GDAL environment variables
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+
+# Copy requirements first for better caching
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
+
+# Install additional dependencies needed for validation
+RUN pip install \
+    geopandas \
+    pandas \
+    shapely \
+    fsspec>=2024.10.0 \
+    gcsfs>=2024.10.0 \
+    pyarrow
+
+# Copy the dataflow directory (which includes setup.py)
+COPY dataflow /app/dataflow
+
+# Install the package in development mode
+WORKDIR /app/dataflow
+RUN pip install -e .
+
+# Set the working directory
+WORKDIR /app

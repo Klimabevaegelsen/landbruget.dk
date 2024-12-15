@@ -1,0 +1,43 @@
+# Cloud Storage and Processing
+apache-beam[gcp]>=2.50.0,<3.0.0  # Used in dataflow processing
+google-cloud-storage>=2.0.0  # Used for cloud storage operations
+
+# API Framework
+fastapi>=0.100.0  # Main API framework
+uvicorn>=0.15.0  # ASGI server for FastAPI
+pydantic>=2.0.0  # Data validation for FastAPI
+
+# Data Processing
+numpy>=1.26.4  # Required for data processing
+shapely>=2.0.0  # Geometry operations
+geopandas>=0.14.0  # Geospatial data handling
+pandas>=2.2.0  # Data manipulation
+pyproj>=3.0.0  # Used with geopandas
+fiona>=1.9.0  # Used with geopandas
+tqdm>=4.62.0  # Progress bars
+psutil==5.9.7  # System monitoring
+pyarrow>=12.0.0  # Parquet file operations
+
+# HTTP Client
+aiohttp>=3.8.0  # Async HTTP requests
+aiohttp[speedups]>=3.8.0
+
+
+# Database
+backoff>=1.10.0  # Retry logic
+
+# Environment Variables
+python-dotenv>=0.19.0  # Loading environment variables
+
+# Cloud Storage
+fsspec>=2024.10.0  # Cloud storage operations
+gcsfs>=2024.10.0  # Google Cloud Storage operations
+
+# PDF Processing
+pdfplumber>=0.10.3  # PDF parsing
+
+# SFTP and JSON Processing
+paramiko>=3.4.0  # SFTP client
+ijson>=3.2.3  # Streaming JSON parser
+google-cloud-bigquery>=3.13.0  # BigQuery client
+google-cloud-secret-manager>=2.16.4  # Secret Manager client
