@@ -20,7 +20,7 @@ import ssl
 from shapely.validation import explain_validity
 from shapely.geometry.polygon import orient
 
-from ...base import Source
+from ..base import Source
 from ..utils.geometry_validator import validate_and_transform_geometries
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,8 @@ def clean_value(value):
     return value if value else None
 
 class WaterProjects(Source):
+    source_id = "water_projects"
+    
     def __init__(self, config):
         super().__init__(config)
         self.batch_size = 100

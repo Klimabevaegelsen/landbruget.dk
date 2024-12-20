@@ -17,7 +17,7 @@ from tqdm import tqdm
 import psutil
 import pandas as pd
 
-from ...base import Source
+from ..base import Source
 from ..utils.geometry_validator import validate_and_transform_geometries
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,10 @@ def clean_value(value):
     return value if value else None
 
 class Cadastral(Source):
+    """Danish cadastral parcels from WFS"""
+    
+    source_id = "cadastral"
+    
     def __init__(self, config):
         super().__init__(config)
         self.field_mapping = {

@@ -58,5 +58,19 @@ SOURCES = {
         "bucket": "landbrugsdata-raw-data",
         "raw_folder": "raw",
         "processed_folder": "processed"
+    },
+    "herd_data": {
+        "name": "Danish Herd Data",
+        "type": "soap",
+        "description": "Herd data from CHR (Central Husbandry Register)",
+        "frequency": "weekly",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data",
+        "wsdl_urls": {
+            "stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?WSDL",
+            "besaetning": "https://ws.fvst.dk/service/CHR_besaetningWS?wsdl",
+            "ejendom": "https://ws.fvst.dk/service/CHR_ejendomWS?wsdl",
+            "ejer": "https://ws.fvst.dk/service/CHR_ejerWS?wsdl"
+        }
     }
 }
