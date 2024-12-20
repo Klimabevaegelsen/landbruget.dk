@@ -3,7 +3,7 @@ import json
 import zipfile
 import ijson
 from typing import Generator, Any, Dict, Optional, Tuple
-from ...base import Source
+from ..base import Source
 from google.cloud import storage
 from pathlib import Path
 import os
@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 class PropertyOwnersParser(Source):
     """Parser for property owners data from Datafordeler"""
+    
+    source_id = "property_owners"
     
     def __init__(self, config):
         super().__init__(config)

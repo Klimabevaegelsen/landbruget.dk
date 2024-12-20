@@ -1,5 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import './index.css';
 import App from './App';
 
 const root = ReactDOM.createRoot(

@@ -3,7 +3,7 @@ import aiohttp
 import geopandas as gpd
 import asyncio
 import xml.etree.ElementTree as ET
-from ...base import Source
+from ..base import Source
 import time
 import os
 import ssl
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 class AgriculturalFields(Source):
     """Danish Agricultural Fields WFS parser"""
+    
+    source_id = "agricultural_fields"
     
     COLUMN_MAPPING = {
         'Marknr': 'field_id',
