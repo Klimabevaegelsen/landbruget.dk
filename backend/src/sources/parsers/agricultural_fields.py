@@ -160,14 +160,13 @@ class AgriculturalFields(Source):
         """Sync agricultural fields and blocks data"""
         logger.info("Starting agricultural data sync...")
         self.start_time = time.time()
-        self.features_processed = 0
         total_processed = 0
 
         try:
             conn = aiohttp.TCPConnector(limit=self.max_concurrent, ssl=self.ssl_context)
             async with aiohttp.ClientSession(timeout=self.timeout_config, connector=conn) as session:
-                # Process both fields and blocks
-                for endpoint in ['fields', 'blocks']:
+                # Process all endpoints
+                for endpoint in ['fields', 'blocks', 'fields_2023', 'blocks_2023', 'blocks_2024']:
                     self.features_processed = 0
                     self.is_sync_complete = False
                     
@@ -189,14 +188,14 @@ class AgriculturalFields(Source):
                                 await self.write_to_storage(features_batch, f'agricultural_{endpoint}')
                                 features_batch = []
                                 
+                                # Log progress
                                 elapsed = time.time() - self.start_time
-                                speed = self.features_processed / elapsed
+                                rate = self.features_processed / elapsed if elapsed > 0 else 0
                                 remaining = total_features - self.features_processed
-                                eta_minutes = (remaining / speed) / 60 if speed > 0 else 0
-                                
+                                eta_minutes = (remaining / rate / 60) if rate > 0 else 0
                                 logger.info(
                                     f"Progress: {self.features_processed:,}/{total_features:,} "
-                                    f"({speed:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
+                                    f"({rate:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
                                 )
                     
                     total_processed += self.features_processed
