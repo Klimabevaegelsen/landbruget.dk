@@ -4,7 +4,7 @@ SOURCES = {
         "type": "arcgis",
         "description": "Weekly updated agricultural field data",
         "urls": {
-            "fields": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/0/query",
+            "fields": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/12/query",
             "blocks": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/2/query"
         },
         "frequency": "weekly",
