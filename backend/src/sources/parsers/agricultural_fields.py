@@ -26,7 +26,10 @@ class AgriculturalFields(Source):
         'Afgroede': 'crop_type',
         'GB': 'organic_farming',
         'GBanmeldt': 'reported_area_ha',
-        'Markblok': 'block_id'
+        'Markblok': 'block_id',
+        'MB_NR': 'block_id',
+        'BLOKAREAL': 'block_area_ha',
+        'MARKBLOKTY': 'block_type'
     }
     
     def __init__(self, config):
@@ -55,8 +58,8 @@ class AgriculturalFields(Source):
                    f"max_concurrent={self.max_concurrent}, "
                    f"storage_batch_size={self.storage_batch_size}")
 
-    async def _get_total_count(self, session):
-        """Get total number of features"""
+    async def _get_total_count(self, session, endpoint):
+        """Get total number of features for a specific endpoint"""
         params = {
             'f': 'json',
             'where': '1=1',
@@ -64,24 +67,24 @@ class AgriculturalFields(Source):
         }
         
         try:
-            url = self.config['url']
+            url = self.config['urls'][endpoint]
             logger.info(f"Fetching total count from {url}")
             async with session.get(url, params=params, ssl=self.ssl_context) as response:
                 if response.status == 200:
                     data = await response.json()
                     total = data.get('count', 0)
-                    logger.info(f"Total features available: {total:,}")
+                    logger.info(f"Total {endpoint} features available: {total:,}")
                     return total
                 else:
-                    logger.error(f"Error getting count: {response.status}")
+                    logger.error(f"Error getting count for {endpoint}: {response.status}")
                     response_text = await response.text()
                     logger.error(f"Response: {response_text[:500]}...")
                     return 0
         except Exception as e:
-            logger.error(f"Error getting total count: {str(e)}", exc_info=True)
+            logger.error(f"Error getting total count for {endpoint}: {str(e)}", exc_info=True)
             return 0
 
-    async def _fetch_chunk(self, session, start_index, retry_count=0):
+    async def _fetch_chunk(self, session, endpoint, start_index, retry_count=0):
         """Fetch a chunk of features with retry logic"""
         params = {
             'f': 'json',
@@ -95,8 +98,8 @@ class AgriculturalFields(Source):
         async with self.request_semaphore:
             try:
                 chunk_start = time.time()
-                url = self.config['url']
-                logger.debug(f"Fetching from URL: {url} (attempt {retry_count + 1})")
+                url = self.config['urls'][endpoint]
+                logger.debug(f"Fetching {endpoint} from URL: {url} (attempt {retry_count + 1})")
                 async with session.get(url, params=params, ssl=self.ssl_context) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -137,63 +140,70 @@ class AgriculturalFields(Source):
                         
                         if response.status >= 500 and retry_count < self.max_retries:
                             await asyncio.sleep(2 ** retry_count)
-                            return await self._fetch_chunk(session, start_index, retry_count + 1)
+                            return await self._fetch_chunk(session, endpoint, start_index, retry_count + 1)
                         return None
                         
             except ssl.SSLError as e:
                 logger.error(f"SSL Error at index {start_index}: {str(e)}")
                 if retry_count < self.max_retries:
                     await asyncio.sleep(2 ** retry_count)
-                    return await self._fetch_chunk(session, start_index, retry_count + 1)
+                    return await self._fetch_chunk(session, endpoint, start_index, retry_count + 1)
                 return None
             except Exception as e:
                 logger.error(f"Error fetching chunk at index {start_index}: {str(e)}")
                 if retry_count < self.max_retries:
                     await asyncio.sleep(2 ** retry_count)
-                    return await self._fetch_chunk(session, start_index, retry_count + 1)
+                    return await self._fetch_chunk(session, endpoint, start_index, retry_count + 1)
                 return None
 
     async def sync(self):
-        """Sync agricultural fields data"""
-        logger.info("Starting agricultural fields sync...")
+        """Sync agricultural fields and blocks data"""
+        logger.info("Starting agricultural data sync...")
         self.start_time = time.time()
         self.features_processed = 0
-        self.is_sync_complete = False
-        
+        total_processed = 0
+
         try:
             conn = aiohttp.TCPConnector(limit=self.max_concurrent, ssl=self.ssl_context)
             async with aiohttp.ClientSession(timeout=self.timeout_config, connector=conn) as session:
-                total_features = await self._get_total_count(session)
-                logger.info(f"Found {total_features:,} total features")
-                
-                features_batch = []
-                
-                for start_index in range(0, total_features, self.batch_size):
-                    chunk = await self._fetch_chunk(session, start_index)
-                    if chunk is not None:
-                        features_batch.extend(chunk.to_dict('records'))
-                        self.features_processed += len(chunk)
-                        
-                        # Write batch if it's large enough or it's the last batch
-                        is_last_batch = (start_index + self.batch_size) >= total_features
-                        if len(features_batch) >= self.storage_batch_size or is_last_batch:
-                            logger.info(f"Writing batch of {len(features_batch):,} features (is_last_batch: {is_last_batch})")
-                            self.is_sync_complete = is_last_batch  # Only set True for last batch
-                            await self.write_to_storage(features_batch, 'agricultural_fields')
-                            features_batch = []  # Clear batch after writing
+                # Process both fields and blocks
+                for endpoint in ['fields', 'blocks']:
+                    self.features_processed = 0
+                    self.is_sync_complete = False
+                    
+                    total_features = await self._get_total_count(session, endpoint)
+                    logger.info(f"Found {total_features:,} total {endpoint}")
+                    
+                    features_batch = []
+                    
+                    for start_index in range(0, total_features, self.batch_size):
+                        chunk = await self._fetch_chunk(session, endpoint, start_index)
+                        if chunk is not None:
+                            features_batch.extend(chunk.to_dict('records'))
+                            self.features_processed += len(chunk)
                             
-                            elapsed = time.time() - self.start_time
-                            speed = self.features_processed / elapsed
-                            remaining = total_features - self.features_processed
-                            eta_minutes = (remaining / speed) / 60 if speed > 0 else 0
-                            
-                            logger.info(
-                                f"Progress: {self.features_processed:,}/{total_features:,} "
-                                f"({speed:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
-                            )
+                            is_last_batch = (start_index + self.batch_size) >= total_features
+                            if len(features_batch) >= self.storage_batch_size or is_last_batch:
+                                logger.info(f"Writing batch of {len(features_batch):,} {endpoint}")
+                                self.is_sync_complete = is_last_batch
+                                await self.write_to_storage(features_batch, f'agricultural_{endpoint}')
+                                features_batch = []
+                                
+                                elapsed = time.time() - self.start_time
+                                speed = self.features_processed / elapsed
+                                remaining = total_features - self.features_processed
+                                eta_minutes = (remaining / speed) / 60 if speed > 0 else 0
+                                
+                                logger.info(
+                                    f"Progress: {self.features_processed:,}/{total_features:,} "
+                                    f"({speed:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
+                                )
+                    
+                    total_processed += self.features_processed
+                    logger.info(f"Completed {endpoint} sync. Processed: {self.features_processed:,}")
                 
-                logger.info(f"Sync completed. Total processed: {self.features_processed:,}")
-                return self.features_processed
+                logger.info(f"All syncs completed. Total processed: {total_processed:,}")
+                return total_processed
                 
         except Exception as e:
             logger.error(f"Error in sync: {str(e)}")

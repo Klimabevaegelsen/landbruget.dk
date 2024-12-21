@@ -43,11 +43,11 @@ class Source(ABC):
         """Fetch raw data from source"""
         pass
         
-    async def store(self, df: pd.DataFrame) -> bool:
+    async def store(self, df: pd.DataFrame, dataset: str = None) -> bool:
         """Store raw data in GCS"""
         try:
-            # Save as parquet with timestamp
-            path = f"raw/{self.source_id}/current.parquet"
+            # Use dataset name if provided, otherwise use source_id
+            path = f"raw/{dataset or self.source_id}/current.parquet"
             
             with self.get_temp_file() as temp_file:
                 if isinstance(df, gpd.GeoDataFrame):
@@ -55,7 +55,7 @@ class Source(ABC):
                 else:
                     # Convert to GeoDataFrame if it's not already
                     gdf = gpd.GeoDataFrame(df)
-                    gdf = validate_and_transform_geometries(gdf, self.source_id)
+                    gdf = validate_and_transform_geometries(gdf, dataset or self.source_id)
                     gdf.to_parquet(temp_file.name)
                 
                 self.bucket.blob(path).upload_from_filename(temp_file.name)
@@ -63,7 +63,7 @@ class Source(ABC):
             return True
             
         except Exception as e:
-            logger.error(f"Error storing data for {self.source_id}: {str(e)}")
+            logger.error(f"Error storing data for {dataset or self.source_id}: {str(e)}")
             return False
             
     async def sync(self) -> Optional[int]:
