@@ -5,7 +5,10 @@ SOURCES = {
         "description": "Weekly updated agricultural field data",
         "urls": {
             "fields": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/12/query",
-            "blocks": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/2/query"
+            "blocks": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/2/query",
+            "fields_2023": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query",
+            "blocks_2023": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/7/query",
+            "blocks_2024": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query"
         },
         "frequency": "weekly",
         "enabled": True,
