@@ -3,7 +3,10 @@ SOURCES = {
         "name": "Danish Agricultural Fields",
         "type": "arcgis",
         "description": "Weekly updated agricultural field data",
-        "url": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/12/query",
+        "urls": {
+            "fields": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/12/query",
+            "blocks": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/1/query"
+        },
         "frequency": "weekly",
         "enabled": True,
         "bucket": "landbrugsdata-raw-data"
