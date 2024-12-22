@@ -121,3 +121,6 @@ Each field record includes:
 - Field-level estimates maintain farm totals
 - Analysis focuses on nitrogen distribution patterns
 - Results should be viewed as estimates based on farm patterns
+
+## Exploration code:
+https://colab.research.google.com/drive/1AghsRm8Dsfk3kVR-tUe2BUS3E9v7KY2I?usp=sharing 
