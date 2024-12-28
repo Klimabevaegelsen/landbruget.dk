@@ -5,7 +5,25 @@ The purpose of this project is to organize information about the Danish agricult
 ![Backend](https://img.shields.io/badge/backend-Python%203.9-green.svg)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018-blue.svg)
 ![License](https://img.shields.io/badge/license-CC--BY-green.svg)
-[![slack](https://img.shields.io/badge/slack-landbrugsdata-brightgreen.svg?logo=slack)](https://join.slack.com/t/landbrugsdata/shared_invite/zt-2unmop7jo-eig_P_ThEfi~A395tR_ySA)
+[![slack](https://img.shields.io/badge/slack-landbrugsdata-brightgreen.svg?logo=slack)](https://join.slack.com/t/landbrugsdata/shared_invite/zt-2xap8il6o-0YT4IV9sv9t72XZB5pVirA)
+
+## Untraditional and temporary readme as we get started.
+
+There is shitload of data the externalities of the agricultural sector, but it's hidden behind PDFs, SOAP APIs, WFS endpoints and subject access requests across many governmental agencies.
+The goal is to fetch that data, transform it, combine it, and visualise it so it's super easy for anyone - citizens, journalists, activists, farmers and civil servants to understand what's up and to speed up the much needed transformation of our land.
+
+The founder of this project is a noob fumbling around in Cursor, so the code will probably leave a lot to desire. So if you can code, do give us a hand!
+
+Broad ideas (open for input!):
+- Fetch and parse data in Python using Cloud Run
+- Save it in Google Cloud Storage
+- Clean it, transform it, combine it in Bigquery or Cloud Run (Bigquery seemed good for geospatial stuff!)
+- Export it as PMTiles and datasets in Google Cloud Storage through a FastAPI. All data should be joinable on a field, CVR, unique person, parcel and/or CHR.
+- Main page will be a visualisation in a React front-end, using Maplibre and D3.js.
+- There could be data-heavy blogposts as secondary pages.
+- Most views could be expected to come from either screenshots or embeds with specific filters applied
+
+Have fun!
 
 ## 🚀 Quick Start
 
