@@ -1,4 +1,4 @@
-# Landbrugsdata
+# Landbruget.dk
 
 The purpose of this project is to organize information about the Danish agricultural sector and make it universally accessible and useful.
 
