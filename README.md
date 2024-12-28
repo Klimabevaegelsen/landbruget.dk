@@ -9,7 +9,7 @@ The purpose of this project is to organize information about the Danish agricult
 
 ## Untraditional and temporary readme as we get started.
 
-There is shitload of data the externalities of the agricultural sector, but it's hidden behind PDFs, SOAP APIs, WFS endpoints and subject access requests across many governmental agencies.
+There is shitload of data about the externalities of the agricultural sector, but it's hidden behind PDFs, SOAP APIs, WFS endpoints and subject access requests across many governmental agencies.
 The goal is to fetch that data, transform it, combine it, and visualise it so it's super easy for anyone - citizens, journalists, activists, farmers and civil servants to understand what's up and to speed up the much needed transformation of our land.
 
 The founder of this project is a noob fumbling around in Cursor, so the code will probably leave a lot to desire. So if you can code, do give us a hand!
