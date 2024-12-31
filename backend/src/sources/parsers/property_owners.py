@@ -3,7 +3,7 @@ import json
 import zipfile
 import ijson
 from typing import Generator, Any, Dict, Optional, Tuple
-from ..base import Source
+from ..base import BaseSource
 from google.cloud import storage
 from pathlib import Path
 import os
