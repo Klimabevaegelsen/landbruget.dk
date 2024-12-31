@@ -17,7 +17,7 @@ from tqdm import tqdm
 import psutil
 import pandas as pd
 
-from ..base import Source
+from ..base import GeospatialSource
 from ..utils.geometry_validator import validate_and_transform_geometries
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def clean_value(value):
     value = value.strip()
     return value if value else None
 
-class Cadastral(Source):
+class Cadastral(GeospatialSource):
     """Danish cadastral parcels from WFS"""
     
     source_id = "cadastral"

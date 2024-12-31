@@ -3,7 +3,7 @@ import aiohttp
 import geopandas as gpd
 import asyncio
 import xml.etree.ElementTree as ET
-from ..base import Source
+from ..base import GeospatialSource
 import time
 import os
 import ssl
@@ -12,7 +12,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-class AgriculturalFields(Source):
+class AgriculturalFields(GeospatialSource):
     """Danish Agricultural Fields WFS parser"""
     
     source_id = "agricultural_fields"
@@ -160,13 +160,14 @@ class AgriculturalFields(Source):
         """Sync agricultural fields and blocks data"""
         logger.info("Starting agricultural data sync...")
         self.start_time = time.time()
+        self.features_processed = 0
         total_processed = 0
 
         try:
             conn = aiohttp.TCPConnector(limit=self.max_concurrent, ssl=self.ssl_context)
             async with aiohttp.ClientSession(timeout=self.timeout_config, connector=conn) as session:
-                # Process all endpoints
-                for endpoint in ['fields', 'blocks', 'fields_2023', 'blocks_2023', 'blocks_2024']:
+                # Process both fields and blocks
+                for endpoint in ['fields', 'blocks']:
                     self.features_processed = 0
                     self.is_sync_complete = False
                     
@@ -188,14 +189,14 @@ class AgriculturalFields(Source):
                                 await self.write_to_storage(features_batch, f'agricultural_{endpoint}')
                                 features_batch = []
                                 
-                                # Log progress
                                 elapsed = time.time() - self.start_time
-                                rate = self.features_processed / elapsed if elapsed > 0 else 0
+                                speed = self.features_processed / elapsed
                                 remaining = total_features - self.features_processed
-                                eta_minutes = (remaining / rate / 60) if rate > 0 else 0
+                                eta_minutes = (remaining / speed) / 60 if speed > 0 else 0
+                                
                                 logger.info(
                                     f"Progress: {self.features_processed:,}/{total_features:,} "
-                                    f"({rate:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
+                                    f"({speed:.1f} features/second, ETA: {eta_minutes:.1f} minutes)"
                                 )
                     
                     total_processed += self.features_processed

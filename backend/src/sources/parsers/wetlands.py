@@ -5,7 +5,7 @@ import logging
 import aiohttp
 from shapely.geometry import Polygon, MultiPolygon
 from aiohttp import ClientError
-from ..base import Source
+from ..base import GeospatialSource
 import pandas as pd
 import geopandas as gpd
 import os
@@ -17,7 +17,7 @@ from shapely.ops import unary_union
 
 logger = logging.getLogger(__name__)
 
-class Wetlands(Source):
+class Wetlands(GeospatialSource):
     source_id = "wetlands"
     
     def __init__(self, config):
