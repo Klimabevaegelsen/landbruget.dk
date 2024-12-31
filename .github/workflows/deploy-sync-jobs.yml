@@ -51,6 +51,7 @@ jobs:
           ["wetlands-sync"]="4|16Gi|DB_PASSWORD=db-password:latest|wetlands"
           ["water-projects-sync"]="4|8Gi|DB_PASSWORD=db-password:latest|water_projects"
           ["agricultural-fields-sync"]="8|16Gi|DB_PASSWORD=db-password:latest|agricultural_fields"
+          ["herd-data-sync"]="4|8Gi|DB_PASSWORD=db-password:latest,FVM_USERNAME=fvm_username:latest,FVM_PASSWORD=fvm_password:latest|herd_data"
         )
 
         for job in "${!jobs[@]}"; do
