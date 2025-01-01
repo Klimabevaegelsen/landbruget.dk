@@ -78,5 +78,16 @@ SOURCES = {
             "ejendom": "https://ws.fvst.dk/service/CHR_ejendomWS?wsdl",
             "ejer": "https://ws.fvst.dk/service/CHR_ejerWS?wsdl"
         }
+    },
+    "bnbo_status": {
+        "name": "Danish BNBO Status",
+        "type": "wfs",
+        "description": "Municipal status for well-near protection areas (BNBO)",
+        "url": "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs",
+        "layer": "dai:status_bnbo",
+        "frequency": "weekly",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data",
+        "create_dissolved": True
     }
 }
