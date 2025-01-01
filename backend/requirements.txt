@@ -21,7 +21,11 @@ pyarrow>=12.0.0  # Parquet file operations
 # HTTP Client
 aiohttp>=3.8.0  # Async HTTP requests
 aiohttp[speedups]>=3.8.0
+requests>=2.31.0  # Synchronous HTTP requests
+certifi>=2024.2.2  # SSL certificate verification
 
+# SOAP Client
+zeep>=4.2.1  # SOAP client for web services
 
 # Database
 backoff>=1.10.0  # Retry logic
