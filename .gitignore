@@ -89,3 +89,17 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+
+# Devenv
+.envrc
+devenv.nix
+devenv.lock
+devenv.yaml
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
