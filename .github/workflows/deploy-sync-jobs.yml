@@ -53,6 +53,7 @@ jobs:
           ["agricultural-fields-sync"]="8|16Gi|DB_PASSWORD=db-password:latest|agricultural_fields"
           ["chr-data-sync"]="4|8Gi|DB_PASSWORD=db-password:latest,FVM_USERNAME=fvm_username:latest,FVM_PASSWORD=fvm_password:latest|chr_data"
           ["bnbo-status-sync"]="4|8Gi|DB_PASSWORD=db-password:latest|bnbo_status"
+          ["antibiotics-sync"]="4|8Gi|DB_PASSWORD=db-password:latest,FVM_USERNAME=fvm_username:latest,FVM_PASSWORD=fvm_password:latest,VETSTAT_CERTIFICATE=vetstat-certificate:latest,VETSTAT_CERTIFICATE_PASSWORD=vetstat-certificate-password:latest|antibiotics"
         )
 
         for job in "${!jobs[@]}"; do
