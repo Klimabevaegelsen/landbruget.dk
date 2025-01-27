@@ -332,12 +332,122 @@ class CHRSpeciesParser(BaseSource):
             return None
 
     async def get_species_usage_combinations_async(self) -> pd.DataFrame:
-        """Async version of get_species_usage_combinations."""
-        return self.get_species_usage_combinations()
+        """Get all species/usage combinations."""
+        try:
+            # Get all species codes
+            request = {
+                'GLRCHRWSInfoInbound': {
+                    'BrugerNavn': self.username,
+                    'KlientId': 'LandbrugsData',
+                    'SessionId': '1',
+                    'IPAdresse': '',
+                    'TrackID': 'species_codes'
+                }
+            }
+            
+            result = self.clients['stamdata'].service.listDyreArt(request)
+            
+            if not hasattr(result, 'Response') or not result.Response:
+                logger.error("No response from listDyreArt")
+                return pd.DataFrame()
+            
+            species_list = result.Response.DyreArtListe.DyreArt
+            if not isinstance(species_list, list):
+                species_list = [species_list]
+            
+            # Process each species code
+            combinations = []
+            for species in species_list:
+                species_code = self.safe_int(getattr(species, 'DyreArtKode', None))
+                species_text = self.safe_str(getattr(species, 'DyreArtTekst', None))
+                
+                if not species_code:
+                    continue
+                
+                # Get usage codes for this species
+                usage_request = {
+                    'GLRCHRWSInfoInbound': {
+                        'BrugerNavn': self.username,
+                        'KlientId': 'LandbrugsData',
+                        'SessionId': '1',
+                        'IPAdresse': '',
+                        'TrackID': f'usage_codes_{species_code}'
+                    },
+                    'Request': {
+                        'DyreArtKode': str(species_code)
+                    }
+                }
+                
+                usage_result = self.clients['stamdata'].service.listBrugsArt(usage_request)
+                
+                if hasattr(usage_result, 'Response') and usage_result.Response:
+                    usage_list = usage_result.Response.BrugsArtListe.BrugsArt
+                    if not isinstance(usage_list, list):
+                        usage_list = [usage_list]
+                    
+                    for usage in usage_list:
+                        usage_code = self.safe_int(getattr(usage, 'BrugsArtKode', None))
+                        usage_text = self.safe_str(getattr(usage, 'BrugsArtTekst', None))
+                        
+                        if usage_code:
+                            combinations.append({
+                                'species_code': species_code,
+                                'species_text': species_text,
+                                'usage_code': usage_code,
+                                'usage_text': usage_text
+                            })
+            
+            df = pd.DataFrame(combinations)
+            if not df.empty:
+                await self.store(df, 'species_usage_combinations')
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error getting species/usage combinations: {str(e)}")
+            return pd.DataFrame()
 
     async def get_herd_numbers_async(self, species_code: int, usage_code: Optional[int] = None) -> pd.DataFrame:
-        """Async version of get_herd_numbers."""
-        return self.get_herd_numbers(species_code, usage_code)
+        """Get all herd numbers for a given species code and optional usage code."""
+        try:
+            request = {
+                'GLRCHRWSInfoInbound': {
+                    'BrugerNavn': self.username,
+                    'KlientId': 'LandbrugsData',
+                    'SessionId': '1',
+                    'IPAdresse': '',
+                    'TrackID': f'herd_numbers_{species_code}_{usage_code}'
+                },
+                'Request': {
+                    'DyreArtKode': str(species_code)
+                }
+            }
+            
+            if usage_code:
+                request['Request']['BrugsArtKode'] = str(usage_code)
+            
+            result = self.clients['besaetning'].service.listBesaetningsNummer(request)
+            
+            if not hasattr(result, 'Response') or not result.Response:
+                logger.error(f"No response for species {species_code}, usage {usage_code}")
+                return pd.DataFrame()
+            
+            herds = result.Response.BesaetningsNummerListe.BesaetningsNummer
+            if not isinstance(herds, list):
+                herds = [herds]
+            
+            df = pd.DataFrame([{
+                'herd_number': self.safe_int(getattr(herd, 'BesaetningsNummer', None)),
+                'species_code': species_code,
+                'usage_code': usage_code
+            } for herd in herds])
+            
+            if not df.empty:
+                await self.store(df, f'herd_numbers_{species_code}_{usage_code}')
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error getting herd numbers for species {species_code}, usage {usage_code}: {str(e)}")
+            return pd.DataFrame()
 
     async def fetch(self) -> pd.DataFrame:
         """Fetch data from the CHR web services."""
@@ -358,6 +468,17 @@ class CHRSpeciesParser(BaseSource):
         except Exception as e:
             logger.error(f"Error during fetch: {str(e)}")
             return pd.DataFrame()
+
+    async def sync(self) -> Optional[int]:
+        """Full sync process: fetch and store"""
+        try:
+            df = await self.fetch()
+            if await self.store(df):
+                return len(df)
+            return None
+        except Exception as e:
+            logger.error(f"Sync failed for {self.source_id}: {str(e)}")
+            return None
 
     def fetch_sync(self) -> pd.DataFrame:
         """Synchronous version of fetch."""
