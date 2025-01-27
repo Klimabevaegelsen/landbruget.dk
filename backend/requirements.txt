@@ -1,45 +1,46 @@
 # Core Data Processing
-pandas>=2.2.2
-numpy>=1.26.4
-pyarrow>=15.0.0
+pandas~=2.2.3
+numpy~=2.2.2
+pyarrow~=19.0.0
 
 # Geospatial Processing
-geopandas>=0.14.3
-shapely>=2.0.3
-pyproj>=3.6.1
-fiona>=1.9.5
+geopandas~=1.0.1
+shapely~=2.0.6
+pyproj~=3.7.0
+fiona~=1.10.1
 
 # Cloud Services
-google-cloud-storage>=2.19.0
-google-cloud-bigquery>=3.50.0
-google-cloud-secret-manager>=2.20.0
-fsspec>=2024.3.0
-gcsfs>=2024.3.0
+google-cloud-storage~=2.19.0
+google-cloud-bigquery~=3.29.0
+google-cloud-secret-manager~=2.22.1
+fsspec~=2024.12.0
+gcsfs~=2024.12.0
 
 # Web Framework
-fastapi>=0.110.0
-uvicorn>=0.27.1
-pydantic>=2.6.3
+fastapi~=0.115.7
+uvicorn~=0.34.0
+pydantic~=2.10.6
 
 # HTTP and API Clients
-aiohttp>=3.9.3
-aiohttp[speedups]>=3.9.3
-requests>=2.31.0
-zeep>=4.2.1
-paramiko>=3.4.0
-certifi>=2024.2.2
-pyOpenSSL>=24.0.0
+aiohttp~=3.11.11
+aiohttp[speedups]~=3.11.11
+requests~=2.32.3
+zeep~=4.3.1
+paramiko~=3.5.0
+certifi~=2024.12.14
+pyOpenSSL~=25.0.0
 
 # Data Pipeline and Validation
-apache-beam>=2.55.0
-backoff>=2.2.1
+apache-beam~=2.62.0
+backoff~=2.2.1
 
 # PDF Processing
-pdfplumber>=0.10.3
+pdfplumber~=0.11.5
+
 # Utilities
-python-dotenv>=1.0.1
-tqdm>=4.66.2
-psutil>=5.9.8
-cryptography>=42.0.5
-lxml>=5.1.0
-ijson>=3.2.3
+python-dotenv~=1.0.1
+tqdm~=4.67.1
+psutil~=6.1.1
+cryptography~=44.0.0
+lxml~=5.3.0
+ijson~=3.3.0
