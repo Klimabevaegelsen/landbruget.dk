@@ -71,7 +71,7 @@ class CHRDataParser(BaseSource):
     def source_id(self) -> str:
         return "chr_data"
 
-    def process_chr_numbers(self, chr_numbers: List[int], species_code: int) -> pd.DataFrame:
+    async def process_chr_numbers(self, chr_numbers: List[int], species_code: int) -> pd.DataFrame:
         """Process a list of CHR numbers and return the data."""
         results = []
         total_chr_numbers = len(chr_numbers)
@@ -677,7 +677,7 @@ class CHRDataParser(BaseSource):
                             logger.info(f"Starting batch {batch_num}/{total_batches} for species {species_code}, usage {usage_code}")
                             try:
                                 logger.info(f"Processing {len(batch_df)} CHR numbers...")
-                                result = self.process_chr_numbers(batch_df['chr_number'].tolist(), species_code)
+                                result = await self.process_chr_numbers(batch_df['chr_number'].tolist(), species_code)
                                 if result is not None:
                                     all_results.append(result)
                                     logger.info(f"Successfully processed and uploaded batch {batch_num}/{total_batches}")
