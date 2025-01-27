@@ -36,7 +36,6 @@ backoff>=2.2.1
 
 # PDF Processing
 pdfplumber>=0.10.3
-
 # Utilities
 python-dotenv>=1.0.1
 tqdm>=4.66.2
