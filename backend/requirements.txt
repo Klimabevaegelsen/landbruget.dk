@@ -1,47 +1,46 @@
-# Cloud Storage and Processing
-apache-beam[gcp]>=2.50.0,<3.0.0  # Used in dataflow processing
-google-cloud-storage>=2.0.0  # Used for cloud storage operations
+# Core Data Processing
+pandas>=2.2.0
+numpy<1.25.0,>=1.14.3
+pyarrow<12.0.0,>=3.0.0
 
-# API Framework
-fastapi>=0.100.0  # Main API framework
-uvicorn>=0.15.0  # ASGI server for FastAPI
-pydantic>=2.0.0  # Data validation for FastAPI
+# Geospatial Processing
+geopandas>=0.14.0
+shapely>=2.0.0
+pyproj>=3.0.0
+fiona>=1.9.0
 
-# Data Processing
-numpy>=1.26.4  # Required for data processing
-shapely>=2.0.0  # Geometry operations
-geopandas>=0.14.0  # Geospatial data handling
-pandas>=2.2.0  # Data manipulation
-pyproj>=3.0.0  # Used with geopandas
-fiona>=1.9.0  # Used with geopandas
-tqdm>=4.62.0  # Progress bars
-psutil==5.9.7  # System monitoring
-pyarrow>=12.0.0  # Parquet file operations
+# Cloud Services
+google-cloud-storage>=2.0.0
+google-cloud-bigquery>=3.13.0
+google-cloud-secret-manager==2.16.4
+fsspec>=2024.10.0
+gcsfs>=2024.10.0
 
-# HTTP Client
-aiohttp>=3.8.0  # Async HTTP requests
+# Web Framework
+fastapi==0.104.1
+uvicorn>=0.15.0
+pydantic>=2.0.0
+
+# HTTP and API Clients
+aiohttp>=3.8.0
 aiohttp[speedups]>=3.8.0
-requests>=2.31.0  # Synchronous HTTP requests
-certifi>=2024.2.2  # SSL certificate verification
+requests==2.31.0
+zeep==4.2.1  # For SOAP
+paramiko>=3.4.0  # For SFTP
+certifi==2023.11.17
+pyOpenSSL>=24.0.0
 
-# SOAP Client
-zeep>=4.2.1  # SOAP client for web services
-
-# Database
-backoff>=1.10.0  # Retry logic
-
-# Environment Variables
-python-dotenv>=0.19.0  # Loading environment variables
-
-# Cloud Storage
-fsspec>=2024.10.0  # Cloud storage operations
-gcsfs>=2024.10.0  # Google Cloud Storage operations
+# Data Pipeline and Validation
+apache-beam==2.52.0
+backoff>=1.10.0
 
 # PDF Processing
-pdfplumber>=0.10.3  # PDF parsing
+pdfplumber>=0.10.3
 
-# SFTP and JSON Processing
-paramiko>=3.4.0  # SFTP client
-ijson>=3.2.3  # Streaming JSON parser
-google-cloud-bigquery>=3.13.0  # BigQuery client
-google-cloud-secret-manager>=2.16.4  # Secret Manager client
+# Utilities
+python-dotenv>=0.19.0
+tqdm>=4.62.0
+psutil==5.9.7
+cryptography==41.0.7
+lxml>=4.9.3
+ijson>=3.2.3  # For streaming JSON parsing
