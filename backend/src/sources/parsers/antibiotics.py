@@ -466,7 +466,7 @@ class VetStatAntibioticsParser(BaseSource):
             
             if results:
                 df = pd.DataFrame(results)
-                self._upload_to_storage(df, f'antibiotics_{species_code}')
+                await self.store(df, f'antibiotics_{species_code}')
                 return df
             
             return None
@@ -507,3 +507,14 @@ class VetStatAntibioticsParser(BaseSource):
         """Synchronous version of fetch."""
         import asyncio
         return asyncio.run(self.fetch())
+
+    async def sync(self) -> Optional[int]:
+        """Full sync process: fetch and store"""
+        try:
+            df = await self.fetch()
+            if await self.store(df):
+                return len(df)
+            return None
+        except Exception as e:
+            logger.error(f"Sync failed for {self.source_id}: {str(e)}")
+            return None

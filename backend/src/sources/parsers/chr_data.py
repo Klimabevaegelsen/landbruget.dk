@@ -194,7 +194,7 @@ class CHRDataParser(BaseSource):
                     # Upload batch if we have enough data
                     if len(herds_data) >= self.UPLOAD_THRESHOLD or len(properties_data) >= self.UPLOAD_THRESHOLD:
                         logger.info(f"Upload threshold reached in batch {batch_num}, uploading data...")
-                        self._upload_batch_data(herds_data, properties_data, owners_data, users_data, practices_data)
+                        await self._upload_batch_data(herds_data, properties_data, owners_data, users_data, practices_data)
                         results.append(('batch', {
                             'herds': len(herds_data),
                             'properties': len(properties_data),
@@ -217,7 +217,7 @@ class CHRDataParser(BaseSource):
             # Upload any remaining data
             if any([herds_data, properties_data, owners_data, users_data, practices_data]):
                 logger.info("Uploading remaining data...")
-                self._upload_batch_data(herds_data, properties_data, owners_data, users_data, practices_data)
+                await self._upload_batch_data(herds_data, properties_data, owners_data, users_data, practices_data)
                 results.append(('final_batch', {
                     'herds': len(herds_data),
                     'properties': len(properties_data),
@@ -234,55 +234,37 @@ class CHRDataParser(BaseSource):
             logger.error(f"Error processing CHR numbers: {str(e)}", exc_info=True)
             return pd.DataFrame()
 
-    def _upload_batch_data(self, herds_data: list, properties_data: list, owners_data: list, users_data: list, practices_data: list) -> None:
-        """Upload batches of data to storage."""
+    async def _upload_batch_data(self, herds_data: list, properties_data: list, owners_data: list, users_data: list, practices_data: list) -> None:
+        """Upload batch data to Cloud Storage."""
         try:
-            # Convert lists to DataFrames and upload
             if herds_data:
                 logger.info(f"Converting and uploading {len(herds_data)} herd records...")
                 herds_df = pd.DataFrame(herds_data)
-                self._upload_to_storage(herds_df, 'herds')
+                await self.store(herds_df, 'herds')
                 logger.info(f"Uploaded {len(herds_data)} herd records")
-            
-            # Extract veterinary events before uploading properties
-            veterinary_events = []
-            if properties_data:
-                logger.info("Processing veterinary events from properties...")
-                for prop in properties_data:
-                    if 'veterinary_events' in prop:
-                        events = prop.pop('veterinary_events')
-                        for event in events:
-                            event['chr_number'] = prop['chr_number']
-                        veterinary_events.extend(events)
-            
-            if veterinary_events:
-                logger.info(f"Converting and uploading {len(veterinary_events)} veterinary event records...")
-                events_df = pd.DataFrame(veterinary_events)
-                self._upload_to_storage(events_df, 'veterinary_events')
-                logger.info(f"Uploaded {len(veterinary_events)} veterinary event records")
             
             if properties_data:
                 logger.info(f"Converting and uploading {len(properties_data)} property records...")
                 properties_df = pd.DataFrame(properties_data)
-                self._upload_to_storage(properties_df, 'properties')
+                await self.store(properties_df, 'properties')
                 logger.info(f"Uploaded {len(properties_data)} property records")
             
             if owners_data:
                 logger.info(f"Converting and uploading {len(owners_data)} owner records...")
                 owners_df = pd.DataFrame(owners_data)
-                self._upload_to_storage(owners_df, 'owners')
+                await self.store(owners_df, 'owners')
                 logger.info(f"Uploaded {len(owners_data)} owner records")
             
             if users_data:
                 logger.info(f"Converting and uploading {len(users_data)} user records...")
                 users_df = pd.DataFrame(users_data)
-                self._upload_to_storage(users_df, 'users')
+                await self.store(users_df, 'users')
                 logger.info(f"Uploaded {len(users_data)} user records")
             
             if practices_data:
                 logger.info(f"Converting and uploading {len(practices_data)} practice records...")
                 practices_df = pd.DataFrame(practices_data)
-                self._upload_to_storage(practices_df, 'practices')
+                await self.store(practices_df, 'practices')
                 logger.info(f"Uploaded {len(practices_data)} practice records")
                 
         except Exception as e:
@@ -721,4 +703,15 @@ class CHRDataParser(BaseSource):
             
         except Exception as e:
             logger.error(f"Error processing species code {species_code}: {str(e)}", exc_info=True)
+            return None
+
+    async def sync(self) -> Optional[int]:
+        """Full sync process: fetch and store"""
+        try:
+            df = await self.fetch()
+            if await self.store(df):
+                return len(df)
+            return None
+        except Exception as e:
+            logger.error(f"Sync failed for {self.source_id}: {str(e)}")
             return None 
