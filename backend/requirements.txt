@@ -1,7 +1,7 @@
 # Core Data Processing
 pandas~=2.2.3
 numpy~=2.2.2
-pyarrow~=19.0.0
+pyarrow<17.0.0,>=3.0.0
 
 # Geospatial Processing
 geopandas~=1.0.1
