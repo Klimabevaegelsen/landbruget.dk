@@ -39,63 +39,51 @@ class BaseSource(ABC):
         pass
         
     @abstractmethod
-    def fetch(self) -> pd.DataFrame:
+    async def fetch(self) -> pd.DataFrame:
         """Fetch raw data from source"""
         pass
         
-    def store(self, df: pd.DataFrame, dataset: str = None) -> bool:
+    @abstractmethod
+    async def sync(self) -> Optional[int]:
+        """Full sync process: fetch and store"""
+        pass
+        
+    async def store(self, df: pd.DataFrame) -> bool:
         """Store raw data in GCS"""
         try:
-            # Use dataset name if provided, otherwise use source_id
-            path = f"raw/{dataset or self.source_id}/current.parquet"
+            if df.empty:
+                logger.warning(f"Empty DataFrame for {self.source_id}, skipping upload")
+                return False
             
-            with self.get_temp_file() as temp_file:
-                df.to_parquet(temp_file.name)
-                self.bucket.blob(path).upload_from_filename(temp_file.name)
-                
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error storing data for {dataset or self.source_id}: {str(e)}")
-            return False
-            
-    def sync(self) -> Optional[int]:
-        """Full sync process: fetch and store"""
-        try:
-            df = self.fetch()
-            if self.store(df):
-                return len(df)
-            return None
-        except Exception as e:
-            logger.error(f"Sync failed for {self.source_id}: {str(e)}")
-            return None 
-    
-    def _upload_to_storage(self, df: pd.DataFrame, table_name: str) -> None:
-        """Upload DataFrame to Cloud Storage as parquet file"""
-        if df.empty:
-            logger.warning(f"Empty DataFrame for {table_name}, skipping upload")
-            return
-            
-        try:
             # Save to temp file
-            temp_file = f"/tmp/{table_name}.parquet"
+            temp_file = f"/tmp/{self.source_id}.parquet"
             df.to_parquet(temp_file, index=False)
             
             # Upload to Cloud Storage
-            blob = self.bucket.blob(f'raw/{self.source_id}/{table_name}.parquet')
+            blob = self.bucket.blob(f'raw/{self.source_id}/current.parquet')
             blob.upload_from_filename(temp_file)
             
             # Clean up
             os.remove(temp_file)
             
-            logger.info(f"Uploaded {len(df):,} records to {table_name}")
-            
+            return True
         except Exception as e:
-            logger.error(f"Error uploading {table_name} to storage: {str(e)}")
-            raise
+            logger.error(f"Error storing data for {self.source_id}: {str(e)}")
+            return False
 
 class GeospatialSource(BaseSource):
     """Base class for geospatial data sources that fetch and store raw data"""
+    
+    async def sync(self) -> Optional[int]:
+        """Default implementation for geospatial sources"""
+        try:
+            df = await self.fetch()
+            if await self.store(df):
+                return len(df)
+            return None
+        except Exception as e:
+            logger.error(f"Sync failed for {self.source_id}: {str(e)}")
+            return None
     
     async def store(self, df: pd.DataFrame, dataset: str = None) -> bool:
         """Store raw data in GCS"""
@@ -115,7 +103,6 @@ class GeospatialSource(BaseSource):
                 self.bucket.blob(path).upload_from_filename(temp_file.name)
                 
             return True
-            
         except Exception as e:
-            logger.error(f"Error storing data for {dataset or self.source_id}: {str(e)}")
+            logger.error(f"Error storing data for {self.source_id}: {str(e)}")
             return False 
