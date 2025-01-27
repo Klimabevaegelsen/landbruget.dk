@@ -65,10 +65,10 @@ SOURCES = {
         "raw_folder": "raw",
         "processed_folder": "processed"
     },
-    "herd_data": {
-        "name": "Danish Herd Data",
+    "chr_data": {
+        "name": "Danish CHR Data",
         "type": "soap",
-        "description": "Herd data from CHR (Central Husbandry Register)",
+        "description": "Animal data from CHR (Central Husbandry Register)",
         "frequency": "weekly",
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
@@ -89,5 +89,14 @@ SOURCES = {
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
         "create_dissolved": True
+    },
+    "antibiotics": {
+        "name": "Danish VetStat Data",
+        "type": "soap",
+        "description": "Antibiotic usage data from VetStat",
+        "frequency": "monthly",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data",
+        "url": "https://vetstat.fvst.dk/vetstat/services/external/CHRWS"
     }
 }
