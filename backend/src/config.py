@@ -90,5 +90,13 @@ SOURCES = {
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
         "create_dissolved": True
+    },
+    "slaugther_premiums": {
+        "name": "Danish Slaughter Premiums",
+        "type": "static",
+        "description": "Slaughter premiums from Danish Agriculture & Food Council",
+        "frequency": "static",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data"
     }
 }
