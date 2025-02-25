@@ -90,3 +90,17 @@ Adjust the `container_cpu` and `container_memory` variables to scale the Cloud R
 - The database is only accessible from the Cloud Run service
 - The Filestore instance is only accessible from the Cloud Run service
 - The load balancer can be configured with SSL for secure communication 
+
+## Local Development
+
+For local development and making changes to Mage.ai content, please refer to the [CONTRIBUTING.md](../../backend/mage/CONTRIBUTING.md) file in the `backend/mage` directory.
+
+### Development Workflow
+
+1. Developers make changes to Mage.ai content locally using Docker
+2. Changes are committed to a feature branch
+3. A pull request is created for review
+4. Once approved, changes are merged to the main branch
+5. The Terraform configuration in this directory is used to deploy the changes to the production environment
+
+This workflow ensures that all changes to Mage.ai content are properly reviewed and tested before being deployed to production. 
