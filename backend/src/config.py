@@ -58,6 +58,7 @@ SOURCES = {
     },
     "property_owners": {
         "name": "Danish Property Owners",
+        "description": "Property owner data from Datafordeleren",
         "frequency": "weekly",
         "enabled": True,
         "type": "sftp",
