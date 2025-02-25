@@ -48,25 +48,25 @@ async def get_data(source_id: str):
     """Get data from a specific source"""
     if source_id not in SOURCES:
         raise HTTPException(status_code=404, detail="Source not found")
-        
+
     config = SOURCES[source_id]
     if not config["enabled"]:
         raise HTTPException(status_code=403, detail="Source is disabled")
-    
+
     try:
         # Get appropriate source handler
         source = get_source_handler(source_id, config)
         if not source:
             raise HTTPException(status_code=501, detail="Source not implemented")
-        
+
         # Fetch data
         df = await source.fetch()
-        
+
         # Get next update time for weekly sources
         next_update = None
         if config["frequency"] == "weekly":
             next_update = (datetime.now() + timedelta(days=7)).isoformat()
-        
+
         return JSONResponse(
             content=df.to_dict(orient="records"),
             headers={
@@ -75,7 +75,7 @@ async def get_data(source_id: str):
                 "X-Update-Frequency": config["frequency"]
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error fetching data from {source_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
