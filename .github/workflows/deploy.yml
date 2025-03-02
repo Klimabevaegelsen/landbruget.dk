@@ -50,6 +50,7 @@ jobs:
           path: backend/mage/test-results.xml
 
       - name: Validate Mage.ai configuration
+        working-directory: backend/mage
         run: |
           python -c "
           import yaml
@@ -65,14 +66,14 @@ jobs:
               
               # Validate YAML configurations if they exist
               try:
-                  with open('metadata.yaml', 'r') as f:
+                  with open('pipelines/wetlands_pipeline/metadata.yaml', 'r') as f:
                       metadata = yaml.safe_load(f)
                   print('metadata.yaml is valid')
               except FileNotFoundError:
                   print('metadata.yaml not found - skipping')
               
               try:
-                  with open('io_config.yaml', 'r') as f:
+                  with open('pipelines/wetlands_pipeline/io_config.yaml', 'r') as f:
                       io_config = yaml.safe_load(f)
                   print('io_config.yaml is valid')
               except FileNotFoundError:
