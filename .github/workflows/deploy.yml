@@ -1,17 +1,21 @@
-name: Deploy to Cloud Run
+name: Deploy Mage.ai Pipeline Updates
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'backend/mage/**'
+      - '.github/workflows/deploy.yml'
 
 env:
   PROJECT_ID: landbrugsdata-1
   REGION: europe-west1
   SERVICE: mage-data-prep
+  MAGE_ENVIRONMENT: production
 
 jobs:
-  deploy:
+  validate-and-deploy:
     runs-on: ubuntu-latest
 
     permissions:
@@ -20,14 +24,53 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mage-ai pytest pytest-cov
+
+      - name: Run tests
+        working-directory: backend/mage
+        run: |
+          python -m pytest tests/ -v --cov=. --cov-report=xml --junitxml=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: backend/mage/test-results.xml
+
+      - name: Validate Mage.ai configuration
+        working-directory: backend/mage
+        run: |
+          python -c "
+          from mage_ai.data_preparation.repo_manager import RepoManager
+          from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
+          
+          # Validate repository structure
+          repo_manager = RepoManager()
+          repo_manager.validate_repo_structure()
+          
+          # Validate pipeline
+          pipeline_uuid = 'wetlands_pipeline'
+          scheduler = PipelineScheduler(pipeline_uuid)
+          scheduler.validate_pipeline()
+          "
 
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v1
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
@@ -36,14 +79,25 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Build and Push Container
-        run: |-
-          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} .
+        run: |
+          cd backend/mage
+          # Use the same image name as in Terraform
+          docker build \
+            --build-arg MAGE_ENVIRONMENT=${{ env.MAGE_ENVIRONMENT }} \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:latest \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} .
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
 
-      - name: Deploy to Cloud Run
-        run: |-
-          gcloud run deploy ${{ env.SERVICE }} \
+      - name: Update Cloud Run Service
+        run: |
+          gcloud run services update ${{ env.SERVICE }} \
             --region ${{ env.REGION }} \
-            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --platform managed \
-            --allow-unauthenticated 
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+
+      - name: Test Deployment
+        run: |
+          # Wait for new revision to be ready
+          sleep 30
+          DEPLOYED_URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format 'value(status.url)')
+          curl -s -o /dev/null -w "%{http_code}" $DEPLOYED_URL | grep 200 
