@@ -115,10 +115,12 @@ All static sources are updated through manual pull requests:
    git checkout -b feature/your-feature-name
    ```
 3. Make your changes
-4. Run tests:
+4. Run linting and tests:
    ```bash
    # Backend
    cd backend
+   ruff check .  # Run linting checks
+   ruff check --fix .  # Auto-fix linting issues
    pytest
 
    # Frontend
