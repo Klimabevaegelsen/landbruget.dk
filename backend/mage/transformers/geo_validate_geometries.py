@@ -1,4 +1,3 @@
-import logging
 import duckdb
 import tempfile
 import os
@@ -229,7 +228,7 @@ def geo_validate_geometries(data, *args, **kwargs):
     finally:
         try:
             con.execute("DROP TABLE IF EXISTS valid_features")
-        except Exception as e:
+        except Exception:
             pass
         con.close()
 

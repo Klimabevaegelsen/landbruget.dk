@@ -1,7 +1,5 @@
 import requests
-import xml.etree.ElementTree as ET
 import logging
-from shapely.geometry import Polygon
 
 if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer

@@ -3,7 +3,6 @@ import time
 
 if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer
-    from mage_ai.data_preparation.shared.secrets import get_secret_value
 if 'test' not in globals():
     from mage_ai.data_preparation.decorators import test
 

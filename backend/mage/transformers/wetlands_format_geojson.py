@@ -1,11 +1,7 @@
-import logging
-import duckdb
 import tempfile
 import os
 import json
-from typing import Dict, Any
 import geopandas as gpd
-import pandas as pd
 import shapely
 
 if 'transformer' not in globals():

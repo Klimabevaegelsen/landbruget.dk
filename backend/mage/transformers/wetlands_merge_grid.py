@@ -1,4 +1,3 @@
-import logging
 import time
 import psutil
 from typing import Dict, Any, List

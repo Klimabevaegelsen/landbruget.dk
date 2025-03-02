@@ -1,7 +1,5 @@
 import requests
 import xml.etree.ElementTree as ET
-import logging
-import math
 
 if 'data_loader' not in globals():
     from mage_ai.data_preparation.decorators import data_loader
@@ -161,6 +159,7 @@ def test_output(*args):
     
     if isinstance(data, list) and len(data) == 2:
         # Standard case - we received [data_items, metadata_items]
+        data_items, metadata_items = data
         assert len(data_items) > 0, 'Data items list should not be empty'
         assert len(metadata_items) > 0, 'Metadata items list should not be empty'
         assert len(data_items) == len(metadata_items), 'Data items and metadata items should have the same length'
