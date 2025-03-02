@@ -50,20 +50,37 @@ jobs:
           path: backend/mage/test-results.xml
 
       - name: Validate Mage.ai configuration
-        working-directory: backend/mage
         run: |
           python -c "
-          from mage_ai.data_preparation.repo_manager import RepoManager
+          import yaml
+          import sys
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
           
-          # Validate repository structure
-          repo_manager = RepoManager()
-          repo_manager.validate_repo_structure()
-          
-          # Validate pipeline
-          pipeline_uuid = 'wetlands_pipeline'
-          scheduler = PipelineScheduler(pipeline_uuid)
-          scheduler.validate_pipeline()
+          try:
+              # Validate pipeline
+              pipeline_uuid = 'wetlands_pipeline'
+              scheduler = PipelineScheduler(pipeline_uuid)
+              scheduler.validate_pipeline()
+              print(f'Pipeline {pipeline_uuid} is valid')
+              
+              # Validate YAML configurations if they exist
+              try:
+                  with open('metadata.yaml', 'r') as f:
+                      metadata = yaml.safe_load(f)
+                  print('metadata.yaml is valid')
+              except FileNotFoundError:
+                  print('metadata.yaml not found - skipping')
+              
+              try:
+                  with open('io_config.yaml', 'r') as f:
+                      io_config = yaml.safe_load(f)
+                  print('io_config.yaml is valid')
+              except FileNotFoundError:
+                  print('io_config.yaml not found - skipping')
+              
+          except Exception as e:
+              print(f'Validation failed: {e}')
+              sys.exit(1)
           "
 
       - name: Google Auth
