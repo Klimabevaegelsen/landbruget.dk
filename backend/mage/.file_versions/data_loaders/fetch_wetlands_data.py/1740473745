@@ -1,0 +1,311 @@
+import logging
+import xml.etree.ElementTree as ET
+import requests
+import json
+from typing import Dict, List, Any
+import os
+import sys
+from shapely.geometry import Polygon, MultiPolygon
+
+# TEST COMMENT - This line was added to test file syncing with the container
+# Timestamp: 2023-11-15 - If you see this in the container, file syncing is working
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+logger = logging.getLogger(__name__)
+
+@data_loader
+def load_data(partition=None, **kwargs):
+    """
+    This function fetches wetlands data from Denmark's environmental data portal.
+    When used as a dynamic block, Mage AI will automatically combine the results from all partitions.
+    
+    Args:
+        partition (dict, optional): Information about the current partition for dynamic blocks.
+                                   Contains 'index' (current partition) and 'total' (total partitions).
+    
+    Returns:
+        list: A list of GeoJSON features from the WFS service.
+    """
+    # Direct print statement that will show in the output
+    print("STARTING WETLANDS DATA FETCH - THIS SHOULD BE VISIBLE IN OUTPUT")
+    
+    # Using the Mage provided logger
+    logger = kwargs.get('logger')
+    if logger:
+        logger.info("Starting wetlands data fetch with Mage logger")
+    
+    # Configuration variables
+    config = {
+        'url': 'https://wfs2-miljoegis.mim.dk/natur/ows',
+        'layer': 'natur:kulstof2022',
+        'batch_size': 1000,  # Increased batch size for better efficiency
+        'timeout': 300  # 5 minutes timeout
+    }
+    
+    # Calculate start index based on partition if provided
+    start_index = 0
+    partition_index = 0
+    partition_total = 1
+    
+    if partition is not None:
+        # Handle different partition formats
+        if isinstance(partition, dict) and 'index' in partition and 'total' in partition:
+            partition_index = partition['index']
+            partition_total = partition['total']
+            start_index = partition_index * config['batch_size']
+        elif isinstance(partition, int):
+            # Handle case where partition is just an integer
+            partition_index = partition
+            start_index = partition_index * config['batch_size']
+        
+        if logger:
+            logger.info(f"Processing partition {partition_index + 1}/{partition_total} - Start index: {start_index}")
+        print(f"Processing partition {partition_index + 1}/{partition_total} - Start index: {start_index}")
+    
+    # Define namespaces for XML parsing
+    namespaces = {
+        'wfs': 'http://www.opengis.net/wfs/2.0',
+        'natur': 'http://wfs2-miljoegis.mim.dk/natur',
+        'gml': 'http://www.opengis.net/gml/3.2'
+    }
+    
+    # WFS parameters
+    wfs_params = {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': config['layer'],
+        'SRSNAME': 'EPSG:25832',
+        'COUNT': str(config['batch_size']),
+        'STARTINDEX': str(start_index)
+    }
+    
+    try:
+        # Fetch data from the WFS service
+        print(f"Fetching data from WFS service: {config['url']}")
+        if logger:
+            logger.info(f"Fetching data from WFS service: {config['url']}")
+            
+        response = requests.get(config['url'], params=wfs_params, timeout=config['timeout'])
+        
+        # Log the full request URL for debugging
+        print(f"Request URL: {response.url}")
+        if logger:
+            logger.info(f"Request URL: {response.url}")
+        
+        if response.status_code != 200:
+            error_message = f"Error fetching data: {response.status_code}"
+            print(error_message)
+            if logger:
+                logger.error(error_message)
+                
+            error_message = f"Response content: {response.text[:500]}..."  # Log first 500 chars
+            print(error_message)
+            if logger:
+                logger.error(error_message)
+                
+            return []
+        
+        # Parse XML response
+        print("Parsing WFS XML response...")
+        if logger:
+            logger.info("Parsing WFS XML response...")
+            
+        root = ET.fromstring(response.text)
+        
+        # Log the root element to help debug the structure
+        print(f"Root element: {root.tag}")
+        if logger:
+            logger.info(f"Root element: {root.tag}")
+        
+        # Try to get total matched features
+        total_features = root.get('numberMatched', None)
+        if total_features:
+            total_features = int(total_features)
+            print(f"Total available features: {total_features:,}")
+            if logger:
+                logger.info(f"Total available features: {total_features:,}")
+        
+        # Extract features using appropriate namespace and path
+        # We'll try multiple possible paths since the exact structure might vary
+        features = []
+        possible_paths = [
+            './/{http://wfs2-miljoegis.mim.dk/natur}kulstof2022',
+            './/natur:kulstof2022',
+            './/*[local-name()="kulstof2022"]'
+        ]
+        
+        elements = []
+        for path in possible_paths:
+            try:
+                if path.startswith('.//{'):
+                    elements = root.findall(path)  # Use direct path
+                elif ':' in path:
+                    elements = root.findall(path, namespaces)  # Use namespace mapping
+                else:
+                    elements = root.findall(path)  # Use local-name path
+                    
+                if elements:
+                    print(f"Found {len(elements)} features using path: {path}")
+                    if logger:
+                        logger.info(f"Found {len(elements)} features using path: {path}")
+                    break
+            except Exception as e:
+                error_message = f"Error finding elements with path {path}: {str(e)}"
+                print(error_message)
+                if logger:
+                    logger.warning(error_message)
+                elements = []
+                
+        if not elements:
+            error_message = "Could not find any features in the response"
+            print(error_message)
+            if logger:
+                logger.warning(error_message)
+                
+            error_message = f"Response content: {response.text[:500]}..."
+            print(error_message)
+            if logger:
+                logger.info(error_message)
+                
+            return []
+        
+        # Process found elements
+        for feature in elements:
+            try:
+                # Extract ID - try different attribute formats
+                feature_id = None
+                for id_attr in ['{http://www.opengis.net/gml/3.2}id', 'id', 'gml:id']:
+                    feature_id = feature.get(id_attr)
+                    if feature_id:
+                        break
+                
+                if not feature_id:
+                    # Generate a synthetic ID if none found
+                    feature_id = f"feature_{len(features)}"
+                
+                # Try to extract attributes using different possible paths
+                gridcode = None
+                toerv_pct = None
+                
+                # Try direct child elements
+                for child in feature:
+                    if child.tag.endswith('gridcode') or 'gridcode' in child.tag.lower():
+                        gridcode = int(child.text) if child.text and child.text.strip() else None
+                    elif child.tag.endswith('toerv_pct') or 'toerv_pct' in child.tag.lower():
+                        toerv_pct = child.text
+                
+                # If not found, try namespace-qualified elements
+                if gridcode is None:
+                    gridcode_elem = feature.find('.//natur:gridcode', namespaces)
+                    if gridcode_elem is not None and gridcode_elem.text:
+                        gridcode = int(gridcode_elem.text)
+                
+                if toerv_pct is None:
+                    toerv_pct_elem = feature.find('.//natur:toerv_pct', namespaces)
+                    if toerv_pct_elem is not None:
+                        toerv_pct = toerv_pct_elem.text
+                
+                # Parse geometry
+                geom_elem = feature.find('.//gml:Polygon', namespaces)
+                geometry = None
+                if geom_elem is not None:
+                    try:
+                        coords_elem = geom_elem.find('.//gml:posList', namespaces)
+                        if coords_elem is not None and coords_elem.text:
+                            coords = coords_elem.text.split()
+                            coords = [(float(coords[i]), float(coords[i + 1])) 
+                                    for i in range(0, len(coords), 2)]
+                            poly = Polygon(coords)
+                            
+                            # Ensure the polygon is valid
+                            if not poly.is_valid:
+                                poly = poly.buffer(0)
+                            geometry = poly.__geo_interface__
+                    except Exception as geom_error:
+                        error_message = f"Error parsing geometry: {str(geom_error)}"
+                        print(error_message)
+                        if logger:
+                            logger.error(error_message)
+                
+                # Add the feature to our result list
+                features.append({
+                    'type': 'Feature',
+                    'geometry': geometry,
+                    'properties': {
+                        'id': feature_id,
+                        'gridcode': gridcode,
+                        'toerv_pct': toerv_pct,
+                        'partition': partition_index
+                    }
+                })
+                
+            except Exception as e:
+                error_message = f"Error parsing feature: {str(e)}"
+                print(error_message)
+                if logger:
+                    logger.error(error_message)
+                continue
+        
+        print(f"Successfully parsed {len(features)} features")
+        if logger:
+            logger.info(f"Successfully parsed {len(features)} features")
+        
+        return features
+            
+    except Exception as e:
+        error_message = f"Error in data loader: {str(e)}"
+        print(error_message)
+        if logger:
+            logger.error(error_message)
+        return []
+
+
+@test
+def test_output(*args) -> None:
+    """
+    Test that the output data has the expected structure.
+    
+    This test function can receive multiple arguments, but we only care about the first one.
+    """
+    # Get the first argument, which should be our output
+    if len(args) == 0:
+        assert False, 'No output was provided to the test function'
+        
+    # If we have multiple arguments, take the first one
+    if len(args) > 1:
+        print(f"Note: test_output received {len(args)} arguments, using only the first one")
+    
+    # Print the type of the first argument for debugging
+    output = args[0]
+    print(f"Debug - Type of first argument: {type(output)}")
+    
+    # Check if the output is a list
+    if not isinstance(output, list):
+        # If it's a single feature, wrap it in a list
+        if isinstance(output, dict) and 'type' in output and output.get('type') == 'Feature':
+            print("Converting single feature to list")
+            output = [output]
+        else:
+            # If it's not a list or a feature, fail the test
+            assert False, f'Output should be a list of features, got {type(output)}'
+    
+    assert output is not None, 'The output is undefined'
+    assert isinstance(output, list), 'Output should be a list of features'
+    
+    if len(output) > 0:
+        # Test the first feature in the list
+        feature = output[0]
+        print(f"Debug - Type of first feature: {type(feature)}")
+        print(f"Debug - First feature keys: {feature.keys() if isinstance(feature, dict) else 'Not a dict'}")
+        
+        assert 'properties' in feature, 'properties key is missing'
+        assert 'geometry' in feature, 'geometry key is missing'
+        assert 'type' in feature, 'type key is missing'
+        assert feature['type'] == 'Feature', 'Feature type is incorrect'
+        
+        print(f"Test passed! Output contains {len(output)} features with the expected structure.") 

@@ -36,6 +36,7 @@ backend/data/
 temp_data/
 temp_carbon/
 cadastral_schema.txt
+
 # Node
 node_modules/
 build/
@@ -89,3 +90,15 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+
+# Google Cloud credentials
+.gcp/
+*.json.gcp
+application_default_credentials.json
+*credentials*.json
+backend/mage/.gcp/
+
+# Mage specific
+backend/mage/.file_versions/
+backend/mage/.ssh_tunnel/
+backend/mage/__pycache__/

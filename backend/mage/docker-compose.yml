@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  mage:
+    build: .  # Use our custom Dockerfile in the current directory
+    container_name: landbrugsdata-mage
+    ports:
+      - 6789:6789
+    volumes:
+      - .:/home/src/default_repo
+    environment:
+      - ENV=dev
+    restart: unless-stopped
+    command: ["mage", "start"]
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G 

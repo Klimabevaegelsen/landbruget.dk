@@ -1,0 +1,34 @@
+from mage_ai.data_preparation.repo_manager import get_repo_path
+from mage_ai.io.config import ConfigFileLoader
+from mage_ai.io.google_cloud_storage import GoogleCloudStorage
+from os import path
+import os
+import sys
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@data_loader
+def load_data(**kwargs):
+    """
+    Wetlands pipeline data loader block
+    
+    Return
+        Dictionary with metadata about the fetched data
+    """
+    # Use the implementation from the reusable loader
+    # The import needs to be adjusted to work within the mage container
+    sys.path.append('/home/src/default_repo')
+    from data_loaders.fetch_wetlands import load_data as fetch_wetlands
+    
+    # Configure for testing (small sample)
+    config = {
+        'batch_size': 1000,  # Smaller batch for testing
+        'max_batches': 2     # Only 2 batches maximum
+    }
+    
+    # Run the data loader
+    return fetch_wetlands(config) 

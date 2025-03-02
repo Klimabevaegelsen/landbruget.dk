@@ -1,0 +1,111 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - process_wetlands_data
+  executor_config: null
+  executor_type: local_python
+  has_callback: null
+  language: python
+  name: fetch_wetlands_data
+  retry_config: null
+  status: failed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: fetch_wetlands_data
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - create_dissolved_wetlands
+  - export_wetlands_to_gcs
+  executor_config: null
+  executor_type: local_python
+  has_callback: null
+  language: python
+  name: process_wetlands_data
+  retry_config: null
+  status: null
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - fetch_wetlands_data
+  uuid: process_wetlands_data
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - export_dissolved_to_gcs
+  executor_config: null
+  executor_type: local_python
+  has_callback: null
+  language: python
+  name: create_dissolved_wetlands
+  retry_config: null
+  status: null
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - process_wetlands_data
+  uuid: create_dissolved_wetlands
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: null
+  language: python
+  name: export_wetlands_to_gcs
+  retry_config: null
+  status: null
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - process_wetlands_data
+  uuid: export_wetlands_to_gcs
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: null
+  language: python
+  name: export_dissolved_to_gcs
+  retry_config: null
+  status: null
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - create_dissolved_wetlands
+  uuid: export_dissolved_to_gcs
+cache_block_output_in_memory: false
+callbacks: []
+concurrency_config: {}
+conditionals: []
+created_at: null
+data_integration: null
+description: Pipeline for fetching, processing, and syncing Danish Wetlands data
+executor_config: {}
+executor_count: 1
+executor_type: null
+extensions: {}
+name: wetlands_pipeline
+notification_config: {}
+remote_variables_dir: null
+retry_config: {}
+run_pipeline_in_one_process: false
+settings:
+  triggers: null
+spark_config: {}
+tags:
+- geospatial
+- wetlands
+- danish-environment
+type: python
+uuid: wetlands_pipeline
+variables_dir: /home/src/mage_data/default_repo
+widgets: []
