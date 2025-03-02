@@ -29,7 +29,7 @@ def export_processed_wetlands(data, *args, **kwargs):
                 - validation_rules: Applied validation rules
                 - stats: Validation statistics
     """
-    logger = logging.getLogger(__name__)
+    # Remove unused logger
     
     # Get data from previous step
     validated_data_path = data.get('validated_data_path')
@@ -73,7 +73,7 @@ def export_processed_wetlands(data, *args, **kwargs):
                     print(error_msg)
                     raise ValueError(error_msg)
             
-            print(f"\n☁️ Using Google Cloud Storage:")
+            print("\n☁️ Using Google Cloud Storage:")
             print(f"  • Bucket: {bucket_name}")
             print(f"  • Path: {storage_path}")
             
@@ -94,25 +94,25 @@ def export_processed_wetlands(data, *args, **kwargs):
             storage_config = config.get('LOCAL_STORAGE') or {}
             base_path = storage_config.get('base_path') or os.getenv('MAGEAI_DATA_DIR') or '/home/src/mage_data'
             
-            print(f"\n💾 Using local storage:")
+            print("\n💾 Using local storage:")
             print(f"  • Base path: {base_path}")
             
             # Ensure the directory exists
-            file_path = os.path.join(base_path, storage_path)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            if not os.path.exists(os.path.dirname(storage_path)):
+                os.makedirs(os.path.dirname(storage_path))
             
             # Copy the validated file to the destination
             print("\n📋 Copying data to local storage...")
-            shutil.copy2(validated_data_path, file_path)
+            shutil.copy2(validated_data_path, storage_path)
             
-            print(f"✅ Stored {validated_count:,} processed features to {file_path}")
+            print(f"✅ Stored {validated_count:,} processed features to {storage_path}")
             storage_mode = 'local'
         
         # Log CRS information
         source_crs = metadata.get('source_crs')
         target_crs = metadata.get('target_crs')
         if source_crs and target_crs:
-            print(f"\n🌍 CRS Information:")
+            print("\n�� CRS Information:")
             print(f"  • Source: EPSG:{source_crs}")
             print(f"  • Target: EPSG:{target_crs}")
         
@@ -125,7 +125,7 @@ def export_processed_wetlands(data, *args, **kwargs):
         
         # Log file size
         if storage_mode == 'local':
-            file_size = os.path.getsize(file_path)
+            file_size = os.path.getsize(storage_path)
             print(f"\n📦 File size: {file_size/1024/1024:.2f} MB")
         
         return {

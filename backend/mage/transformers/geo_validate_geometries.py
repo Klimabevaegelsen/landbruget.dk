@@ -50,7 +50,6 @@ def geo_validate_geometries(data, *args, **kwargs):
     Raises:
         ValueError: If input requirements are not met
     """
-    logger = logging.getLogger(__name__)
     
     # 1. Input Validation
     input_path = data.get('input_path') or data.get('formatted_data_path')
@@ -230,7 +229,7 @@ def geo_validate_geometries(data, *args, **kwargs):
     finally:
         try:
             con.execute("DROP TABLE IF EXISTS valid_features")
-        except:
+        except Exception as e:
             pass
         con.close()
 

@@ -22,7 +22,6 @@ if 'test' not in globals():
 
 def process_chunk(chunk_gdf: gpd.GeoDataFrame, gridcode: int) -> gpd.GeoDataFrame:
     """Process a spatial chunk to merge adjacent polygons with the same gridcode."""
-    logger = logging.getLogger(__name__)
     
     # Filter by gridcode
     filtered_df = chunk_gdf[chunk_gdf['gridcode'] == gridcode].copy()
@@ -72,7 +71,7 @@ def process_chunk(chunk_gdf: gpd.GeoDataFrame, gridcode: int) -> gpd.GeoDataFram
 
 def create_spatial_chunks(gdf: gpd.GeoDataFrame, num_chunks: int = 4) -> List[gpd.GeoDataFrame]:
     """Split a GeoDataFrame into spatial chunks based on a grid."""
-    logger = logging.getLogger(__name__)
+    # Remove unused logger
     
     # Get the total bounds of the dataset
     minx, miny, maxx, maxy = gdf.total_bounds
@@ -102,7 +101,6 @@ def create_spatial_chunks(gdf: gpd.GeoDataFrame, num_chunks: int = 4) -> List[gp
             
             if len(chunk_gdf) > 0:
                 chunks.append(chunk_gdf)
-                logger.info(f"Created chunk with {len(chunk_gdf)} features")
     
     return chunks
 
@@ -224,7 +222,6 @@ def merge_grid(data_item: Dict[str, Any]) -> Dict[str, Any]:
     if not data_item.get("input_path"):
         raise ValueError("No input path provided for merging")
 
-    logger = logging.getLogger(__name__)
     print("🚀 Starting polygon merging process")
     
     # Record start time for performance tracking
@@ -293,7 +290,7 @@ def merge_grid(data_item: Dict[str, Any]) -> Dict[str, Any]:
             
             # Check memory usage
             mem_used = psutil.virtual_memory().percent
-            logger.info(f"Memory usage before processing chunk: {mem_used}%")
+            print(f"Memory usage before processing chunk: {mem_used}%")
             
             # Process the chunk
             result = process_chunk(chunk, code)

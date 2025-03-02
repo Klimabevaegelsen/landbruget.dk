@@ -1,13 +1,9 @@
 import logging
-import xml.etree.ElementTree as ET
-from io import StringIO
 import time
-import tempfile
-import os
-import json
 
 if 'transformer' not in globals():
     from mage_ai.data_preparation.decorators import transformer
+    from mage_ai.data_preparation.shared.secrets import get_secret_value
 if 'test' not in globals():
     from mage_ai.data_preparation.decorators import test
 

@@ -1,5 +1,3 @@
-import pytest
-from mage_ai.data_preparation.repo_manager import get_repo_path
 from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
 from mage_ai.data_preparation.models.pipeline import Pipeline
 

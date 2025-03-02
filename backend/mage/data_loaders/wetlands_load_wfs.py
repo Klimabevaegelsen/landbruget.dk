@@ -11,7 +11,6 @@ if 'test' not in globals():
 
 def get_wfs_capabilities(wfs_url: str) -> dict:
     """Get WFS capabilities including feature type details."""
-    logger = logging.getLogger(__name__)
     
     params = {
         'SERVICE': 'WFS',
@@ -66,7 +65,6 @@ def load_wetlands_data(**kwargs):
         [metadata1, metadata2, ...]        # Metadata for each batch
     ]
     """
-    logger = logging.getLogger(__name__)
     
     # Parameters with sensible defaults
     config = kwargs.get('config', {})
@@ -74,7 +72,7 @@ def load_wetlands_data(**kwargs):
     layer_name = config.get('layer_name', 'natur:kulstof2022')
     batch_size = int(config.get('batch_size', 50000))
     
-    print(f"\n🚀 Starting wetlands data load")
+    print("\n🚀 Starting wetlands data load")
     print(f"📡 WFS URL: {wfs_url}")
     print(f"📂 Layer: {layer_name}")
     print(f"📦 Batch size: {batch_size:,}")
@@ -161,14 +159,8 @@ def test_output(*args):
     # Get the first argument
     data = args[0]
     
-    logger = logging.getLogger(__name__)
-    logger.info(f"Test received {len(args)} arguments")
-    
     if isinstance(data, list) and len(data) == 2:
         # Standard case - we received [data_items, metadata_items]
-        logger.info("Testing standard dynamic block output format")
-        data_items, metadata_items = data
-        
         assert len(data_items) > 0, 'Data items list should not be empty'
         assert len(metadata_items) > 0, 'Metadata items list should not be empty'
         assert len(data_items) == len(metadata_items), 'Data items and metadata items should have the same length'

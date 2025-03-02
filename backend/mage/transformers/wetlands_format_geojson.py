@@ -50,7 +50,7 @@ def wetlands_format_geojson(data, *args, **kwargs):
         ValueError: If GeoJSON data is missing or invalid
         Exception: If any error occurs during processing
     """
-    logger = logging.getLogger(__name__)
+    # Remove unused logger and con
     
     # Get GeoJSON data
     geojson_data = data.get('geojson_data')
@@ -63,7 +63,6 @@ def wetlands_format_geojson(data, *args, **kwargs):
     print("\n🔄 Starting GeoJSON to GeoParquet conversion")
     
     # Initialize variables
-    con = None
     geojson_path = None
     output_path = None
     
@@ -147,7 +146,7 @@ def wetlands_format_geojson(data, *args, **kwargs):
             gdf = gdf[gdf['geometry'].apply(lambda g: shapely.is_valid(g) if g is not None else False)]
         
         # Log final counts
-        print(f"\n📊 Final dataset statistics:")
+        print("\n📊 Final dataset statistics:")
         print(f"  • Total features: {len(gdf):,}")
         print(f"  • Features removed: {initial_count - len(gdf):,}")
         

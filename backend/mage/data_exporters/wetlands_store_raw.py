@@ -27,7 +27,7 @@ def export_data(data, *args, **kwargs):
     config = kwargs.get('config', {})
     storage_path = config.get('storage_path', 'wetlands/raw_data.jsonl')
     
-    print(f"\n📁 Storage Configuration:")
+    print("\n📁 Storage Configuration:")
     print(f"  • Target path: {storage_path}")
     
     # Ensure directory exists
@@ -58,7 +58,7 @@ def export_data(data, *args, **kwargs):
         print("\n📊 Storage Statistics:")
         print(f"  • Features stored: {feature_count:,}")
         print(f"  • File size: {file_size/1024/1024:.2f} MB")
-        print(f"  • Storage mode: local")
+        print("  • Storage mode: local")
         
         print("\n✅ Successfully stored raw wetlands data")
         

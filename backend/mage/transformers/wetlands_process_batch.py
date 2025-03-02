@@ -18,7 +18,7 @@ def process_batch(data, *args, **kwargs):
     Input data format:
     - For a dynamic child block, data is one item from the data_items list
     """
-    logger = logging.getLogger(__name__)
+    # Remove unused logger
     
     # Get metadata and batch index from input data
     if not isinstance(data, dict):
