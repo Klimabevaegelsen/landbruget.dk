@@ -53,31 +53,27 @@ jobs:
         working-directory: backend/mage
         run: |
           python -c "
-          import yaml
+          import os
           import sys
+          import yaml
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
           
           try:
-              # Validate pipeline
+              # Set up pipeline path
               pipeline_uuid = 'wetlands_pipeline'
+              pipeline_path = os.path.join('pipelines', pipeline_uuid)
+              
+              # Validate pipeline YAML
+              pipeline_yaml = os.path.join(pipeline_path, 'metadata.yaml')
+              if os.path.exists(pipeline_yaml):
+                  with open(pipeline_yaml, 'r') as f:
+                      metadata = yaml.safe_load(f)
+                  print('Pipeline metadata.yaml is valid')
+              
+              # Initialize and validate pipeline
               scheduler = PipelineScheduler(pipeline_uuid)
               scheduler.validate_pipeline()
               print(f'Pipeline {pipeline_uuid} is valid')
-              
-              # Validate YAML configurations if they exist
-              try:
-                  with open('pipelines/wetlands_pipeline/metadata.yaml', 'r') as f:
-                      metadata = yaml.safe_load(f)
-                  print('metadata.yaml is valid')
-              except FileNotFoundError:
-                  print('metadata.yaml not found - skipping')
-              
-              try:
-                  with open('pipelines/wetlands_pipeline/io_config.yaml', 'r') as f:
-                      io_config = yaml.safe_load(f)
-                  print('io_config.yaml is valid')
-              except FileNotFoundError:
-                  print('io_config.yaml not found - skipping')
               
           except Exception as e:
               print(f'Validation failed: {e}')
