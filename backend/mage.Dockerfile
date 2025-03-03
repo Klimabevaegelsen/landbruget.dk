@@ -41,5 +41,8 @@ ENV MAGE_DEV_MODE=${MAGE_DEV_MODE}
 RUN ls -la /home/src/default_repo/ && \
     ls -la /home/src/default_repo/pipelines/
 
+# Set explicit repo path to ensure Mage.ai finds the pipelines
+ENV MAGE_REPO_PATH=/home/src/default_repo
+
 # Keep the default entrypoint from the base image
 ENTRYPOINT ["/bin/sh", "-c", "/app/run_app.sh"] 
