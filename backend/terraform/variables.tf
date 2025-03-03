@@ -22,6 +22,12 @@ variable "zone" {
   default     = "europe-west1-b"
 }
 
+variable "gcs_bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket for Mage.ai data storage. Set via environment variable TF_VAR_gcs_bucket_name. Example: mage-data-storage"
+  # No default - this should be provided via environment variable
+}
+
 variable "user_email" {
   type        = string
   description = "Email address of the user to grant project-level access for Cloud Run (not used directly as it's fetched from Secret Manager)"

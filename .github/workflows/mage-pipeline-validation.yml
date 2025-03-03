@@ -44,6 +44,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # This step validates that all Mage.ai pipeline code can be properly bundled
+      # into a Docker image, ensuring that our production deployment will succeed
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
