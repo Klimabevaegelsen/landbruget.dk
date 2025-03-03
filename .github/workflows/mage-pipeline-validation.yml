@@ -43,27 +43,71 @@ jobs:
           import os
           import sys
           import yaml
+          from mage_ai.data_preparation.models.pipeline import Pipeline
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
+          
+          def validate_pipeline_metadata(metadata):
+              required_fields = ['blocks', 'name', 'type', 'uuid']
+              for field in required_fields:
+                  if field not in metadata:
+                      raise ValueError(f'Pipeline metadata is missing required field: {field}')
+              
+              # Validate blocks
+              if not metadata['blocks']:
+                  raise ValueError('Pipeline must contain at least one block')
+              
+              # Check for required block types
+              block_types = [block.get('type') for block in metadata['blocks']]
+              required_types = {'data_loader', 'transformer', 'data_exporter'}
+              missing_types = required_types - set(block_types)
+              if missing_types:
+                  raise ValueError(f'Pipeline is missing required block types: {missing_types}')
+              
+              # Validate block dependencies
+              for block in metadata['blocks']:
+                  if 'upstream_blocks' not in block:
+                      raise ValueError(f'Block {block.get("name", "unknown")} is missing upstream_blocks field')
+                  if 'downstream_blocks' not in block:
+                      raise ValueError(f'Block {block.get("name", "unknown")} is missing downstream_blocks field')
           
           try:
               # Set up pipeline path
               pipeline_uuid = 'wetlands_pipeline'
               pipeline_path = os.path.join('pipelines', pipeline_uuid)
               
-              # Validate pipeline YAML
+              # Validate pipeline YAML exists
               pipeline_yaml = os.path.join(pipeline_path, 'metadata.yaml')
-              if os.path.exists(pipeline_yaml):
-                  with open(pipeline_yaml, 'r') as f:
-                      metadata = yaml.safe_load(f)
-                  print('Pipeline metadata.yaml is valid')
+              if not os.path.exists(pipeline_yaml):
+                  print(f'Pipeline metadata.yaml not found at {pipeline_yaml}')
+                  sys.exit(1)
+                  
+              # Load and validate metadata
+              with open(pipeline_yaml, 'r') as f:
+                  metadata = yaml.safe_load(f)
+                  print('Pipeline metadata.yaml is valid YAML')
+                  validate_pipeline_metadata(metadata)
+                  print('Pipeline metadata structure is valid')
+              
+              # Initialize pipeline
+              pipeline = Pipeline.get(pipeline_uuid)
+              if not pipeline:
+                  print(f'Pipeline {pipeline_uuid} not found')
+                  sys.exit(1)
               
               # Initialize and validate pipeline
-              scheduler = PipelineScheduler(pipeline_uuid)
+              scheduler = PipelineScheduler(pipeline_uuid=pipeline_uuid)
+              scheduler.pipeline = pipeline
+              
+              # Validate pipeline configuration
               scheduler.validate_pipeline()
-              print(f'Pipeline {pipeline_uuid} is valid')
+              print(f'Pipeline {pipeline_uuid} configuration is valid')
+              
+              # Validate pipeline can be executed
+              pipeline.validate()
+              print(f'Pipeline {pipeline_uuid} execution validation passed')
               
           except Exception as e:
-              print(f'Validation failed: {e}')
+              print(f'Validation failed: {str(e)}')
               sys.exit(1)
           "
 
@@ -95,10 +139,16 @@ jobs:
         run: |
           docker run --rm mageai-test:latest python -c "
           import os
+          from mage_ai.data_preparation.models.pipeline import Pipeline
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
           
           # Test pipeline loading
           pipeline_uuid = 'wetlands_pipeline'
-          scheduler = PipelineScheduler(pipeline_uuid)
-          print(f'Successfully loaded pipeline: {pipeline_uuid}')
+          pipeline = Pipeline.get(pipeline_uuid)
+          scheduler = PipelineScheduler(pipeline_uuid=pipeline_uuid)
+          scheduler.pipeline = pipeline
+          
+          # Validate pipeline can be loaded in Docker
+          pipeline.validate()
+          print(f'Successfully validated pipeline: {pipeline_uuid} in Docker')
           " 
