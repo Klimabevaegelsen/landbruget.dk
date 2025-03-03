@@ -148,9 +148,13 @@ Key patterns:
    # Create feature branch
    git checkout -b feature/your-feature-name
    
-   # Start Mage.ai
-   docker run -it -p 6789:6789 -v $(pwd)/backend/mage:/home/src mageai/mageai
+   # Build and run Mage.ai locally
+   docker build -t mage-local -f backend/mage.Dockerfile .
+   docker run -it -p 6789:6789 mage-local
    ```
+
+   > **Note**: The Dockerfile is configured to automatically run in development mode when built locally.
+   > Build arguments `MAGE_ENVIRONMENT` and `MAGE_DEV_MODE` default to `dev` and `true` respectively.
 
 3. **Access UI**: Open http://localhost:6789
 
@@ -198,22 +202,36 @@ Key patterns:
 
 ## Deployment
 
-### Local Development
+### Local Development with Docker
 ```bash
-# From docker-compose.yml
-version: '3'
-services:
-  mage:
-    build: .
-    ports:
-      - 6789:6789
-    volumes:
-      - .:/home/src/default_repo
-    environment:
-      - ENV=dev
+# Build the local development image
+docker build -t mage-local -f backend/mage.Dockerfile .
+
+# Run the container with port forwarding
+docker run -it -p 6789:6789 mage-local
 ```
 
-### Production (Google Cloud Run)
+The Dockerfile is configured to:
+- Use development mode by default for local builds
+- Set appropriate environment variables automatically
+- Copy all necessary files from backend/mage to the container
+
+### Production Deployment (via GitHub Actions)
+Production deployment is handled automatically by the GitHub Actions workflow when changes are pushed to the main branch:
+
+1. The workflow builds the Docker image with production settings:
+   ```
+   docker build --build-arg MAGE_ENVIRONMENT=production --build-arg MAGE_DEV_MODE=false -f backend/mage.Dockerfile .
+   ```
+
+2. The built image is pushed to Google Container Registry
+
+3. Cloud Run service is updated with the new image and environment variables:
+   ```
+   MAGE_ENVIRONMENT=production
+   GCS_BUCKET_NAME=europe-west1-landbrug-bc7a96db-bucket
+   ```
+
 From `metadata.yaml`:
 ```yaml
 production:
