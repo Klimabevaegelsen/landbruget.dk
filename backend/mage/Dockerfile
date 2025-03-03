@@ -1,10 +1,21 @@
 FROM mageai/mageai:latest
 
+# Install system dependencies including ODBC first
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    unixodbc \
+    unixodbc-dev \
+    libodbc2 \
+    libodbcinst2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install GDAL dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gdal-bin \
     libgdal-dev \
     libspatialindex-dev \
+    proj-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # Set GDAL environment variables
