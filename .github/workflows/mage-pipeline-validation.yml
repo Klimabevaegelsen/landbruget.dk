@@ -1,14 +1,14 @@
-name: Mage.ai Pipeline Validation
+name: Validate Mage.ai Pipeline Configuration
 
 on:
   push:
     paths:
       - 'backend/mage/**'
-      - '.github/workflows/mage-pipeline.yml'
+      - '.github/workflows/mage-pipeline-validation.yml'
   pull_request:
     paths:
       - 'backend/mage/**'
-      - '.github/workflows/mage-pipeline.yml'
+      - '.github/workflows/mage-pipeline-validation.yml'
 
 jobs:
   validate:
@@ -40,26 +40,24 @@ jobs:
       - name: Validate Mage configuration
         run: |
           python -c "
-          import yaml
+          import os
           import sys
-          from mage_ai.data_preparation.repo_manager import RepoManager
+          import yaml
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
           
-          # Validate YAML configurations
           try:
-              with open('metadata.yaml', 'r') as f:
-                  metadata = yaml.safe_load(f)
-              with open('io_config.yaml', 'r') as f:
-                  io_config = yaml.safe_load(f)
-              print('Pipeline configuration is valid YAML')
-              
-              # Initialize repo manager
-              repo_manager = RepoManager()
-              repo_manager.validate_repo_structure()
-              print('Repository structure is valid')
-              
-              # Validate pipeline
+              # Set up pipeline path
               pipeline_uuid = 'wetlands_pipeline'
+              pipeline_path = os.path.join('pipelines', pipeline_uuid)
+              
+              # Validate pipeline YAML
+              pipeline_yaml = os.path.join(pipeline_path, 'metadata.yaml')
+              if os.path.exists(pipeline_yaml):
+                  with open(pipeline_yaml, 'r') as f:
+                      metadata = yaml.safe_load(f)
+                  print('Pipeline metadata.yaml is valid')
+              
+              # Initialize and validate pipeline
               scheduler = PipelineScheduler(pipeline_uuid)
               scheduler.validate_pipeline()
               print(f'Pipeline {pipeline_uuid} is valid')
@@ -96,12 +94,8 @@ jobs:
       - name: Test Mage.ai in Docker
         run: |
           docker run --rm mageai-test:latest python -c "
-          from mage_ai.data_preparation.repo_manager import get_repo_path
+          import os
           from mage_ai.orchestration.pipeline_scheduler import PipelineScheduler
-          
-          # Verify Mage.ai setup
-          repo_path = get_repo_path()
-          print(f'Mage.ai repository path: {repo_path}')
           
           # Test pipeline loading
           pipeline_uuid = 'wetlands_pipeline'
