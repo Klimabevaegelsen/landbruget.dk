@@ -1,16 +1,5 @@
 FROM mageai/mageai:latest
 
-# Install GDAL dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    gdal-bin \
-    libgdal-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set GDAL environment variables
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
-
 # Install Python packages for geospatial processing
 # These are essential for the wetlands_merge_grid implementation
 RUN pip install --no-cache-dir \
@@ -19,7 +8,8 @@ RUN pip install --no-cache-dir \
     dask-geopandas>=0.4.2 \
     libpysal>=4.12.1 \
     pyogrio>=0.8.0 \
-    GDAL==$(gdal-config --version) \
+    # Use a pre-built GDAL wheel instead of system packages
+    GDAL>=3.6.2 \
     && rm -rf /root/.cache/pip/*
 
 # You can add more dependencies here as needed
