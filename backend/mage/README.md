@@ -148,13 +148,11 @@ Key patterns:
    # Create feature branch
    git checkout -b feature/your-feature-name
    
-   # Build and run Mage.ai locally
-   docker build -t mage-local -f backend/mage.Dockerfile .
-   docker run -it -p 6789:6789 mage-local
+   # Start Mage.ai with volume mounting (recommended approach)
+   docker run -it -p 6789:6789 -v $(pwd)/backend/mage:/home/src/default_repo mageai/mageai:latest
    ```
 
-   > **Note**: The Dockerfile is configured to automatically run in development mode when built locally.
-   > Build arguments `MAGE_ENVIRONMENT` and `MAGE_DEV_MODE` default to `dev` and `true` respectively.
+   > **Note**: This approach uses volume mounting, which allows you to make changes to pipeline files and see them immediately without rebuilding the container.
 
 3. **Access UI**: Open http://localhost:6789
 
@@ -204,22 +202,19 @@ Key patterns:
 
 ### Local Development with Docker
 ```bash
-# Build the local development image
-docker build -t mage-local -f backend/mage.Dockerfile .
-
-# Run the container with port forwarding
-docker run -it -p 6789:6789 mage-local
+# Use volume mounting for development (recommended by Mage.ai)
+docker run -it -p 6789:6789 -v $(pwd)/backend/mage:/home/src/default_repo mageai/mageai:latest
 ```
 
-The Dockerfile is configured to:
-- Use development mode by default for local builds
-- Set appropriate environment variables automatically
-- Copy all necessary files from backend/mage to the container
+This approach:
+- Mounts your local pipeline files directly into the container
+- Allows real-time editing without rebuilding
+- Provides immediate feedback on changes
 
 ### Production Deployment (via GitHub Actions)
 Production deployment is handled automatically by the GitHub Actions workflow when changes are pushed to the main branch:
 
-1. The workflow builds the Docker image with production settings:
+1. The workflow builds the Docker image with all pipeline code bundled inside:
    ```
    docker build --build-arg MAGE_ENVIRONMENT=production --build-arg MAGE_DEV_MODE=false -f backend/mage.Dockerfile .
    ```
@@ -231,6 +226,8 @@ Production deployment is handled automatically by the GitHub Actions workflow wh
    MAGE_ENVIRONMENT=production
    GCS_BUCKET_NAME=europe-west1-landbrug-bc7a96db-bucket
    ```
+
+> **Important**: Any changes to pipelines require rebuilding and redeploying the Docker image for production. This is the intended workflow for Mage.ai.
 
 From `metadata.yaml`:
 ```yaml

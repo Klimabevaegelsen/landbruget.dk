@@ -35,6 +35,9 @@ jobs:
       - name: Authorize Docker push
         run: gcloud auth configure-docker
 
+      # This step builds a Docker image that bundles all Mage.ai pipeline code
+      # Following Mage.ai's recommended approach for production deployment
+      # Any changes to pipelines or code will require a new build and deployment
       - name: Build and Push Container
         run: |-
           docker build \
