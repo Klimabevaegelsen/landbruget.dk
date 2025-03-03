@@ -65,9 +65,9 @@ jobs:
               # Validate block dependencies
               for block in metadata['blocks']:
                   if 'upstream_blocks' not in block:
-                      raise ValueError(f'Block {block.get('name', 'unknown')} is missing upstream_blocks field')
+                      raise ValueError(f"Block {block.get('name', 'unknown')} is missing upstream_blocks field")
                   if 'downstream_blocks' not in block:
-                      raise ValueError(f'Block {block.get('name', 'unknown')} is missing downstream_blocks field')
+                      raise ValueError(f"Block {block.get('name', 'unknown')} is missing downstream_blocks field")
           
           try:
               # Set up pipeline path
