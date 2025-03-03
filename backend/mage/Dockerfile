@@ -14,10 +14,10 @@ ENV C_INCLUDE_PATH=/usr/include/gdal
 # Install Python packages for geospatial processing
 # These are essential for the wetlands_merge_grid implementation
 RUN pip install --no-cache-dir \
-    shapely==2.0.7 \
-    geopandas==1.0.1 \
-    dask-geopandas==0.4.2 \
-    libpysal==4.12.1 \
+    shapely>=2.0.7 \
+    geopandas>=1.0.1 \
+    dask-geopandas>=0.4.2 \
+    libpysal>=4.12.1 \
     pyogrio>=0.8.0 \
     GDAL==$(gdal-config --version) \
     && rm -rf /root/.cache/pip/*
