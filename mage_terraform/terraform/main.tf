@@ -135,10 +135,6 @@ resource "google_cloud_run_service" "run_service" {
           name  = "ULIMIT_NO_FILE"
           value = 16384
         }
-        env {
-          name  = "PLATFORM"
-          value = "linux/amd64"
-        }
         
         # Mage environment configuration
         env {

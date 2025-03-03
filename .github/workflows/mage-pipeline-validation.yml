@@ -55,4 +55,17 @@ jobs:
           load: true
           tags: mageai-test:latest
           cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/mage
+          push: false
+          load: true
+          tags: mageai-test:latest
+          cache-from: type=gha
           cache-to: type=gha,mode=max 
