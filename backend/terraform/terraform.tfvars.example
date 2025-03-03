@@ -1,0 +1,43 @@
+# terraform.tfvars.example
+# Copy this file to terraform.tfvars and fill in your own values
+# All sensitive values are stored in Secret Manager
+
+# Project Configuration
+project_id = "your-gcp-project-id"
+region = "europe-west1"
+zone = "europe-west1-b"
+
+# Application Configuration
+app_name = "mage-data-prep"
+docker_image = "mageai/mageai:latest"
+container_cpu = "2000m"
+container_memory = "2G"
+
+# Database Configuration
+# database_user is now fetched from Secret Manager (mage-database-user)
+# database_password is now fetched from Secret Manager (mage-database-password)
+
+# Access Configuration
+# user_email = "your-email@example.com" # Will be stored in Secret Manager
+
+# Git Configuration
+# All Git credentials are fetched from Secret Manager:
+# - git-username
+# - git-email
+# - git-auth-token
+
+# Load Balancer Configuration
+# Uncomment and set these values if you want to enable SSL
+# domain = "mage.example.com"
+# ssl = true
+
+# Note: The following secrets must exist in Secret Manager:
+# - mage-database-user
+# - mage-database-password
+# - mage-user-email
+# - mage-service-account
+# - mage-oauth-client-id
+# - mage-oauth-client-secret
+# - git-username
+# - git-email
+# - git-auth-token 

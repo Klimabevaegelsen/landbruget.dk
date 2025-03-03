@@ -1,0 +1,60 @@
+from typing import Dict, List
+import xml.etree.ElementTree as ET
+import requests  # Added this import
+import logging
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+@data_loader
+def load_data(*args, **kwargs) -> List[Dict]:
+    """
+    Gets the total number of features from the wetlands WFS service and creates partitions for processing.
+    Returns a list of partitions to process.
+    """
+    # Configuration
+    config = {
+        'url': 'https://wfs2-miljoegis.mim.dk/natur/wfs',
+        'layer': 'natur:kulstof2022',
+        'batch_size': 100000,
+        'timeout': 300
+    }
+    
+    # WFS parameters for count query
+    params = {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': config['layer'],
+        'SRSNAME': 'EPSG:25832',
+        'count': '1',
+        'startIndex': '0'
+    }
+    
+    try:
+        response = requests.get(config['url'], params=params, timeout=config['timeout'])
+        response.raise_for_status()
+        
+        root = ET.fromstring(response.text)
+        total_features = int(root.get('numberMatched', '1'))
+        
+        # Create partitions
+        partitions = []
+        for start_index in range(0, total_features, config['batch_size']):
+            end_index = min(start_index + config['batch_size'], total_features)
+            partitions.append({
+                'id': start_index,  # Using start_index as id
+                'start_index': start_index,
+                'end_index': end_index,
+                'size': end_index - start_index,
+                'url': config['url'],
+                'layer': config['layer']
+            })
+        
+        return partitions
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise

@@ -1,0 +1,176 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: '#3b5998'
+  configuration:
+    batch_size: 50000
+    dynamic: true
+    wetlands_layer: kulstof2022
+    wetlands_url: https://wfs2-miljoegis.mim.dk/natur/ows
+  downstream_blocks:
+  - wetlands_process_batch
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_load_wfs
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: wetlands_load_wfs
+- all_upstream_blocks_executed: true
+  color: '#0000FF'
+  configuration:
+    reduce_output: true
+  downstream_blocks:
+  - wetlands_combine_batches
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_process_batch
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - wetlands_load_wfs
+  uuid: wetlands_process_batch
+- all_upstream_blocks_executed: true
+  color: '#00FF00'
+  configuration: {}
+  downstream_blocks:
+  - wetlands_store_raw
+  - wetlands_format_geojson
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_combine_batches
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - wetlands_process_batch
+  uuid: wetlands_combine_batches
+- all_upstream_blocks_executed: true
+  color: '#FF9900'
+  configuration:
+    storage_path: "wetlands/raw_data.jsonl"
+  downstream_blocks: []
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_store_raw
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - wetlands_combine_batches
+  uuid: wetlands_store_raw
+- all_upstream_blocks_executed: true
+  color: '#ffd700'
+  configuration:
+    source_crs: 25832
+  downstream_blocks:
+  - wetlands_merge_grid
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_format_geojson
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - wetlands_combine_batches
+  uuid: wetlands_format_geojson
+- all_upstream_blocks_executed: true
+  color: '#4B0082'
+  configuration: {}
+  downstream_blocks:
+  - geo_validate_geometries
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_merge_grid
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - wetlands_format_geojson
+  uuid: wetlands_merge_grid
+- all_upstream_blocks_executed: true
+  color: '#800080'
+  configuration:
+    validation_rules:
+      min_points: 4
+      min_area: 1.0
+      max_area: 10000000.0
+  downstream_blocks:
+  - wetlands_store_processed
+  executor_config: null
+  has_callback: false
+  language: python
+  name: geo_validate_geometries
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - wetlands_merge_grid
+  uuid: geo_validate_geometries
+- all_upstream_blocks_executed: true
+  color: '#FF0000'
+  configuration:
+    storage_path: "wetlands/processed_current.parquet"
+  downstream_blocks: []
+  executor_config: null
+  has_callback: false
+  language: python
+  name: wetlands_store_processed
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - geo_validate_geometries
+  uuid: wetlands_store_processed
+cache_block_output_in_memory: false
+callbacks: []
+concurrency_config: {}
+conditionals: []
+created_at: null
+data_integration: null
+description: Extracts, processes, and stores wetlands data from WFS
+gcp_cloud_run_config:
+  project_id: landbrugsdata-1
+  timeout_seconds: 3600
+executor_count: 1
+executor_type: local_python
+extensions: {}
+name: wetlands_pipeline
+notification_config: {}
+remote_variables_dir: null
+retry_config:
+  delay_seconds: 5
+  max_retries: 3
+  retry_jitter_factor: 0.2
+run_pipeline_in_one_process: false
+settings:
+  triggers: null
+  production:
+    executor_type: gcp_cloud_run
+spark_config: {}
+tags:
+- geospatial
+- wetlands
+- wfs
+- etl
+type: python
+uuid: wetlands_pipeline
+variables:
+  bucket_name: europe-west1-landbrug-bc7a96db-bucket
+variables_dir: /home/src/mage_data/default_repo
+widgets: []

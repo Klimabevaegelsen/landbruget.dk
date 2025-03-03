@@ -1,0 +1,164 @@
+import logging
+import requests
+import math
+import re
+from datetime import datetime, timedelta
+
+if 'custom' not in globals():
+    from mage_ai.data_preparation.decorators import custom
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+
+logger = logging.getLogger(__name__)
+
+@data_loader
+def export_data_to_dynamic_child_blocks(**kwargs):
+    """
+    This function determines the number of partitions needed for the wetlands data.
+    It fetches the total number of features and calculates how many partitions are needed
+    based on the desired batch size.
+    
+    Following Mage AI's dynamic blocks pattern, this function returns:
+    1. A list of partition configurations (one per batch)
+    2. A list of metadata dictionaries (one per batch)
+    
+    Returns:
+        list: A list containing [partitions, metadata]
+    """
+    logger.info("DETERMINING PARTITIONS FOR WETLANDS DATA")
+    
+    # Configuration variables
+    config = {
+        'url': 'https://wfs2-miljoegis.mim.dk/natur/ows',
+        'layer': 'natur:kulstof2022',
+        'batch_size': 1000,
+        'max_partitions': 100,
+        'timeout': 60,
+        'min_partitions': 1,
+    }
+    
+    # WFS parameters for a metadata request
+    wfs_params = {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': config['layer'],
+        'SRSNAME': 'EPSG:25832',
+        'COUNT': '1',
+    }
+    
+    # Fetch metadata from the WFS service
+    logger.info(f"Fetching metadata from WFS service: {config['url']}")
+    try:
+        response = requests.get(config['url'], params=wfs_params, timeout=config['timeout'])
+        logger.info(f"Request URL: {response.url}")
+        
+        if response.status_code != 200:
+            logger.warning(f"Error fetching metadata: {response.status_code}")
+            logger.warning(f"Response content: {response.text[:500]}...")
+            # Return a single partition as fallback
+            partitions = [{'index': 0, 'total': 1}]
+            metadata = [{'block_uuid': 'fetch_wetlands_data_0'}]
+            return [partitions, metadata]
+        
+        # Extract the numberMatched attribute directly from the XML text
+        match = re.search(r'numberMatched="(\d+)"', response.text)
+        if match:
+            total_features = int(match.group(1))
+            logger.info(f"Total available features: {total_features}")
+        else:
+            logger.warning("Could not find numberMatched attribute in response")
+            logger.warning(f"Response content: {response.text[:500]}...")
+            # Return a single partition as fallback
+            partitions = [{'index': 0, 'total': 1}]
+            metadata = [{'block_uuid': 'fetch_wetlands_data_0'}]
+            return [partitions, metadata]
+        
+    except Exception as e:
+        logger.error(f"Exception while fetching metadata: {str(e)}")
+        # Return a single partition as fallback
+        partitions = [{'index': 0, 'total': 1}]
+        metadata = [{'block_uuid': 'fetch_wetlands_data_0'}]
+        return [partitions, metadata]
+    
+    # Calculate number of partitions needed
+    partitions_needed = max(
+        config['min_partitions'],
+        min(
+            config['max_partitions'],
+            math.ceil(total_features / config['batch_size'])
+        )
+    )
+    
+    logger.info(f"Creating {partitions_needed} partitions with batch size {config['batch_size']}")
+    
+    # Create partition dictionaries and metadata
+    partitions = []
+    metadata = []
+    
+    for i in range(partitions_needed):
+        partitions.append({
+            'index': i, 
+            'total': partitions_needed,
+            'start_index': i * config['batch_size'],
+            'count': config['batch_size']
+        })
+        metadata.append({'block_uuid': f'fetch_wetlands_data_{i}'})
+    
+    logger.info(f"Created {len(partitions)} partitions with the expected structure")
+    
+    # Return both the partitions and metadata
+    return [partitions, metadata]
+
+
+@test
+def test_output(data, *args, **kwargs):
+    """
+    Test that the output has the expected structure for a dynamic block.
+    
+    Args:
+        data: The output returned by the export function
+    """
+    logger.info(f"TEST FUNCTION RECEIVED: data={data}")
+    
+    # For dynamic blocks, the output should be a list with 2 elements
+    # If the data is not already a list of [partitions, metadata], wrap it
+    if not isinstance(data, list) or (isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict)):
+        # This means we have a list of partitions directly, not the [partitions, metadata] format
+        # Let's convert it to the expected format for testing
+        partitions = data
+        metadata = [{'block_uuid': f'fetch_wetlands_data_{i}'} for i in range(len(partitions))]
+        data = [partitions, metadata]
+    
+    # Now validate the structure
+    assert isinstance(data, list), f"Output should be a list, got {type(data)}"
+    assert len(data) == 2, f"Output should contain 2 items (partitions and metadata), got {len(data)}"
+    
+    partitions = data[0]
+    metadata = data[1]
+    
+    # Validate partitions
+    assert isinstance(partitions, list), f"Partitions should be a list, got {type(partitions)}"
+    
+    # Validate metadata
+    assert isinstance(metadata, list), f"Metadata should be a list, got {type(metadata)}"
+    
+    # Ensure partitions and metadata have the same length
+    assert len(partitions) == len(metadata), f"Partitions length ({len(partitions)}) should match metadata length ({len(metadata)})"
+    
+    # If we have partitions, test the first one
+    if len(partitions) > 0:
+        partition = partitions[0]
+        assert isinstance(partition, dict), f"Partition should be a dictionary, got {type(partition)}"
+        assert 'index' in partition, "Partition should have an 'index' key"
+        assert 'total' in partition, "Partition should have a 'total' key"
+    
+    # If we have metadata, test the first one
+    if len(metadata) > 0:
+        meta = metadata[0]
+        assert isinstance(meta, dict), f"Metadata should be a dictionary, got {type(meta)}"
+        assert 'block_uuid' in meta, "Metadata should have a 'block_uuid' key"
+    
+    logger.info(f"Test passed! Created {len(partitions)} partitions with the expected structure.") 

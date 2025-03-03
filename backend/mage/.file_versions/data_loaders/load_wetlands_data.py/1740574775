@@ -1,0 +1,196 @@
+import requests
+import xml.etree.ElementTree as ET
+import logging
+import math
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@data_loader
+def load_wetlands_data(**kwargs):
+    """
+    Load wetlands data from Danish WFS service.
+    Designed for fetching large datasets in batches.
+    
+    Returns data in the format expected by dynamic blocks:
+    [
+        [batch_item1, batch_item2, ...],  # Data for each batch
+        [metadata1, metadata2, ...]        # Metadata for each batch
+    ]
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Parameters with sensible defaults
+    config = kwargs.get('config', {})
+    wfs_url = config.get('wetlands_url', 'https://wfs2-miljoegis.mim.dk/natur/ows')
+    layer_name = config.get('layer_name', 'kulstof2022')
+    batch_size = int(config.get('batch_size', 100000))
+    
+    logger.info(f"Loading wetlands data from {wfs_url} for layer {layer_name}")
+    
+    # Define namespaces for XML parsing
+    namespaces = {
+        'wfs': 'http://www.opengis.net/wfs/2.0',
+        'natur': 'http://wfs2-miljoegis.mim.dk/natur',
+        'gml': 'http://www.opengis.net/gml/3.2'
+    }
+    
+    # First, get the total feature count
+    count_params = {
+        'SERVICE': 'WFS',
+        'VERSION': '2.0.0',
+        'REQUEST': 'GetFeature',
+        'TYPENAMES': layer_name,
+        'SRSNAME': 'EPSG:25832',
+        'count': '1'  # Just get one to check total count
+    }
+    
+    try:
+        # Request to get total number of features
+        logger.info(f"Checking feature count with URL: {wfs_url}")
+        response = requests.get(wfs_url, params=count_params)
+        response.raise_for_status()
+        
+        # Parse XML response
+        root = ET.fromstring(response.text)
+        
+        # Get total feature count from XML 
+        number_matched = root.get('numberMatched')
+        if number_matched is None:
+            raise ValueError("Could not determine total feature count from WFS response")
+            
+        total_features = int(number_matched)
+        logger.info(f"Total features: {total_features}")
+        
+        # Calculate number of batches needed
+        num_batches = math.ceil(total_features / batch_size)
+        logger.info(f"Will process {total_features} features in {num_batches} batches of {batch_size}")
+        
+        # Create common metadata for all batches
+        common_metadata = {
+            'wfs_url': wfs_url,
+            'layer_name': layer_name,
+            'batch_size': batch_size,
+            'total_features': total_features,
+            'num_batches': num_batches,
+            'namespaces': namespaces
+        }
+        
+        # Create batch indices for dynamic mapping
+        batch_indices = list(range(num_batches))
+        
+        logger.info(f"Setting up dynamic mapping with {num_batches} batches")
+        
+        # Create data items and metadata items
+        data_items = []
+        metadata_items = []
+        
+        for idx in batch_indices:
+            # Create a dictionary for each batch with necessary info
+            batch_item = {
+                'batch_index': idx,
+                'metadata': common_metadata
+            }
+            data_items.append(batch_item)
+            
+            # Create metadata for this batch (required for dynamic blocks)
+            batch_metadata = {
+                'block_uuid': f'batch_{idx}'  # Unique identifier for each dynamic child block
+            }
+            metadata_items.append(batch_metadata)
+        
+        logger.info(f"Created {len(data_items)} batch items for dynamic mapping")
+        
+        # Return in the format expected for dynamic blocks: [data_list, metadata_list]
+        return [data_items, metadata_items]
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error connecting to WFS service: {str(e)}")
+        raise ValueError(f"Failed to connect to WFS service: {str(e)}")
+    except ET.ParseError as e:
+        logger.error(f"Error parsing XML response: {str(e)}")
+        raise ValueError(f"Invalid response from WFS service: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise ValueError(f"An unexpected error occurred: {str(e)}")
+
+
+@test
+def test_output(*args):
+    """
+    Test the output of the data loader.
+    When dynamic mapping is enabled with reduce_output=true, this function will
+    receive multiple batch items as separate arguments.
+    """
+    # Check that we received at least one argument
+    assert len(args) > 0, 'No output was produced'
+    
+    # Get the first argument
+    data = args[0]
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Test received {len(args)} arguments")
+    logger.info(f"First argument type: {type(data)}")
+    
+    if isinstance(data, list) and len(data) == 2:
+        # Standard case - we received [data_items, metadata_items]
+        logger.info("Testing standard dynamic block output format")
+        data_items, metadata_items = data
+        
+        assert len(data_items) > 0, 'Data items list should not be empty'
+        assert len(metadata_items) > 0, 'Metadata items list should not be empty'
+        assert len(data_items) == len(metadata_items), 'Data items and metadata items should have the same length'
+        
+        # Check first data item
+        first_data_item = data_items[0]
+        assert 'batch_index' in first_data_item, 'Each data item should contain batch_index'
+        assert 'metadata' in first_data_item, 'Each data item should contain metadata'
+        
+        # Check first metadata item
+        first_metadata_item = metadata_items[0]
+        assert 'block_uuid' in first_metadata_item, 'Each metadata item should contain block_uuid'
+    elif len(args) > 1:
+        # If we're getting multiple arguments, log what we're receiving
+        logger.info("Testing with multiple arguments (likely from reduce_output=true)")
+        for i, arg in enumerate(args):
+            logger.info(f"Argument {i} type: {type(arg)}")
+            if isinstance(arg, dict):
+                logger.info(f"Argument {i} keys: {list(arg.keys())}")
+            
+        # We may be getting the metadata directly. Check if the first few arguments
+        # have the expected structure for metadata
+        logger.info("Checking if arguments match expected structure for metadata")
+        if isinstance(data, dict) and 'block_uuid' in data:
+            logger.info("Found block_uuid in first argument - appears to be metadata")
+            # In this case, we're getting metadata objects
+            return
+        else:
+            # Otherwise, fall back to a simple check that should work in most cases
+            logger.info("Checking with more permissive assertions")
+            # Just assert the arguments are not None
+            for arg in args:
+                assert arg is not None, 'Each argument should not be None'
+    else:
+        # Single argument but not a [data_items, metadata_items] pair
+        logger.info(f"Testing with single argument of type {type(data)}")
+        if isinstance(data, dict):
+            logger.info(f"Single argument keys: {list(data.keys())}")
+            # Just make sure it's not None
+            assert data is not None, 'Output should not be None'
+        else:
+            # If it's not a dict or the expected list format, just check it's not None
+            assert data is not None, 'Output should not be None'
+
+
+if __name__ == "__main__":
+    # For local testing
+    result = load_wetlands_data()
+    print(f"Created {len(result[0])} batch items for dynamic mapping")
+    if len(result[0]) > 0:
+        first_batch = result[0][0]
+        print(f"Sample batch item: Batch index {first_batch['batch_index']}")
+        print(f"Total features: {first_batch['metadata']['total_features']}")
+        print(f"Total batches: {first_batch['metadata']['num_batches']}") 

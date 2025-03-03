@@ -1,0 +1,184 @@
+import os
+import logging
+import xml.etree.ElementTree as ET
+import requests
+from typing import Dict, List, Any, Optional
+import json
+import tempfile
+import time
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@data_loader
+def load_data(config: Dict = None, *args, **kwargs) -> Dict:
+    """
+    Fetch wetlands data from the WFS service.
+    This block only fetches data and returns it for further processing.
+    
+    Args:
+        config: Configuration dictionary containing parameters 
+               - url: WFS service URL
+               - layer: Layer name
+               - batch_size: Number of features per batch
+               - max_batches: Maximum number of batches to fetch (for testing)
+    
+    Returns:
+        Dictionary containing batch data and metadata
+    """
+    # Default configuration
+    config = config or {}
+    url = config.get('url', 'https://geodata.miljoeportal.dk/geoserver/dpd/ows')
+    layer = config.get('layer', 'dpd:kulstof2022')
+    batch_size = config.get('batch_size', 10000)
+    max_batches = config.get('max_batches', 2)  # Default to 2 batches for testing
+    
+    logger.info(f"Starting wetlands data fetch from {url}, layer: {layer}")
+    
+    # Create temp directory for downloaded files
+    temp_dir = tempfile.mkdtemp(prefix="wetlands_")
+    logger.info(f"Created temporary directory: {temp_dir}")
+    
+    # Track batches and metadata
+    batch_files = []
+    total_features = 0
+    
+    # Define namespaces for XML parsing
+    namespaces = {
+        'wfs': 'http://www.opengis.net/wfs/2.0',
+        'natur': 'http://wfs2-miljoegis.mim.dk/natur',
+        'gml': 'http://www.opengis.net/gml/3.2'
+    }
+    
+    try:
+        # Get first batch to determine total count
+        params = get_wfs_params(layer, 0, batch_size)
+        response = requests.get(url, params=params)
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch data: {response.status_code}")
+        
+        # Save first batch locally
+        first_batch_path = os.path.join(temp_dir, f"wetlands_batch_0.xml")
+        with open(first_batch_path, 'w') as f:
+            f.write(response.text)
+        batch_files.append(first_batch_path)
+        
+        # Parse to get total count
+        root = ET.fromstring(response.text)
+        total_matched = root.get('numberMatched', '0')
+        total_features = int(total_matched)
+        logger.info(f"Total available features: {total_features:,}")
+        
+        # Determine number of batches to fetch
+        num_batches = (total_features + batch_size - 1) // batch_size
+        if max_batches is not None and max_batches > 0:
+            num_batches = min(num_batches, max_batches)
+            logger.info(f"Limited to {max_batches} batches")
+        
+        # Get remaining batches
+        for batch_index in range(1, num_batches):
+            start_index = batch_index * batch_size
+            logger.info(f"Fetching batch {batch_index}/{num_batches-1} (starting at index {start_index})")
+            
+            try:
+                # Fetch batch
+                params = get_wfs_params(layer, start_index, batch_size)
+                response = requests.get(url, params=params, timeout=60)
+                
+                if response.status_code != 200:
+                    logger.error(f"Failed to fetch batch {batch_index}: {response.status_code}")
+                    continue
+                    
+                # Save batch locally
+                batch_path = os.path.join(temp_dir, f"wetlands_batch_{batch_index}.xml")
+                with open(batch_path, 'w') as f:
+                    f.write(response.text)
+                batch_files.append(batch_path)
+                
+                logger.info(f"Successfully fetched batch {batch_index}")
+                
+                # Small delay to avoid overwhelming the service
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Error fetching batch {batch_index}: {str(e)}")
+        
+        # Create sample data with feature count from each batch
+        sample_data = []
+        for batch_file in batch_files:
+            try:
+                tree = ET.parse(batch_file)
+                root = tree.getroot()
+                features = root.findall('.//natur:kulstof2022', namespaces)
+                sample_data.append({
+                    'file': os.path.basename(batch_file),
+                    'feature_count': len(features)
+                })
+            except Exception as e:
+                logger.error(f"Error analyzing batch {batch_file}: {str(e)}")
+        
+        # Create result
+        result = {
+            'total_features': total_features,
+            'batches_fetched': len(batch_files),
+            'temp_directory': temp_dir,
+            'batch_files': batch_files,
+            'sample_data': sample_data
+        }
+        
+        logger.info(f"Completed wetlands data fetch. Fetched {len(batch_files)} batches.")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in fetch_wetlands: {str(e)}")
+        # Clean up temp directory on error
+        if os.path.exists(temp_dir):
+            for f in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, f))
+            os.rmdir(temp_dir)
+        raise
+
+def get_wfs_params(layer, start_index, batch_size):
+    """Get WFS request parameters"""
+    return {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': layer,
+        'SRSNAME': 'EPSG:25832',
+        'count': str(batch_size),
+        'startIndex': str(start_index)
+    }
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Test the output of the data loader
+    
+    Args:
+        output: Output from the data loader
+    """
+    assert output is not None, "Output should not be None"
+    assert isinstance(output, dict), "Output should be a dictionary"
+    assert 'total_features' in output, "Output should contain total_features"
+    assert 'batches_fetched' in output, "Output should contain batches_fetched"
+    assert 'batch_files' in output, "Output should contain batch_files"
+    assert isinstance(output['batch_files'], list), "batch_files should be a list"
+    assert len(output['batch_files']) > 0, "Should have fetched at least one batch"
+    
+    # Test that the files exist
+    for batch_file in output['batch_files']:
+        assert os.path.exists(batch_file), f"Batch file {batch_file} should exist"
+    
+    # Test sample data
+    assert 'sample_data' in output, "Output should contain sample_data"
+    assert isinstance(output['sample_data'], list), "sample_data should be a list"
+    if len(output['sample_data']) > 0:
+        assert 'feature_count' in output['sample_data'][0], "Sample data should contain feature_count" 

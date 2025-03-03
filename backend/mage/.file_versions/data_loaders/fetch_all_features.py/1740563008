@@ -1,0 +1,129 @@
+from typing import Dict
+import xml.etree.ElementTree as ET
+import requests
+import logging
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+logger = logging.getLogger(__name__)
+
+@data_loader
+def load_data(partition: Dict, **kwargs) -> Dict:
+    """
+    Fetches raw data for a single partition of wetlands features.
+    
+    Args:
+        partition: Dictionary containing:
+            - start_index: Starting index for this partition
+            - end_index: Ending index for this partition
+            - size: Size of this partition
+            
+    Returns:
+        Dictionary containing the raw feature data for this partition
+    """
+    # Get metadata from upstream block
+    upstream_data = kwargs.get('upstream_block_data', {})
+    metadata = upstream_data.get('metadata', {})
+    
+    logger.info(f"Processing partition: {partition['start_index']} to {partition['end_index']}")
+    
+    # WFS parameters for this partition
+    params = {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': metadata.get('layer', 'natur:kulstof2022'),
+        'SRSNAME': 'EPSG:25832',
+        'count': str(partition['size']),
+        'startIndex': str(partition['start_index'])
+    }
+    
+    # Define namespaces for XML parsing
+    namespaces = {
+        'wfs': 'http://www.opengis.net/wfs/2.0',
+        'natur': 'http://wfs2-miljoegis.mim.dk/natur',
+        'gml': 'http://www.opengis.net/gml/3.2'
+    }
+    
+    try:
+        # Fetch the partition data
+        response = requests.get(
+            metadata.get('url', 'https://wfs2-miljoegis.mim.dk/natur/wfs'),
+            params=params, 
+            timeout=metadata.get('timeout', 300)
+        )
+        response.raise_for_status()
+        
+        root = ET.fromstring(response.text)
+        
+        # Extract raw feature data
+        features = []
+        for feature in root.findall('.//natur:kulstof2022', namespaces):
+            try:
+                # Get geometry as raw coordinates
+                geom_elem = feature.find('.//gml:Polygon', namespaces)
+                if geom_elem is None:
+                    continue
+                    
+                coords_elem = geom_elem.find('.//gml:posList', namespaces)
+                if coords_elem is None or not coords_elem.text:
+                    continue
+                
+                # Extract raw feature data
+                feature_data = {
+                    'id': feature.get('{http://www.opengis.net/gml/3.2}id'),
+                    'gridcode': feature.find('natur:gridcode', namespaces).text,
+                    'toerv_pct': feature.find('natur:toerv_pct', namespaces).text,
+                    'coordinates': coords_elem.text  # Keep raw coordinate string
+                }
+                
+                features.append(feature_data)
+                
+            except Exception as e:
+                logger.warning(f"Error extracting feature data: {str(e)}")
+                continue
+        
+        logger.info(f"Successfully processed partition {partition['start_index']}-{partition['end_index']}, found {len(features)} features")
+        
+        return {
+            'partition_info': partition,
+            'feature_count': len(features),
+            'features': features,
+            'crs': "EPSG:25832"
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching partition {partition['start_index']}-{partition['end_index']}: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing partition {partition['start_index']}-{partition['end_index']}: {str(e)}")
+        raise
+
+@test
+def test_output(output: Dict) -> None:
+    """
+    Test the output of the data loader.
+    """
+    assert isinstance(output, dict), 'Output must be a dictionary'
+    assert 'partition_info' in output, 'Output must contain partition_info'
+    assert 'feature_count' in output, 'Output must contain feature_count'
+    assert 'features' in output, 'Output must contain features'
+    assert 'crs' in output, 'Output must contain crs'
+    
+    # Validate partition info
+    partition_info = output['partition_info']
+    assert 'start_index' in partition_info, 'Partition info must contain start_index'
+    assert 'end_index' in partition_info, 'Partition info must contain end_index'
+    assert 'size' in partition_info, 'Partition info must contain size'
+    
+    # Validate features
+    assert isinstance(output['features'], list), 'Features must be a list'
+    if output['features']:
+        feature = output['features'][0]
+        assert 'id' in feature, 'Feature must contain id'
+        assert 'gridcode' in feature, 'Feature must contain gridcode'
+        assert 'toerv_pct' in feature, 'Feature must contain toerv_pct'
+        assert 'coordinates' in feature, 'Feature must contain coordinates'

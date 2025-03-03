@@ -1,0 +1,140 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: '#3b5998'
+  configuration:
+    batch_size: 100000
+    wetlands_layer: kulstof2022
+    wetlands_url: https://wfs2-miljoegis.mim.dk/natur
+  downstream_blocks:
+  - process_batch
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_wetlands_data
+  retry_config: null
+  status: failed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: load_wetlands_data
+- all_upstream_blocks_executed: true
+  color: '#0000FF'
+  configuration: {}
+  downstream_blocks:
+  - combine_batches
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: process_batch
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - load_wetlands_data
+  uuid: process_batch
+- all_upstream_blocks_executed: true
+  color: '#00FF00'
+  configuration: {}
+  downstream_blocks:
+  - export_raw_wetlands
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: combine_batches
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - process_batch
+  uuid: combine_batches
+- all_upstream_blocks_executed: true
+  color: '#FF9900'
+  configuration:
+    bucket_name: europe-west1-landbrug-bc7a96db-bucket
+    raw_path: raw/wetlands/raw_data.jsonl
+  downstream_blocks:
+  - process_geometries
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: export_raw_wetlands
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - combine_batches
+  uuid: export_raw_wetlands
+- all_upstream_blocks_executed: true
+  color: '#ffd700'
+  configuration: {}
+  downstream_blocks:
+  - export_processed_wetlands
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: process_geometries
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - export_raw_wetlands
+  uuid: process_geometries
+- all_upstream_blocks_executed: true
+  color: '#FF0000'
+  configuration:
+    processed_path: raw/wetlands/processed_current.parquet
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: export_processed_wetlands
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - process_geometries
+  uuid: export_processed_wetlands
+cache_block_output_in_memory: false
+callbacks: []
+concurrency_config: {}
+conditionals: []
+created_at: null
+data_integration: null
+description: Extracts, processes, and stores wetlands data from WFS
+executor_config: {}
+executor_count: 1
+executor_type: local_python
+extensions: {}
+name: wetlands_pipeline
+notification_config: {}
+remote_variables_dir: null
+retry_config:
+  delay_seconds: 5
+  max_retries: 3
+  retry_jitter_factor: 0.2
+run_pipeline_in_one_process: false
+settings:
+  triggers: null
+spark_config: {}
+tags:
+- geospatial
+- wetlands
+- wfs
+- etl
+type: python
+uuid: wetlands_pipeline
+variables:
+  bucket_name: europe-west1-landbrug-bc7a96db-bucket
+variables_dir: /home/src/mage_data/default_repo
+widgets: []

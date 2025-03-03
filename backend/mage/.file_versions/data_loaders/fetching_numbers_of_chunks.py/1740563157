@@ -1,0 +1,106 @@
+from typing import Dict, List
+import xml.etree.ElementTree as ET
+import requests
+import logging
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+logger = logging.getLogger(__name__)
+
+@data_loader
+def load_data(**kwargs) -> List[Dict]:
+    """
+    Gets the total number of features from the wetlands WFS service and creates partitions for processing.
+    
+    Returns:
+        List of partitions, where each partition contains:
+            - start_index: Starting index for the partition
+            - end_index: Ending index for the partition
+            - size: Size of the partition
+            - metadata: Configuration details
+    """
+    # Configuration from wetlands.py
+    config = {
+        'url': 'https://wfs2-miljoegis.mim.dk/natur/wfs',
+        'layer': 'natur:kulstof2022',
+        'batch_size': 100000,  # From wetlands.py batch_size
+        'timeout': 300  # From wetlands.py request_timeout
+    }
+    
+    logger.info("Fetching total number of wetland features...")
+    
+    # WFS parameters for count query
+    params = {
+        'SERVICE': 'WFS',
+        'REQUEST': 'GetFeature',
+        'VERSION': '2.0.0',
+        'TYPENAMES': config['layer'],
+        'SRSNAME': 'EPSG:25832',
+        'count': '1',  # We only need metadata here
+        'startIndex': '0'
+    }
+    
+    try:
+        response = requests.get(config['url'], params=params, timeout=config['timeout'])
+        response.raise_for_status()
+        
+        root = ET.fromstring(response.text)
+        total_features = int(root.get('numberMatched', '0'))
+        
+        logger.info(f"Total features available: {total_features:,}")
+        
+        # Create list of partitions
+        partitions = []
+        for start_index in range(0, total_features, config['batch_size']):
+            end_index = min(start_index + config['batch_size'], total_features)
+            partitions.append({
+                'start_index': start_index,
+                'end_index': end_index,
+                'size': end_index - start_index,
+                'metadata': {
+                    'url': config['url'],
+                    'layer': config['layer'],
+                    'timeout': config['timeout']
+                }
+            })
+        
+        logger.info(f"Created {len(partitions)} partitions")
+        
+        return partitions
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching feature count: {str(e)}")
+        raise
+    
+@test
+def test_output(*outputs) -> None:
+    """
+    Test the output of the data loader.
+    For dynamic blocks, this receives all partition outputs.
+    
+    Args:
+        *outputs: Variable number of outputs from each partition
+    """
+    # For the partitioner block, we expect a single list output
+    assert len(outputs) == 1, 'Expected single output from partitioner'
+    partitions = outputs[0]
+    
+    assert isinstance(partitions, list), 'Output must be a list'
+    assert len(partitions) > 0, 'Should have at least one partition'
+    
+    for partition in partitions:
+        assert isinstance(partition, dict), 'Each partition must be a dictionary'
+        assert 'start_index' in partition, 'Each partition must have start_index'
+        assert 'end_index' in partition, 'Each partition must have end_index'
+        assert 'size' in partition, 'Each partition must have size'
+        assert 'metadata' in partition, 'Each partition must have metadata'
+        assert partition['end_index'] > partition['start_index'], 'End index must be greater than start index'
+        
+        # Validate metadata
+        metadata = partition['metadata']
+        assert 'url' in metadata, 'Metadata must contain url'
+        assert 'layer' in metadata, 'Metadata must contain layer'
+        assert 'timeout' in metadata, 'Metadata must contain timeout'

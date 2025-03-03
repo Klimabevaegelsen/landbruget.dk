@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  mage:
+    build:
+      context: .
+    ports:
+      - "6789:6789"
+    volumes:
+      - .:/app
+    environment:
+      - MAGE_ENV=${MAGE_ENV:-development}
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G 
