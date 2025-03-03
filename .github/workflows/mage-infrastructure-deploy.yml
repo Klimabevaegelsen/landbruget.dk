@@ -61,11 +61,17 @@ jobs:
       - name: Import Existing Infrastructure
         working-directory: backend/terraform
         continue-on-error: true
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_app_name: ${{ env.SERVICE }}
+          TF_VAR_docker_image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+          TF_VAR_gcs_bucket_name: ${{ env.GCS_BUCKET_NAME }}
         run: |
           # Helper function for imports
           import_resource() {
             echo "Importing $1..."
-            terraform import $1 $2 || echo "Failed to import $1 - it may not exist yet or is already in state"
+            terraform import -input=false $1 $2 || echo "Failed to import $1 - it may not exist yet or is already in state"
           }
           
           # Import database instance
