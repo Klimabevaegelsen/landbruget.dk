@@ -58,6 +58,44 @@ jobs:
         working-directory: backend/terraform
         run: terraform init
 
+      - name: Import Existing Infrastructure
+        working-directory: backend/terraform
+        continue-on-error: true
+        run: |
+          # Helper function for imports
+          import_resource() {
+            echo "Importing $1..."
+            terraform import $1 $2 || echo "Failed to import $1 - it may not exist yet or is already in state"
+          }
+          
+          # Import database instance
+          import_resource "google_sql_database_instance.instance" "projects/${{ env.PROJECT_ID }}/instances/mage-data-prep-db-instance"
+          
+          # Import VPC connector
+          import_resource "google_vpc_access_connector.connector" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/mage-data-prep-vpc-connector"
+          
+          # Import NFS-related resources
+          import_resource "module.nfs.google_compute_firewall.nfs_firewall_rule" "projects/${{ env.PROJECT_ID }}/global/firewalls/mage-data-prep-nfs-nfs"
+          import_resource "module.nfs.google_compute_address.default" "projects/${{ env.PROJECT_ID }}/regions/${{ env.REGION }}/addresses/mage-data-prep-nfs-nfs-ip"
+          import_resource "module.nfs.google_compute_disk.default" "projects/${{ env.PROJECT_ID }}/zones/${{ env.REGION }}-b/disks/mage-data-prep-nfs-disk"
+          
+          # Import Cloud Run service
+          import_resource "google_cloud_run_service.run_service" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/mage-data-prep"
+          
+          # Import IAM bindings
+          import_resource "google_cloud_run_service_iam_member.run_all_users" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/mage-data-prep roles/run.invoker allUsers"
+          
+          # Import API services (these might be managed by other deployments too)
+          import_resource "google_project_service.iam" "${{ env.PROJECT_ID }}/iam.googleapis.com"
+          import_resource "google_project_service.artifactregistry" "${{ env.PROJECT_ID }}/artifactregistry.googleapis.com"
+          import_resource "google_project_service.cloudrun" "${{ env.PROJECT_ID }}/run.googleapis.com"
+          import_resource "google_project_service.resourcemanager" "${{ env.PROJECT_ID }}/cloudresourcemanager.googleapis.com"
+          import_resource "google_project_service.vpcaccess" "${{ env.PROJECT_ID }}/vpcaccess.googleapis.com"
+          import_resource "google_project_service.secretmanager" "${{ env.PROJECT_ID }}/secretmanager.googleapis.com"
+          import_resource "google_project_service.sqladmin" "${{ env.PROJECT_ID }}/sqladmin.googleapis.com"
+          
+          echo "Import step completed - proceeding with plan/apply"
+
       - name: Terraform Plan
         working-directory: backend/terraform
         env:
