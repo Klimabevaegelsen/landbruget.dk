@@ -158,7 +158,7 @@ production:
 Critical environment variables:
 ```bash
 MAGE_ENVIRONMENT=production
-GCS_BUCKET_NAME=europe-west1-landbrug-bc7a96db-bucket
+GCS_BUCKET_NAME=mage-data-storage
 ```
 
 ## Dependencies

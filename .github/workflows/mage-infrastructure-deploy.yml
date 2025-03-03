@@ -9,7 +9,7 @@ env:
   PROJECT_ID: landbrugsdata-1
   REGION: europe-west1
   SERVICE: mage-data-prep
-  GCS_BUCKET_NAME: europe-west1-landbrug-bc7a96db-bucket
+  GCS_BUCKET_NAME: mage-data-storage
   TF_VAR_container_cpu: "4000m"
   TF_VAR_container_memory: "8G"
 
@@ -65,6 +65,7 @@ jobs:
           TF_VAR_region: ${{ env.REGION }}
           TF_VAR_app_name: ${{ env.SERVICE }}
           TF_VAR_docker_image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+          TF_VAR_gcs_bucket_name: ${{ env.GCS_BUCKET_NAME }}
         run: terraform plan -out=tfplan
 
       - name: Terraform Apply
