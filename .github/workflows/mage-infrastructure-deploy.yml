@@ -9,6 +9,7 @@ env:
   PROJECT_ID: landbrugsdata-1
   REGION: europe-west1
   SERVICE: mage-data-prep
+  GCS_BUCKET_NAME: europe-west1-landbrug-bc7a96db-bucket
 
 jobs:
   deploy:
@@ -36,7 +37,11 @@ jobs:
 
       - name: Build and Push Container
         run: |-
-          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} -f backend/mage.Dockerfile .
+          docker build \
+            --build-arg MAGE_ENVIRONMENT=production \
+            --build-arg MAGE_DEV_MODE=false \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
+            -f backend/mage.Dockerfile .
           docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
@@ -45,4 +50,5 @@ jobs:
             --region ${{ env.REGION }} \
             --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
             --platform managed \
-            --allow-unauthenticated 
+            --allow-unauthenticated \
+            --set-env-vars="GCS_BUCKET_NAME=${{ env.GCS_BUCKET_NAME }},MAGE_ENVIRONMENT=production" 
