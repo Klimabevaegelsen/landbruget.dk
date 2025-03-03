@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'backend/mage/**'
+      - 'backend/mage.Dockerfile'
       - '.github/workflows/mage-pipeline-validation.yml'
 
 jobs:
@@ -46,7 +47,8 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          context: backend/mage
+          context: .
+          file: backend/mage.Dockerfile
           push: false
           load: true
           tags: mageai-test:latest
