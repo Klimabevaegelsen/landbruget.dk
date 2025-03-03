@@ -171,6 +171,6 @@ tags:
 type: python
 uuid: wetlands_pipeline
 variables:
-  bucket_name: europe-west1-landbrug-bc7a96db-bucket
+  bucket_name: mage-data-storage
 variables_dir: /home/src/mage_data/default_repo
 widgets: []

@@ -9,7 +9,9 @@ env:
   PROJECT_ID: landbrugsdata-1
   REGION: europe-west1
   SERVICE: mage-data-prep
-  GCS_BUCKET_NAME: europe-west1-landbrug-bc7a96db-bucket
+  GCS_BUCKET_NAME: mage-data-storage
+  TF_VAR_container_cpu: "4000m"
+  TF_VAR_container_memory: "8G"
 
 jobs:
   deploy:
@@ -35,6 +37,9 @@ jobs:
       - name: Authorize Docker push
         run: gcloud auth configure-docker
 
+      # This step builds a Docker image that bundles all Mage.ai pipeline code
+      # Following Mage.ai's recommended approach for production deployment
+      # Any changes to pipelines or code will require a new build and deployment
       - name: Build and Push Container
         run: |-
           docker build \
@@ -44,11 +49,69 @@ jobs:
             -f backend/mage.Dockerfile .
           docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
 
-      - name: Deploy to Cloud Run
-        run: |-
-          gcloud run deploy ${{ env.SERVICE }} \
-            --region ${{ env.REGION }} \
-            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars="GCS_BUCKET_NAME=${{ env.GCS_BUCKET_NAME }},MAGE_ENVIRONMENT=production" 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
+        working-directory: backend/terraform
+        run: terraform init
+
+      - name: Import Existing Infrastructure
+        working-directory: backend/terraform
+        continue-on-error: true
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_app_name: ${{ env.SERVICE }}
+          TF_VAR_docker_image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+          TF_VAR_gcs_bucket_name: ${{ env.GCS_BUCKET_NAME }}
+        run: |
+          # Helper function for imports
+          import_resource() {
+            echo "Importing $1..."
+            terraform import -input=false $1 $2 || echo "Failed to import $1 - it may not exist yet or is already in state"
+          }
+          
+          # Import database instance
+          import_resource "google_sql_database_instance.instance" "projects/${{ env.PROJECT_ID }}/instances/mage-data-prep-db-instance"
+          
+          # Import VPC connector
+          import_resource "google_vpc_access_connector.connector" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/mage-data-prep-vpc-connector"
+          
+          # Import NFS-related resources
+          import_resource "module.nfs.google_compute_firewall.nfs_firewall_rule" "projects/${{ env.PROJECT_ID }}/global/firewalls/mage-data-prep-nfs-nfs"
+          import_resource "module.nfs.google_compute_address.default" "projects/${{ env.PROJECT_ID }}/regions/${{ env.REGION }}/addresses/mage-data-prep-nfs-nfs-ip"
+          import_resource "module.nfs.google_compute_disk.default" "projects/${{ env.PROJECT_ID }}/zones/${{ env.REGION }}-b/disks/mage-data-prep-nfs-disk"
+          
+          # Import Cloud Run service
+          import_resource "google_cloud_run_service.run_service" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/mage-data-prep"
+          
+          # Import IAM bindings
+          import_resource "google_cloud_run_service_iam_member.run_all_users" "projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/services/mage-data-prep roles/run.invoker allUsers"
+          
+          # Import API services (these might be managed by other deployments too)
+          import_resource "google_project_service.iam" "${{ env.PROJECT_ID }}/iam.googleapis.com"
+          import_resource "google_project_service.artifactregistry" "${{ env.PROJECT_ID }}/artifactregistry.googleapis.com"
+          import_resource "google_project_service.cloudrun" "${{ env.PROJECT_ID }}/run.googleapis.com"
+          import_resource "google_project_service.resourcemanager" "${{ env.PROJECT_ID }}/cloudresourcemanager.googleapis.com"
+          import_resource "google_project_service.vpcaccess" "${{ env.PROJECT_ID }}/vpcaccess.googleapis.com"
+          import_resource "google_project_service.secretmanager" "${{ env.PROJECT_ID }}/secretmanager.googleapis.com"
+          import_resource "google_project_service.sqladmin" "${{ env.PROJECT_ID }}/sqladmin.googleapis.com"
+          
+          echo "Import step completed - proceeding with plan/apply"
+
+      - name: Terraform Plan
+        working-directory: backend/terraform
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_app_name: ${{ env.SERVICE }}
+          TF_VAR_docker_image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+          TF_VAR_gcs_bucket_name: ${{ env.GCS_BUCKET_NAME }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: backend/terraform
+        run: terraform apply -auto-approve tfplan 

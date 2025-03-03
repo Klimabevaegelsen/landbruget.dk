@@ -1,6 +1,8 @@
-# Mage.ai Pipeline Development Guide
+# Mage.ai Pipeline Technical Documentation
 
-This guide outlines best practices, learnings, and contribution guidelines for developing large-scale geospatial data pipelines with Mage.ai, derived from our implementation of the wetlands data processing pipeline.
+This document outlines the architecture, best practices, and technical implementation details of our large-scale geospatial data pipelines with Mage.ai, derived from our implementation of the wetlands data processing pipeline.
+
+> **Looking to contribute?** Please see the [CONTRIBUTING.md](./CONTRIBUTING.md) file for detailed setup instructions and workflow guidelines.
 
 ## Table of Contents
 
@@ -9,10 +11,9 @@ This guide outlines best practices, learnings, and contribution guidelines for d
 3. [Memory Management](#memory-management)
 4. [Error Handling](#error-handling)
 5. [Deployment](#deployment)
-6. [Contributing](#contributing)
-7. [Dependencies](#dependencies)
-8. [Testing](#testing)
-9. [Known Limitations](#known-limitations)
+6. [Dependencies](#dependencies)
+7. [Testing](#testing)
+8. [Known Limitations](#known-limitations)
 
 ## Core Principles
 
@@ -130,107 +131,19 @@ Key patterns:
 - Graceful degradation
 - Clean up resources in finally blocks
 
-## Contributing
-
-### Local Development Setup
-
-1. **Prerequisites**:
-   - Docker installed
-   - Git installed
-   - Repository access
-
-2. **Setup Steps**:
-   ```bash
-   # Clone repository
-   git clone https://github.com/Klimabevaegelsen/landbruget.dk.git
-   cd landbruget.dk
-   
-   # Create feature branch
-   git checkout -b feature/your-feature-name
-   
-   # Build and run Mage.ai locally
-   docker build -t mage-local -f backend/mage.Dockerfile .
-   docker run -it -p 6789:6789 mage-local
-   ```
-
-   > **Note**: The Dockerfile is configured to automatically run in development mode when built locally.
-   > Build arguments `MAGE_ENVIRONMENT` and `MAGE_DEV_MODE` default to `dev` and `true` respectively.
-
-3. **Access UI**: Open http://localhost:6789
-
-### Making Changes
-
-1. **Creating/Modifying Pipelines**:
-   - Navigate to "Pipelines" in UI
-   - Click "New pipeline" or select existing
-   - Add/modify blocks as needed
-
-2. **Adding Custom Code**:
-   ```python
-   from mage_ai.data_preparation.repo_manager import get_repo_path
-   from os import path
-   import sys
-
-   repo_path = get_repo_path()
-   sys.path.append(repo_path)
-
-   from custom.your_module import your_function
-   ```
-
-### Best Practices
-
-1. Keep changes focused on single concerns
-2. Document complex logic
-3. Use descriptive names
-4. Create reusable utility functions
-5. Test thoroughly
-6. Update documentation
-
-### Submitting Changes
-
-1. **Commit**:
-   ```bash
-   git add backend/mage/
-   git commit -m "Description of changes"
-   ```
-
-2. **Push and Create PR**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-   Then create PR on GitHub with detailed description
-
 ## Deployment
 
-### Local Development with Docker
-```bash
-# Build the local development image
-docker build -t mage-local -f backend/mage.Dockerfile .
+Our Mage.ai pipeline is deployed on Google Cloud Run. The deployment is managed automatically by GitHub Actions workflows.
 
-# Run the container with port forwarding
-docker run -it -p 6789:6789 mage-local
-```
+### Local Development
+For local development instructions, refer to the [CONTRIBUTING.md](./CONTRIBUTING.md) file.
 
-The Dockerfile is configured to:
-- Use development mode by default for local builds
-- Set appropriate environment variables automatically
-- Copy all necessary files from backend/mage to the container
-
-### Production Deployment (via GitHub Actions)
-Production deployment is handled automatically by the GitHub Actions workflow when changes are pushed to the main branch:
-
-1. The workflow builds the Docker image with production settings:
-   ```
-   docker build --build-arg MAGE_ENVIRONMENT=production --build-arg MAGE_DEV_MODE=false -f backend/mage.Dockerfile .
-   ```
-
-2. The built image is pushed to Google Container Registry
-
-3. Cloud Run service is updated with the new image and environment variables:
-   ```
-   MAGE_ENVIRONMENT=production
-   GCS_BUCKET_NAME=europe-west1-landbrug-bc7a96db-bucket
-   ```
+### Production Architecture
+In production:
+- The pipeline runs on Google Cloud Run with increased resources
+- Data is stored in Google Cloud Storage
+- Authentication uses Cloud Run's service identity
+- Pipeline metadata contains environment-specific settings
 
 From `metadata.yaml`:
 ```yaml
@@ -242,18 +155,16 @@ production:
     bucket: ${GCS_BUCKET_NAME}
 ```
 
-Required environment variables:
+Critical environment variables:
 ```bash
 MAGE_ENVIRONMENT=production
-GCS_BUCKET_NAME=your-bucket
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+GCS_BUCKET_NAME=mage-data-storage
 ```
 
 ## Dependencies
 
-From our actual `requirements.txt` and `Dockerfile`:
-```dockerfile
-# Core dependencies
+Critical geospatial dependencies:
+```
 shapely>=2.0.7
 geopandas>=1.0.1
 dask[dataframe]>=2024.3.0
@@ -263,7 +174,11 @@ distributed>=2024.6.0
 psutil>=5.9.0
 ```
 
+For the complete list, see the requirements.txt file.
+
 ## Testing
+
+Our pipelines include built-in test functions for validation:
 
 ```python
 @test

@@ -1,6 +1,11 @@
 FROM mageai/mageai:latest
 
-# Define build arguments with development defaults (for local builds)
+# NOTE: This Dockerfile is primarily for production deployment.
+# For local development, use volume mounting instead:
+# docker run -it -p 6789:6789 -v $(pwd)/backend/mage:/home/src/default_repo mageai/mageai:latest
+
+# Define build arguments for environment settings
+# These are overridden by GitHub Actions for production builds
 ARG MAGE_ENVIRONMENT=dev
 ARG MAGE_DEV_MODE=true
 
@@ -18,6 +23,7 @@ RUN rm -rf /home/src/default_repo
 RUN mkdir -p /home/src/default_repo
 
 # Copy the Mage project files - preserve directory structure
+# This bundles all pipelines and code into the image for production deployment
 COPY backend/mage/ /home/src/default_repo/
 
 # Ensure correct permissions for Mage to read files
@@ -34,6 +40,9 @@ ENV MAGE_DEV_MODE=${MAGE_DEV_MODE}
 # List files to verify structure (for debugging)
 RUN ls -la /home/src/default_repo/ && \
     ls -la /home/src/default_repo/pipelines/
+
+# Set explicit repo path to ensure Mage.ai finds the pipelines
+ENV MAGE_REPO_PATH=/home/src/default_repo
 
 # Keep the default entrypoint from the base image
 ENTRYPOINT ["/bin/sh", "-c", "/app/run_app.sh"] 

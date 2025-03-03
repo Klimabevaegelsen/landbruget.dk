@@ -1,19 +1,26 @@
-project_type: standalone
+# project_type: standalone
 
 # Development configuration (default)
 variables_dir: /home/src/mage_data
-remote_variables_dir: null
+remote_variables_dir: gs://mage-data-storage/mage_data
 executor_type: local_python
 executor_count: 1
 
 # Production configuration
 production:
   executor_type: gcp_cloud_run
-  remote_variables_dir: gs://europe-west1-landbrug-bc7a96db-bucket/mage_data
+  remote_variables_dir: gs://mage-data-storage/mage_data
   storage:
     type: gcs
     bucket: ${GCS_BUCKET_NAME}
-    base_path: raw/wetlands
+    base_path: raw
+
+# GCP Cloud Run configuration for executors
+gcp_cloud_run_config:
+  project_id: landbrugsdata-1
+  timeout_seconds: 3600
+  # CPU and memory configurations are not directly supported in the current GCP Cloud Run executor
+  # These are inherited from the main service configuration defined in Terraform
 
 # Notification settings
 notification_config:
@@ -85,10 +92,6 @@ pipelines:
 # Default configuration (development)
 storage:
   type: local
-  base_path: ${MAGEAI_DATA_DIR}/wetlands
+  base_path: ${MAGEAI_DATA_DIR}
 
-# Shared settings across environments
-wetlands:
-  paths:
-    raw_data: raw_data.jsonl
-    processed_data: processed_current.parquet
+# Pipeline-specific configurations should be moved to their respective pipeline metadata files
