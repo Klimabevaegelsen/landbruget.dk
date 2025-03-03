@@ -10,6 +10,8 @@ env:
   REGION: europe-west1
   SERVICE: mage-data-prep
   GCS_BUCKET_NAME: europe-west1-landbrug-bc7a96db-bucket
+  TF_VAR_container_cpu: "4000m"
+  TF_VAR_container_memory: "8G"
 
 jobs:
   deploy:
@@ -47,11 +49,24 @@ jobs:
             -f backend/mage.Dockerfile .
           docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
 
-      - name: Deploy to Cloud Run
-        run: |-
-          gcloud run deploy ${{ env.SERVICE }} \
-            --region ${{ env.REGION }} \
-            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars="GCS_BUCKET_NAME=${{ env.GCS_BUCKET_NAME }},MAGE_ENVIRONMENT=production" 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
+        working-directory: backend/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: backend/terraform
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_app_name: ${{ env.SERVICE }}
+          TF_VAR_docker_image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: backend/terraform
+        run: terraform apply -auto-approve tfplan 
