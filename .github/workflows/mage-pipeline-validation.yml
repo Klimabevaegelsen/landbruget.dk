@@ -88,23 +88,23 @@ jobs:
                   validate_pipeline_metadata(metadata)
                   print('Pipeline metadata structure is valid')
               
-              # Initialize pipeline
+              # Initialize and validate pipeline
               pipeline = Pipeline.get(pipeline_uuid)
               if not pipeline:
                   print(f'Pipeline {pipeline_uuid} not found')
                   sys.exit(1)
               
-              # Initialize and validate pipeline
-              scheduler = PipelineScheduler(pipeline_uuid=pipeline_uuid)
-              scheduler.pipeline = pipeline
-              
-              # Validate pipeline configuration
-              scheduler.validate_pipeline()
-              print(f'Pipeline {pipeline_uuid} configuration is valid')
-              
               # Validate pipeline can be executed
               pipeline.validate()
               print(f'Pipeline {pipeline_uuid} execution validation passed')
+              
+              # Initialize scheduler with pipeline
+              scheduler = PipelineScheduler()
+              scheduler.pipeline = pipeline
+              
+              # Validate pipeline scheduling
+              scheduler.validate()
+              print(f'Pipeline {pipeline_uuid} scheduling validation passed')
               
           except Exception as e:
               print(f'Validation failed: {str(e)}')
@@ -145,8 +145,6 @@ jobs:
           # Test pipeline loading
           pipeline_uuid = 'wetlands_pipeline'
           pipeline = Pipeline.get(pipeline_uuid)
-          scheduler = PipelineScheduler(pipeline_uuid=pipeline_uuid)
-          scheduler.pipeline = pipeline
           
           # Validate pipeline can be loaded in Docker
           pipeline.validate()
