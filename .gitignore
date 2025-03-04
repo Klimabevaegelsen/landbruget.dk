@@ -91,6 +91,17 @@ test_cadastral.log
 cloud-sql-proxy
 backend/test_wfs.py
 
+# Devenv
+.envrc
+devenv.nix
+devenv.lock
+devenv.yaml
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
 # Google Cloud credentials
 .gcp/
 *.json.gcp

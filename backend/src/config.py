@@ -58,6 +58,7 @@ SOURCES = {
     },
     "property_owners": {
         "name": "Danish Property Owners",
+        "description": "Property owner data from Datafordeleren",
         "frequency": "weekly",
         "enabled": True,
         "type": "sftp",
@@ -89,6 +90,14 @@ SOURCES = {
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
         "create_dissolved": True
+    },
+    "slaugther_premiums": {
+        "name": "Danish Slaughter Premiums",
+        "type": "static",
+        "description": "Slaughter premiums from Danish Agriculture & Food Council",
+        "frequency": "static",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data"
     },
     "antibiotics": {
         "name": "Danish VetStat Data",
