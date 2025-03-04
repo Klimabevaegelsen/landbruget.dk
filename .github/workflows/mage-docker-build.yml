@@ -1,0 +1,60 @@
+name: Build & Push Mage.ai Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '!backend/terraform/**'  # Exclude terraform directory changes
+
+env:
+  PROJECT_ID: landbrugsdata-1
+  SERVICE: mage-data-prep
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Authorize Docker push
+        run: gcloud auth configure-docker
+
+      # This step builds a Docker image that bundles all Mage.ai pipeline code
+      # Following Mage.ai's recommended approach for production deployment
+      - name: Build and Push Container
+        run: |-
+          docker build \
+            --build-arg MAGE_ENVIRONMENT=production \
+            --build-arg MAGE_DEV_MODE=false \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
+            -f backend/mage.Dockerfile .
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
+      
+      # Store the new image reference for later use by the deployment workflow
+      - name: Create Deployment Artifact
+        run: |
+          echo "DOCKER_IMAGE=gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}" > docker-image.txt
+      
+      - name: Upload Docker Image Reference
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-image
+          path: docker-image.txt
+          retention-days: 1 
