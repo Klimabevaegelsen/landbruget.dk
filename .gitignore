@@ -89,3 +89,42 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+
+# Google Cloud credentials
+.gcp/
+*.json.gcp
+application_default_credentials.json
+*credentials*.json
+backend/mage/.gcp/
+
+# Mage specific
+backend/mage/.file_versions/
+backend/mage/.ssh_tunnel/
+backend/mage/__pycache__/
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+*.tfplan
+
+# Devenv [https://devenv.sh]
+.devenv
+devenv.nix
+devenv.lock
+.devenv.flake.nix
+devenv.yaml
+.envrc
+# For direnv integration
+.direnv/
