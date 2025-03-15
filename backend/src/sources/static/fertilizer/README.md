@@ -123,4 +123,4 @@ Each field record includes:
 - Results should be viewed as estimates based on farm patterns
 
 ## Exploration code:
-https://colab.research.google.com/drive/1AghsRm8Dsfk3kVR-tUe2BUS3E9v7KY2I?usp=sharing 
+https://colab.research.google.com/drive/1AghsRm8Dsfk3kVR-tUe2BUS3E9v7KY2I?usp=sharing
