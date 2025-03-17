@@ -128,3 +128,4 @@ devenv.yaml
 .envrc
 # For direnv integration
 .direnv/
+.pre-commit-config.yaml
