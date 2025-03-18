@@ -37,6 +37,9 @@ backoff~=2.2.1
 # PDF Processing
 pdfplumber~=0.11.5
 
+# Excel processing
+openpyxl~=3.1.0
+
 # Utilities
 python-dotenv~=1.0.1
 tqdm~=4.67.1
