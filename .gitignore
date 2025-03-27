@@ -91,17 +91,6 @@ test_cadastral.log
 cloud-sql-proxy
 backend/test_wfs.py
 
-# Devenv
-.envrc
-devenv.nix
-devenv.lock
-devenv.yaml
-.devenv*
-devenv.local.nix
-
-# direnv
-.direnv
-
 # Google Cloud credentials
 .gcp/
 *.json.gcp
@@ -130,3 +119,13 @@ override.tf.json
 terraform.rc
 tfplan
 *.tfplan
+
+# Devenv [https://devenv.sh]
+.devenv
+devenv.nix
+devenv.lock
+.devenv.flake.nix
+devenv.yaml
+.envrc
+# For direnv integration
+.direnv/
