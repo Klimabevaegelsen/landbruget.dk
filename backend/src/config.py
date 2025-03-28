@@ -98,5 +98,13 @@ SOURCES = {
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
         "url": "https://vetstat.fvst.dk/vetstat/services/external/CHRWS"
+    },
+    "worker_safety": {
+        "name": "Danish Worker Safety Data",
+        "type": "static",
+        "description": "Worker safety accident data from 2020-2024",
+        "frequency": "static",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data"
     }
 }
