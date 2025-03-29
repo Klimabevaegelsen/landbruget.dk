@@ -98,5 +98,13 @@ SOURCES = {
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
         "url": "https://vetstat.fvst.dk/vetstat/services/external/CHRWS"
+    },
+    "slaugther_premiums": {
+        "name": "Danish Slaughter Premiums",
+        "type": "static",
+        "description": "Slaughter premiums from Danish Agriculture & Food Council",
+        "frequency": "static",
+        "enabled": True,
+        "bucket": "landbrugsdata-raw-data"
     }
 }
