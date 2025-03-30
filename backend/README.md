@@ -60,14 +60,14 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 - Geospatial field names should start with "geo_".
 - Common feature names: 
 - CVR Number: cvr_number
- - Geometry fields: geometry
- - CHR Number: chr_number
- - Herd Number: herd_number
- - Kommune: municipality
- - Dyrearttekst: species_name
- - År: year
- - Marknummber: field_id
- - Markbloknummer: field_block_id
+  - Geometry fields: geometry
+  - CHR Number: chr_number
+  - Herd Number: herd_number
+  - Kommune: municipality
+  - Dyrearttekst: species_name
+  - År: year
+  - Marknummber: field_id
+  - Markbloknummer: field_block_id
 
 ### Data values
 - Null values should be ... null.
