@@ -19,7 +19,7 @@ Bronze and Silver layer processes may run in the same Mage.ai pipeline. Gold lay
 - Data should in the prod environment be saved on GCS for Bronze layer, CloudSQL for Silver and Gold layer and processed in Mage.ai.
 - CRS conversions of geospatial data should be avoided (as it may changes the data).
 - Utilise optimal Mage.ai architecture (dynamic modules instead of multiple workers / await/async, etc), ensuring separation of responsibility for modules.
-- Do add comments in the code and do add logs for steps within each modules.
+- Do add comments in the code and do add logs for steps within each module.
 - Each Mage.ai module should have its own tests.
 
 
