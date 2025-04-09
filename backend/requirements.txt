@@ -40,6 +40,10 @@ pdfplumber~=0.11.5
 # Excel processing
 openpyxl~=3.1.0
 
+# Testing
+pytest~=8.2.0
+pytest-asyncio~=0.23.5
+
 # Utilities
 python-dotenv~=1.0.1
 tqdm~=4.67.1
