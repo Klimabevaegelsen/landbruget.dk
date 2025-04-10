@@ -12,9 +12,7 @@ class NLES5Calculator:
     """
     Calculator for estimating nitrogen washout using the NLES5 model.
 
-    This implementation is based on the SAS code from the Danish Agricultural Agency's
-    climate tool calculation basis. It calculates nitrogen washout for agricultural fields
-    based on:
+    It calculates nitrogen washout for agricultural fields based on:
     - Field geometry and crop type
     - Percolation data
     - Catch crop data
@@ -45,7 +43,7 @@ class NLES5Calculator:
         self.fertilizer_accounts = fertilizer_accounts_parser
         self.field_plan = field_plan_parser
 
-        # Crop parameters from SAS code
+        # Crop parameters
         self.crop_params: Dict[str, float] = {
             'winter_cereals': 0,
             'spring_cereals': -6.74,
@@ -62,7 +60,7 @@ class NLES5Calculator:
             'pulses_winter_rape': -2.87
         }
 
-        # Coefficients from SAS code
+        # Coefficients for each model parameter
         self.coefficients: Dict[str, float] = {
             'Bt': 0.456793,
             'Bcs': 0.049570,
@@ -76,16 +74,9 @@ class NLES5Calculator:
 
         # Soil type parameters
         self.soil_params = {
-            'sand': {
-                'per1_coef': -0.001194,
-                'per2_coef': -0.00111,
-                'per_p_coef': -0.00086
-            },
-            'clay': {
-                'per1_coef': -0.00080,
-                'per2_coef': -0.00075,
-                'per_p_coef': -0.00064
-            }
+            'per1_coef': -0.001,  # Fixed coefficient for period 1 (Sep-Nov)
+            'per2_coef': -0.0009,  # Fixed coefficient for period 2 (Dec-Feb)
+            'per_p_coef': -0.0007  # Fixed coefficient for period 3 (Mar-Aug)
         }
 
     async def calculate_nitrogen_washout(
@@ -190,22 +181,18 @@ class NLES5Calculator:
             crop_type = field_data['crop_type'].iloc[0]
             m_crop_param = self.crop_params.get(crop_type, 0)
 
-            # 3. Get soil type and parameters
-            soil_type = 'sand' if field_data['soil_type'].iloc[0] in [1, 2, 3, 4] else 'clay'
-            soil_params = self.soil_params[soil_type]
+            # 3. Calculate drainage effect
+            drain = (1 - np.exp(self.soil_params['per1_coef'] * per1 +
+                               self.soil_params['per2_coef'] * (per2 + per3))) * \
+                   np.exp(self.soil_params['per_p_coef'] * (per2 + per3))
 
-            # 4. Calculate drainage effect
-            drain = (1 - np.exp(soil_params['per1_coef'] * per1 +
-                               soil_params['per2_coef'] * (per2 + per3))) * \
-                   np.exp(soil_params['per_p_coef'] * (per2 + per3))
+            # 4. Calculate soil effect
+            soil = np.exp(-0.00185 * 20)  # Fixed clay content of 20%
 
-            # 5. Calculate soil effect
-            soil = np.exp(-0.00185 * field_data['clay_content'].iloc[0])
-
-            # 6. Calculate percolation and soil effect
+            # 5. Calculate percolation and soil effect
             perco_soil_effect = drain * soil * 1.085
 
-            # 7. Calculate nitrogen effect
+            # 6. Calculate nitrogen effect
             # Get nitrogen parameters from field plan and fertilizer data
             tn_t_ha = field_plan_data['N Kvote Mark'].iloc[0] if not field_plan_data.empty else 0
             mineral_n_foraar = fertilizer_data['F_706_1'].iloc[0] if not fertilizer_data.empty else 0
@@ -226,18 +213,18 @@ class NLES5Calculator:
                  self.coefficients['Bf1'] * (niveau_nfix + niveau_nfix) / 2 +
                  self.coefficients['Bg0'] * organic_n_hus)
 
-            # 8. Calculate crop effect
+            # 7. Calculate crop effect
             crop = m_crop_param
 
-            # 9. Calculate trend effect
+            # 8. Calculate trend effect
             trend = -0.1108 * (2017 - 1991)  # Using reference year 2017
 
-            # 10. Calculate final nitrogen washout
+            # 9. Calculate final nitrogen washout
             v = 23.51 + n + crop
             vk = v ** 1.5
             y5 = trend + vk * perco_soil_effect
 
-            # 11. Create result GeoDataFrame
+            # 10. Create result GeoDataFrame
             result = gpd.GeoDataFrame({
                 'field_id': field_data['field_id'].iloc[0],
                 'geometry': field_data['geometry'].iloc[0],
@@ -247,7 +234,7 @@ class NLES5Calculator:
                 'percolation_period2': per2,
                 'percolation_period3': per3,
                 'crop_type': crop_type,
-                'soil_type': soil_type,
+                'soil_type': 'fixed',
                 'drainage_effect': drain,
                 'soil_effect': soil,
                 'nitrogen_effect': n,
