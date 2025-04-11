@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class SoilTypeParser(GeospatialSource):
-    """Parser for soil types from WFS"""
+    """Parser for soil types from WFS
+
+        Note to the next dev who comes here: This class could probably be simplified to just download a shapefile of the same soil type map
+        and read it into a GeoDataFrame. The link is : https://landbrugsgeodata.fvm.dk/ and https://landbrugsgeodata.fvm.dk/Download/Jordbunds-%20og%20terraenforhold/Jordbundskort_2024.zip.
+    """
 
     source_id = "soil_types"
 
