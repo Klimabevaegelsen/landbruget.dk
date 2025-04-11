@@ -30,10 +30,12 @@ class SoilTypeParser(GeospatialSource):
         self.max_retries = 3
         self.retry_delay = 5  # seconds
 
-        # Create a persistent directory for checkpoints and batches
-        self.work_dir = os.path.join(tempfile.gettempdir(), f'soil_type_work_{int(time.time())}')
+        # Use a consistent work directory name
+        self.work_dir = os.path.join(tempfile.gettempdir(), 'soil_type_work')
+
+        # Create work directory if it doesn't exist
         os.makedirs(self.work_dir, exist_ok=True)
-        logger.info(f"Created work directory: {self.work_dir}")
+        logger.info(f"Using work directory: {self.work_dir}")
 
         self.checkpoint_file = os.path.join(self.work_dir, 'checkpoint.json')
         self.namespaces = {
@@ -55,15 +57,56 @@ class SoilTypeParser(GeospatialSource):
         logger.info(f"Saved checkpoint: batch {batch_number}, index {start_index}")
 
     def _load_checkpoint(self):
-        """Load the last checkpoint if it exists"""
+        """Load the last checkpoint if it exists and find existing batch files"""
         if not os.path.exists(self.checkpoint_file):
+            # If no checkpoint exists, look for existing batch files
+            batch_files = []
+            start_index = 0
+            batch_number = 1
+
+            # Find all existing batch files
+            for file in os.listdir(self.work_dir):
+                if file.startswith('batch_') and file.endswith('.parquet'):
+                    try:
+                        batch_num = int(file.split('_')[1].split('.')[0])
+                        batch_files.append(os.path.join(self.work_dir, file))
+                        # Update start_index based on the number of features in this batch
+                        gdf = gpd.read_parquet(os.path.join(self.work_dir, file))
+                        start_index += len(gdf)
+                        batch_number = max(batch_number, batch_num + 1)
+                    except Exception as e:
+                        logger.warning(f"Failed to process existing batch file {file}: {str(e)}")
+
+            if batch_files:
+                logger.info(f"Found {len(batch_files)} existing batch files, continuing from index {start_index}")
+                return start_index, batch_number, batch_files
+
             return 0, 1, []
 
         try:
             with open(self.checkpoint_file, 'r') as f:
                 checkpoint = json.load(f)
-            logger.info(f"Loaded checkpoint: batch {checkpoint['batch_number']}, index {checkpoint['start_index']}")
-            return checkpoint['start_index'], checkpoint['batch_number'], checkpoint['batch_files']
+
+            # Verify that all batch files in the checkpoint still exist
+            valid_batch_files = []
+            for batch_file in checkpoint['batch_files']:
+                if os.path.exists(batch_file):
+                    valid_batch_files.append(batch_file)
+                else:
+                    logger.warning(f"Batch file from checkpoint not found: {batch_file}")
+
+            if len(valid_batch_files) != len(checkpoint['batch_files']):
+                logger.warning("Some batch files from checkpoint are missing, adjusting start index")
+                # Recalculate start_index based on existing batch files
+                start_index = 0
+                for batch_file in valid_batch_files:
+                    gdf = gpd.read_parquet(batch_file)
+                    start_index += len(gdf)
+            else:
+                start_index = checkpoint['start_index']
+
+            logger.info(f"Loaded checkpoint: batch {checkpoint['batch_number']}, index {start_index}")
+            return start_index, checkpoint['batch_number'], valid_batch_files
         except Exception as e:
             logger.warning(f"Failed to load checkpoint: {str(e)}")
             return 0, 1, []
@@ -109,11 +152,15 @@ class SoilTypeParser(GeospatialSource):
 
                                 features = data['features']
                                 if not features:
+                                    logger.info(f"No more features found at index {start_index}")
                                     return None
 
                                 logger.info(f"Found {len(features)} features in batch {batch_number} (indexes {start_index}-{start_index + len(features) - 1})")
                                 return features
 
+                            elif response.status == 404:
+                                logger.info(f"No more features found at index {start_index} (404 response)")
+                                return None
                             else:
                                 error_text = await response.text()
                                 raise Exception(f"HTTP {response.status}: {error_text}")
