@@ -7,6 +7,9 @@ from src.sources.base import GeospatialSource
 import asyncio
 from urllib.parse import urlencode
 import json
+import os
+import tempfile
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 # Set logging level to INFO to see debug messages
@@ -22,6 +25,8 @@ class SoilTypeParser(GeospatialSource):
         self.batch_size = config.get('batch_size', 10000)  # Default to 10000 if not specified
         self.max_concurrent = 5
         self.request_timeout = 300
+        self.temp_dir = tempfile.mkdtemp(prefix='soil_type_batches_')
+        logger.info(f"Created temporary directory for batch files: {self.temp_dir}")
 
         self.namespaces = {
             'wfs': 'http://www.opengis.net/wfs/2.0',
@@ -30,6 +35,22 @@ class SoilTypeParser(GeospatialSource):
         }
 
         self.request_semaphore = asyncio.Semaphore(self.max_concurrent)
+
+    def _save_batch(self, features, batch_number):
+        """Save a batch of features to a GeoParquet file"""
+        if not features:
+            return None
+
+        # Create GeoDataFrame from features
+        gdf = gpd.GeoDataFrame.from_features(features)
+        gdf = gdf.set_geometry('geometry')
+        gdf.crs = 'EPSG:4326'
+
+        # Save to GeoParquet
+        batch_file = os.path.join(self.temp_dir, f'batch_{batch_number}.parquet')
+        gdf.to_parquet(batch_file)
+        logger.info(f"Saved batch {batch_number} to {batch_file}")
+        return batch_file
 
     async def fetch(self):
         """Required method from GeospatialSource. Fetches soil type data.
@@ -48,7 +69,7 @@ class SoilTypeParser(GeospatialSource):
                          or None if the fetch fails.
         """
         base_url = 'https://geodata.fvm.dk/geoserver/Jordbunds_og_terraenforhold/wfs'
-        all_features = []
+        batch_files = []
         start_index = 0
         batch_number = 1
 
@@ -87,28 +108,33 @@ class SoilTypeParser(GeospatialSource):
                                             logger.error(f"Unexpected JSON response type: {type(data)}")
                                             return None
 
-                                    if 'features' not in data:
-                                        logger.error("No features found in response")
+                                        if 'features' not in data:
+                                            logger.error("No features found in response")
+                                            return None
+
+                                        features = data['features']
+                                        if not features:
+                                            # No more features to fetch
+                                            break
+
+                                        logger.info(f"Found {len(features)} features in batch {batch_number} (indexes {start_index}-{start_index + len(features) - 1})")
+
+                                        # Save batch to file
+                                        batch_file = self._save_batch(features, batch_number)
+                                        if batch_file:
+                                            batch_files.append(batch_file)
+
+                                        start_index += len(features)
+                                        batch_number += 1
+
+                                    except json.JSONDecodeError as e:
+                                        logger.error(f"Failed to parse JSON response: {str(e)}")
+                                        logger.error(f"Response text: {text[:1000]}...")
                                         return None
 
-                                    features = data['features']
-                                    if not features:
-                                        # No more features to fetch
-                                        break
-
-                                    logger.info(f"Found {len(features)} features in batch {batch_number} (indexes {start_index}-{start_index + len(features) - 1})")
-                                    all_features.extend(features)
-                                    start_index += len(features)
-                                    batch_number += 1
-
-                                except json.JSONDecodeError as e:
-                                    logger.error(f"Failed to parse JSON response: {str(e)}")
-                                    logger.error(f"Response text: {text[:1000]}...")
+                                except Exception as e:
+                                    logger.error(f"Error processing response: {str(e)}")
                                     return None
-
-                            except Exception as e:
-                                logger.error(f"Error processing response: {str(e)}")
-                                return None
                             else:
                                 logger.error(f"Failed to fetch data: {response.status}")
                                 error_text = await response.text()
@@ -118,20 +144,30 @@ class SoilTypeParser(GeospatialSource):
                 logger.error(f"Request failed: {str(e)}")
                 return None
 
-        if not all_features:
+        if not batch_files:
             logger.error("No features were fetched")
             return None
 
-        logger.info(f"Total features fetched: {len(all_features)}")
+        logger.info(f"Total batches saved: {len(batch_files)}")
 
-        # Create GeoDataFrame from all features
-        gdf = gpd.GeoDataFrame.from_features(all_features)
-        if 'geometry' not in gdf.columns:
-            logger.error("No geometry column in GeoDataFrame")
-            return None
+        # Read and merge all batch files
+        logger.info("Merging batch files...")
+        gdfs = [gpd.read_parquet(f) for f in batch_files]
+        gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
-        gdf = gdf.set_geometry('geometry')
-        gdf.crs = 'EPSG:4326'
+        # Clean up temporary files
+        for f in batch_files:
+            try:
+                os.remove(f)
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary file {f}: {str(e)}")
+
+        try:
+            os.rmdir(self.temp_dir)
+        except Exception as e:
+            logger.warning(f"Failed to remove temporary directory {self.temp_dir}: {str(e)}")
+
+        logger.info(f"Final GeoDataFrame contains {len(gdf)} features")
         return gdf
 
     def _parse_features(self, root):
