@@ -5,6 +5,7 @@ import numpy as np
 from ..parsers.agricultural_fields import AgriculturalFields
 from .percolation import PercolationCalculator
 from ..static.fertilizer.parser import CatchCrops, FertilizerAccounts, FieldPlanFertilizer
+from ..parsers.soil_type import SoilTypeParser
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,8 @@ class NLES5Calculator:
         percolation_calculator: PercolationCalculator,
         catch_crops_parser: CatchCrops,
         fertilizer_accounts_parser: FertilizerAccounts,
-        field_plan_parser: FieldPlanFertilizer
+        field_plan_parser: FieldPlanFertilizer,
+        soil_type_parser: SoilTypeParser
     ):
         """
         Initialize the NLES5 calculator with required data sources.
@@ -36,12 +38,14 @@ class NLES5Calculator:
             catch_crops_parser: Parser for catch crop data
             fertilizer_accounts_parser: Parser for fertilizer accounts
             field_plan_parser: Parser for field plan with fertilizer info
+            soil_type_parser: Parser for soil type data
         """
         self.ag_fields = agricultural_fields_parser
         self.percolation = percolation_calculator
         self.catch_crops = catch_crops_parser
         self.fertilizer_accounts = fertilizer_accounts_parser
         self.field_plan = field_plan_parser
+        self.soil_type_parser = soil_type_parser
 
         # Crop parameters
         self.crop_params: Dict[str, float] = {
@@ -74,9 +78,16 @@ class NLES5Calculator:
 
         # Soil type parameters
         self.soil_params = {
-            'per1_coef': -0.001,  # Fixed coefficient for period 1 (Sep-Nov)
-            'per2_coef': -0.0009,  # Fixed coefficient for period 2 (Dec-Feb)
-            'per_p_coef': -0.0007  # Fixed coefficient for period 3 (Mar-Aug)
+            'sand': {
+                'per1_coef': -0.001194,
+                'per2_coef': -0.00111,
+                'per_p_coef': -0.00086
+            },
+            'clay': {
+                'per1_coef': -0.00080,
+                'per2_coef': -0.00075,
+                'per_p_coef': -0.00064
+            }
         }
 
     async def calculate_nitrogen_washout(
@@ -103,7 +114,15 @@ class NLES5Calculator:
                 logger.error(f"No field data found for field_id: {field_id}")
                 return gpd.GeoDataFrame()
 
-            # 2. Get percolation data
+            # 2. Get soil type data
+            soil_type_data = await self.soil_type_parser.fetch_soil_types()
+            if soil_type_data is not None and not soil_type_data.empty:
+                # Spatial join to get soil type for the field
+                field_with_soil = gpd.sjoin(field_data, soil_type_data, how='left', predicate='intersects')
+                if not field_with_soil.empty:
+                    field_data = field_with_soil
+
+            # 3. Get percolation data
             percolation_data = await self.percolation.get_daily_percolation(
                 bbox=field_data.geometry.bounds,
                 start_date=start_date,
@@ -114,19 +133,19 @@ class NLES5Calculator:
                 logger.error(f"No percolation data found for field_id: {field_id}")
                 return gpd.GeoDataFrame()
 
-            # 3. Get catch crop data
+            # 4. Get catch crop data
             catch_crop_data = await self.catch_crops.fetch()
             catch_crop_data = catch_crop_data[catch_crop_data['field_id'] == field_id]
 
-            # 4. Get fertilizer account data
+            # 5. Get fertilizer account data
             fertilizer_data = await self.fertilizer_accounts.fetch()
             fertilizer_data = fertilizer_data[fertilizer_data['field_id'] == field_id]
 
-            # 5. Get field plan data
+            # 6. Get field plan data
             field_plan_data = await self.field_plan.fetch()
             field_plan_data = field_plan_data[field_plan_data['field_id'] == field_id]
 
-            # 6. Calculate nitrogen washout
+            # 7. Calculate nitrogen washout
             result = self._calculate_washout(
                 field_data,
                 percolation_data,
@@ -181,18 +200,22 @@ class NLES5Calculator:
             crop_type = field_data['crop_type'].iloc[0]
             m_crop_param = self.crop_params.get(crop_type, 0)
 
-            # 3. Calculate drainage effect
-            drain = (1 - np.exp(self.soil_params['per1_coef'] * per1 +
-                               self.soil_params['per2_coef'] * (per2 + per3))) * \
-                   np.exp(self.soil_params['per_p_coef'] * (per2 + per3))
+            # 3. Get soil type and parameters
+            soil_type = 'sand' if field_data['soil_type'].iloc[0] in [1, 2, 3, 4] else 'clay'
+            soil_params = self.soil_params[soil_type]
 
-            # 4. Calculate soil effect
-            soil = np.exp(-0.00185 * 20)  # Fixed clay content of 20%
+            # 4. Calculate drainage effect
+            drain = (1 - np.exp(soil_params['per1_coef'] * per1 +
+                               soil_params['per2_coef'] * (per2 + per3))) * \
+                   np.exp(soil_params['per_p_coef'] * (per2 + per3))
 
-            # 5. Calculate percolation and soil effect
+            # 5. Calculate soil effect
+            soil = np.exp(-0.00185 * field_data['clay_content'].iloc[0])
+
+            # 6. Calculate percolation and soil effect
             perco_soil_effect = drain * soil * 1.085
 
-            # 6. Calculate nitrogen effect
+            # 7. Calculate nitrogen effect
             # Get nitrogen parameters from field plan and fertilizer data
             tn_t_ha = field_plan_data['N Kvote Mark'].iloc[0] if not field_plan_data.empty else 0
             mineral_n_foraar = fertilizer_data['F_706_1'].iloc[0] if not fertilizer_data.empty else 0
@@ -213,18 +236,18 @@ class NLES5Calculator:
                  self.coefficients['Bf1'] * (niveau_nfix + niveau_nfix) / 2 +
                  self.coefficients['Bg0'] * organic_n_hus)
 
-            # 7. Calculate crop effect
+            # 8. Calculate crop effect
             crop = m_crop_param
 
-            # 8. Calculate trend effect
+            # 9. Calculate trend effect
             trend = -0.1108 * (2017 - 1991)  # Using reference year 2017
 
-            # 9. Calculate final nitrogen washout
+            # 10. Calculate final nitrogen washout
             v = 23.51 + n + crop
             vk = v ** 1.5
             y5 = trend + vk * perco_soil_effect
 
-            # 10. Create result GeoDataFrame
+            # 11. Create result GeoDataFrame
             result = gpd.GeoDataFrame({
                 'field_id': field_data['field_id'].iloc[0],
                 'geometry': field_data['geometry'].iloc[0],
@@ -234,7 +257,7 @@ class NLES5Calculator:
                 'percolation_period2': per2,
                 'percolation_period3': per3,
                 'crop_type': crop_type,
-                'soil_type': 'fixed',
+                'soil_type': soil_type,
                 'drainage_effect': drain,
                 'soil_effect': soil,
                 'nitrogen_effect': n,

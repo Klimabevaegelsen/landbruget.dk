@@ -10,6 +10,8 @@ import json
 import os
 import tempfile
 import pandas as pd
+import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 # Set logging level to INFO to see debug messages
@@ -22,24 +24,56 @@ class SoilTypeParser(GeospatialSource):
 
     def __init__(self, config):
         super().__init__(config)
-        self.batch_size = config.get('batch_size', 10000)  # Default to 10000 if not specified
+        self.batch_size = config.get('batch_size', 10000)
         self.max_concurrent = 5
         self.request_timeout = 300
-        self.temp_dir = tempfile.mkdtemp(prefix='soil_type_batches_')
-        logger.info(f"Created temporary directory for batch files: {self.temp_dir}")
+        self.max_retries = 3
+        self.retry_delay = 5  # seconds
 
+        # Create a persistent directory for checkpoints and batches
+        self.work_dir = os.path.join(tempfile.gettempdir(), f'soil_type_work_{int(time.time())}')
+        os.makedirs(self.work_dir, exist_ok=True)
+        logger.info(f"Created work directory: {self.work_dir}")
+
+        self.checkpoint_file = os.path.join(self.work_dir, 'checkpoint.json')
         self.namespaces = {
             'wfs': 'http://www.opengis.net/wfs/2.0',
             'gml': 'http://www.opengis.net/gml/3.2',
             'jord': 'http://www.fvm.dk/jordbunds_og_terraenforhold'
         }
-
         self.request_semaphore = asyncio.Semaphore(self.max_concurrent)
+
+    def _save_checkpoint(self, start_index, batch_number, batch_files):
+        """Save the current progress to a checkpoint file"""
+        checkpoint = {
+            'start_index': start_index,
+            'batch_number': batch_number,
+            'batch_files': batch_files
+        }
+        with open(self.checkpoint_file, 'w') as f:
+            json.dump(checkpoint, f)
+        logger.info(f"Saved checkpoint: batch {batch_number}, index {start_index}")
+
+    def _load_checkpoint(self):
+        """Load the last checkpoint if it exists"""
+        if not os.path.exists(self.checkpoint_file):
+            return 0, 1, []
+
+        try:
+            with open(self.checkpoint_file, 'r') as f:
+                checkpoint = json.load(f)
+            logger.info(f"Loaded checkpoint: batch {checkpoint['batch_number']}, index {checkpoint['start_index']}")
+            return checkpoint['start_index'], checkpoint['batch_number'], checkpoint['batch_files']
+        except Exception as e:
+            logger.warning(f"Failed to load checkpoint: {str(e)}")
+            return 0, 1, []
 
     def _save_batch(self, features, batch_number):
         """Save a batch of features to a GeoParquet file"""
         if not features:
             return None
+
+        batch_file = os.path.join(self.work_dir, f'batch_{batch_number}.parquet')
 
         # Create GeoDataFrame from features
         gdf = gpd.GeoDataFrame.from_features(features)
@@ -47,102 +81,106 @@ class SoilTypeParser(GeospatialSource):
         gdf.crs = 'EPSG:4326'
 
         # Save to GeoParquet
-        batch_file = os.path.join(self.temp_dir, f'batch_{batch_number}.parquet')
         gdf.to_parquet(batch_file)
         logger.info(f"Saved batch {batch_number} to {batch_file}")
         return batch_file
 
-    async def fetch(self):
-        """Required method from GeospatialSource. Fetches soil type data.
+    async def _fetch_batch_with_retry(self, url, batch_number, start_index):
+        """Fetch a batch with retry logic"""
+        for attempt in range(self.max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with self.request_semaphore:
+                        async with session.get(url, timeout=self.request_timeout) as response:
+                            if response.status == 200:
+                                text = await response.text()
 
-        Returns:
-            GeoDataFrame: A GeoDataFrame containing soil type features with geometry and properties
-                         or None if the fetch fails.
-        """
-        return await self.fetch_soil_types()
+                                if text.strip().startswith('<?xml'):
+                                    logger.error("Received XML error response")
+                                    logger.error(f"Error response: {text}")
+                                    raise Exception("XML error response received")
+
+                                data = json.loads(text)
+                                if not isinstance(data, dict):
+                                    raise Exception(f"Unexpected JSON response type: {type(data)}")
+
+                                if 'features' not in data:
+                                    raise Exception("No features found in response")
+
+                                features = data['features']
+                                if not features:
+                                    return None
+
+                                logger.info(f"Found {len(features)} features in batch {batch_number} (indexes {start_index}-{start_index + len(features) - 1})")
+                                return features
+
+                            else:
+                                error_text = await response.text()
+                                raise Exception(f"HTTP {response.status}: {error_text}")
+
+            except Exception as e:
+                if attempt < self.max_retries - 1:
+                    logger.warning(f"Attempt {attempt + 1} failed for batch {batch_number}: {str(e)}")
+                    logger.info(f"Retrying in {self.retry_delay} seconds...")
+                    await asyncio.sleep(self.retry_delay)
+                else:
+                    logger.error(f"All retry attempts failed for batch {batch_number}: {str(e)}")
+                    raise
 
     async def fetch_soil_types(self):
-        """Fetch soil types from the WFS service
+        """Fetch soil types from the WFS service with error recovery
 
         Returns:
             GeoDataFrame: A GeoDataFrame containing soil type features with geometry and properties
                          or None if the fetch fails.
         """
         base_url = 'https://geodata.fvm.dk/geoserver/Jordbunds_og_terraenforhold/wfs'
-        batch_files = []
-        start_index = 0
-        batch_number = 1
 
-        while True:
-            params = {
-                'SERVICE': 'WFS',
-                'REQUEST': 'GetFeature',
-                'VERSION': '2.0.0',
-                'TYPENAMES': 'Jordbunds_og_terraenforhold:Jordbundskort_2024',
-                'SRSNAME': 'EPSG:4326',
-                'count': str(self.batch_size),
-                'startIndex': str(start_index),
-                'outputFormat': 'application/json'
-            }
+        # Load checkpoint or start fresh
+        start_index, batch_number, batch_files = self._load_checkpoint()
 
-            url = f"{base_url}?{urlencode(params)}"
-            end_index = start_index + self.batch_size - 1
-            logger.info(f"Fetching batch {batch_number} of features (indexes {start_index}-{end_index})")
+        try:
+            while True:
+                params = {
+                    'SERVICE': 'WFS',
+                    'REQUEST': 'GetFeature',
+                    'VERSION': '2.0.0',
+                    'TYPENAMES': 'Jordbunds_og_terraenforhold:Jordbundskort_2024',
+                    'SRSNAME': 'EPSG:4326',
+                    'count': str(self.batch_size),
+                    'startIndex': str(start_index),
+                    'outputFormat': 'application/json'
+                }
 
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with self.request_semaphore:
-                        async with session.get(url, timeout=self.request_timeout) as response:
-                            if response.status == 200:
-                                try:
-                                    text = await response.text()
+                url = f"{base_url}?{urlencode(params)}"
+                end_index = start_index + self.batch_size - 1
+                logger.info(f"Fetching batch {batch_number} of features (indexes {start_index}-{end_index})")
 
-                                    if text.strip().startswith('<?xml'):
-                                        logger.error("Received XML error response")
-                                        logger.error(f"Error response: {text}")
-                                        return None
+                try:
+                    features = await self._fetch_batch_with_retry(url, batch_number, start_index)
+                    if features is None:
+                        break
 
-                                    try:
-                                        data = json.loads(text)
-                                        if not isinstance(data, dict):
-                                            logger.error(f"Unexpected JSON response type: {type(data)}")
-                                            return None
+                    # Save batch to file
+                    batch_file = self._save_batch(features, batch_number)
+                    if batch_file:
+                        batch_files.append(batch_file)
+                        # Update checkpoint after successful save
+                        self._save_checkpoint(start_index + len(features), batch_number + 1, batch_files)
 
-                                        if 'features' not in data:
-                                            logger.error("No features found in response")
-                                            return None
+                    start_index += len(features)
+                    batch_number += 1
 
-                                        features = data['features']
-                                        if not features:
-                                            # No more features to fetch
-                                            break
+                except Exception as e:
+                    logger.error(f"Failed to process batch {batch_number}: {str(e)}")
+                    # Don't raise the exception, allow the process to continue with the next batch
+                    start_index += self.batch_size
+                    batch_number += 1
+                    continue
 
-                                        logger.info(f"Found {len(features)} features in batch {batch_number} (indexes {start_index}-{start_index + len(features) - 1})")
-
-                                        # Save batch to file
-                                        batch_file = self._save_batch(features, batch_number)
-                                        if batch_file:
-                                            batch_files.append(batch_file)
-
-                                        start_index += len(features)
-                                        batch_number += 1
-
-                                    except json.JSONDecodeError as e:
-                                        logger.error(f"Failed to parse JSON response: {str(e)}")
-                                        logger.error(f"Response text: {text[:1000]}...")
-                                        return None
-
-                                except Exception as e:
-                                    logger.error(f"Error processing response: {str(e)}")
-                                    return None
-                            else:
-                                logger.error(f"Failed to fetch data: {response.status}")
-                                error_text = await response.text()
-                                logger.error(f"Error response: {error_text}")
-                                return None
-            except Exception as e:
-                logger.error(f"Request failed: {str(e)}")
-                return None
+        except Exception as e:
+            logger.error(f"Fatal error during fetch: {str(e)}")
+            return None
 
         if not batch_files:
             logger.error("No features were fetched")
@@ -152,23 +190,29 @@ class SoilTypeParser(GeospatialSource):
 
         # Read and merge all batch files
         logger.info("Merging batch files...")
-        gdfs = [gpd.read_parquet(f) for f in batch_files]
-        gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
-
-        # Clean up temporary files
-        for f in batch_files:
-            try:
-                os.remove(f)
-            except Exception as e:
-                logger.warning(f"Failed to remove temporary file {f}: {str(e)}")
-
         try:
-            os.rmdir(self.temp_dir)
-        except Exception as e:
-            logger.warning(f"Failed to remove temporary directory {self.temp_dir}: {str(e)}")
+            gdfs = [gpd.read_parquet(f) for f in batch_files]
+            gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
-        logger.info(f"Final GeoDataFrame contains {len(gdf)} features")
-        return gdf
+            # Clean up work directory
+            for f in batch_files:
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    logger.warning(f"Failed to remove batch file {f}: {str(e)}")
+
+            try:
+                os.remove(self.checkpoint_file)
+                os.rmdir(self.work_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up work directory: {str(e)}")
+
+            logger.info(f"Final GeoDataFrame contains {len(gdf)} features")
+            return gdf
+
+        except Exception as e:
+            logger.error(f"Failed to merge batch files: {str(e)}")
+            return None
 
     def _parse_features(self, root):
         """Parse features from XML root"""
@@ -204,3 +248,12 @@ class SoilTypeParser(GeospatialSource):
         except Exception as e:
             logger.error(f"Error parsing geometry: {str(e)}")
             return None
+
+    async def fetch(self):
+        """Required method from GeospatialSource. Fetches soil type data.
+
+        Returns:
+            GeoDataFrame: A GeoDataFrame containing soil type features with geometry and properties
+                         or None if the fetch fails.
+        """
+        return await self.fetch_soil_types()
