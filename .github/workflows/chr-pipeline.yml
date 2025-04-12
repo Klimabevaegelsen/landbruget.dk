@@ -3,88 +3,82 @@ name: CHR Pipeline
 on:
   schedule:
     - cron: '0 1 * * *'  # Run daily at 1 AM UTC
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
     inputs:
+      test_mode:
+        description: 'Run in test mode (limits data fetched)'
+        type: boolean
+        default: true
       start_date:
         description: 'Start date (YYYY-MM-DD)'
         required: false
       end_date:
         description: 'End date (YYYY-MM-DD)'
         required: false
-      test_mode:
-        description: 'Run in test mode with limited data'
-        type: boolean
-        default: false
 
 jobs:
   run-chr-pipeline:
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
 
-    - name: Install dependencies
-      working-directory: backend/pipelines/chr_pipeline
-      run: |
-        uv pip install --system -e .
+      - name: Install dependencies
+        working-directory: backend/pipelines/chr_pipeline
+        run: uv pip install --system -e .
 
-    - name: Set up environment variables
-      run: |
-        echo "BRONZE_DATA_PATH=gs://landbrugsdata-raw-data/bronze/chr" >> $GITHUB_ENV
-        echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
-        # Add FVM credentials from secrets
-        echo "FVM_USERNAME=${{ secrets.FVM_USERNAME }}" >> $GITHUB_ENV
-        echo "FVM_PASSWORD=${{ secrets.FVM_PASSWORD }}" >> $GITHUB_ENV
-        # Add VetStat credentials from secrets
-        echo "VETSTAT_CERTIFICATE=${{ secrets.VETSTAT_CERTIFICATE }}" >> $GITHUB_ENV
-        echo "VETSTAT_PRIVATE_KEY=${{ secrets.VETSTAT_PRIVATE_KEY }}" >> $GITHUB_ENV
+      - name: Set up environment variables
+        run: |
+          echo "BRONZE_DATA_PATH=gs://landbrugsdata-raw-data/bronze/chr" >> $GITHUB_ENV
+          echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GOOGLE_CLOUD_PROJECT }}" >> $GITHUB_ENV
+          # Add FVM credentials from secrets
+          echo "FVM_USERNAME=${{ secrets.FVM_USERNAME }}" >> $GITHUB_ENV
+          echo "FVM_PASSWORD=${{ secrets.FVM_PASSWORD }}" >> $GITHUB_ENV
+          # Add VetStat credentials from secrets
+          echo "VETSTAT_CERTIFICATE=${{ secrets.VETSTAT_CERTIFICATE }}" >> $GITHUB_ENV
+          echo "VETSTAT_PRIVATE_KEY=${{ secrets.VETSTAT_PRIVATE_KEY }}" >> $GITHUB_ENV
 
-    - name: Run CHR Pipeline
-      working-directory: backend/pipelines/chr_pipeline
-      run: |
-        PIPELINE_ARGS=""
-        
-        # Add date range if provided via manual trigger
-        if [ "${{ github.event.inputs.start_date }}" != "" ]; then
-          PIPELINE_ARGS="$PIPELINE_ARGS --start-date ${{ github.event.inputs.start_date }}"
-        fi
-        if [ "${{ github.event.inputs.end_date }}" != "" ]; then
-          PIPELINE_ARGS="$PIPELINE_ARGS --end-date ${{ github.event.inputs.end_date }}"
-        fi
-        
-        # Add test mode limitations if enabled
-        if [ "${{ github.event.inputs.test_mode }}" = "true" ]; then
-          PIPELINE_ARGS="$PIPELINE_ARGS --test-species-codes 15 --limit-total-herds 100"
-        fi
-        
-        # Run the pipeline with constructed arguments
-        python main.py $PIPELINE_ARGS
+      - name: Run CHR Pipeline
+        working-directory: backend/pipelines/chr_pipeline
+        run: |
+          PIPELINE_ARGS=""
 
-    - name: Handle pipeline failure
-      if: failure()
-      run: |
-        echo "::error::CHR Pipeline failed. Check the logs for details."
-        exit 1
+          # Add date range if provided via manual trigger
+          if [ "${{ inputs.start_date }}" != "" ]; then
+            PIPELINE_ARGS="$PIPELINE_ARGS --start-date ${{ inputs.start_date }}"
+          fi
+          if [ "${{ inputs.end_date }}" != "" ]; then
+            PIPELINE_ARGS="$PIPELINE_ARGS --end-date ${{ inputs.end_date }}"
+          fi
+
+          # Add test mode limitations if enabled
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            PIPELINE_ARGS="$PIPELINE_ARGS --test-species-codes 15 --limit-total-herds 100"
+          fi
+
+          # Run the pipeline with constructed arguments
+          python main.py $PIPELINE_ARGS
+
+      - name: Handle pipeline failure
+        if: failure()
+        run: |
+          echo "::error::CHR Pipeline failed. Check the logs for details."
+          exit 1
