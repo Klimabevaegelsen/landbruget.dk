@@ -24,6 +24,15 @@ venv/
 .env.*
 !.env.example
 
+# Sensitive files
+**/.env
+**/.env.*
+!.env.example
+**/vetstat.p12
+**/vetstat.*.p12
+backend/pipelines/sync_secrets.sh
+backend/pipelines/vetstat.p12
+
 # Data files
 *.geojson
 *.parquet
