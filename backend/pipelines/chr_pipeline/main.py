@@ -207,15 +207,39 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context['chr_numbers'] = chr_numbers
         
     elif step == 'vetstat':
-        if 'chr_numbers' not in context or 'herd_to_species' not in context:
-            raise ValueError("Cannot run 'vetstat' step without first running 'ejendom' and 'herds'")
+        if 'chr_numbers' not in context or 'herd_results' not in context:
+            raise ValueError("Cannot run 'vetstat' step without first running 'ejendom' and 'herd_details'")
             
+        logger.info("Starting VetStat step...")
+        
+        # Build a mapping of CHR numbers to their species codes
+        chr_to_species = {}
+        for result in context['herd_results']:
+            if hasattr(result, 'ChrNummer') and hasattr(result, 'DyreArtKode'):
+                chr_num = result.ChrNummer
+                species = result.DyreArtKode
+                if chr_num not in chr_to_species:
+                    chr_to_species[chr_num] = set()
+                chr_to_species[chr_num].add(species)
+        
+        logger.info(f"Found {len(chr_to_species)} CHR numbers with species codes")
+        
         vetstat_tasks = [
             (chr_num, species, context['args']['start_date'], context['args']['end_date'])
-            for chr_num in context['chr_numbers']
-            for species in {context['herd_to_species'][herd] for herd in context['herd_to_species']}
+            for chr_num, species_set in chr_to_species.items()
+            for species in species_set
         ]
-        process_parallel(load_vetstat_antibiotics, vetstat_tasks, context['args']['workers'])
+        
+        if not vetstat_tasks:
+            logger.warning("No valid CHR number and species code combinations found for VetStat data")
+        else:
+            logger.info(f"Processing {len(vetstat_tasks)} VetStat tasks")
+            try:
+                results = process_parallel(load_vetstat_antibiotics, vetstat_tasks, context['args']['workers'])
+                logger.info(f"Completed VetStat tasks. Results: {[bool(r) for r in results]}")
+            except Exception as e:
+                logger.error(f"Error processing VetStat tasks: {e}", exc_info=True)
+                raise
     
     return context
 
