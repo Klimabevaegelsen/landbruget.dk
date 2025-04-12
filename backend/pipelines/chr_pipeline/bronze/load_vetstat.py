@@ -24,7 +24,6 @@ from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_cer
 from .export import save_raw_data
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -72,13 +71,6 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     cert_base64 = os.getenv('VETSTAT_CERTIFICATE')
     cert_password = os.getenv('VETSTAT_CERTIFICATE_PASSWORD')
     
-    # Debug log the state of environment variables (masking sensitive data)
-    logger.debug("Environment variable status:")
-    logger.debug(f"FVM_USERNAME: {'[SET]' if username else '[MISSING]'}")
-    logger.debug(f"FVM_PASSWORD: {'[SET]' if password else '[MISSING]'}")
-    logger.debug(f"VETSTAT_CERTIFICATE: {'[SET]' if cert_base64 else '[MISSING]'}")
-    logger.debug(f"VETSTAT_CERTIFICATE_PASSWORD: {'[SET]' if cert_password else '[MISSING]'}")
-    
     # Check for missing variables
     missing_vars = []
     if not username:
@@ -96,15 +88,11 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         raise ValueError(error_msg)
     
     try:
-        # Log the length of the base64 certificate to help with debugging
-        logger.debug(f"Base64 certificate length: {len(cert_base64)}")
-        
         # Decode base64 certificate
         try:
             p12_data = base64.b64decode(cert_base64)
-            logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
         except Exception as decode_error:
-            logger.error(f"Failed to decode base64 certificate: {str(decode_error)}")
+            logger.error("Failed to decode base64 certificate")
             raise ValueError("Invalid base64 encoding in VETSTAT_CERTIFICATE") from decode_error
         
         # Load the certificate and private key from the decoded data
@@ -113,9 +101,8 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
                 p12_data, 
                 cert_password.encode('utf-8')
             )
-            logger.debug("Successfully loaded private key and certificate from PKCS12 data")
         except Exception as cert_error:
-            logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
+            logger.error("Failed to load certificate with provided password")
             raise ValueError("Failed to load certificate with provided password") from cert_error
         
         if not private_key or not certificate:
@@ -401,76 +388,44 @@ def create_soap_envelope_template(username: str, chr_number: int, periode_fra: s
 
 # --- Main Loading Function ---
 
-def load_vetstat_antibiotics(herd_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
-    """Fetch raw antibiotics data XML from VetStat for a given herd, species, and period."""
-    # Extract CHR number from herd number (first 6 digits)
-    chr_number = int(str(herd_number)[:6])
-    
-    logger.info(f"Preparing VetStat request for Herd: {herd_number} (CHR: {chr_number}), Species: {species_code}, Period: {period_from} to {period_to}")
-
+def load_vetstat_antibiotics(chr_number: int, species_code: int, start_date: date, end_date: date) -> bool:
+    """Load VetStat antibiotics data for a specific CHR number and species."""
     try:
-        # 1. Get Credentials (including cert/key)
+        logger.debug(f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {start_date} to {end_date}")
+        
+        # Get credentials and prepare request
         username, password, certificate, private_key = get_vetstat_credentials()
-
-        # 2. Create SOAP Envelope Template
-        root = create_soap_envelope_template(
-            username, chr_number, period_from.isoformat(), period_to.isoformat(), species_code
+        
+        # Build and sign SOAP request
+        request_xml = create_soap_envelope_template(
+            username, chr_number, start_date.isoformat(), end_date.isoformat(), species_code
         )
-
-        # 3. Update Security Elements (Timestamps, Nonce, User/Pass, Cert)
-        update_security_elements(root, username, password, certificate)
-
-        # 4. Update References and Calculate Digests
-        # Ensure this happens *after* updating the elements being referenced
-        update_references_and_digests(root)
-
-        # 5. Sign the Document (Calculate and Insert SignatureValue)
-        sign_document(root, private_key)
-
-        # 6. Serialize the final XML
-        # Use unicode encoding for direct use with requests, which handles byte encoding.
-        signed_xml_string = etree.tostring(root, pretty_print=False, encoding='unicode')
-        logger.info("Successfully prepared signed VetStat SOAP request.")
-
-        # 7. Send Request via requests library
-        headers = {
-            "Content-Type": "text/xml;charset=UTF-8",
-            "SOAPAction": SOAP_ACTION
-        }
-        logger.info(f"Sending request to {VETSTAT_ENDPOINT}")
+        signed_request = sign_document(request_xml, private_key)
+        
+        # Send request
         response = requests.post(
             VETSTAT_ENDPOINT,
-            data=signed_xml_string, # Pass unicode string directly, like original script
-            headers=headers
+            data=signed_request,
+            headers={'Content-Type': 'text/xml;charset=UTF-8'},
+            verify=True
         )
-
-        # 8. Handle Response
-        logger.info(f"Received response status code: {response.status_code}")
-        if response.status_code == 200:
-            logger.info("Successfully received VetStat data.")
-            # Return the raw XML content as a string
-            raw_xml_response = response.text
-
-            # Save the raw XML response using the exporter
-            save_raw_data(
-                raw_response=raw_xml_response,
-                data_type='vetstat_antibiotics',
-                identifier={
-                    'chr': chr_number,
-                    'species': species_code,
-                    'from_date': period_from.strftime('%Y-%m-%d'),
-                    'to_date': period_to.strftime('%Y-%m-%d')
-                }
-            )
-            return raw_xml_response
-        else:
-            logger.error(f"Error response from VetStat API: {response.status_code}")
-            logger.error(f"Response content:\n{response.text}")
-            return None
-
+        
+        if response.status_code != 200:
+            logger.error(f"VetStat request failed for CHR {chr_number}: HTTP {response.status_code}")
+            return False
+            
+        # Save response
+        save_raw_data(
+            raw_response=response.text,
+            data_type='vetstat_antibiotics',
+            identifier=f"{chr_number}_{species_code}"
+        )
+        
+        return True
+        
     except Exception as e:
-        logger.error(f"Failed to execute VetStat request: {e}", exc_info=True)
-        return None
+        logger.error(f"Error fetching VetStat data for CHR {chr_number}: {str(e)}")
+        return False
 
 # Remove all test functions and test execution code at the end
 if __name__ == '__main__':

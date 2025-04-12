@@ -51,9 +51,18 @@ jobs:
         cd backend/pipelines/chr_pipeline
         uv pip install --system -e .
 
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
     - name: Set up environment variables
       env:
-        BRONZE_DATA_PATH: ${{ secrets.BRONZE_DATA_PATH }}
+        GCS_BUCKET: landbrugsdata-raw-data
         FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
         FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
         VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
@@ -61,7 +70,7 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/chr_pipeline
-        echo "BRONZE_DATA_PATH=$BRONZE_DATA_PATH" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env

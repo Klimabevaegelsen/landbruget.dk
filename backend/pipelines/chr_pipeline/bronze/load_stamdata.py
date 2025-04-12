@@ -18,7 +18,6 @@ from zeep.helpers import serialize_object
 from .export import save_raw_data
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
@@ -29,7 +28,7 @@ ENDPOINTS = {
 }
 
 # Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = 'LandbrugsData' # TODO: Confirm if this needs changing
+DEFAULT_CLIENT_ID = 'LandbrugsData'
 
 # --- Credential Handling ---
 
@@ -50,7 +49,7 @@ def get_fvm_credentials() -> Tuple[str, str]:
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     """Create a Zeep SOAP client with WSSE authentication."""
     session = Session()
-    session.verify = certifi.where() # Ensure CA certificates are used
+    session.verify = certifi.where()
     transport = Transport(session=session)
     try:
         client = Client(
@@ -58,7 +57,7 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
             transport=transport,
             wsse=UsernameToken(username, password)
         )
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
+        logger.debug(f"Created SOAP client for {wsdl_url}")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -83,17 +82,13 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)
-        # Pass request_data as a single positional argument (arg0)
         response = operation(request_data)
-        logger.info(f"Successfully fetched raw data from {client.wsdl.location} - {operation_name}")
-        # Return the raw Zeep object, serialization happens in export/transform
+        logger.debug(f"Fetched data from {operation_name}")
         return response
     except AttributeError:
-        logger.error(f"Operation '{operation_name}' not found on client for {client.wsdl.location}")
+        logger.error(f"Operation '{operation_name}' not found")
     except Exception as e:
-        logger.error(f"Error calling {operation_name} on {client.wsdl.location}: {e}")
-        # Consider how to handle errors - raise, return None, return error object?
-        # Returning None for now, caller should handle.
+        logger.error(f"Error in {operation_name}: {e}")
     return None
 
 # --- Stamdata Loading Functions ---
@@ -101,17 +96,33 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # Removed load_species function as listDyreArt operation does not exist in CHR_stamdataWS
 
 def load_species_usage_combinations(client: Client, username: str) -> Optional[Any]:
-    """Load raw species and usage combinations (ListDyrearterMedBrugsarter)."""
-    logger.info("Fetching species/usage combinations (ListDyrearterMedBrugsarter). This provides all species and usage types.")
-    request = {
-        'GLRCHRWSInfoInbound': _create_base_request(username),
-        'Request': {} # Empty request gets all combinations according to WSDL
-    }
-    # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
-    response = fetch_raw_soap_response(client, 'ListDyrearterMedBrugsarter', request)
-    if not response:
-        logger.warning("No response received for ListDyrearterMedBrugsarter")
-    return response
+    """Load species and usage type combinations."""
+    try:
+        logger.debug("Fetching species/usage combinations")
+        
+        request_structure = {
+            'GLRCHRWSInfoInbound': {
+                'BrugerID': username,
+                'KlientID': DEFAULT_CLIENT_ID,
+                'TransaktionsID': str(uuid.uuid4())
+            },
+            'Request': {}
+        }
+
+        response = fetch_raw_soap_response(client, 'listDyrearterMedBrugsarter', request_structure)
+        
+        if response:
+            save_raw_data(
+                raw_response=response,
+                data_type='stamdata_list',
+                identifier='species_usage_combinations'
+            )
+            
+        return response
+
+    except Exception as e:
+        logger.error(f"Error fetching species/usage combinations: {e}")
+        return None
 
 
 # Removed load_usage_types_for_species function as listBrugsArt operation does not exist in CHR_stamdataWS
