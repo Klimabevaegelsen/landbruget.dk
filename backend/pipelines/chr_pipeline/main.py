@@ -250,18 +250,17 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         results = process_parallel(load_herd_details, herd_tasks, context['args']['workers'], "Processing herd details")
         
         # Process results to build chr_to_species mapping
-        for result in results:
+        for result, task in zip(results, herd_tasks):
             if result and hasattr(result, 'Response') and result.Response:
                 context['herd_details'].append(result)
                 # Extract CHR number from the response
                 for response in result.Response:
                     if hasattr(response, 'Besaetning') and hasattr(response.Besaetning, 'ChrNummer'):
                         chr_number = response.Besaetning.ChrNummer
-                        species_code = next((task[3] for task in herd_tasks if task[2] == chr_number), None)
-                        if species_code:
-                            if chr_number not in context['chr_to_species']:
-                                context['chr_to_species'][chr_number] = set()
-                            context['chr_to_species'][chr_number].add(species_code)
+                        species_code = task[3]  # Get species code directly from the task
+                        if chr_number not in context['chr_to_species']:
+                            context['chr_to_species'][chr_number] = set()
+                        context['chr_to_species'][chr_number].add(species_code)
         
         if context['args']['progress']:
             logger.warning(f"Processed {len(context['herd_details'])} herd details, found {len(context['chr_to_species'])} unique CHR numbers")
