@@ -401,9 +401,12 @@ def create_soap_envelope_template(username: str, chr_number: int, periode_fra: s
 
 # --- Main Loading Function ---
 
-def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
-    """Fetch raw antibiotics data XML from VetStat for a given CHR, species, and period."""
-    logger.info(f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}")
+def load_vetstat_antibiotics(herd_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
+    """Fetch raw antibiotics data XML from VetStat for a given herd, species, and period."""
+    # Extract CHR number from herd number (first 6 digits)
+    chr_number = int(str(herd_number)[:6])
+    
+    logger.info(f"Preparing VetStat request for Herd: {herd_number} (CHR: {chr_number}), Species: {species_code}, Period: {period_from} to {period_to}")
 
     try:
         # 1. Get Credentials (including cert/key)
