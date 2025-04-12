@@ -151,7 +151,7 @@ def fetch_herds(client: Any, username: str, combinations: List[Dict], limit: Opt
 def process_parallel(func, tasks: List, workers: int) -> List:
     """Execute tasks in parallel using a thread pool."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(func, task) for task in tasks]
+        futures = [executor.submit(func, *task) for task in tasks]
         return [future.result() for future in concurrent.futures.as_completed(futures)]
 
 def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
