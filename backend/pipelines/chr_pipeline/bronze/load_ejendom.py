@@ -18,6 +18,7 @@ from zeep.helpers import serialize_object
 from .export import save_raw_data
 
 # Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
@@ -48,6 +49,7 @@ def get_fvm_credentials() -> Tuple[str, str]:
 
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     """Create a Zeep SOAP client with WSSE authentication."""
+    # Note: Consider moving this to a shared utility module later
     session = Session()
     session.verify = certifi.where() # Ensure CA certificates are used
     transport = Transport(session=session)
@@ -57,16 +59,17 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
             transport=transport,
             wsse=UsernameToken(username, password)
         )
-        logger.debug(f"Created SOAP client for {wsdl_url}")
+        logger.info(f"Successfully created SOAP client for {wsdl_url}")
         return client
     except Exception as e:
-        logger.error(f"Failed to create SOAP client for {wsdl_url}. Error: {str(e)}", exc_info=True)
+        logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
         raise
 
 # --- Base Request Structure ---
 
 def _create_base_request(username: str, session_id: str = '1', track_id: str = 'load_ejendom') -> Dict[str, str]:
     """Create the common GLRCHRWSInfoInbound structure."""
+    # Note: Consider moving this to a shared utility module later
     return {
         'BrugerNavn': username,
         'KlientId': DEFAULT_CLIENT_ID,
@@ -79,23 +82,25 @@ def _create_base_request(username: str, session_id: str = '1', track_id: str = '
 
 def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
     """Fetch raw response from a SOAP endpoint using Zeep."""
+    # Note: Consider moving this to a shared utility module later
     try:
         operation = getattr(client.service, operation_name)
-        logger.debug(f"Calling {operation_name} on {client.wsdl.location}")
+        # Pass request_data as a single positional argument (arg0) based on previous findings
         response = operation(request_data)
-        logger.debug(f"Successfully fetched data from {operation_name}")
+        logger.info(f"Successfully fetched raw data from {client.wsdl.location} - {operation_name}")
+        # Return the raw Zeep object, serialization happens in export/transform
         return response
-    except AttributeError as e:
-        logger.error(f"Operation '{operation_name}' not found on client for {client.wsdl.location}. Error: {str(e)}")
+    except AttributeError:
+        logger.error(f"Operation '{operation_name}' not found on client for {client.wsdl.location}")
     except Exception as e:
-        logger.error(f"Error calling {operation_name} on {client.wsdl.location}. Error: {str(e)}", exc_info=True)
+        logger.error(f"Error calling {operation_name} on {client.wsdl.location}: {e}")
     return None
 
 # --- Ejendom Loading Functions ---
 
 def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> Optional[Any]:
     """Load property details (EjendomsOplysninger) using the 'hentOplysninger' operation."""
-    logger.debug(f"Preparing to fetch property details for CHR: {chr_number}")
+    logger.info(f"Fetching property details for CHR: {chr_number}...")
 
     request_structure = {
          'GLRCHRWSInfoInbound': _create_base_request(username, track_id='load_ejendom_oplysninger'),
@@ -111,7 +116,6 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
     if not response:
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
-        logger.info(f"Successfully fetched property details for CHR: {chr_number}")
         # Save the raw response
         save_raw_data(
             raw_response=response,
@@ -122,7 +126,7 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
 
 def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> Optional[Any]:
     """Load veterinary events (VeterinaereHaendelser) using the 'hentVeterinaereHaendelser' operation."""
-    logger.debug(f"Preparing to fetch veterinary events for CHR: {chr_number}")
+    logger.info(f"Fetching veterinary events for CHR: {chr_number}...")
 
     request_structure = {
          'GLRCHRWSInfoInbound': _create_base_request(username, track_id='load_ejendom_vet_events'),
@@ -140,7 +144,6 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
     if not response:
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
-        logger.info(f"Successfully fetched veterinary events for CHR: {chr_number}")
         # Save the raw response
         save_raw_data(
             raw_response=response,
@@ -151,12 +154,6 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
 
 # --- Test Execution ---
 if __name__ == '__main__':
-    # Set up console logging for testing
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s | %(levelname)-7s | %(name)s | %(message)s'
-    )
-    
     logger.info("--- Starting Ejendom Load Test --- ")
 
     # Replace with a real CHR number for testing
@@ -167,22 +164,22 @@ if __name__ == '__main__':
         ejendom_client = create_soap_client(ENDPOINTS['ejendom'], username, password)
 
         # Test load_ejendom_oplysninger
-        logger.info(f"Testing load_ejendom_oplysninger (CHR: {TEST_CHR_NUMBER})")
+        logger.info(f"\n--- Testing load_ejendom_oplysninger (CHR: {TEST_CHR_NUMBER}) ---")
         oplysninger_raw = load_ejendom_oplysninger(ejendom_client, username, TEST_CHR_NUMBER)
         if oplysninger_raw:
-            logger.info(f"Successfully loaded property details for CHR {TEST_CHR_NUMBER}")
+            logger.info(f"Successfully called load_ejendom_oplysninger for CHR {TEST_CHR_NUMBER}. Raw data saved via export module.")
         else:
-            logger.warning(f"Failed to load property details for CHR {TEST_CHR_NUMBER}")
+            logger.warning("load_ejendom_oplysninger returned None or empty.")
 
         # Test load_ejendom_vet_events
-        logger.info(f"Testing load_ejendom_vet_events (CHR: {TEST_CHR_NUMBER})")
+        logger.info(f"\n--- Testing load_ejendom_vet_events (CHR: {TEST_CHR_NUMBER}) ---")
         vet_events_raw = load_ejendom_vet_events(ejendom_client, username, TEST_CHR_NUMBER)
         if vet_events_raw:
-            logger.info(f"Successfully loaded veterinary events for CHR {TEST_CHR_NUMBER}")
+            logger.info(f"Successfully called load_ejendom_vet_events for CHR {TEST_CHR_NUMBER}. Raw data saved via export module.")
         else:
-            logger.warning(f"Failed to load veterinary events for CHR {TEST_CHR_NUMBER}")
+            logger.warning("load_ejendom_vet_events returned None or empty.")
 
-        logger.info("--- Ejendom Load Test Complete --- ")
+        logger.info("\n--- Ejendom Load Test Complete --- ")
 
     except Exception as e:
-        logger.error(f"Error during Ejendom load test: {str(e)}", exc_info=True)
+        logger.error(f"Error during Ejendom load test: {e}", exc_info=True)

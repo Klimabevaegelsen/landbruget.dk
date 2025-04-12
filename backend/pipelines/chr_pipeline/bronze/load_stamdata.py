@@ -101,32 +101,17 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # Removed load_species function as listDyreArt operation does not exist in CHR_stamdataWS
 
 def load_species_usage_combinations(client: Client, username: str) -> Optional[Any]:
-    """Load species and usage type combinations."""
-    try:
-        logger.debug("Fetching species/usage combinations")
-        
-        # Create base request structure using the helper function
-        base_request = _create_base_request(username)
-        
-        request_structure = {
-            'GLRCHRWSInfoInbound': base_request,
-            'Request': {}  # Empty request body as per WSDL specification
-        }
-
-        response = fetch_raw_soap_response(client, 'ListDyrearterMedBrugsarter', request_structure)
-        
-        if response:
-            save_raw_data(
-                raw_response=response,
-                data_type='stamdata_list',
-                identifier='species_usage_combinations'
-            )
-            
-        return response
-
-    except Exception as e:
-        logger.error(f"Error fetching species/usage combinations: {e}")
-        return None
+    """Load raw species and usage combinations (ListDyrearterMedBrugsarter)."""
+    logger.info("Fetching species/usage combinations (ListDyrearterMedBrugsarter). This provides all species and usage types.")
+    request = {
+        'GLRCHRWSInfoInbound': _create_base_request(username),
+        'Request': {} # Empty request gets all combinations according to WSDL
+    }
+    # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
+    response = fetch_raw_soap_response(client, 'ListDyrearterMedBrugsarter', request)
+    if not response:
+        logger.warning("No response received for ListDyrearterMedBrugsarter")
+    return response
 
 
 # Removed load_usage_types_for_species function as listBrugsArt operation does not exist in CHR_stamdataWS

@@ -38,27 +38,10 @@ logger = logging.getLogger(__name__)
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
-    
-    # Configure root logger
     logging.basicConfig(
         level=numeric_level,
-        format='%(asctime)s | %(levelname)-7s | %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
-    # Set more restrictive levels for some verbose loggers
-    logging.getLogger('zeep').setLevel(logging.WARNING)
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    
-    # Set custom levels for our modules
-    if numeric_level > logging.DEBUG:  # If not in debug mode
-        logging.getLogger('bronze.load_stamdata').setLevel(logging.INFO)
-        logging.getLogger('bronze.load_besaetning').setLevel(logging.INFO)
-        logging.getLogger('bronze.load_diko').setLevel(logging.INFO)
-        logging.getLogger('bronze.load_ejendom').setLevel(logging.INFO)
-        logging.getLogger('bronze.load_vetstat').setLevel(logging.INFO)
-        logging.getLogger('bronze.export').setLevel(logging.INFO)
 
 def get_default_dates() -> tuple[date, date]:
     """Get default start and end dates (previous month)."""
@@ -173,7 +156,7 @@ def process_parallel(func, tasks: List, workers: int) -> List:
 
 def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
     """Run a specific pipeline step and update the context."""
-    logger.info(f"Starting pipeline step: {step}")
+    logger.info(f"Running step: {step}")
     
     if step == 'stamdata':
         context['combinations'] = fetch_stamdata(
@@ -183,7 +166,6 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not context['combinations']:
             raise ValueError("No valid species/usage combinations found")
-        logger.info(f"Completed stamdata step: found {len(context['combinations'])} combinations")
             
     elif step == 'herds':
         if 'combinations' not in context:
@@ -197,7 +179,6 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not context['herd_to_species']:
             raise ValueError("No valid herds found")
-        logger.info(f"Completed herds step: found {len(context['herd_to_species'])} herds")
             
     elif step == 'herd_details':
         if 'herd_to_species' not in context:
@@ -206,15 +187,9 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         # Store herd details and build CHR number mapping
         context['herd_details'] = []
         context['chr_to_species'] = {}
-        total_herds = len(context['herd_to_species'])
-        processed = 0
         
         for herd_number, species_code in context['herd_to_species'].items():
             result = load_herd_details(context['clients']['besaetning'], context['username'], herd_number, species_code)
-            processed += 1
-            if processed % 100 == 0 or processed == total_herds:  # Log progress every 100 herds or at completion
-                logger.info(f"Processed {processed}/{total_herds} herds ({(processed/total_herds)*100:.1f}%)")
-                
             if result and hasattr(result, 'Response') and result.Response:
                 context['herd_details'].append(result)
                 # Extract CHR number from the response
@@ -224,8 +199,6 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                         if chr_number not in context['chr_to_species']:
                             context['chr_to_species'][chr_number] = set()
                         context['chr_to_species'][chr_number].add(species_code)
-        
-        logger.info(f"Completed herd_details step: processed {len(context['herd_details'])} herds")
                         
     elif step == 'diko':
         if 'herd_to_species' not in context:
@@ -233,9 +206,7 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             
         diko_tasks = [(context['clients']['diko'], context['username'], herd, species)
                      for herd, species in context['herd_to_species'].items()]
-        logger.info(f"Starting DIKO processing for {len(diko_tasks)} tasks")
         context['diko_results'] = process_parallel(load_diko_flytninger, diko_tasks, context['args']['workers'])
-        logger.info(f"Completed DIKO step: processed {len(context['diko_results'])} results")
         
     elif step == 'ejendom':
         if 'chr_to_species' not in context:
@@ -243,16 +214,15 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             
         ejendom_tasks = [(context['clients']['ejendom'], context['username'], chr_num) 
                         for chr_num in context['chr_to_species'].keys()]
-        logger.info(f"Starting Ejendom processing for {len(ejendom_tasks)} tasks")
         process_parallel(load_ejendom_oplysninger, ejendom_tasks, context['args']['workers'])
         process_parallel(load_ejendom_vet_events, ejendom_tasks, context['args']['workers'])
-        logger.info(f"Completed Ejendom step: processed {len(ejendom_tasks)} properties")
         
     elif step == 'vetstat':
         if 'chr_to_species' not in context:
             raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
             
         logger.info("Starting VetStat step...")
+        logger.info(f"Found {len(context['chr_to_species'])} CHR numbers with species codes")
         
         vetstat_tasks = [
             (chr_num, species, context['args']['start_date'], context['args']['end_date'])
@@ -266,8 +236,7 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             logger.info(f"Processing {len(vetstat_tasks)} VetStat tasks")
             try:
                 results = process_parallel(load_vetstat_antibiotics, vetstat_tasks, context['args']['workers'])
-                success_count = sum(1 for r in results if r)
-                logger.info(f"Completed VetStat step: {success_count}/{len(vetstat_tasks)} tasks successful")
+                logger.info(f"Completed VetStat tasks. Results: {[bool(r) for r in results]}")
             except Exception as e:
                 logger.error(f"Error processing VetStat tasks: {e}", exc_info=True)
                 raise
