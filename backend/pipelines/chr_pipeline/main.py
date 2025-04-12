@@ -20,7 +20,7 @@ from bronze.load_stamdata import load_species_usage_combinations, create_soap_cl
 from bronze.load_besaetning import load_herd_list, load_herd_details, get_fvm_credentials as get_bes_creds, create_soap_client as create_bes_client, ENDPOINTS as BES_ENDPOINTS
 from bronze.load_ejendom import load_ejendom_oplysninger, load_ejendom_vet_events, get_fvm_credentials as get_ejd_creds, create_soap_client as create_ejd_client, ENDPOINTS as EJD_ENDPOINTS
 from bronze.load_vetstat import load_vetstat_antibiotics
-from bronze.load_diko import create_soap_client as create_diko_client, load_diko_flytninger, ENDPOINTS as DIKO_ENDPOINTS
+from bronze.load_diko import create_soap_client as create_diko_client, load_diko_flytninger, ENDPOINTS as DIKO_ENDPOINTS, VALID_DIKO_SPECIES
 from bronze.export import finalize_export
 
 # --- Helper function for parallel Herd Detail fetching ---
