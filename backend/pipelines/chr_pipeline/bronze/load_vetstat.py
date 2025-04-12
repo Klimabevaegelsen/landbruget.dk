@@ -401,12 +401,9 @@ def create_soap_envelope_template(username: str, chr_number: int, periode_fra: s
 
 # --- Main Loading Function ---
 
-def load_vetstat_antibiotics(herd_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
-    """Fetch raw antibiotics data XML from VetStat for a given herd, species, and period."""
-    # Extract CHR number from herd number (first 6 digits)
-    chr_number = int(str(herd_number)[:6])
-    
-    logger.info(f"Preparing VetStat request for Herd: {herd_number} (CHR: {chr_number}), Species: {species_code}, Period: {period_from} to {period_to}")
+def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
+    """Fetch raw antibiotics data XML from VetStat for a given CHR, species, and period."""
+    logger.info(f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}")
 
     try:
         # 1. Get Credentials (including cert/key)
@@ -430,46 +427,43 @@ def load_vetstat_antibiotics(herd_number: int, species_code: int, period_from: d
         # 6. Serialize the final XML
         # Use unicode encoding for direct use with requests, which handles byte encoding.
         signed_xml_string = etree.tostring(root, pretty_print=False, encoding='unicode')
-        logger.info("Successfully prepared signed VetStat SOAP request.")
+        logger.debug("Successfully prepared signed VetStat SOAP request.")
 
         # 7. Send Request via requests library
         headers = {
             "Content-Type": "text/xml;charset=UTF-8",
             "SOAPAction": SOAP_ACTION
         }
-        logger.info(f"Sending request to {VETSTAT_ENDPOINT}")
+        logger.debug(f"Sending request to {VETSTAT_ENDPOINT}")
         response = requests.post(
             VETSTAT_ENDPOINT,
-            data=signed_xml_string, # Pass unicode string directly, like original script
+            data=signed_xml_string,
             headers=headers
         )
 
         # 8. Handle Response
-        logger.info(f"Received response status code: {response.status_code}")
         if response.status_code == 200:
-            logger.info("Successfully received VetStat data.")
-            # Return the raw XML content as a string
+            logger.info(f"Successfully fetched VetStat data for CHR: {chr_number}")
             raw_xml_response = response.text
 
             # Save the raw XML response using the exporter
             save_raw_data(
                 raw_response=raw_xml_response,
                 data_type='vetstat_antibiotics',
-                identifier={
-                    'chr': chr_number,
-                    'species': species_code,
-                    'from_date': period_from.strftime('%Y-%m-%d'),
-                    'to_date': period_to.strftime('%Y-%m-%d')
-                }
+                identifier=f"{chr_number}_{species_code}"
             )
             return raw_xml_response
+        elif response.status_code == 500:
+            # This is a normal response when there's no data
+            logger.error(f"VetStat request failed for CHR {chr_number}: HTTP 500")
+            return None
         else:
-            logger.error(f"Error response from VetStat API: {response.status_code}")
+            logger.error(f"Unexpected response from VetStat API for CHR {chr_number}: {response.status_code}")
             logger.error(f"Response content:\n{response.text}")
             return None
 
     except Exception as e:
-        logger.error(f"Failed to execute VetStat request: {e}", exc_info=True)
+        logger.error(f"Failed to execute VetStat request for CHR {chr_number}: {e}")
         return None
 
 # Remove all test functions and test execution code at the end
