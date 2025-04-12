@@ -63,7 +63,8 @@ NAMESPACES = {
 
 def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
-    load_dotenv()  # Load environment variables from .env file
+    # Load environment variables from .env file if it exists
+    load_dotenv()
     
     # Get required environment variables
     username = os.getenv('FVM_USERNAME')
@@ -71,7 +72,14 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     cert_base64 = os.getenv('VETSTAT_CERTIFICATE')
     cert_password = os.getenv('VETSTAT_CERTIFICATE_PASSWORD')
     
-    # Debug which variables are missing
+    # Debug log the state of environment variables (masking sensitive data)
+    logger.debug("Environment variable status:")
+    logger.debug(f"FVM_USERNAME: {'[SET]' if username else '[MISSING]'}")
+    logger.debug(f"FVM_PASSWORD: {'[SET]' if password else '[MISSING]'}")
+    logger.debug(f"VETSTAT_CERTIFICATE: {'[SET]' if cert_base64 else '[MISSING]'}")
+    logger.debug(f"VETSTAT_CERTIFICATE_PASSWORD: {'[SET]' if cert_password else '[MISSING]'}")
+    
+    # Check for missing variables
     missing_vars = []
     if not username:
         missing_vars.append('FVM_USERNAME')
@@ -88,14 +96,27 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         raise ValueError(error_msg)
     
     try:
+        # Log the length of the base64 certificate to help with debugging
+        logger.debug(f"Base64 certificate length: {len(cert_base64)}")
+        
         # Decode base64 certificate
-        p12_data = base64.b64decode(cert_base64)
+        try:
+            p12_data = base64.b64decode(cert_base64)
+            logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
+        except Exception as decode_error:
+            logger.error(f"Failed to decode base64 certificate: {str(decode_error)}")
+            raise ValueError("Invalid base64 encoding in VETSTAT_CERTIFICATE") from decode_error
         
         # Load the certificate and private key from the decoded data
-        private_key, certificate, _ = load_key_and_certificates(
-            p12_data, 
-            cert_password.encode('utf-8')
-        )
+        try:
+            private_key, certificate, _ = load_key_and_certificates(
+                p12_data, 
+                cert_password.encode('utf-8')
+            )
+            logger.debug("Successfully loaded private key and certificate from PKCS12 data")
+        except Exception as cert_error:
+            logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
+            raise ValueError("Failed to load certificate with provided password") from cert_error
         
         if not private_key or not certificate:
             raise ValueError("Failed to load private key or certificate from decoded data")
