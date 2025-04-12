@@ -33,7 +33,7 @@ load_dotenv()
 # Get Google Cloud Project ID from environment variable
 GOOGLE_CLOUD_PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT')
 if not GOOGLE_CLOUD_PROJECT_ID:
-    raise ValueError("GOOGLE_CLOUD_PROJECT environment variable must be set")
+    logger.warning("GOOGLE_CLOUD_PROJECT environment variable is not set")
 
 # Secret Manager Secret IDs
 FVM_USERNAME_SECRET_ID = 'fvm_username'
@@ -71,8 +71,21 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     cert_base64 = os.getenv('VETSTAT_CERTIFICATE')
     cert_password = os.getenv('VETSTAT_CERTIFICATE_PASSWORD')
     
-    if not all([username, password, cert_base64, cert_password]):
-        raise ValueError("Missing required environment variables for VetStat authentication")
+    # Debug which variables are missing
+    missing_vars = []
+    if not username:
+        missing_vars.append('FVM_USERNAME')
+    if not password:
+        missing_vars.append('FVM_PASSWORD')
+    if not cert_base64:
+        missing_vars.append('VETSTAT_CERTIFICATE')
+    if not cert_password:
+        missing_vars.append('VETSTAT_CERTIFICATE_PASSWORD')
+    
+    if missing_vars:
+        error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     try:
         # Decode base64 certificate
@@ -87,11 +100,10 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         if not private_key or not certificate:
             raise ValueError("Failed to load private key or certificate from decoded data")
             
-        logger.info("Successfully loaded VetStat certificate and private key")
         return username, password, certificate, private_key
         
     except Exception as e:
-        logger.error(f"Failed to load VetStat certificate/key: {e}")
+        logger.error(f"Failed to load VetStat certificate/key: {str(e)}")
         raise
 
 # --- XML Helper Functions (Adapted from fetch_chr_details.py) ---
@@ -247,10 +259,10 @@ def sign_document(root: etree._Element, private_key: Any):
 
         encoded_signature = base64.b64encode(signature).decode()
         signature_value_el.text = encoded_signature
-        logger.info("Successfully generated and inserted SignatureValue.")
+        logger.info("Successfully generated and inserted signature")
 
     except Exception as e:
-        logger.error(f"Error during signing process: {e}")
+        logger.error("Error during signing process")
         raise
 
 # --- SOAP Envelope Creation ---
@@ -436,15 +448,13 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
         logger.error(f"Failed to execute VetStat request: {e}", exc_info=True)
         return None
 
-# --- Test Execution ---
+# Remove all test functions and test execution code at the end
 if __name__ == '__main__':
-    logger.info("--- Starting VetStat Load Test --- ")
-
     # Use CHR and Species identified previously
     TEST_CHR_NUMBER = 28400
     TEST_SPECIES_CODE = 15 # Pigs
 
-    # Define a test period (e.g., first 3 months of 2023, like original script)
+    # Define a test period (e.g., first 3 months of 2023)
     TEST_PERIOD_FROM = date(2023, 1, 1)
     TEST_PERIOD_TO = date(2023, 3, 31)
 
@@ -458,16 +468,5 @@ if __name__ == '__main__':
 
     if vetstat_response_xml:
         logger.info("Successfully received VetStat response XML.")
-        # Optionally, log a snippet or save to a file for inspection
-        logger.info(f"VetStat Response Snippet (first 1000 chars):\n{vetstat_response_xml[:1000]}...")
-        # Example: Save to file
-        # try:
-        #     with open("vetstat_response_test.xml", "w", encoding="utf-8") as f:
-        #         f.write(vetstat_response_xml)
-        #     logger.info("Saved VetStat response to vetstat_response_test.xml")
-        # except Exception as e:
-        #     logger.error(f"Failed to save VetStat response to file: {e}")
     else:
         logger.warning("Failed to retrieve VetStat response.")
-
-    logger.info("\n--- VetStat Load Test Complete --- ")
