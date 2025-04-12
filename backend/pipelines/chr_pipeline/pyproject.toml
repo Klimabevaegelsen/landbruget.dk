@@ -17,6 +17,7 @@ dependencies = [
     "google-cloud-storage~=2.19.0",
     "python-dotenv~=1.0.1",
     "cryptography", # Added cryptography package
+    "tqdm~=4.66.2", # Progress bar that works in both CI and interactive environments
 ]
 
 [build-system]
