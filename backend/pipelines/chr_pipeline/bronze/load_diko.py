@@ -18,8 +18,7 @@ from zeep.helpers import serialize_object
 from .export import save_raw_data
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('backend.pipelines.chr_pipeline.bronze.load_diko')
 
 # --- Constants ---
 

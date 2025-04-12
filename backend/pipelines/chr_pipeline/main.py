@@ -6,6 +6,8 @@ import logging
 import concurrent.futures
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any, Set
+from tqdm.contrib.logging import logging_redirect_tqdm
+from tqdm.auto import tqdm
 
 from bronze.load_stamdata import (
     create_soap_client as create_stamdata_client,
@@ -38,10 +40,36 @@ logger = logging.getLogger(__name__)
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    # Remove all existing handlers to start fresh
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+    
+    # Set up root logger at WARNING by default with a format that works well with tqdm
     logging.basicConfig(
-        level=numeric_level,
+        level=logging.WARNING,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    
+    # Configure our pipeline loggers
+    pipeline_logger = logging.getLogger('backend.pipelines.chr_pipeline')
+    pipeline_logger.setLevel(numeric_level)
+    
+    # Configure bronze module loggers
+    bronze_logger = logging.getLogger('backend.pipelines.chr_pipeline.bronze')
+    bronze_logger.setLevel(numeric_level if numeric_level <= logging.INFO else logging.WARNING)
+    
+    # Set third-party loggers to WARNING or higher
+    logging.getLogger('zeep').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('google').setLevel(logging.WARNING)
+    logging.getLogger('requests').setLevel(logging.WARNING)
+    
+    # Prevent log propagation for specific modules when not in DEBUG
+    if numeric_level > logging.DEBUG:
+        for logger_name in ['zeep', 'urllib3', 'google', 'requests']:
+            logging.getLogger(logger_name).propagate = False
 
 def get_default_dates() -> tuple[date, date]:
     """Get default start and end dates (previous month)."""
@@ -69,7 +97,9 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument('--limit-total-herds', type=int,
                       help='Limit total number of herds processed')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
-                      default='INFO', help='Logging level')
+                      default='WARNING', help='Logging level')
+    parser.add_argument('--progress', action='store_true',
+                      help='Show progress information')
     
     args = parser.parse_args()
     
@@ -148,15 +178,34 @@ def fetch_herds(client: Any, username: str, combinations: List[Dict], limit: Opt
     logger.info(f"Found {len(herd_to_species)} unique herds")
     return herd_to_species
 
-def process_parallel(func, tasks: List, workers: int) -> List:
-    """Execute tasks in parallel using a thread pool."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(func, *task) for task in tasks]
-        return [future.result() for future in concurrent.futures.as_completed(futures)]
+def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
+    """Execute tasks in parallel using a thread pool with progress tracking."""
+    results = []
+    with logging_redirect_tqdm():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(func, *task) for task in tasks]
+            
+            # Create progress bar that works in both CI and interactive environments
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc=desc or func.__name__,
+                unit='tasks',
+                mininterval=1.0,  # Update at most once per second
+                bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+            ):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Task failed: {e}")
+                    results.append(None)
+    
+    return results
 
 def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
     """Run a specific pipeline step and update the context."""
-    logger.info(f"Running step: {step}")
+    logger.warning(f"Starting step: {step}")
     
     if step == 'stamdata':
         context['combinations'] = fetch_stamdata(
@@ -166,6 +215,8 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not context['combinations']:
             raise ValueError("No valid species/usage combinations found")
+        if context['args']['progress']:
+            logger.warning(f"Found {len(context['combinations'])} species/usage combinations")
             
     elif step == 'herds':
         if 'combinations' not in context:
@@ -179,7 +230,9 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not context['herd_to_species']:
             raise ValueError("No valid herds found")
-            
+        if context['args']['progress']:
+            logger.warning(f"Found {len(context['herd_to_species'])} herds")
+    
     elif step == 'herd_details':
         if 'herd_to_species' not in context:
             raise ValueError("Cannot run 'herd_details' step without first running 'herds'")
@@ -188,25 +241,47 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context['herd_details'] = []
         context['chr_to_species'] = {}
         
-        for herd_number, species_code in context['herd_to_species'].items():
-            result = load_herd_details(context['clients']['besaetning'], context['username'], herd_number, species_code)
+        herd_tasks = [(context['clients']['besaetning'], context['username'], herd_num, species_code) 
+                      for herd_num, species_code in context['herd_to_species'].items()]
+        
+        if context['args']['progress']:
+            logger.warning(f"Processing {len(herd_tasks)} herd detail tasks")
+        
+        results = process_parallel(load_herd_details, herd_tasks, context['args']['workers'], "Processing herd details")
+        
+        # Process results to build chr_to_species mapping
+        for result in results:
             if result and hasattr(result, 'Response') and result.Response:
                 context['herd_details'].append(result)
                 # Extract CHR number from the response
                 for response in result.Response:
                     if hasattr(response, 'Besaetning') and hasattr(response.Besaetning, 'ChrNummer'):
                         chr_number = response.Besaetning.ChrNummer
-                        if chr_number not in context['chr_to_species']:
-                            context['chr_to_species'][chr_number] = set()
-                        context['chr_to_species'][chr_number].add(species_code)
-                        
+                        species_code = next((task[3] for task in herd_tasks if task[2] == chr_number), None)
+                        if species_code:
+                            if chr_number not in context['chr_to_species']:
+                                context['chr_to_species'][chr_number] = set()
+                            context['chr_to_species'][chr_number].add(species_code)
+        
+        if context['args']['progress']:
+            logger.warning(f"Processed {len(context['herd_details'])} herd details, found {len(context['chr_to_species'])} unique CHR numbers")
+        
     elif step == 'diko':
         if 'herd_to_species' not in context:
             raise ValueError("Cannot run 'diko' step without first running 'herds'")
             
-        diko_tasks = [(context['clients']['diko'], context['username'], herd, species)
-                     for herd, species in context['herd_to_species'].items()]
-        context['diko_results'] = process_parallel(load_diko_flytninger, diko_tasks, context['args']['workers'])
+        diko_tasks = [(context['clients']['diko'], context['username'], herd_num, species_code) 
+                      for herd_num, species_code in context['herd_to_species'].items()]
+        
+        if context['args']['progress']:
+            logger.warning(f"Processing {len(diko_tasks)} DIKO tasks")
+        
+        results = process_parallel(load_diko_flytninger, diko_tasks, context['args']['workers'], "Processing DIKO tasks")
+        context['diko_results'] = results
+        
+        if context['args']['progress']:
+            successful = sum(1 for r in results if r)
+            logger.warning(f"Completed DIKO tasks. Success: {successful}/{len(diko_tasks)}")
         
     elif step == 'ejendom':
         if 'chr_to_species' not in context:
@@ -214,16 +289,23 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             
         ejendom_tasks = [(context['clients']['ejendom'], context['username'], chr_num) 
                         for chr_num in context['chr_to_species'].keys()]
-        process_parallel(load_ejendom_oplysninger, ejendom_tasks, context['args']['workers'])
-        process_parallel(load_ejendom_vet_events, ejendom_tasks, context['args']['workers'])
+        
+        if context['args']['progress']:
+            logger.warning(f"Processing {len(ejendom_tasks)} ejendom tasks")
+        
+        # Run both ejendom operations
+        oplysninger_results = process_parallel(load_ejendom_oplysninger, ejendom_tasks, context['args']['workers'], "Processing Ejendom Oplysninger")
+        vet_events_results = process_parallel(load_ejendom_vet_events, ejendom_tasks, context['args']['workers'], "Processing Ejendom Vet Events")
+        
+        if context['args']['progress']:
+            successful_opl = sum(1 for r in oplysninger_results if r)
+            successful_vet = sum(1 for r in vet_events_results if r)
+            logger.warning(f"Completed Ejendom tasks. Oplysninger success: {successful_opl}/{len(ejendom_tasks)}, Vet events success: {successful_vet}/{len(ejendom_tasks)}")
         
     elif step == 'vetstat':
         if 'chr_to_species' not in context:
             raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
             
-        logger.info("Starting VetStat step...")
-        logger.info(f"Found {len(context['chr_to_species'])} CHR numbers with species codes")
-        
         vetstat_tasks = [
             (chr_num, species, context['args']['start_date'], context['args']['end_date'])
             for chr_num, species_set in context['chr_to_species'].items()
@@ -232,14 +314,17 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         
         if not vetstat_tasks:
             logger.warning("No valid CHR number and species code combinations found for VetStat data")
-        else:
-            logger.info(f"Processing {len(vetstat_tasks)} VetStat tasks")
-            try:
-                results = process_parallel(load_vetstat_antibiotics, vetstat_tasks, context['args']['workers'])
-                logger.info(f"Completed VetStat tasks. Results: {[bool(r) for r in results]}")
-            except Exception as e:
-                logger.error(f"Error processing VetStat tasks: {e}", exc_info=True)
-                raise
+        elif context['args']['progress']:
+            logger.warning(f"Processing {len(vetstat_tasks)} VetStat tasks")
+            
+        try:
+            results = process_parallel(load_vetstat_antibiotics, vetstat_tasks, context['args']['workers'], "Processing VetStat tasks")
+            if context['args']['progress']:
+                successful = sum(1 for r in results if r)
+                logger.warning(f"Completed VetStat tasks. Success: {successful}/{len(vetstat_tasks)}")
+        except Exception as e:
+            logger.error(f"Error processing VetStat tasks: {e}", exc_info=True)
+            raise
     
     return context
 
@@ -286,10 +371,10 @@ def main():
             context = run_step(step, context)
             
         # Always finalize export
-        logger.info("Finalizing export...")
+        logger.warning("Finalizing export...")
         finalize_export()
         
-        logger.info(f"Pipeline step(s) {', '.join(steps_to_run)} completed successfully")
+        logger.warning(f"Pipeline step(s) {', '.join(steps_to_run)} completed successfully")
         
     except Exception as e:
         logger.error(f"Pipeline failed: {e}", exc_info=True)

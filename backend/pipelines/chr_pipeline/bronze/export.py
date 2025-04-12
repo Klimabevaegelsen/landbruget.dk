@@ -43,6 +43,9 @@ if not USE_GCS:
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
 _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 
+# Get timestamp for this export run
+EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
 # --- Helper Functions ---
 
 def _ensure_dir(filepath: Path):
@@ -95,7 +98,8 @@ def _serialize_data(data: Any) -> Optional[str]:
 def _save_to_gcs(blob_path: str, content: str, format_type: str):
     """Helper function to save content to GCS."""
     bucket = gcs_client.bucket(GCS_BUCKET)
-    blob = bucket.blob(f"bronze/{blob_path}")  # Add bronze/ prefix to all files
+    # Add bronze/chr/{timestamp} prefix to all files
+    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{blob_path}")
     
     # Set content type based on format
     content_type = 'application/json' if format_type == 'json' else 'application/xml'
@@ -103,8 +107,10 @@ def _save_to_gcs(blob_path: str, content: str, format_type: str):
 
 def _save_locally(filepath: Path, content: str, format_type: str):
     """Helper function to save content locally."""
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    # Add timestamp to the path
+    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    timestamped_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(timestamped_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
 def save_raw_data(
@@ -127,6 +133,9 @@ def save_raw_data(
     else:
         try:
             serialized_obj = serialize_object(raw_response, target_cls=dict)
+            # Add timestamp to the data
+            if isinstance(serialized_obj, dict):
+                serialized_obj['_export_timestamp'] = EXPORT_TIMESTAMP
             _data_buffer[buffer_key]["json"].append(serialized_obj)
         except Exception as e:
              logger.error(f"Failed to serialize object for {buffer_key}: {e}")
@@ -159,7 +168,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing JSON to GCS {filename}: {e}")
             else:
-                filepath = Path(f"./data/bronze/{filename}")
+                filepath = Path(f"./data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
                     _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), 'json')
@@ -181,7 +190,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing XML to GCS {filename}: {e}")
             else:
-                filepath = Path(f"./data/bronze/{filename}")
+                filepath = Path(f"./data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(xml_data_list)} records locally to {filepath}")
                     _save_locally(filepath, full_xml_content, 'xml')
@@ -189,7 +198,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing XML file {filepath}: {e}")
 
-    logger.info(f"Export complete: {total_files} files written using {storage_mode}")
+    logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{EXPORT_TIMESTAMP}/")
     _data_buffer.clear()
 
 # --- Cleanup Function (Optional) ---
