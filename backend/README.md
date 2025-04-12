@@ -5,22 +5,22 @@ Programming language used in the backend is Python. SQL may be used to execute t
 
 ## Stack
 
-Pipelines run through Mage.ai. Mage.ai is (very) opinionated and was intentionally chosen to ensure consistency and readability and thus ease of maintenance and contribution.
+Pipelines run through will be run on Github workflows and actions
 
 We use a [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) for our data storage and pipeline infrastructure.
 
-Bronze and Silver layer processes may run in the same Mage.ai pipeline. Gold layer processes will run in separate pipelines.
+Bronze and Silver layer processes may run in the same pipeline. Gold layer processes will run in separate pipelines.
 
 ## Overall
 - Consider whether we should fetch and store the data or whether we can provide a link in the frontend or fetch the data at runtime.
 - Do not share identifiers and credentials in commits.
 - If you're concerned whether your data contains PII data, reach out to the maintainers before committing data.
 - Data should in the dev environment be saved and processed locally, ideally using DuckDB and Ibis.
-- Data should in the prod environment be saved on GCS for Bronze layer, CloudSQL for Silver and Gold layer and processed in Mage.ai.
+- Data should in the prod environment be saved on GCS for Bronze layer, CloudSQL for Silver and Gold layer.
 - CRS conversions of geospatial data should be avoided (as it may changes the data).
-- Utilise optimal Mage.ai architecture (dynamic modules instead of multiple workers / await/async, etc), ensuring separation of responsibility for modules.
+- Utilise optimal Github actions  ensuring separation of responsibility for modules.
 - Do add comments in the code and do add logs for steps within each module.
-- Each Mage.ai module should have its own tests.
+- Each step module should have its own tests.
 
 
 ## LLMs 

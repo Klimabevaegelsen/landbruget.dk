@@ -19,24 +19,25 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage paths and clients
-BRONZE_DATA_PATH = os.getenv('BRONZE_DATA_PATH', './data/bronze')
-IS_GCS_PATH = BRONZE_DATA_PATH.startswith('gs://')
+GCS_BUCKET = os.getenv('GCS_BUCKET')
+GOOGLE_CLOUD_PROJECT = os.getenv('GOOGLE_CLOUD_PROJECT')
 
-# Initialize GCS client and paths if using GCS
+# Use GCS if we have the required configuration
+USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+
+# Initialize GCS client if bucket is configured
 gcs_client = None
-gcs_bucket_name = os.getenv('GCS_BUCKET')  # Get from environment
-gcs_prefix = None
-
-if IS_GCS_PATH:
+if USE_GCS:
     try:
-        gcs_client = storage.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT'))
-        path_parts = BRONZE_DATA_PATH[5:].split('/', 1)
-        gcs_bucket_name = gcs_bucket_name or path_parts[0]  # Use env var or fallback to path
-        gcs_prefix = path_parts[1].strip('/') if len(path_parts) > 1 else ''
-        logger.info(f"Initialized GCS client for bucket: {gcs_bucket_name}, prefix: {gcs_prefix}")
+        gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
+        logger.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
     except Exception as e:
-        logger.error(f"Failed to initialize GCS client: {e}", exc_info=True)
-        raise
+        logger.error(f"Failed to initialize GCS client: {e}")
+        logger.info("Falling back to local storage")
+        USE_GCS = False
+
+if not USE_GCS:
+    logger.info("Using local storage in ./data/bronze/")
 
 # --- In-memory buffer for consolidated output ---
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
@@ -54,11 +55,11 @@ def _ensure_dir(filepath: Path):
 
 def _get_final_filename(data_source: str, operation: str, format: str) -> Path:
     """Generate the filename for the final consolidated file."""
-    base_path = Path(BRONZE_DATA_PATH)
+    base_path = Path(f"./data/bronze/{data_source}")
     # Sanitize operation name for filename
     safe_operation = operation.replace(" ", "_").replace("/", "_")
-    filename = f"{data_source}_{safe_operation}.{format}"
-    return base_path / data_source / filename
+    filename = f"{safe_operation}.{format}"
+    return base_path / filename
 
 def _serialize_data(data: Any) -> Optional[str]:
     """Serialize Python/Zeep object to a JSON string."""
@@ -93,8 +94,8 @@ def _serialize_data(data: Any) -> Optional[str]:
 
 def _save_to_gcs(blob_path: str, content: str, format_type: str):
     """Helper function to save content to GCS."""
-    bucket = gcs_client.bucket(gcs_bucket_name)
-    blob = bucket.blob(blob_path)
+    bucket = gcs_client.bucket(GCS_BUCKET)
+    blob = bucket.blob(f"bronze/{blob_path}")  # Add bronze/ prefix to all files
     
     # Set content type based on format
     content_type = 'application/json' if format_type == 'json' else 'application/xml'
@@ -107,124 +108,89 @@ def _save_locally(filepath: Path, content: str, format_type: str):
         f.write(content)
 
 def save_raw_data(
-    # Renamed arguments for clarity
     raw_response: Any,
     data_type: str,
     identifier: Optional[Union[str, Dict[str, Any]]] = None,
-    # operation: str, # No longer needed if data_type is specific enough
-    # data_source: str, # No longer needed
 ):
-    """
-    Detects data type (XML string vs other) and appends the raw data object
-    or string to an in-memory buffer for later writing to consolidated files.
-
-    Args:
-        raw_response: The raw data object (e.g., Zeep object, dict) or XML string.
-        data_type: A specific identifier for the type of data (e.g., 'stamdata_list',
-                   'besaetning_details', 'vetstat_antibiotics'). Used as buffer key.
-        identifier: Contextual identifier (e.g., species_usage, herd_species) for logging/metadata.
-    """
+    """Buffer raw data for later consolidated export."""
     if raw_response is None:
         logger.warning(f"Received None for raw_response for data_type '{data_type}'. Skipping save.")
         return
 
-    # Use data_type directly as the buffer key
     buffer_key = data_type
 
-    # Initialize buffer for this key if it doesn't exist
     if buffer_key not in _data_buffer:
         _data_buffer[buffer_key] = {"json": [], "xml": []}
 
-    # Determine format and append to the correct list
     if isinstance(raw_response, str):
-        # Assume it's a raw XML string (or already JSON string)
         _data_buffer[buffer_key]["xml"].append(raw_response)
-        # logger.debug(f"Buffered XML/String data for {buffer_key}. Identifier: {identifier}. Count: {len(_data_buffer[buffer_key]['xml'])}")
     else:
-        # Assume it's a Zeep object or other Python object to be JSON serialized
         try:
-            # Perform serialization here to catch errors early
-            # We store the *serialized object* (dict/list) in the buffer
             serialized_obj = serialize_object(raw_response, target_cls=dict)
             _data_buffer[buffer_key]["json"].append(serialized_obj)
-            # logger.debug(f"Buffered JSON data for {buffer_key}. Identifier: {identifier}. Count: {len(_data_buffer[buffer_key]['json'])}")
         except Exception as e:
-             logger.error(f"Failed to serialize object for {buffer_key} (Identifier: {identifier}) to JSON: {e}. Skipping.", exc_info=False)
+             logger.error(f"Failed to serialize object for {buffer_key}: {e}")
 
 # --- Final Export Function ---
 
 def finalize_export():
-    """
-    Writes the buffered data to consolidated JSON or XML files.
-    - JSON data is saved as a JSON array `[...]`.
-    - XML data is saved as concatenated strings separated by a comment.
-    """
-    logger.info(f"Finalizing export. Writing buffered data to {BRONZE_DATA_PATH}...")
+    """Write buffered data to consolidated files."""
     if not _data_buffer:
         logger.warning("No data buffered for export.")
         return
 
+    storage_mode = "GCS (GitHub Actions)" if USE_GCS else "local filesystem"
+    logger.info(f"Starting export using {storage_mode}")
+    
     total_files = 0
     for buffer_key, format_data in _data_buffer.items():
-        # Use the buffer_key (which is now data_type) for filename
         data_type = buffer_key
 
-        # --- Process JSON data ---
+        # Process JSON data
         json_data_list = format_data.get("json", [])
         if json_data_list:
             filename = f"{data_type}.json"
-            if IS_GCS_PATH:
-                # Construct GCS path by combining prefix (if any) with filename
-                blob_path = f"{gcs_prefix}/{filename}" if gcs_prefix else filename
+            if USE_GCS:
                 try:
-                    logger.info(f"Writing {len(json_data_list)} JSON objects to GCS: gs://{gcs_bucket_name}/{blob_path}")
+                    logger.info(f"Writing {len(json_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}")
                     json_content = json.dumps(json_data_list, indent=2, default=str)
-                    _save_to_gcs(blob_path, json_content, 'json')
+                    _save_to_gcs(filename, json_content, 'json')
                     total_files += 1
-                    logger.info(f"Successfully wrote to GCS: gs://{gcs_bucket_name}/{blob_path}")
                 except Exception as e:
-                    logger.error(f"Error writing JSON to GCS {blob_path}: {e}", exc_info=True)
+                    logger.error(f"Error writing JSON to GCS {filename}: {e}")
             else:
-                filepath = Path(BRONZE_DATA_PATH) / filename
+                filepath = Path(f"./data/bronze/{filename}")
                 try:
-                    logger.info(f"Writing {len(json_data_list)} JSON objects locally to {filepath}")
+                    logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
                     _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), 'json')
                     total_files += 1
-                    logger.info(f"Successfully wrote {filepath}")
                 except Exception as e:
-                    logger.error(f"Error writing JSON file {filepath}: {e}", exc_info=True)
+                    logger.error(f"Error writing JSON file {filepath}: {e}")
 
-        # --- Process XML data ---
+        # Process XML data
         xml_data_list = format_data.get("xml", [])
         if xml_data_list:
             filename = f"{data_type}.xml"
-            # Concatenate XML strings with a separator
             full_xml_content = "\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(xml_data_list)
             
-            if IS_GCS_PATH:
-                # Construct GCS path by combining prefix (if any) with filename
-                blob_path = f"{gcs_prefix}/{filename}" if gcs_prefix else filename
+            if USE_GCS:
                 try:
-                    logger.info(f"Writing {len(xml_data_list)} XML/String responses to GCS: gs://{gcs_bucket_name}/{blob_path}")
-                    _save_to_gcs(blob_path, full_xml_content, 'xml')
+                    logger.info(f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}")
+                    _save_to_gcs(filename, full_xml_content, 'xml')
                     total_files += 1
-                    logger.info(f"Successfully wrote to GCS: gs://{gcs_bucket_name}/{blob_path}")
                 except Exception as e:
-                    logger.error(f"Error writing XML to GCS {blob_path}: {e}", exc_info=True)
+                    logger.error(f"Error writing XML to GCS {filename}: {e}")
             else:
-                filepath = Path(BRONZE_DATA_PATH) / filename
+                filepath = Path(f"./data/bronze/{filename}")
                 try:
-                    logger.info(f"Writing {len(xml_data_list)} XML/String responses locally to {filepath}")
+                    logger.info(f"Writing {len(xml_data_list)} records locally to {filepath}")
                     _save_locally(filepath, full_xml_content, 'xml')
                     total_files += 1
-                    logger.info(f"Successfully wrote {filepath}")
                 except Exception as e:
-                    logger.error(f"Error writing XML file {filepath}: {e}", exc_info=True)
+                    logger.error(f"Error writing XML file {filepath}: {e}")
 
-    logger.info(f"Final export complete. Wrote {total_files} consolidated files.")
-    # Clear the buffer after writing
+    logger.info(f"Export complete: {total_files} files written using {storage_mode}")
     _data_buffer.clear()
-    logger.info("Data buffer cleared.")
 
 # --- Cleanup Function (Optional) ---
 def clear_buffer():

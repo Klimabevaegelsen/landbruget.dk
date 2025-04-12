@@ -19,7 +19,6 @@ from zeep.exceptions import Fault
 from .export import save_raw_data
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
@@ -50,9 +49,8 @@ def get_fvm_credentials() -> Tuple[str, str]:
 # --- SOAP Client Creation ---
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     """Create a Zeep SOAP client with WSSE authentication."""
-    # Note: Consider moving this to a shared utility module later
     session = Session()
-    session.verify = certifi.where() # Ensure CA certificates are used
+    session.verify = certifi.where()
     transport = Transport(session=session)
     try:
         client = Client(
@@ -60,7 +58,7 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
             transport=transport,
             wsse=UsernameToken(username, password)
         )
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
+        logger.debug(f"Created SOAP client for {wsdl_url}")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -83,18 +81,15 @@ def _create_base_request(username: str, session_id: str = '1', track_id: str = '
 
 def fetch_raw_soap_response(client: Client, operation_name: str, request_structure: Dict) -> Optional[Any]:
     """Fetch raw response from a SOAP endpoint using Zeep."""
-    # Note: Consider moving this to a shared utility module later
     try:
         operation = getattr(client.service, operation_name)
-        # Pass the dictionary directly, not unpacked with **
-        # This assumes the operation expects a single complex type argument matching the dict structure
         response = operation(request_structure)
-        logger.info(f"Successfully fetched raw data from {client.wsdl.location} - {operation_name}")
+        logger.debug(f"Fetched data from {operation_name}")
         return response
     except AttributeError:
-        logger.error(f"Operation '{operation_name}' not found on client for {client.wsdl.location}")
+        logger.error(f"Operation '{operation_name}' not found")
     except Exception as e:
-        logger.error(f"Error calling {operation_name} on {client.wsdl.location}: {e}")
+        logger.error(f"Error in {operation_name}: {e}")
     return None
 
 # --- Besætning Loading Functions ---
@@ -106,182 +101,93 @@ def load_herd_list(
     usage_code: int,
     start_herd_number: Optional[int] = None,
 ) -> Tuple[List[int], bool, Optional[int]]:
-    """
-    Fetches a list of herd numbers for a given species and usage code,
-    handling pagination.
-
-    Returns:
-        A tuple containing:
-        - list: A list of herd numbers found in this batch.
-        - bool: True if there are more herds to fetch, False otherwise.
-        - Optional[int]: The last herd number received in this batch (TilBesNr),
-                         or None if not available or no herds found.
-    """
-    operation_name = "listBesaetningerMedBrugsart"
-    base_request = _create_base_request(username)
-    request_data = {
-        "DyreArtKode": str(species_code),
-        "BrugsArtKode": str(usage_code),
-    }
-    if start_herd_number and start_herd_number > 0:
-        request_data["BesNrFra"] = str(start_herd_number)
-
-    # Create the payload dictionary expected by the operation elements
-    payload = {
-        "GLRCHRWSInfoInbound": base_request,
-        "Request": request_data,
-    }
-
-    logger.info(f"Fetching herd list for species {species_code}, usage {usage_code}, starting from herd {start_herd_number or 'beginning'}...")
-
-    # --- Construct the request structure precisely according to WSDL/XSD ---
+    """Load list of herds for a given species and usage type."""
     try:
-        # 1. Get the factory for the innermost request parameters type
-        RequestParamsFactory = besaetning_client.get_type('ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType')
-        request_params = RequestParamsFactory(
-            DyreArtKode=species_code,
-            BrugsArtKode=usage_code,
-            FraBesNr=start_herd_number
-        )
-
-        # 2. Get the factory for the common inbound header type (Corrected type name)
-        GLRCHRWSInfoInboundFactory = besaetning_client.get_type('ns0:GLRCHRWSInfoInboundType')
-        common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
-
-        # 3. Combine the header and request parameters into the structure expected by the operation argument
-        #    We don't need a factory for the wrapping element itself.
-        payload_content = {
-            'GLRCHRWSInfoInbound': common_header,
-            'Request': request_params
+        logger.debug(f"Fetching herds for species {species_code}, usage {usage_code}")
+        
+        request_structure = {
+            'GLRCHRWSInfoInbound': {
+                'BrugerID': username,
+                'KlientID': DEFAULT_CLIENT_ID,
+                'TransaktionsID': str(uuid.uuid4())
+            },
+            'Request': {
+                'DyreArtKode': species_code,
+                'BrugsArtKode': usage_code,
+                'StartBesaetningsNummer': start_herd_number
+            }
         }
 
-        # 4. Call the operation, passing the constructed payload structure as the value
-        #    for the argument named after the element reference in the WSDL message part.
-        response = besaetning_client.service.listBesaetningerMedBrugsart(
-            CHR_besaetningListBesaetningerMedBrugsartRequest=payload_content
-        )
+        response = fetch_raw_soap_response(besaetning_client, 'listBesaetninger', request_structure)
+        
+        if not response:
+            return [], False, None
 
-        # --- End of new request structure ---
-
-        if response is None:
-            logger.warning(f"No response received for species {species_code}, usage {usage_code}, start {start_herd_number}.")
-            return [], False, None # Indicate potential error/end
-
-        # Process the response (assuming the structure is now correct)
-        serialized_response = serialize_object(response, dict)
-
-        # Save raw data (using the structured response directly)
+        # Save raw response
         save_raw_data(
+            raw_response=response,
             data_type='besaetning_list',
-            identifier=f"{species_code}_{usage_code}_{start_herd_number or 0}",
-            raw_response=serialized_response # Save the serialized dict
+            identifier=f"{species_code}_{usage_code}"
         )
 
-        # --- Start Parsing Logic ---
+        # Parse response
         herd_list = []
         has_more = False
-        last_herd_in_batch = None # Initialize to None
+        last_herd_in_batch = None
 
-        if hasattr(response, "Response"):
-            response_body = response.Response
-            # Get has_more first, default to False
-            has_more = bool(getattr(response_body, "FlereBesaetninger", False))
-            # Get TilBesNr only if has_more is True
-            if has_more:
-                til_bes_nr_str = getattr(response_body, "TilBesNr", None)
-                if til_bes_nr_str:
-                    try:
-                        last_herd_in_batch = int(til_bes_nr_str)
-                    except (ValueError, TypeError):
-                        logger.warning(f"Could not parse TilBesNr: {til_bes_nr_str}")
-                        last_herd_in_batch = None # Explicitly None if parsing fails
-                # If TilBesNr is missing but has_more is True, keep last_herd_in_batch as None
-            # If has_more is False, last_herd_in_batch remains None (its initial value)
-
-            if hasattr(response_body, "BesaetningsnummerListe") and hasattr(
-                response_body.BesaetningsnummerListe, "BesNrListe"
-            ):
-                raw_herd_list = response_body.BesaetningsnummerListe.BesNrListe
-                if raw_herd_list:
-                    # Ensure it's a list
-                    if not isinstance(raw_herd_list, list):
-                        raw_herd_list = [raw_herd_list]
-
-                    # Extract valid integer herd numbers
-                    for herd_num_str in raw_herd_list:
-                        try:
-                            herd_num_int = int(herd_num_str)
-                            if herd_num_int > 0:
-                                herd_list.append(herd_num_int)
-                        except (ValueError, TypeError):
-                            logger.warning(f"Skipping invalid herd number: {herd_num_str}")
+        if hasattr(response, 'Response'):
+            response_data = response.Response
+            if isinstance(response_data, list):
+                for item in response_data:
+                    herd_number = getattr(item, 'BesaetningsNummer', None)
+                    if herd_number is not None:
+                        herd_list.append(int(herd_number))
+                        last_herd_in_batch = int(herd_number)
             else:
-                 logger.warning("BesaetningsnummerListe or BesNrListe not found in response.")
-        else:
-            logger.warning("Response attribute not found in the SOAP response object.")
+                herd_number = getattr(response_data, 'BesaetningsNummer', None)
+                if herd_number is not None:
+                    herd_list.append(int(herd_number))
+                    last_herd_in_batch = int(herd_number)
 
+            has_more = bool(getattr(response_data, 'HarFlere', False))
 
-        logger.info(f"Found {len(herd_list)} herds. Has More: {has_more}. Last Herd: {last_herd_in_batch}")
-        # Return herd_list, has_more (bool), and last_herd_in_batch (int or None)
+        logger.debug(f"Found {len(herd_list)} herds for species {species_code}")
         return herd_list, has_more, last_herd_in_batch
-        # --- End Parsing Logic ---
 
     except Exception as e:
-        logger.error(
-            f"Failed to load herd list for Species: {species_code}, "
-            f"Usage: {usage_code}, Start: {start_herd_number}: {e}",
-            exc_info=True,
-        )
-        # Return empty list and False for has_more on error
+        logger.error(f"Error fetching herd list: {e}")
         return [], False, None
 
 def load_herd_details(client: Client, username: str, herd_number: int, species_code: int) -> Optional[Any]:
-    """Load detailed information for a specific herd using 'hentStamoplysninger'."""
-    logger.info(f"Fetching details for Herd: {herd_number}, Species: {species_code}...")
-
-    # --- WSDL CHECK NEEDED ---
-    # TODO: Verify the exact request structure required by 'hentStamoplysninger'.
-    # Assuming it needs GLRCHRWSInfoInbound and a Request object containing BesaetningsNummer and DyreArtKode.
-    # Construct request using factories (similar pattern)
+    """Load detailed information for a specific herd."""
     try:
-        # --- Use Factory for Header --- 
-        GLRCHRWSInfoInboundFactory = client.get_type('ns0:GLRCHRWSInfoInboundType')
-        common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username=username, track_id=f"load_details_{herd_number}"))
-
-        # --- Use Factory for Request Parameters with Integers --- 
-        RequestParamsFactory = client.get_type('ns0:CHR_besaetningHentStamoplysningerRequestType')
-        request_params = RequestParamsFactory(
-            BesaetningsNummer=herd_number, # Use int
-            DyreArtKode=species_code    # Use int
-        )
-
-        # Construct the payload dictionary with the request part using the factory object
-        payload_content = {
-            'GLRCHRWSInfoInbound': common_header,
-            'Request': request_params # Use the factory object here
+        logger.debug(f"Fetching details for herd {herd_number}")
+        
+        request_structure = {
+            'GLRCHRWSInfoInbound': {
+                'BrugerID': username,
+                'KlientID': DEFAULT_CLIENT_ID,
+                'TransaktionsID': str(uuid.uuid4())
+            },
+            'Request': {
+                'BesaetningsNummer': herd_number,
+                'DyreArtKode': species_code
+            }
         }
 
-        operation_name = 'hentStamoplysninger' # Confirmed operation name
-
-        # Pass the payload dictionary as the argument
-        response = client.service.hentStamoplysninger(
-            CHR_besaetningHentStamoplysningerRequest=payload_content
-        )
-
-        if not response:
-            logger.warning(f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})")
-            return None # Return None if no response
-        else:
-            # Save the raw response using the updated function call signature
+        response = fetch_raw_soap_response(client, 'hentStamoplysninger', request_structure)
+        
+        if response:
             save_raw_data(
-                raw_response=response, # Pass the raw Zeep object
+                raw_response=response,
                 data_type='besaetning_details',
                 identifier=f"{herd_number}_{species_code}"
             )
-            return response # Return the raw Zeep response object
+            
+        return response
 
-    except Fault as f:
-        logger.error(f"Fault occurred in load_herd_details: {f}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error fetching herd details for {herd_number}: {e}")
         return None
 
 # --- Test Execution ---
