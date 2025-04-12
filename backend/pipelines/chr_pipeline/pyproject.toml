@@ -1,0 +1,36 @@
+[project]
+name = "chr-pipeline"
+version = "0.1.0" # Initial version, can be updated later
+description = "Bronze layer pipeline for fetching CHR data."
+readme = "README.md" # Assumes README.md exists or will be created
+requires-python = ">=3.9" # Specify your project's Python requirement
+license = { text = "MIT" } # Or choose another appropriate license
+authors = [
+    { name = "Your Name", email = "your@email.com" }, # Replace with actual details
+]
+dependencies = [
+    "zeep~=4.3.1",
+    "certifi~=2024.12.14",
+    "google-cloud-secret-manager~=2.22.1",
+    "lxml~=5.3.0", # Using ~= again, Docker env might handle linking better
+    "xmlsec==1.3.14",
+    "google-cloud-storage~=2.19.0",
+    "python-dotenv~=1.0.1",
+    "cryptography", # Added cryptography package
+]
+
+[build-system]
+requires = ["hatchling"] # A common, modern build backend
+build-backend = "hatchling.build"
+
+# --- Added Hatch build configuration ---
+[tool.hatch.build.targets.wheel]
+packages = ["bronze", "silver"]
+# --- End Added Hatch build configuration ---
+
+[tool.uv]
+# Optional: You can configure uv settings here if needed later
+
+[tool.poetry.dependencies]
+python = "^3.9"
+python-dotenv = "^1.0.0"
