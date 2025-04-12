@@ -119,22 +119,27 @@ def fetch_herds(client: Any, username: str, combinations: List[Dict], limit: Opt
         start_number = 0
         while True:
             try:
-                response = load_herd_list(client, username, species_code, usage_code, start_number)
-                if not response or not response.Response:
-                    break
-                    
-                for item in response.Response:
-                    herd_number = int(getattr(item, 'BesaetningsNummer', 0))
+                # load_herd_list returns (herd_list, has_more, last_herd_in_batch)
+                herd_list, has_more, last_herd = load_herd_list(
+                    client, username, species_code, usage_code, start_number
+                )
+                
+                # Process the herd list
+                for herd_number in herd_list:
                     if herd_number > 0:
                         herd_to_species[herd_number] = species_code
                         if limit and len(herd_to_species) >= limit:
                             return herd_to_species
-                            
-                if not getattr(response, 'HasMore', False):
+                
+                # Check if we need to continue pagination
+                if not has_more:
                     break
                     
-                start_number = max(int(getattr(item, 'BesaetningsNummer', 0)) 
-                                 for item in response.Response) + 1
+                # Update start number for next page
+                if last_herd is not None:
+                    start_number = last_herd + 1
+                else:
+                    break
                     
             except Exception as e:
                 logger.error(f"Error fetching herds for species {species_code}: {e}")
