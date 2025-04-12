@@ -18,6 +18,7 @@ from zeep.helpers import serialize_object
 from .export import save_raw_data
 
 # Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
@@ -28,7 +29,7 @@ ENDPOINTS = {
 }
 
 # Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = 'LandbrugsData'
+DEFAULT_CLIENT_ID = 'LandbrugsData' # TODO: Confirm if this needs changing
 
 # --- Credential Handling ---
 
@@ -49,7 +50,7 @@ def get_fvm_credentials() -> Tuple[str, str]:
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     """Create a Zeep SOAP client with WSSE authentication."""
     session = Session()
-    session.verify = certifi.where()
+    session.verify = certifi.where() # Ensure CA certificates are used
     transport = Transport(session=session)
     try:
         client = Client(
@@ -57,7 +58,7 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
             transport=transport,
             wsse=UsernameToken(username, password)
         )
-        logger.debug(f"Created SOAP client for {wsdl_url}")
+        logger.info(f"Successfully created SOAP client for {wsdl_url}")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -82,13 +83,17 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)
+        # Pass request_data as a single positional argument (arg0)
         response = operation(request_data)
-        logger.debug(f"Fetched data from {operation_name}")
+        logger.info(f"Successfully fetched raw data from {client.wsdl.location} - {operation_name}")
+        # Return the raw Zeep object, serialization happens in export/transform
         return response
     except AttributeError:
-        logger.error(f"Operation '{operation_name}' not found")
+        logger.error(f"Operation '{operation_name}' not found on client for {client.wsdl.location}")
     except Exception as e:
-        logger.error(f"Error in {operation_name}: {e}")
+        logger.error(f"Error calling {operation_name} on {client.wsdl.location}: {e}")
+        # Consider how to handle errors - raise, return None, return error object?
+        # Returning None for now, caller should handle.
     return None
 
 # --- Stamdata Loading Functions ---
@@ -100,16 +105,15 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
     try:
         logger.debug("Fetching species/usage combinations")
         
+        # Create base request structure using the helper function
+        base_request = _create_base_request(username)
+        
         request_structure = {
-            'GLRCHRWSInfoInbound': {
-                'BrugerID': username,
-                'KlientID': DEFAULT_CLIENT_ID,
-                'TransaktionsID': str(uuid.uuid4())
-            },
-            'Request': {}
+            'GLRCHRWSInfoInbound': base_request,
+            'Request': {}  # Empty request body as per WSDL specification
         }
 
-        response = fetch_raw_soap_response(client, 'listDyrearterMedBrugsarter', request_structure)
+        response = fetch_raw_soap_response(client, 'ListDyrearterMedBrugsarter', request_structure)
         
         if response:
             save_raw_data(
