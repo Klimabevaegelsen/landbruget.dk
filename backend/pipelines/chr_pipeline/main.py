@@ -184,10 +184,22 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if 'herd_to_species' not in context:
             raise ValueError("Cannot run 'herd_details' step without first running 'herds'")
             
-        herd_tasks = [(context['clients']['besaetning'], context['username'], herd, species)
-                     for herd, species in context['herd_to_species'].items()]
-        context['herd_results'] = process_parallel(load_herd_details, herd_tasks, context['args']['workers'])
+        # Store herd details and build CHR number mapping
+        context['herd_details'] = []
+        context['chr_to_species'] = {}
         
+        for herd_number, species_code in context['herd_to_species'].items():
+            result = load_herd_details(context['clients']['besaetning'], context['username'], herd_number, species_code)
+            if result and hasattr(result, 'Response') and result.Response:
+                context['herd_details'].append(result)
+                # Extract CHR number from the response
+                for response in result.Response:
+                    if hasattr(response, 'Besaetning') and hasattr(response.Besaetning, 'ChrNummer'):
+                        chr_number = response.Besaetning.ChrNummer
+                        if chr_number not in context['chr_to_species']:
+                            context['chr_to_species'][chr_number] = set()
+                        context['chr_to_species'][chr_number].add(species_code)
+                        
     elif step == 'diko':
         if 'herd_to_species' not in context:
             raise ValueError("Cannot run 'diko' step without first running 'herds'")
@@ -207,26 +219,15 @@ def run_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context['chr_numbers'] = chr_numbers
         
     elif step == 'vetstat':
-        if 'chr_numbers' not in context or 'herd_results' not in context:
-            raise ValueError("Cannot run 'vetstat' step without first running 'ejendom' and 'herd_details'")
+        if 'chr_to_species' not in context:
+            raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
             
         logger.info("Starting VetStat step...")
-        
-        # Build a mapping of CHR numbers to their species codes
-        chr_to_species = {}
-        for result in context['herd_results']:
-            if hasattr(result, 'ChrNummer') and hasattr(result, 'DyreArtKode'):
-                chr_num = result.ChrNummer
-                species = result.DyreArtKode
-                if chr_num not in chr_to_species:
-                    chr_to_species[chr_num] = set()
-                chr_to_species[chr_num].add(species)
-        
-        logger.info(f"Found {len(chr_to_species)} CHR numbers with species codes")
+        logger.info(f"Found {len(context['chr_to_species'])} CHR numbers with species codes")
         
         vetstat_tasks = [
             (chr_num, species, context['args']['start_date'], context['args']['end_date'])
-            for chr_num, species_set in chr_to_species.items()
+            for chr_num, species_set in context['chr_to_species'].items()
             for species in species_set
         ]
         
