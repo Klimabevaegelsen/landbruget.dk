@@ -19,7 +19,7 @@ from tqdm.auto import tqdm
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import shutil
-from .export import export_movements_optimized
+from .export import export_movements_optimized, DateTimeEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,7 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> Dict[st
         response = client.service.listAlleFlytningerIPerioden(request)
         response_info = serialize_object(response)
         
+        # Add metadata with dates in ISO format
         return {
             'timestamp': datetime.utcnow().isoformat(),
             'start_date': start_date.isoformat(),
@@ -164,8 +165,8 @@ def fetch_all_movements(
     start_date: date,
     end_date: date,
     output_dir: str,
-    max_concurrent_fetches: int = 5,  # Adjust based on API limits
-    buffer_size: int = 50,  # Number of responses to accumulate before writing to disk
+    max_concurrent_fetches: int = 5,
+    buffer_size: int = 50,
     show_progress: bool = False,
     test_mode: bool = False
 ) -> Dict[str, Any]:
@@ -210,10 +211,10 @@ def fetch_all_movements(
             if not current_buffer:
                 return None
                 
-            # Write buffer to temporary file
+            # Write buffer to temporary file using DateTimeEncoder
             temp_path = Path(temp_dir) / f"buffer_{buffer_count}.json"
             with open(temp_path, 'w') as f:
-                json.dump(current_buffer, f)
+                json.dump(current_buffer, f, cls=DateTimeEncoder)
             temp_files.append(temp_path)
             buffer_count += 1
             current_buffer = []
@@ -274,8 +275,8 @@ def fetch_all_movements(
         
         result = {
             "export_timestamp": export_timestamp,
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
             "storage_path": export_result["destination"],
             "total_chunks": len(date_chunks)
         }
