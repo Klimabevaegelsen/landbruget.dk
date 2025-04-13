@@ -21,7 +21,6 @@ dependencies = [
     "pandas~=2.2.1",  # For data processing
     "xmltodict~=0.13.0",  # For handling raw XML responses
     "tenacity~=8.2.3",  # For retry logic
-    "psutil~=5.9.8",  # For disk space monitoring
 ]
 
 [build-system]

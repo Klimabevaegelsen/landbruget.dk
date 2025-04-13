@@ -4,13 +4,14 @@ import logging
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
-from datetime import datetime, date
-import io
+from typing import Any, Dict, List, Iterator
+from datetime import datetime
+from io import BytesIO
 
 from dotenv import load_dotenv
 from google.cloud import storage
 from google.api_core.exceptions import GoogleAPICallError
+from tqdm.auto import tqdm
 
 # Load environment variables
 load_dotenv()
@@ -30,121 +31,119 @@ gcs_client = None
 if USE_GCS:
     try:
         gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
+        logger.debug(f"Initialized GCS client for project: {GOOGLE_CLOUD_PROJECT}")
     except Exception as e:
         logger.error(f"Failed to initialize GCS client: {e}")
-        logger.info("Falling back to local storage")
+        logger.warning("Falling back to local storage")
         USE_GCS = False
 
 if not USE_GCS:
-    logger.info("Using local storage in ./data/bronze/")
+    logger.warning("Using local storage in ./data/raw/svineflytning/")
 
-# --- In-memory buffer for local storage ---
-_data_buffer: Dict[str, List[Any]] = {}
+def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
+    """
+    Helper function to stream content to GCS.
+    
+    Args:
+        blob_path: The path to save the blob to.
+        data_iterator: Iterator yielding data to stream.
+        
+    Returns:
+        str: The full GCS path where the content was saved.
+    """
+    bucket = gcs_client.bucket(GCS_BUCKET)
+    # Add bronze/svineflytning/{timestamp} prefix to all files
+    full_path = f"bronze/svineflytning/{blob_path}"
+    blob = bucket.blob(full_path)
 
-# Get timestamp for this export run
-EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    # Create a streaming upload
+    with blob.open('w') as f:
+        # Write opening bracket for JSON array
+        f.write('[\n')
+        
+        first = True
+        for item in data_iterator:
+            if not first:
+                f.write(',\n')
+            else:
+                first = False
+            json.dump(item, f, indent=2, ensure_ascii=False)
+        
+        # Write closing bracket
+        f.write('\n]')
 
-class DateTimeEncoder(json.JSONEncoder):
-    """JSON encoder that handles datetime and date objects."""
-    def default(self, obj):
-        if isinstance(obj, (datetime, date)):
-            return obj.isoformat()
-        return super().default(obj)
+    return f"gs://{GCS_BUCKET}/{full_path}"
 
-def save_movements(movements: List[Dict[str, Any]]):
-    """Save movement data directly or buffer for later export."""
-    if not movements:
-        logger.warning("No movements provided to save")
-        return
+def _save_locally(filepath: Path, data_iterator: Iterator[Dict]) -> str:
+    """
+    Helper function to save content locally.
+    
+    Args:
+        filepath: The path to save the file to.
+        data_iterator: Iterator yielding data to save.
+        
+    Returns:
+        str: The full local path where the content was saved.
+    """
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        # Write opening bracket for JSON array
+        f.write('[\n')
+        
+        first = True
+        for item in data_iterator:
+            if not first:
+                f.write(',\n')
+            else:
+                first = False
+            json.dump(item, f, indent=2, ensure_ascii=False)
+        
+        # Write closing bracket
+        f.write('\n]')
+    
+    return str(filepath.absolute())
 
+def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filename: str) -> Dict[str, Any]:
+    """
+    Export pig movement data to either GCS or local storage using streaming.
+    
+    Args:
+        data_iterator: Iterator yielding data to export
+        export_timestamp: Timestamp string for the export
+        filename: Name of the file to export
+        
+    Returns:
+        Dict containing export metadata
+    """
+    destination = None
     if USE_GCS:
-        # Stream directly to GCS
-        filename = "movements.json"
-        base_path = f"bronze/svineflytning/{EXPORT_TIMESTAMP}"
-        full_path = f"{base_path}/{filename}"
-        
-        # Add timestamp to each movement
-        for movement in movements:
-            if isinstance(movement, dict):
-                movement['_export_timestamp'] = EXPORT_TIMESTAMP
-        
-        # Create a stream with the data
-        stream = io.StringIO()
-        json.dump(movements, stream, ensure_ascii=False, cls=DateTimeEncoder)
-        stream.seek(0)
-        
-        # Upload to GCS
-        bucket = gcs_client.bucket(GCS_BUCKET)
-        blob = bucket.blob(full_path)
-        blob.upload_from_file(stream, content_type='application/json')
-        
-        # Clean up
-        stream.close()
-        
+        try:
+            logger.debug(f"Streaming data to GCS bucket '{GCS_BUCKET}'")
+            destination = _save_to_gcs(
+                f"{export_timestamp}/{filename}",
+                data_iterator
+            )
+            logger.debug(f"Successfully exported to GCS: {destination}")
+        except Exception as e:
+            logger.error(f"Error writing to GCS: {e}")
+            logger.warning("Falling back to local storage")
+            filepath = Path("./data/raw/svineflytning") / export_timestamp / filename
+            destination = _save_locally(
+                filepath,
+                data_iterator
+            )
+            logger.debug(f"Successfully saved locally: {destination}")
     else:
-        # For local storage, keep the existing buffering logic
-        if 'movements' not in _data_buffer:
-            _data_buffer['movements'] = []
-        
-        # Add timestamp to each movement
-        for movement in movements:
-            if isinstance(movement, dict):
-                movement['_export_timestamp'] = EXPORT_TIMESTAMP
-        
-        _data_buffer['movements'].extend(movements)
-
-def finalize_export() -> Dict[str, Any]:
-    """Write buffered data to consolidated files."""
-    if not _data_buffer:
-        if USE_GCS:
-            return {
-                "export_timestamp": EXPORT_TIMESTAMP,
-                "storage_type": "gcs",
-                "files_written": 1,  # We already wrote the file in save_movements
-                "destination": f"gs://{GCS_BUCKET}/bronze/svineflytning/{EXPORT_TIMESTAMP}"
-            }
-        logger.warning("No data buffered for export")
-        return {"status": "no_data"}
-
-    if not USE_GCS:
-        # Local storage export
-        result = {
-            "export_timestamp": EXPORT_TIMESTAMP,
-            "storage_type": "local",
-            "files_written": 0,
-            "record_counts": {},
-        }
-
-        for data_type, data_list in _data_buffer.items():
-            if not data_list:
-                continue
-
-            record_count = len(data_list)
-            result["record_counts"][data_type] = record_count
-            
-            filename = f"{data_type}.json"
-            filepath = Path(f"./data/bronze/svineflytning/{filename}")
-            logger.info(f"Writing {record_count} records locally to {filepath}")
-            
-            filepath.parent.mkdir(parents=True, exist_ok=True)
-            timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
-            timestamped_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(timestamped_path, 'w', encoding='utf-8') as f:
-                json.dump(data_list, f, ensure_ascii=False, cls=DateTimeEncoder, indent=2)
-            
-            destination = str(timestamped_path.absolute())
-            result["files_written"] += 1
-            result["destination"] = os.path.dirname(destination)
-
-        # Clear the buffer after successful export
-        _data_buffer.clear()
-        
-        logger.info(f"Export complete: {result['files_written']} files written to local storage")
-        return result
-
-def clear_buffer():
-    """Explicitly clear the data buffer."""
-    _data_buffer.clear()
-    logger.info("Data buffer cleared")
+        filepath = Path("./data/raw/svineflytning") / export_timestamp / filename
+        destination = _save_locally(
+            filepath,
+            data_iterator
+        )
+        logger.debug(f"Successfully saved locally: {destination}")
+    
+    return {
+        "export_timestamp": export_timestamp,
+        "filename": filename,
+        "storage_type": "gcs" if USE_GCS else "local",
+        "destination": destination
+    }
