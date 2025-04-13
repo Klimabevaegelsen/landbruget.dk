@@ -148,13 +148,11 @@ def main():
                 "Fetching movements"
             )
             
-            # Save movements to buffer as they come in
+            # Save movements as they come in
             for result in results:
                 if result:
                     save_movements(result)
                     total_movements += len(result)
-                    # Clean up memory
-                    del result
             
             if args['progress']:
                 logger.warning(f"Total movements fetched: {total_movements}")
