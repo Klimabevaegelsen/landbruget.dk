@@ -37,7 +37,7 @@ if USE_GCS:
         USE_GCS = False
 
 if not USE_GCS:
-    logger.info("Using local storage in ./data/bronze/")
+    logger.info("Using local storage in /data/bronze/")
 
 # --- In-memory buffer for consolidated output ---
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
@@ -58,7 +58,7 @@ def _ensure_dir(filepath: Path):
 
 def _get_final_filename(data_source: str, operation: str, format: str) -> Path:
     """Generate the filename for the final consolidated file."""
-    base_path = Path(f"./data/bronze/{data_source}")
+    base_path = Path(f"/data/bronze/{data_source}")
     # Sanitize operation name for filename
     safe_operation = operation.replace(" ", "_").replace("/", "_")
     filename = f"{safe_operation}.{format}"
@@ -168,7 +168,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing JSON to GCS {filename}: {e}")
             else:
-                filepath = Path(f"./data/bronze/chr/{filename}")
+                filepath = Path(f"/data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
                     _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), 'json')
@@ -190,7 +190,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing XML to GCS {filename}: {e}")
             else:
-                filepath = Path(f"./data/bronze/chr/{filename}")
+                filepath = Path(f"/data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(xml_data_list)} records locally to {filepath}")
                     _save_locally(filepath, full_xml_content, 'xml')

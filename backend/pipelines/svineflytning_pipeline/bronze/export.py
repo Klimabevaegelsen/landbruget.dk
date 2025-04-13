@@ -51,7 +51,7 @@ if USE_GCS:
         USE_GCS = False
 
 if not USE_GCS:
-    logger.warning("Using local storage in ./data/raw/svineflytning/")
+    logger.warning("Using local storage in /data/raw/svineflytning/")
 
 def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
     """
@@ -140,14 +140,14 @@ def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filen
         except Exception as e:
             logger.error(f"Error writing to GCS: {e}")
             logger.warning("Falling back to local storage")
-            filepath = Path("./data/raw/svineflytning") / export_timestamp / filename
+            filepath = Path("/data/raw/svineflytning") / export_timestamp / filename
             destination = _save_locally(
                 filepath,
                 data_iterator
             )
             logger.debug(f"Successfully saved locally: {destination}")
     else:
-        filepath = Path("./data/raw/svineflytning") / export_timestamp / filename
+        filepath = Path("/data/raw/svineflytning") / export_timestamp / filename
         destination = _save_locally(
             filepath,
             data_iterator
@@ -215,7 +215,7 @@ def export_movements_optimized(
             logger.warning("Falling back to local storage")
             
             # Fallback to local storage
-            local_dir = Path("./data/raw/svineflytning") / export_timestamp
+            local_dir = Path("/data/raw/svineflytning") / export_timestamp
             local_dir.mkdir(parents=True, exist_ok=True)
             output_file = local_dir / "svineflytning.json"
             
@@ -238,7 +238,7 @@ def export_movements_optimized(
             logger.debug(f"Successfully saved locally: {destination}")
     else:
         # Direct local storage
-        local_dir = Path("./data/raw/svineflytning") / export_timestamp
+        local_dir = Path("/data/raw/svineflytning") / export_timestamp
         local_dir.mkdir(parents=True, exist_ok=True)
         output_file = local_dir / "svineflytning.json"
         
