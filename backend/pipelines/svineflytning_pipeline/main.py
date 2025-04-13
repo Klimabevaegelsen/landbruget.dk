@@ -51,10 +51,10 @@ def setup_logging(log_level: str):
             third_party_logger.propagate = False
 
 def get_default_dates() -> tuple[date, date]:
-    """Get default start and end dates (previous month)."""
+    """Get default start and end dates (last 5 years)."""
     today = date.today()
-    end_date = today.replace(day=1) - timedelta(days=1)  # Last day of previous month
-    start_date = end_date.replace(day=1)  # First day of previous month
+    end_date = today
+    start_date = today.replace(year=today.year - 5)  # 5 years ago from today
     return start_date, end_date
 
 def parse_args() -> Dict[str, Any]:
