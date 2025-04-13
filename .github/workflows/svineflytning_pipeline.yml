@@ -64,7 +64,7 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Set up environment variables
+    - name: 'Set up environment variables'
       env:
         GCS_BUCKET: landbrugsdata-raw-data
         FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
