@@ -28,6 +28,20 @@ on:
         description: 'Comma-separated list of species codes'
         type: string
         default: ''
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'WARNING'
+      show_progress:
+        description: 'Show progress information'
+        type: boolean
+        default: true
 
 jobs:
   run-pipeline:
@@ -81,7 +95,12 @@ jobs:
       working-directory: backend/pipelines/chr_pipeline
       run: |
         # Build base command with common arguments
-        CMD="python main.py"
+        CMD="python main.py --log-level ${{ inputs.log_level }}"
+        
+        # Add progress flag if enabled
+        if [ "${{ inputs.show_progress }}" = "true" ]; then
+          CMD="$CMD --progress"
+        fi
         
         # Add test mode arguments if enabled
         if [ "${{ inputs.test_mode }}" = "true" ]; then

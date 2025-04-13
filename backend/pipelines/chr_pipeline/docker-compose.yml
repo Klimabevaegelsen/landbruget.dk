@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ../../data:/data
+      - ../../data/bronze/chr:/data/bronze/chr
       - ./vetstat.p12:/app/vetstat.p12
       - ./.env:/app/.env
     environment:
