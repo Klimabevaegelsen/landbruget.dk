@@ -33,16 +33,13 @@ DEFAULT_CLIENT_ID = 'LandbrugsData'
 
 # --- Credential Handling ---
 
-def get_fvm_credentials() -> Tuple[str, str]:
-    """Get FVM username and password from environment variables."""
-    load_dotenv()  # Load environment variables from .env file
-    
-    # Try DATAFORDELER credentials first, fall back to FVM if not found
-    username = os.getenv('DATAFORDELER_USERNAME') or os.getenv('FVM_USERNAME')
-    password = os.getenv('DATAFORDELER_PASSWORD') or os.getenv('FVM_PASSWORD')
+def get_fvm_credentials() -> tuple[str, str]:
+    """Get FVM credentials from environment variables."""
+    username = os.getenv('FVM_USERNAME')
+    password = os.getenv('FVM_PASSWORD')
     
     if not username or not password:
-        raise ValueError("DATAFORDELER_USERNAME/PASSWORD or FVM_USERNAME/PASSWORD must be set in environment variables")
+        raise ValueError("FVM_USERNAME/PASSWORD must be set in environment variables")
     
     return username, password
 
