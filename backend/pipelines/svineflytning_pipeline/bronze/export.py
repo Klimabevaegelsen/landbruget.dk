@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-from datetime import datetime
+from datetime import datetime, date
 import shutil
 import psutil
 import gc
@@ -47,6 +47,13 @@ _data_buffer: Dict[str, List[Any]] = {}
 
 # Get timestamp for this export run
 EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
+class DateTimeEncoder(json.JSONEncoder):
+    """JSON encoder that handles datetime and date objects."""
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 def _save_to_gcs(blob_path: str, content: str) -> str:
     """Save content to GCS."""
@@ -156,7 +163,7 @@ def finalize_export() -> Dict[str, Any]:
             
             # Write chunks
             for i, chunk in enumerate(chunks):
-                chunk_json = json.dumps(chunk, indent=2, ensure_ascii=False)[1:-1]  # Remove [ and ]
+                chunk_json = json.dumps(chunk, indent=2, ensure_ascii=False, cls=DateTimeEncoder)[1:-1]  # Remove [ and ]
                 if i < len(chunks) - 1:
                     chunk_json += ',\n'
                 _append_to_gcs(filename, chunk_json)
@@ -189,7 +196,7 @@ def finalize_export() -> Dict[str, Any]:
             
             # Write chunks
             for i, chunk in enumerate(chunks):
-                chunk_json = json.dumps(chunk, indent=2, ensure_ascii=False)[1:-1]  # Remove [ and ]
+                chunk_json = json.dumps(chunk, indent=2, ensure_ascii=False, cls=DateTimeEncoder)[1:-1]  # Remove [ and ]
                 with open(timestamped_path, 'a', encoding='utf-8') as f:
                     f.write(chunk_json)
                     if i < len(chunks) - 1:
