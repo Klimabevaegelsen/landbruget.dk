@@ -20,13 +20,6 @@ from .export import export_movements
 
 logger = logging.getLogger(__name__)
 
-class DateTimeEncoder(json.JSONEncoder):
-    """Custom JSON encoder for handling datetime and date objects."""
-    def default(self, obj: Any) -> str:
-        if isinstance(obj, (datetime, date)):
-            return obj.isoformat()
-        return super().default(obj)
-
 # Constants
 ENDPOINTS = {
     'prod': 'https://ws.fvst.dk/service/SvineflytningWS?wsdl',
