@@ -3,22 +3,48 @@
 import argparse
 import logging
 from datetime import datetime, date, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pathlib import Path
 import os
 import sys
+import concurrent.futures
 from tqdm.contrib.logging import logging_redirect_tqdm
 from tqdm.auto import tqdm
 
 from bronze.load_svineflytning import (
     get_fvm_credentials,
     create_client,
-    fetch_all_movements,
+    fetch_movements,
     ENDPOINTS
 )
 from bronze.export import export_movements
 
 logger = logging.getLogger(__name__)
+
+def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
+    """Execute tasks in parallel using a thread pool with progress tracking."""
+    results = []
+    with logging_redirect_tqdm():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(func, *task) for task in tasks]
+            
+            # Create progress bar that works in both CI and interactive environments
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc=desc or func.__name__,
+                unit='tasks',
+                mininterval=1.0,  # Update at most once per second
+                bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+            ):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Task failed: {e}")
+                    results.append(None)
+    
+    return results
 
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
@@ -74,6 +100,8 @@ def parse_args() -> Dict[str, Any]:
                       default='prod', help='Environment to use')
     parser.add_argument('--test', action='store_true',
                       help='Run in test mode with limited data')
+    parser.add_argument('--workers', type=int, default=5,
+                      help='Number of parallel workers')
     
     args = parser.parse_args()
     return vars(args)
@@ -96,28 +124,47 @@ def main():
             password
         )
         
-        # Fetch all movements and save raw responses
-        with logging_redirect_tqdm():
-            result = fetch_all_movements(
-                client,
-                args['start_date'],
-                args['end_date'],
-                '/data/raw/svineflytning',  # Local directory for raw data
-                show_progress=args['progress'],
-                test_mode=args['test']
-            )
+        # Calculate chunks for parallel processing
+        total_days = (args['end_date'] - args['start_date']).days + 1
+        chunk_size = 3  # API limit: maximum 3 days per request
         
-        # Export the data (either to GCS or keep it local)
+        # Create tasks for parallel processing
+        tasks = []
+        current_date = args['start_date']
+        while current_date <= args['end_date']:
+            chunk_end = min(current_date + timedelta(days=chunk_size - 1), args['end_date'])
+            tasks.append((client, current_date, chunk_end))
+            current_date = chunk_end + timedelta(days=1)
+        
+        # Fetch all movements in parallel
+        with logging_redirect_tqdm():
+            results = process_parallel(
+                fetch_movements,
+                tasks,
+                args['workers'],
+                "Fetching movements"
+            )
+            
+            # Combine all movements
+            all_movements = []
+            for result in results:
+                if result:
+                    all_movements.extend(result)
+            
+            if args['progress']:
+                logger.warning(f"Total movements fetched: {len(all_movements)}")
+        
+        # Export the data
         export_result = export_movements(
-            result['data_path'],
-            result['export_timestamp'],
-            result['filename']
+            '/data/raw/svineflytning',  # Local directory for raw data
+            datetime.now().isoformat(),
+            'svineflytning_data.json'
         )
         
         # Print information about the fetch and export
         logger.warning(f"Pipeline completed successfully")
         if args['progress']:
-            logger.warning(f"Total chunks processed: {result['total_chunks']}")
+            logger.warning(f"Total chunks processed: {len(tasks)}")
             logger.warning(f"Data exported to: {export_result['destination']}")
         
     except Exception as e:
