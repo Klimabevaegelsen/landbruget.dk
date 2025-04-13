@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from google.cloud import storage
 from google.api_core.exceptions import GoogleAPICallError
 from tqdm.auto import tqdm
+from .load_svineflytning import DateTimeEncoder
 
 # Load environment variables
 load_dotenv()
@@ -67,7 +68,7 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
                 f.write(',\n')
             else:
                 first = False
-            json.dump(item, f, indent=2, ensure_ascii=False)
+            json.dump(item, f, indent=2, ensure_ascii=False, cls=DateTimeEncoder)
         
         # Write closing bracket
         f.write('\n]')
@@ -96,7 +97,7 @@ def _save_locally(filepath: Path, data_iterator: Iterator[Dict]) -> str:
                 f.write(',\n')
             else:
                 first = False
-            json.dump(item, f, indent=2, ensure_ascii=False)
+            json.dump(item, f, indent=2, ensure_ascii=False, cls=DateTimeEncoder)
         
         # Write closing bracket
         f.write('\n]')
