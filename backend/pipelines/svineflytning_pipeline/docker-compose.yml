@@ -1,0 +1,19 @@
+version: '3.11'
+
+services:
+  svineflytning-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ../../data:/data
+    command: >
+      sh -c "
+      env | grep FVM &&
+      python main.py
+      --start-date 2024-01-01
+      --end-date 2024-03-31
+      --log-level INFO
+      --progress
+      --environment prod" 

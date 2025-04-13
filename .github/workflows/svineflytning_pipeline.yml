@@ -1,0 +1,120 @@
+name: Svineflytning Pipeline
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
+        required: true
+        type: string
+      end_date:
+        description: 'End date (YYYY-MM-DD)'
+        required: true
+        type: string
+      test_mode:
+        description: 'Run in test mode'
+        type: boolean
+        default: false
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'WARNING'
+      show_progress:
+        description: 'Show progress information'
+        type: boolean
+        default: true
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/svineflytning_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: landbrugsdata-raw-data
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/svineflytning_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
+    - name: Run Pipeline
+      working-directory: backend/pipelines/svineflytning_pipeline
+      run: |
+        # Build base command with common arguments
+        CMD="python main.py --log-level ${{ inputs.log_level }}"
+        
+        # Add date range arguments if provided via manual trigger
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
+        else
+          # For scheduled runs, use yesterday's date
+          YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
+          CMD="$CMD --start-date $YESTERDAY --end-date $YESTERDAY"
+        fi
+        
+        # Add progress flag if enabled
+        if [ "${{ inputs.show_progress }}" = "true" ]; then
+          CMD="$CMD --progress"
+        fi
+        
+        # Add test mode flag if enabled
+        if [ "${{ inputs.test_mode }}" = "true" ]; then
+          CMD="$CMD --test"
+        fi
+        
+        echo "Running command: $CMD"
+        $CMD
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "Pipeline failed. Please check the logs above for details."
+        exit 1
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload even if the pipeline fails
+      with:
+        name: pipeline-output
+        path: backend/pipelines/svineflytning_pipeline/data
+        retention-days: 7 
