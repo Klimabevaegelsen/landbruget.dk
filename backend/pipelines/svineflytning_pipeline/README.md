@@ -4,7 +4,7 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 
 ## Features
 
-- Fetches pig movement data for the last 3 years by default
+- Fetches pig movement data for the last 5 years by default
 - Processes data in parallel using multiple workers
 - Handles pagination and chunking of requests (max 3 days per request as per API requirements)
 - Runs daily via GitHub Actions
@@ -13,7 +13,7 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 ## Prerequisites
 
 - Docker and Docker Compose
-- Access credentials for either Datafordeler or FVM services
+- Access credentials for FVM services
 
 ## Setup
 
@@ -23,8 +23,7 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
    ```
 
 2. Edit `.env` with your actual credentials:
-   - Either DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD
-   - Or FVM_USERNAME and FVM_PASSWORD
+   FVM_USERNAME and FVM_PASSWORD
 
 3. Create a data directory for the raw files:
    ```bash
@@ -47,12 +46,13 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 
 ### Available Options
 
-- `--start-date`: Start date in YYYY-MM-DD format (default: 3 years ago)
+- `--start-date`: Start date in YYYY-MM-DD format (default: 5 years ago)
 - `--end-date`: End date in YYYY-MM-DD format (default: today)
 - `--workers`: Number of parallel workers (default: 10)
 - `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
 - `--progress`: Show progress information
 - `--environment`: Environment to use (prod, test)
+- `--test`: Run in test mode with limited data
 - `--gcs-bucket`: Google Cloud Storage bucket for export
 
 ### Example Commands
@@ -65,24 +65,25 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
      --log-level DEBUG
    ```
 
-2. Run with fewer workers and show progress:
+2. Run with progress information in test mode:
    ```bash
    docker-compose run --rm svineflytning-pipeline \
-     --workers 5 \
-     --progress
+     --progress \
+     --test
    ```
 
 ## Data Output
 
 The pipeline outputs data to the following locations:
-- Raw XML responses: `data/raw/svineflytning/*.xml`
-- Metadata files: `data/raw/svineflytning/*_metadata.json`
+- Raw data: `/data/raw/svineflytning/`
+- Bronze layer transformations: `bronze/`
+- Silver layer transformations: `silver/`
 
 ## Troubleshooting
 
 1. If you see credential errors:
-   - Check that your .env file exists and contains the correct credentials
-   - Verify that either DATAFORDELER or FVM credentials are properly set
+   - Check that your .env file exists and contains the correct FVM credentials
+   - Verify that FVM_USERNAME and FVM_PASSWORD are properly set
 
 2. If you see XML processing errors:
    - Ensure the container has enough memory
@@ -103,10 +104,12 @@ The pipeline runs automatically via GitHub Actions:
 ## Error Handling
 
 The pipeline includes comprehensive error handling:
-- Logs errors for failed API requests
+- Configurable logging levels (DEBUG, INFO, WARNING, ERROR)
+- Separate logging configuration for pipeline and third-party modules
+- Progress tracking with tqdm integration
+- Graceful error handling with detailed error messages
 - Continues processing on chunk failures
 - Maintains progress even if some requests fail
-- Uploads artifacts even if the pipeline fails
 
 ## Contributing
 
