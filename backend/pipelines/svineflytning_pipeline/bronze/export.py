@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Iterator
 from datetime import datetime, date
 from io import BytesIO
+import shutil
+import ijson  # Add this import for streaming JSON parsing
 
 from dotenv import load_dotenv
 from google.cloud import storage
@@ -151,6 +153,111 @@ def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filen
     return {
         "export_timestamp": export_timestamp,
         "filename": filename,
+        "storage_type": "gcs" if USE_GCS else "local",
+        "destination": destination
+    }
+
+def export_movements_optimized(
+    temp_files: List[Path],
+    export_timestamp: str,
+    total_chunks: int
+) -> Dict[str, Any]:
+    """
+    Export pig movement data using streaming to minimize memory usage.
+    
+    Args:
+        temp_files: List of temporary files containing the movement data
+        export_timestamp: Timestamp string for the export
+        total_chunks: Total number of chunks processed
+        
+    Returns:
+        Dict containing export metadata
+    """
+    def stream_temp_file(temp_file: Path):
+        """Stream contents of a temp file one item at a time."""
+        with open(temp_file, 'rb') as f:
+            parser = ijson.items(f, 'item')
+            for item in parser:
+                yield item
+
+    if USE_GCS:
+        try:
+            logger.debug(f"Starting streaming upload to GCS bucket '{GCS_BUCKET}'")
+            
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(GCS_BUCKET)
+            blob = bucket.blob(f"bronze/svineflytning/{export_timestamp}/svineflytning.json")
+            
+            # Stream directly to GCS
+            with blob.open('w') as f:
+                f.write('[\n')
+                
+                first_item = True
+                for temp_file in temp_files:
+                    for item in stream_temp_file(temp_file):
+                        if not first_item:
+                            f.write(',\n')
+                        else:
+                            first_item = False
+                        json.dump(item, f, indent=2, cls=DateTimeEncoder)
+                
+                f.write('\n]')
+            
+            destination = f"gs://{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
+            logger.debug(f"Successfully exported to GCS: {destination}")
+            
+        except Exception as e:
+            logger.error(f"Error writing to GCS: {e}")
+            logger.warning("Falling back to local storage")
+            
+            # Fallback to local storage
+            local_dir = Path("./data/raw/svineflytning") / export_timestamp
+            local_dir.mkdir(parents=True, exist_ok=True)
+            output_file = local_dir / "svineflytning.json"
+            
+            # Stream to local file
+            with open(output_file, 'w') as f:
+                f.write('[\n')
+                
+                first_item = True
+                for temp_file in temp_files:
+                    for item in stream_temp_file(temp_file):
+                        if not first_item:
+                            f.write(',\n')
+                        else:
+                            first_item = False
+                        json.dump(item, f, indent=2, cls=DateTimeEncoder)
+                
+                f.write('\n]')
+            
+            destination = str(output_file.absolute())
+            logger.debug(f"Successfully saved locally: {destination}")
+    else:
+        # Direct local storage
+        local_dir = Path("./data/raw/svineflytning") / export_timestamp
+        local_dir.mkdir(parents=True, exist_ok=True)
+        output_file = local_dir / "svineflytning.json"
+        
+        # Stream to local file
+        with open(output_file, 'w') as f:
+            f.write('[\n')
+            
+            first_item = True
+            for temp_file in temp_files:
+                for item in stream_temp_file(temp_file):
+                    if not first_item:
+                        f.write(',\n')
+                    else:
+                        first_item = False
+                    json.dump(item, f, indent=2, cls=DateTimeEncoder)
+            
+            f.write('\n]')
+        
+        destination = str(output_file.absolute())
+        logger.debug(f"Successfully saved locally: {destination}")
+    
+    return {
+        "export_timestamp": export_timestamp,
         "storage_type": "gcs" if USE_GCS else "local",
         "destination": destination
     }
