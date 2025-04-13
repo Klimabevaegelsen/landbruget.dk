@@ -4,7 +4,7 @@ import logging
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -30,101 +30,103 @@ gcs_client = None
 if USE_GCS:
     try:
         gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.debug(f"Initialized GCS client for project: {GOOGLE_CLOUD_PROJECT}")
+        logger.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
     except Exception as e:
         logger.error(f"Failed to initialize GCS client: {e}")
-        logger.warning("Falling back to local storage")
+        logger.info("Falling back to local storage")
         USE_GCS = False
 
 if not USE_GCS:
-    logger.warning("Using local storage in ./data/raw/svineflytning/")
+    logger.info("Using local storage in ./data/bronze/")
+
+# --- In-memory buffer for consolidated output ---
+_data_buffer: Dict[str, List[Any]] = {}
+
+# Get timestamp for this export run
+EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
 def _save_to_gcs(blob_path: str, content: str) -> str:
-    """
-    Helper function to save content to GCS.
-    
-    Args:
-        blob_path: The path to save the blob to.
-        content: The content to save.
-        
-    Returns:
-        str: The full GCS path where the content was saved.
-    """
+    """Save content to GCS."""
     bucket = gcs_client.bucket(GCS_BUCKET)
     # Add bronze/svineflytning/{timestamp} prefix to all files
-    full_path = f"bronze/svineflytning/{blob_path}"
+    full_path = f"bronze/svineflytning/{EXPORT_TIMESTAMP}/{blob_path}"
     blob = bucket.blob(full_path)
     blob.upload_from_string(content, content_type='application/json')
     return f"gs://{GCS_BUCKET}/{full_path}"
 
 def _save_locally(filepath: Path, content: str) -> str:
-    """
-    Helper function to save content locally.
-    
-    Args:
-        filepath: The path to save the file to.
-        content: The content to save.
-        
-    Returns:
-        str: The full local path where the content was saved.
-    """
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    """Save content locally."""
+    # Add timestamp to the path
+    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    timestamped_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(timestamped_path, 'w', encoding='utf-8') as f:
         f.write(content)
-    return str(filepath.absolute())
+    return str(timestamped_path.absolute())
 
-def export_movements(data_path: str, export_timestamp: str, filename: str) -> Dict[str, Any]:
-    """
-    Export pig movement data to either GCS or local storage.
-    
-    Args:
-        data_path: Path to the data directory
-        export_timestamp: Timestamp string for the export
-        filename: Name of the file to export
-        
-    Returns:
-        Dict containing export metadata
-    """
-    filepath = Path(data_path) / export_timestamp / filename
-    
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to read data from {filepath}: {e}")
-        raise
-    
-    record_count = len(data) if isinstance(data, list) else 0
-    logger.debug(f"Loaded {record_count} records from {filepath}")
-    
-    destination = None
-    if USE_GCS:
-        try:
-            logger.debug(f"Exporting {record_count} records to GCS bucket '{GCS_BUCKET}'")
-            destination = _save_to_gcs(
-                f"{export_timestamp}/{filename}",
-                json.dumps(data, indent=2, ensure_ascii=False)
-            )
-            logger.debug(f"Successfully exported to GCS: {destination}")
-        except Exception as e:
-            logger.error(f"Error writing to GCS: {e}")
-            logger.warning("Falling back to local storage")
-            destination = _save_locally(
-                filepath,
-                json.dumps(data, indent=2, ensure_ascii=False)
-            )
-            logger.debug(f"Successfully saved locally: {destination}")
-    else:
-        destination = _save_locally(
-            filepath,
-            json.dumps(data, indent=2, ensure_ascii=False)
-        )
-        logger.debug(f"Successfully saved locally: {destination}")
-    
-    return {
-        "export_timestamp": export_timestamp,
-        "filename": filename,
-        "record_count": record_count,
+def save_movements(movements: List[Dict[str, Any]]):
+    """Buffer movement data for later export."""
+    if not movements:
+        logger.warning("No movements provided to save")
+        return
+
+    if 'movements' not in _data_buffer:
+        _data_buffer['movements'] = []
+
+    # Add timestamp to each movement
+    for movement in movements:
+        if isinstance(movement, dict):
+            movement['_export_timestamp'] = EXPORT_TIMESTAMP
+        _data_buffer['movements'].extend(movements)
+
+def finalize_export() -> Dict[str, Any]:
+    """Write buffered data to consolidated files."""
+    if not _data_buffer:
+        logger.warning("No data buffered for export")
+        return {"status": "no_data"}
+
+    storage_mode = "GCS" if USE_GCS else "local filesystem"
+    logger.info(f"Starting export using {storage_mode}")
+
+    result = {
+        "export_timestamp": EXPORT_TIMESTAMP,
         "storage_type": "gcs" if USE_GCS else "local",
-        "destination": destination
+        "files_written": 0,
+        "record_counts": {}
     }
+
+    for data_type, data_list in _data_buffer.items():
+        if not data_list:
+            continue
+
+        filename = f"{data_type}.json"
+        record_count = len(data_list)
+        result["record_counts"][data_type] = record_count
+
+        try:
+            json_content = json.dumps(data_list, indent=2, ensure_ascii=False)
+            
+            if USE_GCS:
+                logger.info(f"Writing {record_count} records to GCS: {filename}")
+                destination = _save_to_gcs(filename, json_content)
+            else:
+                filepath = Path(f"./data/bronze/svineflytning/{filename}")
+                logger.info(f"Writing {record_count} records locally to {filepath}")
+                destination = _save_locally(filepath, json_content)
+
+            result["files_written"] += 1
+            result["destination"] = destination
+
+        except Exception as e:
+            logger.error(f"Error writing file {filename}: {e}")
+            raise
+
+    # Clear the buffer after successful export
+    _data_buffer.clear()
+    
+    logger.info(f"Export complete: {result['files_written']} files written to {storage_mode}")
+    return result
+
+def clear_buffer():
+    """Explicitly clear the data buffer."""
+    _data_buffer.clear()
+    logger.info("Data buffer cleared")
