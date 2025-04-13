@@ -136,7 +136,10 @@ def main():
             tasks.append((client, current_date, chunk_end))
             current_date = chunk_end + timedelta(days=1)
         
-        # Fetch all movements in parallel
+        # Track total movements for progress reporting
+        total_movements = 0
+        
+        # Fetch movements in parallel and save them to buffer as they come in
         with logging_redirect_tqdm():
             results = process_parallel(
                 fetch_movements,
@@ -145,17 +148,16 @@ def main():
                 "Fetching movements"
             )
             
-            # Combine all movements
-            all_movements = []
+            # Save movements to buffer as they come in
             for result in results:
                 if result:
-                    all_movements.extend(result)
+                    save_movements(result)
+                    total_movements += len(result)
+                    # Clean up memory
+                    del result
             
             if args['progress']:
-                logger.warning(f"Total movements fetched: {len(all_movements)}")
-        
-        # Save movements to buffer
-        save_movements(all_movements)
+                logger.warning(f"Total movements fetched: {total_movements}")
         
         # Finalize the export
         export_result = finalize_export()
