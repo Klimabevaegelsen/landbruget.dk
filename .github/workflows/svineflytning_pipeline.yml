@@ -32,11 +32,25 @@ on:
         description: 'Show progress information'
         type: boolean
         default: true
+      max_concurrent_fetches:
+        description: 'Maximum number of concurrent API calls (5-10 recommended)'
+        type: number
+        required: false
+        default: 5
+      buffer_size:
+        description: 'Number of responses to buffer before writing (50-100 recommended)'
+        type: number
+        required: false
+        default: 50
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-
+    
+    # Add resource limits to ensure we stay well within GitHub runner capacity
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"  # Limit Node.js memory to 4GB
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -102,6 +116,15 @@ jobs:
         # Add test mode flag if enabled
         if [ "${{ inputs.test_mode }}" = "true" ]; then
           CMD="$CMD --test"
+        fi
+        
+        # Add resource control parameters
+        if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
+          CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
+        fi
+        
+        if [ -n "${{ inputs.buffer_size }}" ]; then
+          CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
         fi
         
         echo "Running command: $CMD"

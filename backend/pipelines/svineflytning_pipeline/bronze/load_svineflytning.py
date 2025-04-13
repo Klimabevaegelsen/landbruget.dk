@@ -3,7 +3,7 @@
 import logging
 import certifi
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Any, Iterator
+from typing import Dict, List, Any, Iterator, Tuple
 from zeep import Client, exceptions as zeep_exceptions, Settings
 from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
@@ -16,7 +16,10 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
-from .export import export_movements
+from concurrent.futures import ThreadPoolExecutor
+import tempfile
+import shutil
+from .export import export_movements_optimized
 
 logger = logging.getLogger(__name__)
 
@@ -161,17 +164,21 @@ def fetch_all_movements(
     start_date: date,
     end_date: date,
     output_dir: str,
+    max_concurrent_fetches: int = 5,  # Adjust based on API limits
+    buffer_size: int = 50,  # Number of responses to accumulate before writing to disk
     show_progress: bool = False,
     test_mode: bool = False
 ) -> Dict[str, Any]:
     """
-    Fetch all movements for the given date range and stream responses to storage.
+    Fetch all movements for the given date range with parallel processing.
     
     Args:
         client: The SOAP client to use.
         start_date: The start date of the range.
         end_date: The end date of the range.
-        output_dir: The directory to save the responses to (used only for local storage).
+        output_dir: The directory to save the responses to.
+        max_concurrent_fetches: Maximum number of concurrent API calls.
+        buffer_size: Number of responses to accumulate before writing to disk.
         show_progress: Whether to show progress bars.
         test_mode: Whether to run in test mode (limited data).
         
@@ -180,62 +187,97 @@ def fetch_all_movements(
     """
     logger.debug(f"Starting to fetch all movements from {start_date} to {end_date}")
     
-    # In test mode, limit to one day
     if test_mode:
         end_date = start_date
         logger.warning("Running in test mode - limiting to single day")
     
-    # Calculate total number of chunks for progress bar
-    total_days = (end_date - start_date).days + 1
-    total_chunks = (total_days + MAX_DATE_RANGE_DAYS - 1) // MAX_DATE_RANGE_DAYS
-    
-    # Get timestamp for this export run
-    export_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    
-    def response_generator() -> Iterator[Dict[str, Any]]:
-        """Generate responses one at a time."""
-        current_date = start_date
-        chunks_processed = 0
+    # Generate all date chunks
+    date_chunks = []
+    current_date = start_date
+    while current_date <= end_date:
+        chunk_end = min(current_date + timedelta(days=MAX_DATE_RANGE_DAYS - 1), end_date)
+        date_chunks.append((current_date, chunk_end))
+        current_date = chunk_end + timedelta(days=1)
+
+    # Create temporary directory for buffers
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_files = []
+        current_buffer = []
+        buffer_count = 0
         
-        # Create progress bar if requested
+        def flush_buffer() -> str:
+            nonlocal current_buffer, buffer_count
+            if not current_buffer:
+                return None
+                
+            # Write buffer to temporary file
+            temp_path = Path(temp_dir) / f"buffer_{buffer_count}.json"
+            with open(temp_path, 'w') as f:
+                json.dump(current_buffer, f)
+            temp_files.append(temp_path)
+            buffer_count += 1
+            current_buffer = []
+            return str(temp_path)
+
+        def fetch_chunk(dates: Tuple[date, date]) -> Dict:
+            chunk_start, chunk_end = dates
+            try:
+                response = fetch_movements(client, chunk_start, chunk_end)
+                time.sleep(0.1)  # Small delay to avoid overwhelming the server
+                return response
+            except Exception as e:
+                logger.error(f"Error fetching chunk {dates}: {e}")
+                raise
+
+        # Progress bar setup
         pbar = tqdm(
-            total=total_chunks,
+            total=len(date_chunks),
             desc="Fetching movements",
             unit="chunks",
             disable=not show_progress
         )
         
-        while current_date <= end_date:
-            # Calculate end date for this chunk (maximum 3 days)
-            chunk_end = min(current_date + timedelta(days=MAX_DATE_RANGE_DAYS - 1), end_date)
+        # Fetch data in parallel
+        with ThreadPoolExecutor(max_workers=max_concurrent_fetches) as executor:
+            futures = [executor.submit(fetch_chunk, chunk) for chunk in date_chunks]
             
-            try:
-                response = fetch_movements(client, current_date, chunk_end)
-                yield response
-                chunks_processed += 1
-                pbar.update(1)
-                
-                logger.debug(f"Sleeping for 0.1s before next chunk")
-                time.sleep(0.1)  # Small delay to avoid overwhelming the server
-                
-            except Exception as e:
-                logger.error(f"Error fetching movements for period {current_date} to {chunk_end}: {str(e)}")
-                pbar.close()
-                raise
-            
-            current_date = chunk_end + timedelta(days=1)
-        
+            for future in futures:
+                try:
+                    response = future.result()
+                    current_buffer.append(response)
+                    
+                    # If buffer reaches size limit, flush to temp file
+                    if len(current_buffer) >= buffer_size:
+                        flush_buffer()
+                    
+                    pbar.update(1)
+                except Exception as e:
+                    logger.error(f"Error in parallel fetch: {e}")
+                    pbar.close()
+                    raise
+
+        # Flush any remaining data
+        if current_buffer:
+            flush_buffer()
+
         pbar.close()
-    
-    # Stream responses directly to storage
-    filename = "svineflytning.json"
-    export_result = export_movements(response_generator(), export_timestamp, filename)
-    
-    result = {
-        "export_timestamp": export_timestamp,
-        "start_date": start_date,
-        "end_date": end_date,
-        "storage_path": export_result["destination"]
-    }
-    logger.debug(f"Pipeline execution completed: {result}")
-    return result
+
+        # Get timestamp for this export run
+        export_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        
+        # Export the data using the optimized export function
+        export_result = export_movements_optimized(
+            temp_files,
+            export_timestamp,
+            len(date_chunks)
+        )
+        
+        result = {
+            "export_timestamp": export_timestamp,
+            "start_date": start_date,
+            "end_date": end_date,
+            "storage_path": export_result["destination"],
+            "total_chunks": len(date_chunks)
+        }
+        logger.debug(f"Pipeline execution completed: {result}")
+        return result
