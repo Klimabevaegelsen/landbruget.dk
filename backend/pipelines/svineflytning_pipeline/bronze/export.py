@@ -5,14 +5,20 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Iterator
-from datetime import datetime
+from datetime import datetime, date
 from io import BytesIO
 
 from dotenv import load_dotenv
 from google.cloud import storage
 from google.api_core.exceptions import GoogleAPICallError
 from tqdm.auto import tqdm
-from .load_svineflytning import DateTimeEncoder
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder for handling datetime and date objects."""
+    def default(self, obj: Any) -> str:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 # Load environment variables
 load_dotenv()
