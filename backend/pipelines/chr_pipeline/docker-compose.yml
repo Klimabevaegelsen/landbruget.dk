@@ -1,0 +1,33 @@
+version: '3.11'
+
+services:
+  chr_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../../data:/data
+      - ./vetstat.p12:/app/vetstat.p12
+      - ./.env:/app/.env
+    environment:
+      - FVM_USERNAME=${FVM_USERNAME}
+      - FVM_PASSWORD=${FVM_PASSWORD}
+      - VETSTAT_CERTIFICATE_PASSWORD=${VETSTAT_CERTIFICATE_PASSWORD}
+      - DATAFORDELER_SFTP_HOST=${DATAFORDELER_SFTP_HOST}
+      - DATAFORDELER_SFTP_USERNAME=${DATAFORDELER_SFTP_USERNAME}
+      - VETSTAT_CERTIFICATE_PATH=/app/vetstat.p12
+      - VETSTAT_CERTIFICATE=$$(base64 -i ./vetstat.p12)
+    command: >
+      sh -c "
+      VETSTAT_CERTIFICATE=$$(base64 -i /app/vetstat.p12) &&
+      python main.py
+      --test-species-codes '12'
+      --limit-total-herds 5
+      --progress
+      --log-level INFO"
+    networks:
+      - chr_network
+
+networks:
+  chr_network:
+    driver: bridge 
