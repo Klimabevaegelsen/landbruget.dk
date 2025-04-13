@@ -83,13 +83,15 @@ jobs:
         # Build base command with common arguments
         CMD="python main.py --log-level ${{ inputs.log_level }}"
         
-        # Add date range arguments if provided via manual trigger
+        # Add date range arguments based on event type
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # For manual triggers, use provided dates
           CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
         else
-          # For scheduled runs, use yesterday's date
-          YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
-          CMD="$CMD --start-date $YESTERDAY --end-date $YESTERDAY"
+          # For scheduled runs, use 5-year range
+          END_DATE=$(date +%Y-%m-%d)
+          START_DATE=$(date -d "$END_DATE -5 years" +%Y-%m-%d)
+          CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
         fi
         
         # Add progress flag if enabled
