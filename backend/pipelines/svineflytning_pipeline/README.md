@@ -13,7 +13,7 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 ## Prerequisites
 
 - Docker and Docker Compose
-- Access credentials for either Datafordeler or FVM services
+- FVM service credentials
 
 ## Setup
 
@@ -22,9 +22,11 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
    cp .env.example .env
    ```
 
-2. Edit `.env` with your actual credentials:
-   - Either DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD
-   - Or FVM_USERNAME and FVM_PASSWORD
+2. Edit `.env` with your credentials:
+   ```env
+   FVM_USERNAME=your_username
+   FVM_PASSWORD=your_password
+   ```
 
 3. Create a data directory for the raw files:
    ```bash
@@ -82,7 +84,7 @@ The pipeline outputs data to the following locations:
 
 1. If you see credential errors:
    - Check that your .env file exists and contains the correct credentials
-   - Verify that either DATAFORDELER or FVM credentials are properly set
+   - Verify that your FVM credentials are valid
 
 2. If you see XML processing errors:
    - Ensure the container has enough memory
