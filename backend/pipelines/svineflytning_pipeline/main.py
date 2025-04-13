@@ -17,7 +17,7 @@ from bronze.load_svineflytning import (
     fetch_movements,
     ENDPOINTS
 )
-from bronze.export import export_movements
+from bronze.export import save_movements, finalize_export
 
 logger = logging.getLogger(__name__)
 
@@ -154,18 +154,20 @@ def main():
             if args['progress']:
                 logger.warning(f"Total movements fetched: {len(all_movements)}")
         
-        # Export the data
-        export_result = export_movements(
-            '/data/raw/svineflytning',  # Local directory for raw data
-            datetime.now().isoformat(),
-            'svineflytning_data.json'
-        )
+        # Save movements to buffer
+        save_movements(all_movements)
+        
+        # Finalize the export
+        export_result = finalize_export()
         
         # Print information about the fetch and export
         logger.warning(f"Pipeline completed successfully")
         if args['progress']:
             logger.warning(f"Total chunks processed: {len(tasks)}")
-            logger.warning(f"Data exported to: {export_result['destination']}")
+            if "record_counts" in export_result:
+                logger.warning(f"Total movements exported: {export_result['record_counts'].get('movements', 0)}")
+            if "destination" in export_result:
+                logger.warning(f"Data exported to: {export_result['destination']}")
         
     except Exception as e:
         logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
