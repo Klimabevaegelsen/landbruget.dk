@@ -20,7 +20,11 @@ class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj: Any) -> str:
         if isinstance(obj, (datetime, date)):
             return obj.isoformat()
-        return super().default(obj)
+        # Handle any other custom types that might come from the SOAP response
+        try:
+            return str(obj)
+        except Exception:
+            return super().default(obj)
 
 # Load environment variables
 load_dotenv()

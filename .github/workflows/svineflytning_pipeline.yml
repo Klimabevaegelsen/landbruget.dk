@@ -36,7 +36,7 @@ on:
         description: 'Maximum number of concurrent API calls (5-10 recommended)'
         type: number
         required: false
-        default: 5
+        default: 10
       buffer_size:
         description: 'Number of responses to buffer before writing (50-100 recommended)'
         type: number
