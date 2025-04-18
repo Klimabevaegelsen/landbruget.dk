@@ -64,64 +64,81 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
     # Load environment variables from .env file if it exists
     load_dotenv()
-    
+
     # Get required environment variables
     username = os.getenv('FVM_USERNAME')
     password = os.getenv('FVM_PASSWORD')
     cert_base64 = os.getenv('VETSTAT_CERTIFICATE')
+    cert_path = os.getenv('VETSTAT_CERTIFICATE_PATH')
     cert_password = os.getenv('VETSTAT_CERTIFICATE_PASSWORD')
-    
+
     # Debug log the state of environment variables (masking sensitive data)
     logger.debug("Environment variable status:")
     logger.debug(f"FVM_USERNAME: {'[SET]' if username else '[MISSING]'}")
     logger.debug(f"FVM_PASSWORD: {'[SET]' if password else '[MISSING]'}")
     logger.debug(f"VETSTAT_CERTIFICATE: {'[SET]' if cert_base64 else '[MISSING]'}")
+    logger.debug(f"VETSTAT_CERTIFICATE_PATH: {'[SET]' if cert_path else '[MISSING]'}")
     logger.debug(f"VETSTAT_CERTIFICATE_PASSWORD: {'[SET]' if cert_password else '[MISSING]'}")
-    
+
     # Check for missing variables
     missing_vars = []
     if not username:
         missing_vars.append('FVM_USERNAME')
     if not password:
         missing_vars.append('FVM_PASSWORD')
-    if not cert_base64:
-        missing_vars.append('VETSTAT_CERTIFICATE')
+    if not cert_base64 and not cert_path:
+        missing_vars.append('VETSTAT_CERTIFICATE or VETSTAT_CERTIFICATE_PATH')
     if not cert_password:
         missing_vars.append('VETSTAT_CERTIFICATE_PASSWORD')
-    
+
     if missing_vars:
         error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
         logger.error(error_msg)
         raise ValueError(error_msg)
-    
+
     try:
-        # Log the length of the base64 certificate to help with debugging
-        logger.debug(f"Base64 certificate length: {len(cert_base64)}")
-        
-        # Decode base64 certificate
-        try:
-            p12_data = base64.b64decode(cert_base64)
-            logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
-        except Exception as decode_error:
-            logger.error(f"Failed to decode base64 certificate: {str(decode_error)}")
-            raise ValueError("Invalid base64 encoding in VETSTAT_CERTIFICATE") from decode_error
-        
-        # Load the certificate and private key from the decoded data
+        p12_data = None
+
+        # Try to get certificate data from base64 string first
+        if cert_base64:
+            try:
+                logger.debug(f"Using base64 certificate from VETSTAT_CERTIFICATE environment variable")
+                p12_data = base64.b64decode(cert_base64)
+                logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
+            except Exception as decode_error:
+                logger.error(f"Failed to decode base64 certificate: {str(decode_error)}")
+                p12_data = None
+
+        # If base64 decoding failed or wasn't provided, try reading from file
+        if not p12_data and cert_path:
+            try:
+                logger.debug(f"Reading certificate from file: {cert_path}")
+                with open(cert_path, 'rb') as f:
+                    p12_data = f.read()
+                logger.debug(f"Successfully read certificate file. Length: {len(p12_data)} bytes")
+            except Exception as file_error:
+                logger.error(f"Failed to read certificate file {cert_path}: {str(file_error)}")
+                raise ValueError(f"Failed to read certificate file: {str(file_error)}") from file_error
+
+        if not p12_data:
+            raise ValueError("No valid certificate data found from either environment variable or file")
+
+        # Load the certificate and private key from the data
         try:
             private_key, certificate, _ = load_key_and_certificates(
-                p12_data, 
+                p12_data,
                 cert_password.encode('utf-8')
             )
             logger.debug("Successfully loaded private key and certificate from PKCS12 data")
         except Exception as cert_error:
             logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
             raise ValueError("Failed to load certificate with provided password") from cert_error
-        
+
         if not private_key or not certificate:
             raise ValueError("Failed to load private key or certificate from decoded data")
-            
+
         return username, password, certificate, private_key
-        
+
     except Exception as e:
         logger.error(f"Failed to load VetStat certificate/key: {str(e)}")
         raise
@@ -445,12 +462,80 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
             logger.info(f"Successfully fetched VetStat data for CHR: {chr_number}")
             raw_xml_response = response.text
 
-            # Save the raw XML response using the exporter
-            save_raw_data(
-                raw_response=raw_xml_response,
-                data_type='vetstat_antibiotics',
-                identifier=f"{chr_number}_{species_code}"
-            )
+            # Parse the XML response to extract the data
+            try:
+                # Parse the XML response
+                root = etree.fromstring(raw_xml_response.encode('utf-8'))
+
+                # Define the namespaces used in the XML
+                ns = {
+                    'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
+                    'ns2': 'http://vetstat.fvst.dk/ekstern'
+                }
+
+                # Extract the data from the XML
+                data_elements = root.xpath('//ns2:Data', namespaces=ns)
+                logger.info(f"Found {len(data_elements)} data elements in XML response for CHR {chr_number}")
+
+                if data_elements:
+                    # Convert the XML elements to JSON objects
+                    json_data = []
+                    for element in data_elements:
+                        # Extract all child elements directly
+                        item = {}
+
+                        # Process all direct child elements
+                        for child in element:
+                            tag = etree.QName(child.tag).localname
+                            if child.text and child.text.strip():
+                                item[tag] = child.text.strip()
+
+                        # Make sure CHR number is included
+                        if 'CHRNummer' not in item and str(chr_number):
+                            item['CHRNummer'] = str(chr_number)
+
+                        # Make sure species code is included
+                        if 'DyreArtKode' not in item and str(species_code):
+                            item['DyreArtKode'] = str(species_code)
+
+                        # Only add items that have data
+                        if item:
+                            json_data.append(item)
+                            logger.info(f"Extracted data item with keys: {list(item.keys())}")
+
+                    # Save both the raw XML and the parsed JSON
+                    save_raw_data(
+                        raw_response=raw_xml_response,
+                        data_type='vetstat_antibiotics',
+                        identifier=f"{chr_number}_{species_code}"
+                    )
+
+                    # Also save the parsed JSON data
+                    for item in json_data:
+                        save_raw_data(
+                            raw_response=item,
+                            data_type='vetstat_antibiotics',
+                            identifier=f"{chr_number}_{species_code}"
+                        )
+
+                    logger.info(f"Parsed {len(json_data)} antibiotic usage records from XML response")
+                else:
+                    logger.warning(f"No antibiotic usage data found in XML response for CHR {chr_number}")
+                    # Save just the raw XML
+                    save_raw_data(
+                        raw_response=raw_xml_response,
+                        data_type='vetstat_antibiotics',
+                        identifier=f"{chr_number}_{species_code}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to parse XML response for CHR {chr_number}: {e}")
+                # Save the raw XML response even if parsing fails
+                save_raw_data(
+                    raw_response=raw_xml_response,
+                    data_type='vetstat_antibiotics',
+                    identifier=f"{chr_number}_{species_code}"
+                )
+
             return raw_xml_response
         elif response.status_code == 500:
             # This is a normal response when there's no data

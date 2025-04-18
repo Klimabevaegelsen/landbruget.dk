@@ -46,6 +46,11 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
 
     steps:
     - uses: actions/checkout@v4
@@ -90,60 +95,18 @@ jobs:
         echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
         echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        
+        # Create data directories
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
 
     - name: Run Pipeline Step
       working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: landbrugsdata-raw-data
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        # Build base command with common arguments
-        CMD="python main.py --log-level ${{ inputs.log_level }}"
-        
-        # Add progress flag if enabled
-        if [ "${{ inputs.show_progress }}" = "true" ]; then
-          CMD="$CMD --progress"
-        fi
-        
-        # Add test mode arguments if enabled
-        if [ "${{ inputs.test_mode }}" = "true" ]; then
-          if [ -n "${{ inputs.species_codes }}" ]; then
-            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-          else
-            CMD="$CMD --test-species-codes 15"
-          fi
-          
-          if [ -n "${{ inputs.max_herds }}" ]; then
-            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-          else
-            CMD="$CMD --limit-total-herds 100"
-          fi
-        fi
-        
-        # Add step-specific argument
-        case "${{ inputs.step }}" in
-          "all")
-            CMD="$CMD --steps all"
-            ;;
-          "stamdata")
-            CMD="$CMD --steps stamdata"
-            ;;
-          "herds")
-            CMD="$CMD --steps herds"
-            ;;
-          "herd_details")
-            CMD="$CMD --steps herd_details"
-            ;;
-          "diko")
-            CMD="$CMD --steps diko"
-            ;;
-          "ejendom")
-            CMD="$CMD --steps ejendom"
-            ;;
-          "vetstat")
-            CMD="$CMD --steps vetstat"
-            ;;
-        esac
-        
-        echo "Running command: $CMD"
-        $CMD
+        python -m main
 
     - name: Handle pipeline failure
       if: failure()

@@ -6,7 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ../../data/bronze/chr:/data/bronze/chr
+      - ../../data/bronze/chr:/usr/data/bronze/chr
+      - ../../data/silver/chr:/usr/data/silver/chr
       - ./vetstat.p12:/app/vetstat.p12
       - ./.env:/app/.env
     environment:
@@ -14,18 +15,11 @@ services:
       - FVM_PASSWORD=${FVM_PASSWORD}
       - VETSTAT_CERTIFICATE_PASSWORD=${VETSTAT_CERTIFICATE_PASSWORD}
       - VETSTAT_CERTIFICATE_PATH=/app/vetstat.p12
-      - VETSTAT_CERTIFICATE=$$(base64 -i ./vetstat.p12)
     command: >
-      sh -c "
-      VETSTAT_CERTIFICATE=$$(base64 -i /app/vetstat.p12) &&
-      python main.py
-      --test-species-codes '12'
-      --limit-total-herds 5
-      --progress
-      --log-level INFO"
+      sh -c "/opt/venv/bin/python debug_paths.py && /opt/venv/bin/python main.py --steps all --log-level INFO --progress --limit-herds-per-species 10"
     networks:
       - chr_network
 
 networks:
   chr_network:
-    driver: bridge 
+    driver: bridge
