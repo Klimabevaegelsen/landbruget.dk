@@ -18,6 +18,10 @@ dependencies = [
     "python-dotenv~=1.0.1",
     "cryptography", # Added cryptography package
     "tqdm~=4.66.2", # Progress bar that works in both CI and interactive environments
+    "pandas>=2.2.0",    # Allow any version >= 2.2.0
+    "geopandas>=0.14.0", # Allow any version >= 0.14.0
+    "pyarrow>=16.1.0",   # Allow any version >= 16.1.0
+    'ibis-framework[duckdb]>=9.2.0', # Allow any version >= 9.2.0
 ]
 
 [build-system]
@@ -26,12 +30,12 @@ build-backend = "hatchling.build"
 
 # --- Added Hatch build configuration ---
 [tool.hatch.build.targets.wheel]
-packages = ["bronze", "silver"]
-# --- End Added Hatch build configuration ---
+packages = [".", "bronze", "silver"]  # Include the root package
+include = ["README.md", "*.py"] # Include Python files and README.md
+
+[tool.hatch.build]
+only-packages = true
+artifacts = ["*.py"]
 
 [tool.uv]
 # Optional: You can configure uv settings here if needed later
-
-[tool.poetry.dependencies]
-python = "^3.9"
-python-dotenv = "^1.0.0"

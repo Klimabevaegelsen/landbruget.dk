@@ -1,25 +1,45 @@
-# Use the common pipeline base image built locally or from a registry
-# Make sure to build and tag the base image first, e.g., as landbruget-pipeline-base:latest
-FROM landbruget-pipeline-base:latest
+# Use an official OSGeo GDAL base image which includes necessary libraries
+FROM ghcr.io/osgeo/gdal:ubuntu-small-latest
 
-# The WORKDIR /app is inherited from the base image, but setting it explicitly is fine too
-WORKDIR /app
+# Explicitly set WORKDIR
+WORKDIR /usr/src/app
 
-# Copy the pyproject.toml file specific to this pipeline
-# Copy uv.lock as well if you use it for locked dependencies
-COPY ./pyproject.toml /app/pyproject.toml
-# COPY ./uv.lock /app/uv.lock # Uncomment if using uv.lock
+# Install build prerequisites and uv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    curl \
+    gcc \
+    python3-pip \
+    libxml2-dev \
+    libxmlsec1-dev \
+    pkg-config \
+    && \
+    # Install uv using the standalone installer
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    # Move uv to /usr/local/bin
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    # Clean up
+    rm -rf /root/.local && \
+    apt-get remove -y curl --autoremove && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages for this pipeline using uv (installed in base image)
-# Installing into the system Python environment provided by the base image
-RUN uv pip install --system --no-cache -p /usr/local/bin/python -r /app/pyproject.toml
-# RUN uv pip install --system --no-cache --locked -p /usr/local/bin/python -r /app/pyproject.toml # Uncomment if using uv.lock
+# Copy the entire project context first
+# This includes pyproject.toml, README.md, bronze/, silver/, etc.
+COPY . /usr/src/app
 
-# Copy the rest of the pipeline's application code
-COPY . /app
+# Create a virtual environment and install dependencies into it
+ENV VENV_PATH=/opt/venv
+RUN uv venv ${VENV_PATH} && \
+    . ${VENV_PATH}/bin/activate && \
+    uv pip install -e . && \
+    uv pip install 'ibis-framework[duckdb]>=9.2.0' pandas>=2.2.0 geopandas>=0.14.0 pyarrow>=16.1.0
 
-# Define the command to run this pipeline's main script
-CMD ["python", "main.py"]
+# Make test_paths.py executable
+RUN chmod +x test_paths.py
+
+# Define the command to run this pipeline's main script (can be overridden in compose)
+# Ensure the command uses the venv python
+CMD ["/opt/venv/bin/python", "main.py"]
 
 # Optional: Add EXPOSE or ENV specific to this pipeline if needed
 # EXPOSE 80

@@ -1,6 +1,6 @@
 # CHR Pipeline
 
-This pipeline fetches data from the Danish Central Husbandry Register (CHR) system and processes it into a standardized format.
+This directory contains the bronze and silver layer processing scripts for the CHR data pipeline.
 
 ## Features
 

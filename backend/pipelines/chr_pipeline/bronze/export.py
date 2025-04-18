@@ -58,7 +58,7 @@ def _ensure_dir(filepath: Path):
 
 def _get_final_filename(data_source: str, operation: str, format: str) -> Path:
     """Generate the filename for the final consolidated file."""
-    base_path = Path(f"/data/bronze/{data_source}")
+    base_path = Path(f"/usr/data/bronze/{data_source}")
     # Sanitize operation name for filename
     safe_operation = operation.replace(" ", "_").replace("/", "_")
     filename = f"{safe_operation}.{format}"
@@ -79,28 +79,42 @@ def _serialize_data(data: Any) -> Optional[str]:
              # If not JSON, assume it's XML or other raw string, wrap in a simple JSON structure
              return json.dumps({"raw_xml_string": data})
 
+    def json_serializer(obj):
+        """Custom JSON serializer for objects not serializable by default json code"""
+        from decimal import Decimal
+        from datetime import datetime, date
+
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return str(obj)
+        if hasattr(obj, '__dict__'):
+            return obj.__dict__
+        return str(obj)
+
     # Handle Zeep objects or other serializable Python objects
     try:
         serialized_obj = serialize_object(data, target_cls=dict)
-        # Ensure datetime objects are handled correctly
-        return json.dumps(serialized_obj, default=str)
-    except (TypeError, Exception) as e: # Use generic Exception
-        # Fallback for complex types or potential Zeep errors during serialization
-        logger.warning(f"Could not serialize object of type {type(data)} directly: {e}. Falling back to repr().")
+        return json.dumps(serialized_obj, default=json_serializer)
+    except TypeError as type_error:
+        logger.warning(f"TypeError during serialization: {type_error}. Attempting fallback serialization.")
         try:
+            # Try direct JSON serialization with our custom serializer
+            return json.dumps(data, default=json_serializer)
+        except TypeError as direct_error:
+            logger.error(f"Direct serialization failed: {direct_error}")
             # As a last resort, try to get a string representation
-             # Wrap the repr in a JSON structure for consistency
-             return json.dumps({"fallback_repr": repr(data)})
-        except Exception as repr_e:
-            logger.error(f"Failed even during fallback repr serialization: {repr_e}")
-            return None
+            return json.dumps({"fallback_repr": repr(data)})
+    except Exception as e:
+        logger.error(f"Unexpected error during serialization: {e}")
+        return None
 
 def _save_to_gcs(blob_path: str, content: str, format_type: str):
     """Helper function to save content to GCS."""
     bucket = gcs_client.bucket(GCS_BUCKET)
     # Add bronze/chr/{timestamp} prefix to all files
     blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{blob_path}")
-    
+
     # Set content type based on format
     content_type = 'application/json' if format_type == 'json' else 'application/xml'
     blob.upload_from_string(content, content_type=content_type)
@@ -140,9 +154,11 @@ def save_raw_data(
         except Exception as e:
              logger.error(f"Failed to serialize object for {buffer_key}: {e}")
 
-# --- Final Export Function ---
+def get_data_buffer() -> Dict[str, Dict[str, List[Any]]]:
+    """Get a reference to the current data buffer."""
+    return _data_buffer
 
-def finalize_export():
+def finalize_export(clear_buffer: bool = True):
     """Write buffered data to consolidated files."""
     if not _data_buffer:
         logger.warning("No data buffered for export.")
@@ -150,7 +166,7 @@ def finalize_export():
 
     storage_mode = "GCS (GitHub Actions)" if USE_GCS else "local filesystem"
     logger.info(f"Starting export using {storage_mode}")
-    
+
     total_files = 0
     for buffer_key, format_data in _data_buffer.items():
         data_type = buffer_key
@@ -168,7 +184,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing JSON to GCS {filename}: {e}")
             else:
-                filepath = Path(f"/data/bronze/chr/{filename}")
+                filepath = Path(f"/usr/data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
                     _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), 'json')
@@ -181,7 +197,7 @@ def finalize_export():
         if xml_data_list:
             filename = f"{data_type}.xml"
             full_xml_content = "\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(xml_data_list)
-            
+
             if USE_GCS:
                 try:
                     logger.info(f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}")
@@ -190,7 +206,7 @@ def finalize_export():
                 except Exception as e:
                     logger.error(f"Error writing XML to GCS {filename}: {e}")
             else:
-                filepath = Path(f"/data/bronze/chr/{filename}")
+                filepath = Path(f"/usr/data/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(xml_data_list)} records locally to {filepath}")
                     _save_locally(filepath, full_xml_content, 'xml')
@@ -199,7 +215,8 @@ def finalize_export():
                     logger.error(f"Error writing XML file {filepath}: {e}")
 
     logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{EXPORT_TIMESTAMP}/")
-    _data_buffer.clear()
+    if clear_buffer:
+        _data_buffer.clear()
 
 # --- Cleanup Function (Optional) ---
 def clear_buffer():
