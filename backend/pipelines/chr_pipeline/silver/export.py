@@ -32,9 +32,20 @@ gcs_client = None
 gcs_fs = None
 if USE_GCS:
     try:
+        logging.info("Attempting to initialize GCS client and filesystem...")
         gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
         gcs_fs = gcsfs.GCSFileSystem(project=GOOGLE_CLOUD_PROJECT)
-        logging.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
+        # Test GCS connection
+        try:
+            bucket = gcs_client.bucket(GCS_BUCKET)
+            if bucket.exists():
+                logging.info(f"Successfully connected to GCS bucket: {GCS_BUCKET}")
+            else:
+                logging.error(f"GCS bucket {GCS_BUCKET} does not exist")
+                USE_GCS = False
+        except Exception as bucket_err:
+            logging.error(f"Failed to verify GCS bucket: {bucket_err}")
+            USE_GCS = False
     except Exception as e:
         logging.error(f"Failed to initialize GCS client/filesystem: {e}")
         logging.info("Falling back to local storage")
@@ -57,11 +68,15 @@ def _convert_uuid_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save DataFrame to GCS."""
+    if not USE_GCS or not GCS_BUCKET:
+        logging.warning("GCS not configured, cannot save to GCS")
+        return None
+        
     try:
         # Convert UUIDs to strings
         df = _convert_uuid_columns(df)
         
-        # Create a temporary directory
+        # Create a temporary directory for local staging
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / filepath.name
             
@@ -71,13 +86,22 @@ def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Opti
             else:
                 df.to_parquet(temp_path, index=False, engine='pyarrow')
             
-            # Copy to final location
-            os.makedirs(filepath.parent, exist_ok=True)
-            shutil.copy2(temp_path, filepath)
+            # Define GCS path
+            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{filepath.name}"
             
-            return filepath
+            try:
+                # Upload to GCS using gcsfs
+                with open(temp_path, 'rb') as local_file:
+                    with gcs_fs.open(gcs_path, 'wb') as gcs_file:
+                        gcs_file.write(local_file.read())
+                logging.info(f"Successfully uploaded {filepath.name} to GCS at {gcs_path}")
+                return filepath
+            except Exception as gcs_err:
+                logging.error(f"Failed to upload to GCS: {gcs_err}")
+                return None
+            
     except Exception as e:
-        logging.error(f"Error saving to GCS: {e}")
+        logging.error(f"Error in GCS save process: {e}")
         return None
 
 def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
