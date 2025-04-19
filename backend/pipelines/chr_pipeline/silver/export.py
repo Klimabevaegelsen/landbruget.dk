@@ -1,10 +1,12 @@
 import logging
 from pathlib import Path
 import pandas as pd
+import geopandas as gpd
 import tempfile
 from google.cloud import storage
 import os
 from dotenv import load_dotenv
+import gcsfs
 
 # Load environment variables
 load_dotenv()
@@ -14,23 +16,25 @@ GCS_BUCKET = os.getenv('GCS_BUCKET')
 GOOGLE_CLOUD_PROJECT = os.getenv('GOOGLE_CLOUD_PROJECT')
 
 # DEBUG: Log retrieved environment variables
-logging.debug(f"Retrieved GCS_BUCKET: '{GCS_BUCKET}'")
-logging.debug(f"Retrieved GOOGLE_CLOUD_PROJECT: '{GOOGLE_CLOUD_PROJECT}'")
+logging.info(f"Retrieved GCS_BUCKET: '{GCS_BUCKET}'")
+logging.info(f"Retrieved GOOGLE_CLOUD_PROJECT: '{GOOGLE_CLOUD_PROJECT}'")
 
 # Use GCS if we have the required configuration
 USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
 
 # DEBUG: Log USE_GCS decision
-logging.debug(f"USE_GCS determined as: {USE_GCS}")
+logging.info(f"USE_GCS determined as: {USE_GCS}")
 
-# Initialize GCS client if bucket is configured
+# Initialize GCS client and filesystem if bucket is configured
 gcs_client = None
+gcs_fs = None
 if USE_GCS:
     try:
         gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
+        gcs_fs = gcsfs.GCSFileSystem(project=GOOGLE_CLOUD_PROJECT)
         logging.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
     except Exception as e:
-        logging.error(f"Failed to initialize GCS client: {e}")
+        logging.error(f"Failed to initialize GCS client/filesystem: {e}")
         logging.info("Falling back to local storage")
         USE_GCS = False
 
@@ -38,7 +42,7 @@ if not USE_GCS:
     logging.info("Using local storage in /data/silver/")
 
 def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
-    """Save DataFrame to GCS.
+    """Save DataFrame to GCS using gcsfs.
     
     Args:
         filepath: Path object representing the file path
@@ -48,19 +52,27 @@ def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
     Returns:
         str: The GCS path where the file was saved
     """
-    bucket = gcs_client.bucket(GCS_BUCKET)
     # Add silver/chr/{timestamp} prefix
-    blob_path = f"silver/chr/{filepath.parent.name}/{filepath.name}"
-    blob = bucket.blob(blob_path)
+    blob_path = f"gs://{GCS_BUCKET}/silver/chr/{filepath.parent.name}/{filepath.name}"
+    logging.info(f"Attempting to save to GCS path: {blob_path}")
     
-    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=True) as tmp:
+    try:
         if is_geo:
-            df.to_parquet(tmp.name)
+            if not isinstance(df, gpd.GeoDataFrame):
+                raise ValueError("DataFrame must be a GeoDataFrame when is_geo=True")
+            # Use gcsfs directly with to_parquet
+            df.to_parquet(blob_path, filesystem=gcs_fs)
         else:
-            df.to_parquet(tmp.name)
-        blob.upload_from_filename(tmp.name)
-    
-    return f"gs://{GCS_BUCKET}/{blob_path}"
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError("DataFrame must be a pandas DataFrame when is_geo=False")
+            # Use gcsfs directly with to_parquet
+            df.to_parquet(blob_path, filesystem=gcs_fs)
+        
+        logging.info(f"Successfully saved to GCS: {blob_path}")
+        return blob_path
+    except Exception as e:
+        logging.error(f"Error saving to GCS using gcsfs: {e}")
+        raise
 
 def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
     """Save DataFrame locally.
@@ -74,11 +86,23 @@ def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
         str: The local path where the file was saved
     """
     filepath.parent.mkdir(parents=True, exist_ok=True)
-    if is_geo:
-        df.to_parquet(filepath)
-    else:
-        df.to_parquet(filepath)
-    return str(filepath)
+    logging.info(f"Saving locally to: {filepath}")
+    
+    try:
+        if is_geo:
+            if not isinstance(df, gpd.GeoDataFrame):
+                raise ValueError("DataFrame must be a GeoDataFrame when is_geo=True")
+            df.to_parquet(filepath)
+        else:
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError("DataFrame must be a pandas DataFrame when is_geo=False")
+            df.to_parquet(filepath)
+        
+        logging.info(f"Successfully saved locally: {filepath}")
+        return str(filepath)
+    except Exception as e:
+        logging.error(f"Error saving locally: {e}")
+        raise
 
 def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> str:
     """Save a table to either GCS or local storage.
@@ -91,6 +115,10 @@ def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> str:
     Returns:
         str: The path where the file was saved (GCS or local)
     """
+    if df is None or (isinstance(df, (pd.DataFrame, gpd.GeoDataFrame)) and df.empty):
+        logging.warning("Attempted to save empty DataFrame - skipping save")
+        return None
+        
     if USE_GCS:
         try:
             return _save_to_gcs(filepath, df, is_geo)

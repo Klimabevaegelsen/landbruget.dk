@@ -7,6 +7,9 @@ from typing import Optional
 # Import helpers
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 def create_herds_table(con: ibis.BaseBackend, bes_details_raw: Optional[ibis.Table], silver_dir: Path) -> Optional[ibis.Table]:
     """Creates the herds table (excluding owner/user identifiers) from besaetning details.
     
@@ -91,8 +94,11 @@ def create_herds_table(con: ibis.BaseBackend, bes_details_raw: Optional[ibis.Tab
             return None # Return None if no rows
 
         logging.info(f"Saving herds table with {rows} rows.")
-        herds_final.to_parquet(output_path)
-        logging.info(f"Saved herds table to {output_path}")
+        saved_path = export.save_table(output_path, herds_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save herds table - no path returned")
+            return None
+        logging.info(f"Saved herds table to {saved_path}")
 
         return herds_final # Return the table object
 
@@ -194,8 +200,11 @@ def create_herd_owners_table(con: ibis.BaseBackend, bes_details_raw: Optional[ib
             return None
 
         logging.info(f"Saving herd_owners table with attributes ({rows} rows).")
-        herd_owners_final.to_parquet(output_path)
-        logging.info(f"Saved herd_owners table to {output_path}")
+        saved_path = export.save_table(output_path, herd_owners_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save herd_owners table - no path returned")
+            return None
+        logging.info(f"Saved herd_owners table to {saved_path}")
 
         return herd_owners_final
 
@@ -297,8 +306,11 @@ def create_herd_users_table(con: ibis.BaseBackend, bes_details_raw: Optional[ibi
             return None
 
         logging.info(f"Saving herd_users table with attributes ({rows} rows).")
-        herd_users_final.to_parquet(output_path)
-        logging.info(f"Saved herd_users table to {output_path}")
+        saved_path = export.save_table(output_path, herd_users_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save herd_users table - no path returned")
+            return None
+        logging.info(f"Saved herd_users table to {saved_path}")
 
         return herd_users_final
 
