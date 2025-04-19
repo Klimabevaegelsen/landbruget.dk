@@ -164,15 +164,41 @@ def create_properties_table(con: ibis.BaseBackend, ejendom_oplys_raw: Optional[i
 
         output_path = silver_dir / "properties.geoparquet"
         try:
-            logging.info(f"Saving final properties GeoDataFrame...")
+            logging.info(f"Saving final properties GeoDataFrame... Output path: {output_path}")
+            logging.info(f"GeoDataFrame info before save: {gdf_final.info()}")
+            logging.info(f"GeoDataFrame columns: {gdf_final.columns.tolist()}")
             saved_path = export.save_table(output_path, gdf_final, is_geo=True)
             if saved_path is None:
                 logging.error("Failed to save properties table - no path returned")
                 return None
             logging.info(f"Successfully saved properties table to {saved_path}")
             
+            # Add debug info about the file
+            logging.info(f"Attempting to read from path: {output_path}")
+            if output_path.exists():
+                logging.info(f"File exists at {output_path}")
+                logging.info(f"File size: {output_path.stat().st_size} bytes")
+            else:
+                logging.warning(f"File does not exist at {output_path}")
+                # Check if it exists at the saved_path
+                saved_path_obj = Path(saved_path)
+                if saved_path_obj.exists():
+                    logging.info(f"File exists at saved path: {saved_path}")
+                    logging.info(f"File size at saved path: {saved_path_obj.stat().st_size} bytes")
+                else:
+                    logging.warning(f"File does not exist at saved path: {saved_path}")
+            
             # Return an Ibis table reading the result
-            return con.read_parquet(str(output_path)) 
+            # Try reading from both paths
+            try:
+                return con.read_parquet(str(saved_path))
+            except Exception as read_err:
+                logging.error(f"Failed to read from saved_path {saved_path}: {read_err}")
+                try:
+                    return con.read_parquet(str(output_path))
+                except Exception as read_err2:
+                    logging.error(f"Failed to read from output_path {output_path}: {read_err2}")
+                    return None
 
         except Exception as e:
             logging.error(f"Failed during properties GeoParquet save: {e}", exc_info=True)
