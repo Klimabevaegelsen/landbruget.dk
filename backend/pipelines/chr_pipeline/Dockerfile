@@ -33,9 +33,6 @@ RUN uv venv ${VENV_PATH} && \
     . ${VENV_PATH}/bin/activate && \
     uv pip install -e .
 
-# Make test_paths.py executable
-RUN chmod +x test_paths.py
-
 # Define the command to run this pipeline's main script (can be overridden in compose)
 # Ensure the command uses the venv python
 CMD ["/opt/venv/bin/python", "main.py"]

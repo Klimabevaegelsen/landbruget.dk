@@ -9,6 +9,8 @@ This guide provides detailed instructions on how to create a new bronze pipeline
 
 We'll use our existing pipelines (CHR and Svineflytning) as examples while keeping the guidance applicable to all source types.
 
+We recommend using `uv` for faster Python package management and virtual environments. You can install it following the official `uv` documentation and use it for dependency installation and environment setup.
+
 ## Pipeline Structure
 
 Each pipeline should follow this standard directory structure:
@@ -66,20 +68,33 @@ pipeline_name/
 
 ### 2. Dockerfile
 
-- Use the official Python base image
-- Install only necessary dependencies
-- Set appropriate environment variables
+- Use the official Python base image (e.g., `python:3.11-slim`).
+- Install `uv` for faster dependency management within the container.
+- Install only necessary dependencies using `uv pip install --system .`.
+- Set appropriate environment variables.
 - Example:
   ```dockerfile
-  FROM python/3.11-slim
-  
+  # Use an official Python runtime as a parent image
+  FROM python:3.11-slim
+
+  # Install uv for faster package installation
+  RUN pip install uv
+
+  # Set the working directory in the container
   WORKDIR /app
-  
-  COPY pyproject.toml .
-  RUN pip install .
-  
+
+  # Copy only necessary files for dependency installation first to leverage Docker cache
+  COPY pyproject.toml ./
+
+  # Install dependencies using uv
+  # Using --system to install in the global Python environment within the container
+  # --no-cache can be useful to reduce image size, but remove it if caching speeds up builds significantly
+  RUN uv pip install --system . --no-cache
+
+  # Copy the rest of the application code
   COPY . .
-  
+
+  # Command to run the application
   CMD ["python", "main.py"]
   ```
 
@@ -102,7 +117,7 @@ pipeline_name/
 
 ### 4. main.py Structure
 
-Your `main.py` should follow this general structure, adapted for your data source type:
+Your `main.py` should follow this general structure, adapted for your data source type. Synchronous code is generally preferred for simplicity unless asynchronous I/O provides significant performance benefits for your specific source type.
 
 ```python
 import argparse
@@ -205,9 +220,9 @@ if __name__ == "__main__":
 
 #### Database Sources
 - Use connection pooling
-- Stream large result sets
+- Stream large result sets using methods appropriate for your database connector or libraries like `pandas` or `ibis`.
 - Handle connection timeouts
-- Example:
+- Example (using pandas):
   ```python
   def fetch_from_database(config: DataSourceConfig) -> Iterator:
       """Stream data from database"""
@@ -240,8 +255,8 @@ if __name__ == "__main__":
 ### 3. Data Storage
 
 - Use timestamped directories for each run
-- Save metadata with each data file
-- Use appropriate file formats (Parquet/JSON/XML)
+- Save metadata with each data file (e.g., source, timestamp, record count)
+- Use appropriate file formats. Parquet is strongly preferred for structured data due to its efficiency and excellent compatibility with `ibis` and `duckdb`. JSON/XML might be necessary only to preserve the exact raw source format if required.
 - Example:
   ```python
   def save_with_metadata(data: dict, path: Path) -> None:
@@ -264,10 +279,11 @@ if __name__ == "__main__":
 
 ### 4. Configuration
 
-- Use command-line arguments for runtime configuration
-- Use environment variables for secrets
-- Provide sensible defaults
-- Example:
+- Use command-line arguments for runtime configuration (e.g., dates, output paths).
+- Use environment variables for secrets and environment-specific settings (credentials, bucket names).
+- Provide sensible defaults.
+- Consider using a configuration library if complexity grows.
+- Example (`argparse`):
   ```python
   parser.add_argument("--workers", type=int, default=10)
   parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING"], default="INFO")
@@ -277,17 +293,18 @@ if __name__ == "__main__":
 
 ### CHR Pipeline (API Example)
 The CHR pipeline demonstrates:
-- Handling multiple data types (species, herds, movements)
-- Complex authentication (certificates)
-- Parallel processing
-- Comprehensive error handling
+- Handling multiple related data types from a SOAP API (species, herds, movements).
+- Complex authentication using certificates (`xmlsec`, `cryptography`).
+- Using `ibis-framework[duckdb]` for efficient data transformation and processing (preferred approach).
+- Using `pandas` and `geopandas` for initial data loading or specific geo-processing tasks where necessary.
+- Structured logging and error handling.
 
 ### Svineflytning Pipeline (API Example)
 The Svineflytning pipeline shows:
-- Date-based data fetching
-- SOAP API integration
-- Chunked processing
-- Progress tracking
+- A simpler SOAP API integration (`zeep`, `lxml`).
+- Date-based data fetching logic.
+- Saving raw data to GCS using `pandas`.
+- Clear separation of concerns (fetching, saving).
 
 ### Static File Pipeline Example
 A pipeline fetching data from public Google Drive should:
@@ -298,10 +315,11 @@ A pipeline fetching data from public Google Drive should:
 
 ## Testing
 
-1. Create test fixtures
-2. Test with small data samples
-3. Verify output format
-4. Check error handling
+1. Create test fixtures or use sample data.
+2. Test data fetching logic for different scenarios (e.g., date ranges, connection issues).
+3. Test data processing/transformation logic, **preferably using `ibis` expressions and `duckdb`** for validation against expected outcomes.
+4. Verify output format (ideally Parquet) and metadata correctness.
+5. Check error handling mechanisms.
 Example:
 ```python
 def test_fetch_data():
@@ -312,10 +330,14 @@ def test_fetch_data():
 
 ## Deployment
 
-1. Test locally with Docker
-2. Push to repository
-3. Configure GitHub Actions
-4. Monitor initial runs
+**The target runtime environment for these pipelines is GitHub Actions.** Workflows defined in `.github/workflows/` will build the Docker image and execute the pipeline script (`main.py`) directly within a runner environment. 
+
+The typical development and deployment flow is:
+
+1. Develop and test the pipeline locally using `docker-compose up --build`.
+2. Push code changes to the repository.
+3. Configure the relevant GitHub Actions workflow (typically found in `.github/workflows/`) to trigger on pushes/merges/schedules as needed. This workflow handles building the Docker image and running the containerized pipeline.
+4. Monitor pipeline execution and logs directly within the GitHub Actions run interface.
 
 ## Common Issues and Solutions
 
@@ -340,6 +362,13 @@ def test_fetch_data():
    - Track file version/modification dates
    - Handle Google Drive download quotas for large files
    - Use appropriate file download method based on size
+
+## Tooling Recommendations
+
+- **Dependency Management**: `uv` for faster installation and environment management.
+- **Data Manipulation**: **`ibis-framework` with the `duckdb` backend is the preferred choice** for performant, scalable, and database-agnostic transformations. Use `pandas` or `geopandas` primarily for initial data loading, simple manipulations, or when specific features (like advanced geospatial operations in `geopandas`) are required that `ibis` doesn't cover directly.
+- **API Interaction**: `requests` for REST, `zeep` for SOAP.
+- **Cloud Storage**: `google-cloud-storage` and `gcsfs` for seamless GCS integration, especially useful with `ibis` and `duckdb` reading/writing Parquet files directly from/to GCS.
 
 ## Contributing
 

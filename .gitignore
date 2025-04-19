@@ -43,7 +43,6 @@ yarn-error.log*
 
 # Project specific
 backend/pipelines/chr_pipeline/data/
-mage-quickstart/
 bin/
 
 # Sensitive files
