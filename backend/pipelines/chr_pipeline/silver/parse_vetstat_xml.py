@@ -65,7 +65,8 @@ def extract_data_from_xml_chunk(xml_chunk):
                 data_list.append(record)
 
         if not data_list:
-            logging.warning("No Data elements found in the response.")
+            # Use the extracted TrackID in the log message
+            logging.warning(f"No Data elements found in the response.") # DEBUG: Added TrackID
 
     except ET.ParseError as e:
         logging.error(f"XML parsing error: {e} in chunk starting with: {xml_chunk[:100]}...")
@@ -93,8 +94,8 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
                 all_data.extend(chunk_data)
                 if chunk_data:
                     logging.info(f"Successfully parsed chunk {i} with {len(chunk_data)} records")
-                else:
-                    logging.warning(f"No data extracted from chunk {i}")
+                # else: # DEBUG: Removed the generic 'No data extracted' log here, handled in extract_data_from_xml_chunk
+                    # logging.warning(f"No data extracted from chunk {i}") # DEBUG: Commented out
 
         # Write the collected data to JSON Lines format
         with open(output_file, 'w', encoding='utf-8') as f:

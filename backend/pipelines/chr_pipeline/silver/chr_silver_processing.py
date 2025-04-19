@@ -89,12 +89,21 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
         if vetstat_antibiotics_data:
             # Ensure the temporary XML file is cleaned up
             temp_xml_path_obj = silver_dir / "_temp_vetstat.xml"
+            # DEBUG(Added): Define a path for the saved XML in case of issues
+            saved_xml_path_obj = silver_dir / f"_DEBUG_FAILED_vetstat_{export_timestamp or 'unknown'}.xml" 
             try:
                 with open(temp_xml_path_obj, 'w') as f:
                     # Add separator compatible with VetStat XML parser's expectations
-                    f.write("\\n<!-- RAW_RESPONSE_SEPARATOR -->\\n".join(vetstat_antibiotics_data))
+                    f.write("\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(vetstat_antibiotics_data))
                 vetstat_antibiotics_xml_path = temp_xml_path_obj # Assign path only if successfully written
-                logging.info(f"Created temporary VetStat XML file: {vetstat_antibiotics_xml_path}")
+                # DEBUG(Added): Log size of temp XML before parsing
+                try:
+                    xml_size = vetstat_antibiotics_xml_path.stat().st_size
+                    logging.info(f"Created temporary VetStat XML file: {vetstat_antibiotics_xml_path} (Size: {xml_size} bytes)")
+                except Exception as e_stat:
+                    logging.warning(f"Could not get size of temp XML file {vetstat_antibiotics_xml_path}: {e_stat}")
+                    logging.info(f"Created temporary VetStat XML file: {vetstat_antibiotics_xml_path}")
+                 # --- END DEBUG ---
             except Exception as e_write:
                  logging.error(f"Failed to write temporary VetStat XML file: {e_write}", exc_info=True)
                  # Ensure path is None if write failed
@@ -128,13 +137,30 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                     logging.info(f"Successfully created intermediate VetStat JSONL: {vetstat_antibiotics_jsonl_path}")
                 else:
                     logging.warning(f"XML parser ran but output file is empty or missing: {vetstat_antibiotics_jsonl_path}")
+                    # DEBUG(Added): Save the failed XML file if parsing failed/was empty
+                    if vetstat_antibiotics_xml_path.exists():
+                        try:
+                            vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
+                            logging.warning(f"DEBUG(Added): Saved problematic XML to {saved_xml_path_obj} for inspection.")
+                            vetstat_antibiotics_xml_path = None # Ensure it's not cleaned up later normally
+                        except Exception as e_save:
+                            logging.error(f"DEBUG(Added): Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}")
+                    # --- END DEBUG ---
             except (FileNotFoundError, RuntimeError, Exception) as e:
                 logging.error(f"Failed to process VetStat XML: {e}. Proceeding without antibiotic data.", exc_info=True)
-                # Ensure path is None if failed
+                 # DEBUG(Added): Save the failed XML file if parsing failed/was empty
+                if vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists(): # Check again as path might be None
+                    try:
+                        vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
+                        logging.warning(f"DEBUG(Added): Saved problematic XML to {saved_xml_path_obj} for inspection.")
+                        vetstat_antibiotics_xml_path = None # Ensure it's not cleaned up later normally
+                    except Exception as e_save:
+                        logging.error(f"DEBUG(Added): Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}")
+                 # --- END DEBUG ---
+                 # Ensure path is None if failed
                 if vetstat_antibiotics_jsonl_path.exists():
                     try: vetstat_antibiotics_jsonl_path.unlink() # Clean up failed attempt
                     except OSError: pass
-                vetstat_antibiotics_jsonl_path = None
         else:
             logging.warning(f"VetStat XML file not found or not provided ({'in-memory path was' if load_from_memory else 'bronze path was'} {vetstat_antibiotics_xml_path}). Skipping antibiotic data processing.")
             vetstat_antibiotics_jsonl_path = None
@@ -447,54 +473,6 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                 )
                 
             elif step == 'silver_property_vet_events':
-                # --- DEBUG: Describe ejendom_vet_raw before processing --- # (REMOVING BLOCK)
-                # Add comment for easy removal later: DEBUG_DESCRIBE_EJENDOM_VET
-                # ejendom_vet_table_to_process = context.get('ejendom_vet_table')
-                # if ejendom_vet_table_to_process is not None:
-                #     logging.info("DEBUG(Added): Attempting to print DESCRIBE ejendom_vet_table output...")
-                #     # Describe the top-level table
-                #     print("\n--- DEBUG: DESCRIBE ejendom_vet (raw input) ---", flush=True)
-                #     try:
-                #         con.con.sql("DESCRIBE ejendom_vet;").show()
-                #         print("--- END DEBUG: DESCRIBE ejendom_vet ---\n", flush=True)
-                #     except Exception as e_describe_top:
-                #         logging.error(f"DEBUG(Added): Error executing DESCRIBE ejendom_vet: {e_describe_top}", exc_info=True)
-                #         print(f"--- DEBUG: ERROR DESCRIBING ejendom_vet: {e_describe_top} ---\n", flush=True)
-                #
-                #     # Describe the unnested structure
-                #     print("\n--- DEBUG: DESCRIBE UNNESTED VeterinaerHaendelse ---", flush=True)
-                #     try:
-                #         # Need to register the ibis table object as a temp view to use SQL unnest
-                #         temp_view_name = "temp_ejendom_vet_view"
-                #         con.con.register(temp_view_name, ejendom_vet_table_to_process)
-                #
-                #         # Corrected Query to describe the fields inside the event struct
-                #         describe_event_query = f""" \
-                #         DESCRIBE SELECT event_info.* \
-                #         FROM ( \
-                #             SELECT UNNEST(Response.VeterinaereHaendelser.VeterinaerHaendelse) AS event_info \
-                #             FROM {temp_view_name} \
-                #             WHERE Response.VeterinaereHaendelser.VeterinaerHaendelse IS NOT NULL \
-                #             LIMIT 1 \
-                #         );
-                #         """
-                #         con.con.sql(describe_event_query).show()
-                #         print("--- END DEBUG: DESCRIBE UNNESTED VeterinaerHaendelse ---\n", flush=True)
-                #         # Clean up the temporary view
-                #         con.con.unregister(temp_view_name)
-                #     except Exception as e_describe_event:
-                #         logging.error(f"DEBUG(Added): Error executing DESCRIBE on unnested event: {e_describe_event}", exc_info=True)
-                #         print(f"--- DEBUG: ERROR DESCRIBING UNNESTED EVENT: {e_describe_event} ---\n", flush=True)
-                #         # Ensure cleanup on error too
-                #         try:
-                #             con.con.unregister(temp_view_name)
-                #         except Exception:
-                #             pass
-                # else:
-                #     logging.warning("DEBUG(Added): 'ejendom_vet_table' is None, skipping DESCRIBE.")
-                #     print("--- DEBUG: ejendom_vet_table IS NONE ---\n", flush=True)
-                # --- END DEBUG --- 
-
                 property_vet_events_table = property_vet_events.create_property_vet_events_table(
                     con,
                     context.get('ejendom_vet_table'), # Reverted to original context get
