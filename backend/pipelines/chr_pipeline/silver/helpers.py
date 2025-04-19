@@ -80,39 +80,39 @@ def _create_and_save_lookup(con, table: ibis.Table, pk_col: str, name_col: str, 
         return None
 
     try:
-        # Ensure correct types and clean strings before distinct
-        lookup = table.select(
-            pk=table[pk_col].cast(dt.string).pipe(_sanitize_string), # Cast code to string initially for safety
-            name=table[name_col].cast(dt.string).pipe(_sanitize_string)
-        ).distinct()
-        # Filter out rows where either pk or name ended up null after cleaning
-        lookup = lookup.filter(lookup.pk.notnull() & lookup.name.notnull())
+        # Create lookup table with final column names directly
+        lookup = table.select(**{
+            f"{table_name}_code": table[pk_col].cast(dt.string).pipe(_sanitize_string),
+            f"{table_name}_name": table[name_col].cast(dt.string).pipe(_sanitize_string)
+        }).distinct()
 
-        # Attempt to cast pk back to integer if appropriate, warn on failure
+        # Filter out rows where either code or name ended up null after cleaning
+        lookup = lookup.filter(
+            lookup[f"{table_name}_code"].notnull() & 
+            lookup[f"{table_name}_name"].notnull()
+        )
+
+        # Attempt to cast code back to integer if appropriate
         try:
-            if table_name not in ['diseases', 'vet_statuses']: # Explicitly keep strings for these known cases
-                 lookup = lookup.mutate(pk=lookup['pk'].cast(dt.int64))
-            else:
-                lookup = lookup.mutate(pk=lookup['pk'].cast(dt.string))
+            if table_name not in ['diseases', 'vet_statuses']:  # Keep strings for these known cases
+                lookup = lookup.mutate(**{
+                    f"{table_name}_code": lookup[f"{table_name}_code"].cast(dt.int64)
+                })
         except Exception as cast_err:
-            logging.warning(f"Could not cast primary key '{pk_col}' to integer for lookup '{table_name}'. Keeping as string. Error: {cast_err}")
-            lookup = lookup.mutate(pk=lookup['pk'].cast(dt.string))
+            logging.warning(f"Could not cast code to integer for lookup '{table_name}'. Keeping as string. Error: {cast_err}")
 
         # Save locally only since this is a temporary lookup table
         if lookup.count().execute() == 0:
             logging.warning(f"Lookup table '{table_name}' is empty after processing.")
             return None
 
-        # Rename columns to final schema
-        final_pk_name = f"{table_name}_code"
-        final_name = f"{table_name}_name"
-        lookup = lookup.rename(pk=final_pk_name, name=final_name)
-
-        # Execute and save locally
+        # Execute to DataFrame and save
         df = lookup.execute()
-        df.to_parquet(output_path)
+        df.to_parquet(output_path, index=False)
         logging.info(f"Saved temporary lookup table '{table_name}' locally to {output_path}")
 
+        # Convert back to ibis table
+        lookup = con.read_parquet(output_path)
         return lookup
 
     except Exception as e:
