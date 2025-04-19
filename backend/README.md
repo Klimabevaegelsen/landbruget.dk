@@ -34,7 +34,7 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
   
 ## Bronze layer
 - The Bronze layer's purpose is to fetch and store the raw data.
-- Data should be captured raw and stored immediately - no transformation or cleaning.
+- Data should be captured raw and stored immediately - **crucially, NO transformation or cleaning should occur at this stage**. The goal is to preserve the data exactly as it arrived from the source.
 - If source allows different output formats, Parquet/GeoParquet should be preferred, followed by JSON/GeoJSON. If the data is geospatial, the preferred CRS should be EPSG:4326 and then EPSG:25832.
 - Each Bronze layer dataset should be stored under its own folder in the Raw folder with a folder name in English that clearly reflects the data content, and a date for the data fetch.
 - Each Bronze layer dataset should be stored in GCS in prod, include some metadata about the data source, incl. provenance, whether it requires a recurrent request for access, etc.
@@ -47,7 +47,7 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 [DuckDB](https://duckdb.org/docs/stable/) and [Ibis](https://ibis-project.org/) should be preferred to process the data, instead of shapely, pandas and geopandas (where possible).
 
 ### Storage
-- In prod environment, Silver layer data should be kept in prod in Postgres databases (or PostGIS where necessary).
+- In prod environment, Silver layer data should be kept in prod in GCS.
 - In dev environment, it should be stored locally in Parquet/Geoparquet.
 - Nested data should be kept in separate tables.
 - Each Silver layer dataset should be stored under its own folder in the Processed folder with a folder name in English that clearly reflects the data content, and a date for the processing.
