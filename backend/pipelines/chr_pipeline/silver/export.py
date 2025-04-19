@@ -55,23 +55,30 @@ def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
     # Add silver/chr/{timestamp} prefix
     blob_path = f"gs://{GCS_BUCKET}/silver/chr/{filepath.parent.name}/{filepath.name}"
     logging.info(f"Attempting to save to GCS path: {blob_path}")
+    logging.info(f"DataFrame type: {type(df)}")
+    if is_geo:
+        logging.info("Saving as GeoParquet file")
+        logging.info(f"GeoDataFrame CRS: {df.crs}")
+        logging.info(f"GeoDataFrame columns: {df.columns.tolist()}")
     
     try:
         if is_geo:
             if not isinstance(df, gpd.GeoDataFrame):
                 raise ValueError("DataFrame must be a GeoDataFrame when is_geo=True")
-            # Use gcsfs directly with to_parquet
-            df.to_parquet(blob_path, filesystem=gcs_fs)
+            # Ensure the geometry column is properly set
+            if 'geometry' not in df.columns:
+                raise ValueError("GeoDataFrame must have a 'geometry' column")
+            # Save with geoparquet driver
+            df.to_parquet(blob_path, filesystem=gcs_fs, index=False)
         else:
             if not isinstance(df, pd.DataFrame):
                 raise ValueError("DataFrame must be a pandas DataFrame when is_geo=False")
-            # Use gcsfs directly with to_parquet
-            df.to_parquet(blob_path, filesystem=gcs_fs)
+            df.to_parquet(blob_path, filesystem=gcs_fs, index=False)
         
         logging.info(f"Successfully saved to GCS: {blob_path}")
         return blob_path
     except Exception as e:
-        logging.error(f"Error saving to GCS using gcsfs: {e}")
+        logging.error(f"Error saving to GCS using gcsfs: {e}", exc_info=True)
         raise
 
 def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
@@ -87,21 +94,35 @@ def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False):
     """
     filepath.parent.mkdir(parents=True, exist_ok=True)
     logging.info(f"Saving locally to: {filepath}")
+    logging.info(f"DataFrame type: {type(df)}")
+    if is_geo:
+        logging.info("Saving as GeoParquet file")
+        logging.info(f"GeoDataFrame CRS: {df.crs}")
+        logging.info(f"GeoDataFrame columns: {df.columns.tolist()}")
     
     try:
         if is_geo:
             if not isinstance(df, gpd.GeoDataFrame):
                 raise ValueError("DataFrame must be a GeoDataFrame when is_geo=True")
-            df.to_parquet(filepath)
+            # Ensure the geometry column is properly set
+            if 'geometry' not in df.columns:
+                raise ValueError("GeoDataFrame must have a 'geometry' column")
+            # Save with geoparquet driver
+            df.to_parquet(filepath, index=False)
         else:
             if not isinstance(df, pd.DataFrame):
                 raise ValueError("DataFrame must be a pandas DataFrame when is_geo=False")
-            df.to_parquet(filepath)
+            df.to_parquet(filepath, index=False)
         
         logging.info(f"Successfully saved locally: {filepath}")
+        # Verify file was created
+        if filepath.exists():
+            logging.info(f"File size: {filepath.stat().st_size} bytes")
+        else:
+            logging.error(f"File was not created at {filepath}")
         return str(filepath)
     except Exception as e:
-        logging.error(f"Error saving locally: {e}")
+        logging.error(f"Error saving locally: {e}", exc_info=True)
         raise
 
 def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> str:
