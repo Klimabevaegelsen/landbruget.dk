@@ -156,6 +156,8 @@ def save_raw_data(data: Any, output_dir: Path) -> None:
     """Save raw data with metadata, preserving original format"""
     # Save data in its original format (JSON, CSV, XML, etc.)
     # Add metadata including source information
+    # **IMPORTANT**: Absolutely NO transformations should happen here. 
+    # The data saved must be identical to what was fetched.
     pass
 
 def main() -> None:
@@ -257,6 +259,7 @@ if __name__ == "__main__":
 - Use timestamped directories for each run
 - Save metadata with each data file (e.g., source, timestamp, record count)
 - Use appropriate file formats. Parquet is strongly preferred for structured data due to its efficiency and excellent compatibility with `ibis` and `duckdb`. JSON/XML might be necessary only to preserve the exact raw source format if required.
+- **In production, both Bronze and Silver layer data are stored in Google Cloud Storage (GCS).** Silver data should typically be stored as Parquet/GeoParquet files.
 - Example:
   ```python
   def save_with_metadata(data: dict, path: Path) -> None:
