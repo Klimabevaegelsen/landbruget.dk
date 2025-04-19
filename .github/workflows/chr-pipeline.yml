@@ -42,6 +42,10 @@ on:
         description: 'Show progress information'
         type: boolean
         default: true
+      limit_herds_per_species:
+        description: 'Limit number of herds processed per species'
+        type: string
+        default: ''
 
 jobs:
   run-pipeline:
@@ -106,7 +110,24 @@ jobs:
         GCS_BUCKET: landbrugsdata-raw-data
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        python -m main
+        CMD="python -m main --steps ${{ inputs.step }} --log-level ${{ inputs.log_level }}"
+        if [[ "${{ inputs.show_progress }}" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        # Note: test_mode is not directly used by the script, handled elsewhere if needed.
+        
+        echo "Running command: $CMD"
+        $CMD
 
     - name: Handle pipeline failure
       if: failure()
