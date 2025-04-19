@@ -126,6 +126,13 @@ jobs:
         
         # Note: test_mode is not directly used by the script, handled elsewhere if needed.
         
+        echo "--- DEBUG: Checking environment variables ---"
+        echo "GCS_BUCKET:"
+        printenv | grep GCS_BUCKET || echo "GCS_BUCKET not found"
+        echo "GOOGLE_CLOUD_PROJECT:"
+        printenv | grep GOOGLE_CLOUD_PROJECT || echo "GOOGLE_CLOUD_PROJECT not found"
+        echo "--- END DEBUG ---"
+
         echo "Running command: $CMD"
         $CMD
 

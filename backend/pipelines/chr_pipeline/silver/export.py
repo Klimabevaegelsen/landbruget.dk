@@ -13,8 +13,15 @@ load_dotenv()
 GCS_BUCKET = os.getenv('GCS_BUCKET')
 GOOGLE_CLOUD_PROJECT = os.getenv('GOOGLE_CLOUD_PROJECT')
 
+# DEBUG: Log retrieved environment variables
+logging.debug(f"Retrieved GCS_BUCKET: '{GCS_BUCKET}'")
+logging.debug(f"Retrieved GOOGLE_CLOUD_PROJECT: '{GOOGLE_CLOUD_PROJECT}'")
+
 # Use GCS if we have the required configuration
 USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+
+# DEBUG: Log USE_GCS decision
+logging.debug(f"USE_GCS determined as: {USE_GCS}")
 
 # Initialize GCS client if bucket is configured
 gcs_client = None
