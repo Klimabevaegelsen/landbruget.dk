@@ -155,9 +155,13 @@ def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table
 
         # Join with lookups (optional, as with vet_events)
         if 'species' in lookup_tables and lookup_tables['species'] is not None:
-             usage_cleaned = usage_cleaned.left_join(lookup_tables['species'], ['species_code'])
+            usage_cleaned = usage_cleaned.left_join(lookup_tables['species'], ['species_code'])
         if 'age_groups' in lookup_tables and lookup_tables['age_groups'] is not None:
-             usage_cleaned = usage_cleaned.left_join(lookup_tables['age_groups'], ['age_group_code'])
+            # Rename the column before joining
+            usage_cleaned = usage_cleaned.mutate(age_groups_code=usage_cleaned.age_group_code)
+            usage_cleaned = usage_cleaned.left_join(lookup_tables['age_groups'], ['age_groups_code'])
+            # Drop the temporary column after join if needed
+            usage_cleaned = usage_cleaned.drop('age_groups_code')
 
         # Optional: Join with entities table to get entity_id (REMOVED)
         # if entities_table is not None:
