@@ -28,6 +28,9 @@ USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
 # DEBUG: Log USE_GCS decision
 logging.info(f"USE_GCS determined as: {USE_GCS}")
 
+# Get timestamp for this export run
+EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
 # Initialize GCS client and filesystem if bucket is configured
 gcs_client = None
 gcs_fs = None
@@ -67,7 +70,7 @@ def _convert_uuid_columns(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = df[col].apply(lambda x: x.hex if x is not None and hasattr(x, 'hex') else x)
     return df
 
-def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False, export_timestamp: Optional[str] = None) -> Optional[Path]:
+def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save DataFrame to GCS."""
     if not USE_GCS or not GCS_BUCKET:
         logging.warning("GCS not configured, cannot save to GCS")
@@ -87,11 +90,8 @@ def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False, export_
             else:
                 df.to_parquet(temp_path, index=False, engine='pyarrow')
             
-            # Use provided timestamp or generate one
-            timestamp = export_timestamp or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            
             # Define GCS path with timestamp
-            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{timestamp}/{filepath.name}"
+            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{EXPORT_TIMESTAMP}/{filepath.name}"
             
             try:
                 # Upload to GCS using gcsfs
@@ -124,20 +124,22 @@ def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Opt
             else:
                 df.to_parquet(temp_path, index=False, engine='pyarrow')
             
-            # Copy to final location
-            os.makedirs(filepath.parent, exist_ok=True)
-            shutil.copy2(temp_path, filepath)
+            # Copy to final location with timestamp
+            timestamped_dir = filepath.parent / EXPORT_TIMESTAMP
+            os.makedirs(timestamped_dir, exist_ok=True)
+            final_path = timestamped_dir / filepath.name
+            shutil.copy2(temp_path, final_path)
             
-            return filepath
+            return final_path
     except Exception as e:
         logging.error(f"Error saving locally: {e}")
         return None
 
-def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False, export_timestamp: Optional[str] = None) -> Optional[Path]:
+def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save a DataFrame to parquet, first attempting GCS then falling back to local storage."""
     try:
         # Try saving to GCS first
-        saved_path = _save_to_gcs(filepath, df, is_geo, export_timestamp)
+        saved_path = _save_to_gcs(filepath, df, is_geo)
         if saved_path is not None:
             return saved_path
             
