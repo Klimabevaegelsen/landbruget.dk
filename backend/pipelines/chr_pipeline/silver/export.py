@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import gcsfs
 import shutil
 from typing import Optional
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -66,7 +67,7 @@ def _convert_uuid_columns(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = df[col].apply(lambda x: x.hex if x is not None and hasattr(x, 'hex') else x)
     return df
 
-def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
+def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False, export_timestamp: Optional[str] = None) -> Optional[Path]:
     """Save DataFrame to GCS."""
     if not USE_GCS or not GCS_BUCKET:
         logging.warning("GCS not configured, cannot save to GCS")
@@ -86,8 +87,11 @@ def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Opti
             else:
                 df.to_parquet(temp_path, index=False, engine='pyarrow')
             
-            # Define GCS path
-            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{filepath.name}"
+            # Use provided timestamp or generate one
+            timestamp = export_timestamp or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            
+            # Define GCS path with timestamp
+            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{timestamp}/{filepath.name}"
             
             try:
                 # Upload to GCS using gcsfs
@@ -129,11 +133,11 @@ def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Opt
         logging.error(f"Error saving locally: {e}")
         return None
 
-def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
+def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False, export_timestamp: Optional[str] = None) -> Optional[Path]:
     """Save a DataFrame to parquet, first attempting GCS then falling back to local storage."""
     try:
         # Try saving to GCS first
-        saved_path = _save_to_gcs(filepath, df, is_geo)
+        saved_path = _save_to_gcs(filepath, df, is_geo, export_timestamp)
         if saved_path is not None:
             return saved_path
             
