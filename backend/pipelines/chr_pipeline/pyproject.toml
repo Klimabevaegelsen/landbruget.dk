@@ -22,7 +22,8 @@ dependencies = [
     "geopandas>=0.14.0", # Allow any version >= 0.14.0
     "pyarrow>=16.1.0",   # Allow any version >= 16.1.0
     'ibis-framework[duckdb]>=9.2.0', # Allow any version >= 9.2.0
-    "lxml>=5.3.0"
+    "lxml>=5.3.0",
+    "gcsfs>=2024.2.0"  # Added gcsfs for better GCS support
 ]
 
 [build-system]

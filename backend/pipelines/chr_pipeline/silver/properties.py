@@ -12,6 +12,9 @@ from typing import Optional
 from . import config
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 # Helper function to simplify casting and sanitizing in Ibis
 # Note: This UDF approach might have limitations depending on the backend capabilities.
 # If performance issues arise, alternative SQL-based sanitization might be needed.
@@ -161,9 +164,12 @@ def create_properties_table(con: ibis.BaseBackend, ejendom_oplys_raw: Optional[i
 
         output_path = silver_dir / "properties.geoparquet"
         try:
-            logging.info(f"Saving final properties GeoDataFrame to {output_path}...")
-            gdf_final.to_parquet(output_path)
-            logging.info(f"Successfully saved properties table to {output_path}")
+            logging.info(f"Saving final properties GeoDataFrame...")
+            saved_path = export.save_table(output_path, gdf_final, is_geo=True)
+            if saved_path is None:
+                logging.error("Failed to save properties table - no path returned")
+                return None
+            logging.info(f"Successfully saved properties table to {saved_path}")
             
             # Return an Ibis table reading the result
             return con.read_parquet(str(output_path)) 
@@ -171,7 +177,6 @@ def create_properties_table(con: ibis.BaseBackend, ejendom_oplys_raw: Optional[i
         except Exception as e:
             logging.error(f"Failed during properties GeoParquet save: {e}", exc_info=True)
             return None
-        # No finally block needed here as cleanup happens at the end of the outer try block
 
     except Exception as e:
         logging.error(f"Failed to create properties table: {e}", exc_info=True)
@@ -267,8 +272,11 @@ def create_property_owners_table(con: ibis.BaseBackend, ejendom_oplys_raw: Optio
             return None
 
         logging.info(f"Saving property_owners table with attributes ({rows} rows).")
-        prop_owners_final.to_parquet(output_path)
-        logging.info(f"Saved property_owners table to {output_path}")
+        saved_path = export.save_table(output_path, prop_owners_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save property_owners table - no path returned")
+            return None
+        logging.info(f"Saved property_owners table to {saved_path}")
 
         return prop_owners_final
 
@@ -365,8 +373,11 @@ def create_property_users_table(con: ibis.BaseBackend, ejendom_oplys_raw: Option
             return None
 
         logging.info(f"Saving property_users table with attributes ({rows} rows).")
-        prop_users_final.to_parquet(output_path)
-        logging.info(f"Saved property_users table to {output_path}")
+        saved_path = export.save_table(output_path, prop_users_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save property_users table - no path returned")
+            return None
+        logging.info(f"Saved property_users table to {saved_path}")
 
         return prop_users_final
 
