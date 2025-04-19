@@ -229,10 +229,44 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                     temp_view_name = f"temp_buffer_{table_name}_{uuid.uuid4().hex[:8]}"
                     con.con.register(temp_view_name, df)
                     logging.info(f"Registered Pandas DataFrame as DuckDB view: '{temp_view_name}'")
-                    con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
-                    raw_tables[table_name] = con.table(table_name)
+
+                    # --- Modified CREATE TABLE logic ---
+                    # Instead of SELECT *, explicitly select columns needed downstream
+                    # to potentially avoid casting errors on unused complex structs.
+                    if table_name == 'ejendom_vet':
+                        # Downstream uses Response.VeterinaereHaendelser.VeterinaerHaendelse
+                        logging.info(f"Attempting targeted CREATE TABLE for '{table_name}' selecting only 'Response'")
+                        try:
+                            # Check if the view and Response column exist
+                            con.con.sql(f"SELECT Response FROM {temp_view_name} LIMIT 1;")
+                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT Response FROM {temp_view_name}")
+                            logging.info(f"Successfully created '{table_name}' by selecting only 'Response' column.")
+                        except Exception as e_select_response_vet:
+                            logging.error(f"Failed to create '{table_name}' by selecting only 'Response'. Falling back to SELECT *. Error: {e_select_response_vet}", exc_info=True)
+                            # Fallback to original potentially problematic query
+                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
+
+                    elif table_name == 'ejendom_oplys':
+                        # Downstream uses Response.EjendomsOplysninger...
+                        logging.info(f"Attempting targeted CREATE TABLE for '{table_name}' selecting only 'Response'")
+                        try:
+                            # Check if the view and Response column exist
+                            con.con.sql(f"SELECT Response FROM {temp_view_name} LIMIT 1;")
+                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT Response FROM {temp_view_name}")
+                            logging.info(f"Successfully created '{table_name}' by selecting only 'Response' column.")
+                        except Exception as e_select_response_oplys:
+                            logging.error(f"Failed to create '{table_name}' by selecting only 'Response'. Falling back to SELECT *. Error: {e_select_response_oplys}", exc_info=True)
+                            # Fallback to original potentially problematic query
+                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
+                    else:
+                        # For other tables, assume SELECT * is okay for now
+                        logging.info(f"Creating table '{table_name}' using SELECT *")
+                        con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
+                    # --- END Modified CREATE TABLE logic ---
+
+                    raw_tables[table_name] = con.table(table_name) # Get Ibis table reference
                     successfully_loaded = True
-                    source_desc = f"in-memory buffer via DuckDB API for '{source_info['mem_key']}'"
+                    source_desc = f"in-memory buffer via DuckDB view/API for '{source_info['mem_key']}'" # Adjusted description
                     logging.info(f"Successfully loaded {source_desc} into table '{table_name}'.")
                     schema = raw_tables[table_name].schema()
                     logging.info(f"Schema for {table_name}: {schema}")
