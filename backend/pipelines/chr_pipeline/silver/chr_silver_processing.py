@@ -223,66 +223,80 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
             data = in_memory_data.get(source_info['mem_key'], {}).get("json", [])
             if data and isinstance(data, list):
                 logging.info(f"Found {len(data)} records in memory for {source_info['mem_key']}")
-                # Convert list of dicts to Pandas DataFrame for robust handling
+                # Convert list of dicts to Pandas DataFrame for robust handling - REMOVED THIS STEP
+                # Instead, write to temp JSONL and use read_json
+                temp_jsonl_path = None
+                temp_file = None
                 try:
-                    df = pd.DataFrame(data)
-                    temp_view_name = f"temp_buffer_{table_name}_{uuid.uuid4().hex[:8]}"
-                    con.con.register(temp_view_name, df)
-                    logging.info(f"Registered Pandas DataFrame as DuckDB view: '{temp_view_name}'")
+                    # Create a temporary file to write JSONL data
+                    # Use silver_dir to ensure it's within accessible/writable space if run in restricted envs
+                    temp_file = tempfile.NamedTemporaryFile(
+                        mode='w',
+                        encoding='utf-8',
+                        suffix='.jsonl',
+                        delete=False, # Keep the file until manually deleted
+                        dir=silver_dir, # Place temp file in silver dir
+                        prefix=f"temp_{table_name}_"
+                    )
+                    temp_jsonl_path = Path(temp_file.name)
+                    logging.info(f"Writing in-memory data for '{table_name}' to temporary JSONL: {temp_jsonl_path.name}")
 
-                    # --- Modified CREATE TABLE logic ---
-                    # Instead of SELECT *, explicitly select columns needed downstream
-                    # to potentially avoid casting errors on unused complex structs.
-                    if table_name == 'ejendom_vet':
-                        # Downstream uses Response.VeterinaereHaendelser.VeterinaerHaendelse
-                        logging.info(f"Attempting targeted CREATE TABLE for '{table_name}' selecting only 'Response'")
+                    for record in data:
+                        # Ensure complex objects are handled by json.dumps
                         try:
-                            # Check if the view and Response column exist
-                            con.con.sql(f"SELECT Response FROM {temp_view_name} LIMIT 1;")
-                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT Response FROM {temp_view_name}")
-                            logging.info(f"Successfully created '{table_name}' by selecting only 'Response' column.")
-                        except Exception as e_select_response_vet:
-                            logging.error(f"Failed to create '{table_name}' by selecting only 'Response'. Falling back to SELECT *. Error: {e_select_response_vet}", exc_info=True)
-                            # Fallback to original potentially problematic query
-                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
+                             json.dump(record, temp_file, default=str) # Use default=str for non-serializable types like dates
+                             temp_file.write('\\n')
+                        except TypeError as e_json:
+                            logging.warning(f"Skipping record due to JSON serialization error for table '{table_name}': {e_json}. Record sample: {str(record)[:200]}...")
+                            continue # Skip bad records
 
-                    elif table_name == 'ejendom_oplys':
-                        # Downstream uses Response.EjendomsOplysninger...
-                        logging.info(f"Attempting targeted CREATE TABLE for '{table_name}' selecting only 'Response'")
-                        try:
-                            # Check if the view and Response column exist
-                            con.con.sql(f"SELECT Response FROM {temp_view_name} LIMIT 1;")
-                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT Response FROM {temp_view_name}")
-                            logging.info(f"Successfully created '{table_name}' by selecting only 'Response' column.")
-                        except Exception as e_select_response_oplys:
-                            logging.error(f"Failed to create '{table_name}' by selecting only 'Response'. Falling back to SELECT *. Error: {e_select_response_oplys}", exc_info=True)
-                            # Fallback to original potentially problematic query
-                            con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
-                    else:
-                        # For other tables, assume SELECT * is okay for now
-                        logging.info(f"Creating table '{table_name}' using SELECT *")
-                        con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {temp_view_name}")
-                    # --- END Modified CREATE TABLE logic ---
+                    temp_file.flush() # Ensure all data is written
+                    temp_file.close() # Close the file handle
 
-                    raw_tables[table_name] = con.table(table_name) # Get Ibis table reference
+                    logging.info(f"Finished writing temporary JSONL for '{table_name}'. Attempting read_json...")
+
+                    # Use con.read_json (part of Ibis facade for DuckDB)
+                    # auto_detect=True helps with schema inference, format='newline_delimited' is crucial
+                    con.con.sql(f"DROP TABLE IF EXISTS {table_name};") # Ensure clean slate
+                    raw_tables[table_name] = con.read_json(
+                        str(temp_jsonl_path),
+                        format='newline_delimited',
+                        auto_detect=True,
+                        # union_by_name=True # Consider adding if schemas differ slightly between records
+                    )
+                    # Assign the table name explicitly in DuckDB for clarity
+                    # read_json creates a table named after the file stem, so we rename it
+                    table_created_by_read_json = temp_jsonl_path.stem
+                    con.con.sql(f"ALTER TABLE \"{table_created_by_read_json}\" RENAME TO {table_name};")
+                    raw_tables[table_name] = con.table(table_name) # Re-reference table by its final name
+
                     successfully_loaded = True
-                    source_desc = f"in-memory buffer via DuckDB view/API for '{source_info['mem_key']}'" # Adjusted description
-                    logging.info(f"Successfully loaded {source_desc} into table '{table_name}'.")
+                    source_desc = f"in-memory buffer via temp JSONL ({temp_jsonl_path.name}) for '{source_info['mem_key']}'"
+                    logging.info(f"Successfully loaded {source_desc} into table '{table_name}' using read_json.")
                     schema = raw_tables[table_name].schema()
-                    logging.info(f"Schema for {table_name}: {schema}")
-                except Exception as e_mem:
-                    logging.error(f"Failed to load '{table_name}' from memory via DuckDB API: {e_mem}", exc_info=True)
+                    logging.info(f"Schema for {table_name} (from read_json): {schema}")
+
+                except Exception as e_mem_jsonl:
+                    logging.error(f"Failed to load '{table_name}' from memory via temp JSONL: {e_mem_jsonl}", exc_info=True)
                     # Clean up potentially created table on failure
                     try: con.con.sql(f"DROP TABLE IF EXISTS {table_name};")
                     except Exception: pass
+                    # Also try dropping the temp table name if rename failed
+                    if temp_jsonl_path:
+                         try: 
+                             table_created_by_read_json = temp_jsonl_path.stem
+                             con.con.sql(f"DROP TABLE IF EXISTS \"{table_created_by_read_json}\";")
+                         except Exception: pass
                 finally:
-                    # Clean up temporary view regardless of success/failure
-                    if 'temp_view_name' in locals():
-                         try:
-                             con.con.unregister(temp_view_name)
-                             logging.info(f"Unregistered temporary view '{temp_view_name}'")
-                         except Exception as e_unreg:
-                             logging.warning(f"Could not unregister temporary view '{temp_view_name}': {e_unreg}")
+                    # Clean up the temporary JSONL file
+                    if temp_jsonl_path and temp_jsonl_path.exists():
+                        try:
+                            temp_jsonl_path.unlink()
+                            logging.info(f"Removed temporary JSONL file: {temp_jsonl_path.name}")
+                        except OSError as e_del:
+                            logging.warning(f"Could not delete temporary JSONL file {temp_jsonl_path.name}: {e_del}")
+                    if temp_file and not temp_file.closed:
+                         temp_file.close() # Ensure closed if error occurred before explicit close
             else:
                 logging.warning(f"No data (or not a list) found in memory buffer for {source_info['mem_key']}. Will attempt file fallback if configured.")
 
