@@ -39,6 +39,36 @@ def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table
         logging.info(f"Saved empty antibiotic_usage table with schema to {output_path}")
         return None
 
+    # --- START Check if vetstat_raw has columns ---
+    if not vetstat_raw.columns:
+        logging.warning("Cannot create antibiotic_usage: vetstat_raw table exists but has no columns (likely empty source). Creating empty table with schema.")
+        # Reuse the empty table creation logic from the None check
+        empty_data = {
+            "entity_id": [],
+            "cvr_number": [],
+            "chr_number": [],
+            "year": [],
+            "month": [],
+            "species_code": [],
+            "age_group_code": [],
+            "avg_usage_rolling_9m": [],
+            "avg_usage_rolling_12m": [],
+            "animal_days": [],
+            "animal_doses": [],
+            "add_per_100_dyr_per_dag": [],
+            "limit_value": [],
+            "municipality_code": [],
+            "municipality_name": [],
+            "region_code": [],
+            "region_name": []
+        }
+        empty_df = pd.DataFrame(empty_data)
+        output_path = silver_dir / "antibiotic_usage.parquet"
+        empty_df.to_parquet(output_path)
+        logging.info(f"Saved empty antibiotic_usage table with schema to {output_path}")
+        return None
+    # --- END Check ---
+
     # Define source -> target mapping (adjust based on actual parsed XML->JSONL structure)
     usage_cols = {
         'CVRNummer': 'cvr_number_raw',

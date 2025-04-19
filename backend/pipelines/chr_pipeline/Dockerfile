@@ -31,8 +31,7 @@ COPY . /usr/src/app
 ENV VENV_PATH=/opt/venv
 RUN uv venv ${VENV_PATH} && \
     . ${VENV_PATH}/bin/activate && \
-    uv pip install -e . && \
-    uv pip install 'ibis-framework[duckdb]>=9.2.0' pandas>=2.2.0 geopandas>=0.14.0 pyarrow>=16.1.0
+    uv pip install -e .
 
 # Make test_paths.py executable
 RUN chmod +x test_paths.py
