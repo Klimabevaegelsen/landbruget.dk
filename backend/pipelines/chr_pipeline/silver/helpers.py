@@ -9,6 +9,9 @@ from pathlib import Path
 # Import config for PIPELINE_DIR
 from . import config
 
+# Import export module
+from . import export
+
 # --- Helper Functions ---
 
 def get_latest_bronze_dir(base_dir: Path) -> Path:
@@ -71,7 +74,7 @@ def _sanitize_string(col):
     return col # Return original value if not a string (e.g., already None or NaN)
 
 def _create_and_save_lookup(con, table: ibis.Table, pk_col: str, name_col: str, output_path: Path, table_name: str) -> ibis.Table | None:
-    """Creates a distinct lookup table from columns and saves it to Parquet."""
+    """Creates a distinct lookup table from columns and saves it locally (temporary use during processing)."""
     if table is None or pk_col not in table.columns or name_col not in table.columns:
         logging.warning(f"Cannot create lookup '{table_name}': Input table or columns missing.")
         return None
@@ -87,69 +90,30 @@ def _create_and_save_lookup(con, table: ibis.Table, pk_col: str, name_col: str, 
 
         # Attempt to cast pk back to integer if appropriate, warn on failure
         try:
-            # Try casting to bigint first, then int if it fits.
-            # Check if all values can actually be cast to INT64
-            # This check might be expensive, alternative: try-cast during save?
-            # For now, let's attempt the cast and catch the specific error during save or earlier if possible.
-            # We will keep the pk as string if casting fails later or if table_name suggests string keys
             if table_name not in ['diseases', 'vet_statuses']: # Explicitly keep strings for these known cases
-                 # Try casting numeric codes
-                 lookup = lookup.mutate(pk=lookup['pk'].cast(dt.int64))
-                 # If cast succeeds without error (implies data is numeric), use the cast version
-                 # Note: This requires execution or a robust check. Simpler: Keep as string if unsure.
-                 # Let's stick to the explicit check for now.
                  lookup = lookup.mutate(pk=lookup['pk'].cast(dt.int64))
             else:
-                # Keep as string for known string-based codes
                 lookup = lookup.mutate(pk=lookup['pk'].cast(dt.string))
-
-            # Check if values fit in INT32, if so cast down?
-            # max_pk = lookup.agg(max_pk=lookup.pk.max()).execute()['max_pk'][0]
-            # if max_pk is not None and max_pk < 2**31:
-            #      lookup = lookup.mutate(pk=lookup['pk'].cast(dt.int32))
         except Exception as cast_err:
             logging.warning(f"Could not cast primary key '{pk_col}' to integer for lookup '{table_name}'. Keeping as string. Error: {cast_err}")
-            # Keep pk as string if cast fails
             lookup = lookup.mutate(pk=lookup['pk'].cast(dt.string))
 
+        # Save locally only since this is a temporary lookup table
         if lookup.count().execute() == 0:
             logging.warning(f"Lookup table '{table_name}' is empty after processing.")
             return None
 
         # Rename columns to final schema
         final_pk_name = f"{table_name}_code"
-        final_name_col = "name" # Keep 'name' consistent? Or use table_name_name? Let's use name.
-        # Example log shows `diseases_code` but just `name`, let's follow that pattern.
-        if table_name == 'species': # Handle specific naming for species
-            final_pk_name = "species_code"
-            final_name_col = "species_name" # Special case for species
-        elif table_name == 'usage_types':
-             final_pk_name = "usage_code"
-             # final_name_col = "usage_name" # Keep as name
-        # ... add more specific renames if needed ...
-        elif table_name == 'age_groups':
-            final_pk_name = "age_group_code"
-            # final_name_col = "age_group_name" # Keep as name
-        elif table_name == 'diseases':
-            final_pk_name = "disease_code"
-            # final_name_col = "disease_name" # Keep as name
-        elif table_name == 'vet_statuses':
-            final_pk_name = "vet_status_code"
-            # final_name_col = "vet_status_name" # Keep as name
+        final_name = f"{table_name}_name"
+        lookup = lookup.rename(pk=final_pk_name, name=final_name)
 
-        # Rename flexibility: handle cases where final_name_col might differ
-        rename_map = {final_pk_name: "pk"}
-        if final_name_col != "name": # If we decided to rename the 'name' column too
-            rename_map[final_name_col] = "name"
+        # Execute and save locally
+        df = lookup.execute()
+        df.to_parquet(output_path)
+        logging.info(f"Saved temporary lookup table '{table_name}' locally to {output_path}")
 
-        lookup = lookup.rename(rename_map)
-
-        logging.info(f"Saving lookup table '{table_name}' with {lookup.count().execute()} distinct rows.")
-        lookup.to_parquet(output_path)
-        logging.info(f"Saved {table_name} lookup to {output_path}")
-        # Return the ibis table for potential use (e.g., FK mapping)
-        # Read back from Parquet to ensure consistency?
-        return con.read_parquet(str(output_path))
+        return lookup
 
     except Exception as e:
         logging.error(f"Failed to create or save lookup table '{table_name}': {e}", exc_info=True)

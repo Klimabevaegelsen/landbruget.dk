@@ -2,9 +2,13 @@ import ibis
 import ibis.expr.datatypes as dt
 import logging
 from pathlib import Path
+from typing import Optional
 
 # Import helpers (assuming helpers.py is in the same directory)
 from .helpers import _sanitize_string
+
+# Import export module
+from . import export
 
 
 def create_animal_movements_table(con: ibis.BaseBackend, diko_flyt_raw: ibis.Table | None, silver_dir: Path) -> ibis.Table | None:
@@ -104,8 +108,11 @@ def create_animal_movements_table(con: ibis.BaseBackend, diko_flyt_raw: ibis.Tab
             return None
 
         logging.info(f"Saving animal_movements table with {rows} rows.")
-        movements_final.to_parquet(output_path)
-        logging.info(f"Saved animal_movements table to {output_path}")
+        saved_path = export.save_table(output_path, movements_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save animal_movements table - no path returned")
+            return None
+        logging.info(f"Saved animal_movements table to {saved_path}")
 
         return movements_final
 
