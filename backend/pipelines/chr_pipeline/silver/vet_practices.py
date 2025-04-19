@@ -6,6 +6,9 @@ from pathlib import Path
 # Import helpers
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 def create_vet_practices_table(con, bes_details_raw, silver_dir):
     """Creates the vet_practices table from besaetning details."""
     if bes_details_raw is None:
@@ -64,7 +67,10 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
         return None
 
     logging.info(f"Saving vet_practices table with {rows} rows.")
-    vet_practices_final.to_parquet(output_path)
-    logging.info(f"Saved vet_practices table to {output_path}")
+    saved_path = export.save_table(output_path, vet_practices_final.execute(), is_geo=False)
+    if saved_path is None:
+        logging.error("Failed to save vet_practices table - no path returned")
+        return None
+    logging.info(f"Saved vet_practices table to {saved_path}")
 
     return vet_practices_final # Return the final table 

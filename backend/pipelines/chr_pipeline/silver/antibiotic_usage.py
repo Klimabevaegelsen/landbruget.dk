@@ -7,6 +7,9 @@ import pandas as pd # Import pandas for empty df case
 # Import helpers
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 # --- Antibiotic Usage Table ---
 def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table | None, lookup_tables: dict[str, ibis.Table | None], silver_dir: Path) -> ibis.Table | None:
     """Creates the antibiotic_usage table from parsed VetStat data."""
@@ -35,8 +38,11 @@ def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table
         }
         empty_df = pd.DataFrame(empty_data)
         output_path = silver_dir / "antibiotic_usage.parquet"
-        empty_df.to_parquet(output_path)
-        logging.info(f"Saved empty antibiotic_usage table with schema to {output_path}")
+        saved_path = export.save_table(output_path, empty_df, is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save empty antibiotic_usage table - no path returned")
+            return None
+        logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
 
     # --- START Check if vetstat_raw has columns ---
@@ -64,8 +70,11 @@ def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table
         }
         empty_df = pd.DataFrame(empty_data)
         output_path = silver_dir / "antibiotic_usage.parquet"
-        empty_df.to_parquet(output_path)
-        logging.info(f"Saved empty antibiotic_usage table with schema to {output_path}")
+        saved_path = export.save_table(output_path, empty_df, is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save empty antibiotic_usage table - no path returned")
+            return None
+        logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
     # --- END Check ---
 
@@ -206,8 +215,11 @@ def create_antibiotic_usage_table(con: ibis.BaseBackend, vetstat_raw: ibis.Table
             return None
 
         logging.info(f"Saving antibiotic_usage table with {rows} rows.")
-        usage_final.to_parquet(output_path)
-        logging.info(f"Saved antibiotic_usage table to {output_path}")
+        saved_path = export.save_table(output_path, usage_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save antibiotic_usage table - no path returned")
+            return None
+        logging.info(f"Saved antibiotic_usage table to {saved_path}")
 
         return usage_final
 

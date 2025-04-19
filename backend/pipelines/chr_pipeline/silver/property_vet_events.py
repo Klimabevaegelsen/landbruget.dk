@@ -6,6 +6,9 @@ from pathlib import Path
 # Import helpers
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 # --- Property Vet Events Table ---
 def create_property_vet_events_table(con: ibis.BaseBackend, ejendom_vet_raw: ibis.Table | None, lookup_tables: dict[str, ibis.Table | None], silver_dir: Path) -> ibis.Table | None:
     """Creates the property_vet_events table from the nested structure in ejendom_vet_events."""
@@ -107,8 +110,11 @@ def create_property_vet_events_table(con: ibis.BaseBackend, ejendom_vet_raw: ibi
             return None
 
         logging.info(f"Saving property_vet_events table with {rows} rows.")
-        vet_events_final.to_parquet(output_path)
-        logging.info(f"Saved property_vet_events table to {output_path}")
+        saved_path = export.save_table(output_path, vet_events_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save property_vet_events table - no path returned")
+            return None
+        logging.info(f"Saved property_vet_events table to {saved_path}")
 
         # Clean up
         try:

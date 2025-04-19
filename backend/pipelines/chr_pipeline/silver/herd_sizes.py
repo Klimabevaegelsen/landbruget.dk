@@ -6,6 +6,9 @@ from pathlib import Path
 # Import helpers
 from .helpers import _sanitize_string
 
+# Import export module
+from . import export
+
 def create_herd_sizes_table(con, bes_details_raw, silver_dir):
     """Creates the herd_sizes table from besaetning details."""
     if bes_details_raw is None:
@@ -53,8 +56,11 @@ def create_herd_sizes_table(con, bes_details_raw, silver_dir):
             return None # Still return None if empty
 
         logging.info(f"Saving herd_sizes table with {rows} rows.")
-        herd_sizes_final.to_parquet(output_path)
-        logging.info(f"Saved herd_sizes table to {output_path}")
+        saved_path = export.save_table(output_path, herd_sizes_final.execute(), is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save herd_sizes table - no path returned")
+            return None
+        logging.info(f"Saved herd_sizes table to {saved_path}")
 
         return herd_sizes_final
 
