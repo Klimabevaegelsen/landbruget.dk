@@ -2,8 +2,8 @@ name: Svineflytning Pipeline
 
 on:
   schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    # Run weekly at 6 AM UTC on Mondays (corresponds to Monday morning Danish time)
+    - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       start_date:
@@ -94,8 +94,11 @@ jobs:
     - name: Run Pipeline
       working-directory: backend/pipelines/svineflytning_pipeline
       run: |
+        # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
+        LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
+        
         # Build base command with common arguments
-        CMD="python main.py --log-level ${{ inputs.log_level }}"
+        CMD="python main.py --log-level $LOG_LEVEL"
         
         # Add date range arguments based on event type
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
