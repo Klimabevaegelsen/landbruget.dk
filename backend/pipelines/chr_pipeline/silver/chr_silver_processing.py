@@ -244,8 +244,9 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                     for record in data:
                         # Ensure complex objects are handled by json.dumps
                         try:
-                             json.dump(record, temp_file, default=str) # Use default=str for non-serializable types like dates
-                             temp_file.write('\\n')
+                             # Revised JSONL writing:
+                             json_string = json.dumps(record, default=str) # Serialize to string first
+                             temp_file.write(json_string + '\n')      # Write string + newline
                         except TypeError as e_json:
                             logging.warning(f"Skipping record due to JSON serialization error for table '{table_name}': {e_json}. Record sample: {str(record)[:200]}...")
                             continue # Skip bad records
@@ -254,6 +255,14 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                     temp_file.close() # Close the file handle
 
                     logging.info(f"Finished writing temporary JSONL for '{table_name}'. Attempting read_json...")
+
+                    # Increase DuckDB max object size before reading potentially large JSON lines
+                    try:
+                        con.con.sql("SET maximum_object_size='1GB';")
+                        logging.info(f"Set DuckDB maximum_object_size to 1GB for reading '{table_name}'")
+                    except Exception as e_set_max_obj:
+                        # Log warning but proceed, read_json might still work for smaller files
+                        logging.warning(f"Failed to set maximum_object_size for '{table_name}': {e_set_max_obj}")
 
                     # Use con.read_json (part of Ibis facade for DuckDB)
                     # auto_detect=True helps with schema inference, format='newline_delimited' is crucial
