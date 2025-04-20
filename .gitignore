@@ -121,3 +121,5 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+.codx/db
+.codx/logs
