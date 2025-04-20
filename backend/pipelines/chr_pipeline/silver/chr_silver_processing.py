@@ -254,48 +254,27 @@ def process_chr_data(bronze_dir: Optional[Path] = None, silver_dir: Path = None,
                     temp_file.flush() # Ensure all data is written
                     temp_file.close() # Close the file handle
 
-                    logging.info(f"Finished writing temporary JSONL for '{table_name}'. Attempting read_json...")
+                    logging.info(f"Finished writing temporary JSONL for '{table_name}'. Attempting read_json_auto...")
 
-                    # Increase DuckDB max object size before reading potentially large JSON lines
-                    try:
-                        con.con.sql("SET maximum_object_size='1GB';")
-                        logging.info(f"Set DuckDB maximum_object_size to 1GB for reading '{table_name}'")
-                    except Exception as e_set_max_obj:
-                        # Log warning but proceed, read_json might still work for smaller files
-                        logging.warning(f"Failed to set maximum_object_size for '{table_name}': {e_set_max_obj}")
-
-                    # Use con.read_json (part of Ibis facade for DuckDB)
-                    # auto_detect=True helps with schema inference, format='newline_delimited' is crucial
-                    con.con.sql(f"DROP TABLE IF EXISTS {table_name};") # Ensure clean slate
-                    raw_tables[table_name] = con.read_json(
-                        str(temp_jsonl_path),
-                        format='newline_delimited',
-                        auto_detect=True,
-                        # union_by_name=True # Consider adding if schemas differ slightly between records
-                    )
-                    # Assign the table name explicitly in DuckDB for clarity
-                    # read_json creates a table named after the file stem, so we rename it
-                    table_created_by_read_json = temp_jsonl_path.stem
-                    con.con.sql(f"ALTER TABLE \"{table_created_by_read_json}\" RENAME TO {table_name};")
-                    raw_tables[table_name] = con.table(table_name) # Re-reference table by its final name
+                    # Use DuckDB SQL directly to read JSONL and create the table
+                    # read_json_auto handles schema inference and newline delimited format
+                    # Pass maximum_object_size directly as a parameter to the function
+                    # Set to 1GB (1073741824 bytes)
+                    max_obj_size_bytes = 1073741824
+                    con.con.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', maximum_object_size={max_obj_size_bytes});")
+                    raw_tables[table_name] = con.table(table_name) # Get Ibis table reference
 
                     successfully_loaded = True
                     source_desc = f"in-memory buffer via temp JSONL ({temp_jsonl_path.name}) for '{source_info['mem_key']}'"
-                    logging.info(f"Successfully loaded {source_desc} into table '{table_name}' using read_json.")
+                    logging.info(f"Successfully loaded {source_desc} into table '{table_name}' using read_json_auto.")
                     schema = raw_tables[table_name].schema()
-                    logging.info(f"Schema for {table_name} (from read_json): {schema}")
+                    logging.info(f"Schema for {table_name} (from read_json_auto): {schema}")
 
                 except Exception as e_mem_jsonl:
                     logging.error(f"Failed to load '{table_name}' from memory via temp JSONL: {e_mem_jsonl}", exc_info=True)
                     # Clean up potentially created table on failure
                     try: con.con.sql(f"DROP TABLE IF EXISTS {table_name};")
                     except Exception: pass
-                    # Also try dropping the temp table name if rename failed
-                    if temp_jsonl_path:
-                         try: 
-                             table_created_by_read_json = temp_jsonl_path.stem
-                             con.con.sql(f"DROP TABLE IF EXISTS \"{table_created_by_read_json}\";")
-                         except Exception: pass
                 finally:
                     # Clean up the temporary JSONL file
                     if temp_jsonl_path and temp_jsonl_path.exists():
