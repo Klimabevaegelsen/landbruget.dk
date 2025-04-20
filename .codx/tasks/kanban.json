@@ -1,1 +1,84 @@
-{"version": 0.1, "boards": {"kanban": {"columns": [{"title": "tasks", "id": "75006c56-b11e-4f77-861f-4b235e1c99dd"}], "active": false}, "Upwork - Offers": {"id": "712deac5-8cad-41e7-b296-efe27e4fecae", "description": "Backlog board", "branch": "", "columns": [{"title": "Backlog", "color": "#FFC300", "id": "112a3361-febf-4527-9134-1b35492375d6"}, {"title": "In Development", "color": "#DAF7A6", "id": "afd9ea7f-2ce0-4d40-9181-b4fd198bf148"}, {"title": "Completed", "color": "#C70039", "id": "8306bf62-f888-407c-a56f-ffbb6f9470ad"}], "last_update": "2025-04-20T08:03:27.128Z", "active": true}}, "tags": {}}
+{
+  "version": 0.1,
+  "boards": {
+    "kanban": {
+      "columns": [
+        {
+          "title": "tasks",
+          "id": "75006c56-b11e-4f77-861f-4b235e1c99dd"
+        }
+      ],
+      "active": false
+    },
+    "Create Pipeline for Fetching and Processing Data from Google Drive": {
+      "id": "712deac5-8cad-41e7-b296-efe27e4fecae",
+      "description": "Backlog board",
+      "branch": "",
+      "columns": [
+        {
+          "title": "Backlog",
+          "color": "#FFC300",
+          "id": "112a3361-febf-4527-9134-1b35492375d6",
+          "chats": [
+            "ede029e1-79d0-4437-b6c2-41f3cbb5a9fa",
+            "aa4ee57f-aa8f-4254-96cd-803285cef2d3",
+            "0c0e065d-4b3f-4e01-8105-81dfdd09ee1f",
+            "089a20bd-81de-413e-a0d3-72df48723e2a",
+            "5f0558b0-fb7b-48d9-928c-90b3813a4078"
+          ]
+        },
+        {
+          "title": "In Development",
+          "color": "#DAF7A6",
+          "id": "afd9ea7f-2ce0-4d40-9181-b4fd198bf148",
+          "chats": [
+            "c771897b-75ce-4a62-b394-1047fb7a84aa",
+            "ac95be01-1dfb-447e-bad1-f6a47f4cd1cd"
+          ]
+        },
+        {
+          "title": "Completed",
+          "color": "#C70039",
+          "id": "8306bf62-f888-407c-a56f-ffbb6f9470ad",
+          "chats": [
+            "4c5944ab-57cc-487f-93b6-ac7034e3d21e"
+          ]
+        }
+      ],
+      "last_update": "2025-04-20T16:43:48.144Z",
+      "active": true
+    },
+    "Frontend": {
+      "id": "6a92e8e4-77b4-4777-be6a-b7abd774e1f2",
+      "description": "Backlog board",
+      "branch": "",
+      "columns": [
+        {
+          "title": "Backlog",
+          "color": "#FFC300",
+          "id": "6be84ba9-a995-475e-b783-916626eff22d"
+        },
+        {
+          "title": "In Development",
+          "color": "#DAF7A6",
+          "id": "417c81a6-6e38-4227-99e8-6e872540eb9b"
+        },
+        {
+          "title": "Completed",
+          "color": "#C70039",
+          "id": "6d4cf4bf-7344-4d45-86a5-37754d33c447"
+        }
+      ],
+      "last_update": "2025-04-20T16:05:52.614Z"
+    },
+    "mentions": {
+      "columns": [
+        {
+          "title": "changes",
+          "id": "93bbee37-4ea3-476f-bb77-dc58c1bbedae"
+        }
+      ]
+    }
+  },
+  "tags": {}
+}

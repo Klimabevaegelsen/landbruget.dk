@@ -123,3 +123,4 @@ cloud-sql-proxy
 backend/test_wfs.py
 .codx/db
 .codx/logs
+backend/src/sources.egg-info/PKG-INFO

@@ -14,7 +14,7 @@
   "knowledge_context_rag_distance": 0.4,
   "knowledge_external_folders": "",
   "knowledge_query_subprojects": true,
-  "knowledge_file_ignore": ".codx,.venv,.ico",
+  "knowledge_file_ignore": ".codx,.venv,.ico,.xlsx",
   "watching": true,
   "use_knowledge": true,
   "knowledge_hnsw_M": 1024,
