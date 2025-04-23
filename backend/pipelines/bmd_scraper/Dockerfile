@@ -16,12 +16,17 @@ RUN pip install --no-cache-dir uv
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
 # Copy the project code
 COPY . .
+
+# Install the project with dependencies
+# Use production extras if ENVIRONMENT is set to production
+ARG ENVIRONMENT=container
+RUN if [ "$ENVIRONMENT" = "production" ]; then \
+    pip install --no-cache-dir -e ".[production]"; \
+    else \
+    pip install --no-cache-dir -e .; \
+    fi
 
 # Create output directories
 RUN mkdir -p /data/bronze/bmd /data/silver/bmd

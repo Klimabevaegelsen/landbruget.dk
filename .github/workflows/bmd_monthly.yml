@@ -38,11 +38,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/pipelines/bmd_scraper/requirements.txt
           
-          # For production, install GCS dependencies
+          # Install the BMD scraper package with appropriate extras
+          cd backend/pipelines/bmd_scraper
           if [ "${{ env.ENVIRONMENT }}" == "production" ]; then
-            pip install google-cloud-storage
+            pip install -e ".[production]"
+          else
+            pip install -e .
           fi
       
       - name: Authenticate to Google Cloud (Production only)
@@ -78,6 +80,16 @@ jobs:
           
           # Run the pipeline
           python main.py
+      
+      - name: Upload artifacts (Development only)
+        if: env.ENVIRONMENT == 'development'
+        uses: actions/upload-artifact@v3
+        with:
+          name: bmd-data
+          path: |
+            data/bronze/bmd
+            data/silver/bmd
+          retention-days: 30
       
       - name: Notify on success
         if: success()
