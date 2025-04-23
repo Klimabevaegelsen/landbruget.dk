@@ -55,16 +55,18 @@ gs://<bucket-name>/silver/bmd/<timestamp>/metadata.json
    ```
 3. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   cd backend/pipelines/bmd_scraper
+   pip install -e .
    ```
 
 ### Production Setup
 
 For production environments with Google Cloud Storage:
 
-1. Uncomment and install the GCS dependency in requirements.txt:
-   ```
-   google-cloud-storage>=2.0.0
+1. Install with production dependencies:
+   ```bash
+   cd backend/pipelines/bmd_scraper
+   pip install -e ".[production]"
    ```
 
 2. Update the .env file with your GCS configuration:
@@ -96,7 +98,7 @@ The automation is configured in `.github/workflows/bmd_monthly.yml` with the fol
 - **Schedule**: Monthly runs on the 1st at 2 AM UTC (`cron: '0 2 1 * *'`)
 - **Manual Triggering**: Can be triggered manually with environment selection
 - **Environment Support**: 
-  - In production mode, uploads data to GCS
+  - In production mode, uploads data to GCS and installs production dependencies
   - In development mode, saves artifacts in GitHub Actions
 - **GCP Authentication**: Automatically handles authentication for GCS in production mode
 - **Notifications**: Can be configured to notify via Slack, email, etc. on success/failure
@@ -121,8 +123,7 @@ For production runs with GCS integration, the following GitHub secrets must be c
 ├── Dockerfile          # Container definition
 ├── docker-compose.yml  # Local development setup
 ├── main.py             # Main entry point
-├── pyproject.toml      # Python project configuration
-└── requirements.txt    # Python dependencies
+├── pyproject.toml      # Python project configuration and dependencies
 ```
 
 ## Usage

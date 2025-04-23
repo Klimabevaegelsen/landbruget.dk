@@ -70,29 +70,12 @@ class BMDTransformer:
         """
         logger.info(f"Reading Excel file from {self.input_file}")
         try:
-            # Read all sheets to determine the correct one
-            excel_file = pd.ExcelFile(self.input_file)
-            sheet_names = excel_file.sheet_names
-            
-            if not sheet_names:
-                raise ValueError("No sheets found in Excel file")
-            
-            # Use the first sheet if there's only one, otherwise try to find a relevant one
-            sheet_name = sheet_names[0]
-            if len(sheet_names) > 1:
-                # Try to find a more specific sheet if available
-                for name in sheet_names:
-                    if "product" in name.lower() or "data" in name.lower() or "bmd" in name.lower():
-                        sheet_name = name
-                        break
-            
-            logger.info(f"Reading sheet: {sheet_name}")
-            # Using header=3 to use the 4th row as header (0-indexed)
-            df = pd.read_excel(excel_file, sheet_name=sheet_name, header=3)
-            
+            conn = duckdb.connect(database=':memory:')
+
+            df = conn.execute(f"SELECT * FROM read_xlsx('{self.input_file}', range = 'A4:Z', stop_at_empty = true, header=true);").fetchdf()
             # Log the size of the dataframe
             logger.info(f"Read {len(df)} rows and {len(df.columns)} columns")
-            
+            conn.close()
             # Store column information in metadata
             self.silver_metadata = {
                 "transform_timestamp": datetime.now().isoformat(),
@@ -106,6 +89,7 @@ class BMDTransformer:
             return df
         
         except Exception as e:
+            conn.close()
             logger.exception(f"Error reading Excel file: {e}")
             raise
     
