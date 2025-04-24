@@ -29,7 +29,6 @@ RUN if [ "$ENVIRONMENT" = "production" ]; then \
     fi
 
 # Create output directories
-RUN mkdir -p /data/bronze/bmd /data/silver/bmd
 
 # Set environment variable to indicate container environment
 ENV ENVIRONMENT=container

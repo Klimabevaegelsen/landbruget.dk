@@ -233,7 +233,7 @@ class GCSStorage:
 
 def main():
     # Example usage for local development
-    scraper = BMDScraper(output_dir="data/bronze/bmd")
+    scraper = BMDScraper(output_dir="bronze/bmd")
     file_path = scraper.scrape()
     
     if file_path:
