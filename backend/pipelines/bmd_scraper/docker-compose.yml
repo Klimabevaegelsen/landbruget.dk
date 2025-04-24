@@ -9,8 +9,8 @@ services:
       # Mount the code directory for development
       - .:/app
       # Mount data directories for persistence between runs
-      - ../../../bronze/bmd:bronze/bmd
-      - ../../../silver/bmd:silver/bmd
+      - ../../data/bronze/bmd:/data/bronze/bmd
+      - ../../data/silver/bmd:/data/silver/bmd
     environment:
       - ENVIRONMENT=development
       # Add other environment variables or refer to .env file
