@@ -83,7 +83,7 @@ jobs:
       
       - name: Upload artifacts (Development only)
         if: env.ENVIRONMENT == 'development'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bmd-data
           path: |
