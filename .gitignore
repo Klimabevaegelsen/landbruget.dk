@@ -5,7 +5,6 @@ __pycache__/
 *.so
 .Python
 .env
-.venv
 env/
 venv/
 ENV/
@@ -122,3 +121,5 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+*.egg-info
+
