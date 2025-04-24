@@ -12,7 +12,7 @@ This pipeline is divided into two main stages:
 ### Bronze Stage
 The Bronze stage downloads raw Excel data from the BMD portal and saves it with the following structure:
 ```
-data/bronze/bmd/<timestamp>/
+bronze/bmd/<timestamp>/
   ├── bmd_raw.xlsx        # Raw Excel file from BMD portal
   └── metadata.json       # Metadata about the download (timestamp, source URL, etc.)
 ```
@@ -84,8 +84,8 @@ docker-compose up --build
 ```
 
 This will mount the appropriate data directories:
-- `data/bronze/bmd/` -> `/data/bronze/bmd/` in the container
-- `data/silver/bmd/` -> `/data/silver/bmd/` in the container
+- `bronze/bmd/` -> `bronze/bmd/` in the container
+- `silver/bmd/` -> `silver/bmd/` in the container
 
 ## Automated Pipeline Runs
 

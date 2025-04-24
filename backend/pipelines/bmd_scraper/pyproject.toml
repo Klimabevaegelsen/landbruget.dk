@@ -16,7 +16,6 @@ dependencies = [
     "python-dotenv",
     "pyarrow",
     "duckdb",
-    "dotenv"
 ]
 
 [project.optional-dependencies]

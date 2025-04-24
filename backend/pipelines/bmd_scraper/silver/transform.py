@@ -21,12 +21,12 @@ logger = logging.getLogger("bmd_pipeline.silver.transform")
 
 class BMDTransformer:
     """
-    Transforms raw BMD Excel data into a clean, structured format.
+    Transforms raw BMD Excel data into a clean, structured format using DuckDB.
     
     This class handles:
-    - Reading raw Excel data
-    - Cleaning and normalizing fields
-    - Type casting
+    - Reading raw Excel data with DuckDB
+    - Cleaning and normalizing fields with SQL
+    - Type casting with SQL
     - Data validation
     - Saving to Parquet format
     """
@@ -43,6 +43,7 @@ class BMDTransformer:
         self.output_dir = output_dir
         self.timestamp = input_file.parent.name
         self.metadata = {}
+        self.conn = None
         
         # Try to load metadata from bronze stage
         metadata_path = input_file.parent / "metadata.json"
@@ -60,269 +61,368 @@ class BMDTransformer:
             "Ikke godkendt": "not_approved",
             # Add more mappings as needed
         }
+        
+        # Create the DuckDB connection to be used throughout the transformation
+        self.conn = duckdb.connect(database=':memory:')
     
-    def read_excel(self) -> pd.DataFrame:
+    def __del__(self):
+        """Clean up DuckDB connection on object destruction."""
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except:
+                pass
+    
+    def read_excel(self) -> str:
         """
-        Read the raw Excel file into a pandas DataFrame.
+        Read the raw Excel file into a DuckDB table.
         
         Returns:
-            DataFrame containing the raw data
+            Name of the DuckDB table with the raw data
         """
         logger.info(f"Reading Excel file from {self.input_file}")
         try:
-            conn = duckdb.connect(database=':memory:')
-
-            df = conn.execute(f"SELECT * FROM read_xlsx('{self.input_file}', range = 'A4:Z', stop_at_empty = true, header=true);").fetchdf()
-            # Log the size of the dataframe
-            logger.info(f"Read {len(df)} rows and {len(df.columns)} columns")
-            conn.close()
+            # Read Excel file directly into DuckDB table
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE raw_data AS
+                SELECT * FROM read_xlsx('{self.input_file}', range = 'A4:AR', stop_at_empty = true, header=true);
+            """)
+            
+            # Get basic information about the table
+            result = self.conn.execute("SELECT COUNT(*) as row_count FROM raw_data").fetchone()
+            row_count = result[0]
+            
+            result = self.conn.execute("SELECT * FROM raw_data LIMIT 1").description
+            columns = [desc[0] for desc in result]
+            
+            logger.info(f"Read {row_count} rows and {len(columns)} columns")
+            
             # Store column information in metadata
             self.silver_metadata = {
                 "transform_timestamp": datetime.now().isoformat(),
                 "source_file": str(self.input_file),
                 "bronze_timestamp": self.timestamp,
-                "row_count": len(df),
-                "column_count": len(df.columns),
-                "columns": list(df.columns),
+                "row_count": row_count,
+                "column_count": len(columns),
+                "columns": columns,
             }
             
-            return df
+            return "raw_data"
         
         except Exception as e:
-            conn.close()
             logger.exception(f"Error reading Excel file: {e}")
             raise
     
-    def clean_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
+    def clean_column_names(self, table_name: str) -> str:
         """
         Standardize column names to lowercase with underscores.
         
         Args:
-            df: Raw DataFrame
+            table_name: Name of the DuckDB table with raw data
             
         Returns:
-            DataFrame with standardized column names
+            Name of the DuckDB table with standardized column names
         """
-        # Map of original column names to standardized names
-        column_mapping = {}
+        logger.info("Cleaning column names")
         
-        for col in df.columns:
-            # Convert to lowercase, replace spaces with underscores
-            clean_col = col.lower().strip().replace(' ', '_')
-            # Remove special characters
-            clean_col = ''.join(c if c.isalnum() or c == '_' else '_' for c in clean_col)
-            # Remove consecutive underscores
-            while '__' in clean_col:
-                clean_col = clean_col.replace('__', '_')
-            # Remove leading/trailing underscores
-            clean_col = clean_col.strip('_')
+        try:
+            # Get the current columns
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
             
-            column_mapping[col] = clean_col
+            # Create a mapping for column names
+            column_mapping = {}
+            for col in columns:
+                # Convert to lowercase, replace spaces with underscores
+                clean_col = col.lower().strip().replace(' ', '_')
+                # Remove special characters
+                clean_col = ''.join(c if c.isalnum() or c == '_' else '_' for c in clean_col)
+                # Remove consecutive underscores
+                while '__' in clean_col:
+                    clean_col = clean_col.replace('__', '_')
+                # Remove leading/trailing underscores
+                clean_col = clean_col.strip('_')
+                
+                column_mapping[col] = clean_col
+            
+            # Create SQL for column renaming
+            column_selects = []
+            for original, clean in column_mapping.items():
+                column_selects.append(f'"{original}" AS {clean}')
+            
+            # Create a new table with cleaned column names
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE cleaned_columns AS
+                SELECT {', '.join(column_selects)}
+                FROM {table_name};
+            """)
+            
+            # Log the column mapping
+            logger.info(f"Column mapping: {column_mapping} Column mapping lens: {len(column_mapping)}")
+            
+            
+            return "cleaned_columns"
         
-        # Rename columns
-        df = df.rename(columns=column_mapping)
-        
-        # Log the column mapping
-        logger.info(f"Column mapping: {column_mapping}")
-        
-        return df
+        except Exception as e:
+            logger.exception(f"Error cleaning column names: {e}")
+            raise
     
-    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def handle_semicolon_lists(self, table_name: str) -> str:
+        """
+        Convert semicolon-separated values in columns to arrays for better querying.
+        
+        Args:
+            table_name: Name of the DuckDB table to process
+            
+        Returns:
+            Name of the DuckDB table with arrays for semicolon-separated values
+        """
+        logger.info("Converting semicolon-separated lists to arrays")
+        
+        try:
+            # Get column names
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
+            
+            # Identify potential list columns
+            list_columns = []
+            potential_list_columns = [
+                'bruger_pesticid', 
+                'bruger_biocid', 
+                'mindre_anvendelse_nr', 
+                'mindre_anvendelse_godkendelsesindehaver'
+            ]
+            
+            # Check if cleaned column names match any potential list columns
+            for col in columns:
+                clean_col = col.lower().replace(' ', '_').replace('-', '_')
+                if clean_col in potential_list_columns or ';' in str(self.conn.execute(f"SELECT {col} FROM {table_name} LIMIT 1").fetchone()[0]):
+                    # Sample a few rows to confirm semicolon presence
+                    sample = self.conn.execute(f"""
+                        SELECT COUNT(*) 
+                        FROM {table_name} 
+                        WHERE {col} LIKE '%;%' 
+                        LIMIT 10
+                    """).fetchone()[0]
+                    
+                    if sample > 0:
+                        list_columns.append(col)
+                        logger.info(f"Detected semicolon-separated list in column: {col}")
+            
+            if not list_columns:
+                # No list columns found, return the original table
+                logger.info("No semicolon-separated lists found to convert")
+                return table_name
+            
+            # Create SQL for converting semicolon lists to arrays
+            array_conversions = []
+            for col in columns:
+                if col in list_columns:
+                    # Split the column by semicolon and convert to an array
+                    array_conversions.append(f"""
+                        CASE 
+                            WHEN {col} IS NULL OR {col} = '' THEN NULL
+                            ELSE string_split({col}, ';')
+                        END AS {col}
+                    """)
+                else:
+                    array_conversions.append(col)
+            
+            # Create a table with array conversions
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE array_converted AS
+                SELECT {', '.join(array_conversions)}
+                FROM {table_name};
+            """)
+            
+            # Store metadata about array conversions
+            self.silver_metadata["array_conversions"] = {
+                "columns": list_columns,
+                "description": "Semicolon-separated values converted to arrays"
+            }
+            
+            return "array_converted"
+        
+        except Exception as e:
+            logger.exception(f"Error converting semicolon lists to arrays: {e}")
+            raise
+    
+    def clean_data(self, table_name: str) -> str:
         """
         Clean and normalize the data.
         
         Args:
-            df: DataFrame with raw data
+            table_name: Name of the DuckDB table to clean
             
         Returns:
-            Cleaned DataFrame
+            Name of the DuckDB table with cleaned data
         """
         logger.info("Cleaning and normalizing data")
         
-        # Make a copy to avoid modifying the original
-        df_clean = df.copy()
+        try:
+            # Get column names
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
+            
+            # Identify text columns for trimming
+            text_columns = []
+            for col in columns:
+                col_type = self.conn.execute(f"SELECT typeof({col}) FROM {table_name} LIMIT 1").fetchone()[0]
+                if col_type.lower() in ['varchar', 'string', 'text']:
+                    text_columns.append(col)
+            
+            # Create SQL for trimming text columns
+            trims = []
+            for col in columns:
+                if col in text_columns:
+                    trims.append(f'TRIM({col}) AS {col}')
+                else:
+                    trims.append(col)
+            logger.info(f"Trims {len(trims)}")
+            # Create a table with trimmed text
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE trimmed_data AS
+                SELECT {', '.join(trims)}
+                FROM {table_name};
+            """)
+            
+            normalized_table = "trimmed_data"
+            
+            # Handle semicolon-separated lists in a separate function
+            list_processed_table = self.handle_semicolon_lists(normalized_table)
+            
+            # Drop duplicates
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE cleaned_data AS
+                SELECT DISTINCT *
+                FROM {list_processed_table};
+            """)
+            
+            # Check for dropped duplicates
+            orig_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            new_count = self.conn.execute("SELECT COUNT(*) FROM cleaned_data").fetchone()[0]
+            if orig_count > new_count:
+                logger.warning(f"Removed {orig_count - new_count} duplicate rows")
+            
+            return "cleaned_data"
         
-        # Clean text columns (strip whitespace)
-        for col in df_clean.select_dtypes(include=['object']).columns:
-            df_clean[col] = df_clean[col].astype(str).str.strip()
-        
-        # Normalize status fields if they exist
-        status_columns = [col for col in df_clean.columns if 'status' in col.lower() 
-                         or 'godkendelse' in col.lower() or 'tilladelse' in col.lower()]
-        
-        for col in status_columns:
-            df_clean[col] = df_clean[col].map(self.status_mapping).fillna(df_clean[col])
-        
-        # Handle duplicate rows
-        if df_clean.duplicated().any():
-            logger.warning(f"Found {df_clean.duplicated().sum()} duplicate rows, removing them")
-            df_clean = df_clean.drop_duplicates()
-        
-        return df_clean
+        except Exception as e:
+            logger.exception(f"Error cleaning data: {e}")
+            raise
     
-    def parse_dates(self, df: pd.DataFrame) -> pd.DataFrame:
+    def parse_dates(self, table_name: str) -> str:
         """
         Parse and standardize date columns.
         
         Args:
-            df: DataFrame with raw data
+            table_name: Name of the DuckDB table
             
         Returns:
-            DataFrame with standardized date columns
+            Name of the DuckDB table with date columns parsed
         """
         logger.info("Parsing date columns")
         
-        # Identify potential date columns
-        date_columns = [col for col in df.columns 
-                       if any(date_term in col.lower() for date_term in 
-                             ['date', 'dato', 'godkendelsesdato', 'udløbsdato', 'expiry'])]
-        
-        for col in date_columns:
-            try:
-                # Try converting to datetime
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-                logger.info(f"Converted {col} to date format")
-            except Exception as e:
-                logger.warning(f"Could not convert {col} to date: {e}")
-        
-        return df
-    
-    def apply_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply correct data types to columns.
-        
-        Args:
-            df: Cleaned DataFrame
-            
-        Returns:
-            DataFrame with correct types
-        """
-        logger.info("Applying data types")
-        
-        # Store the original dtypes for reference
-        self.silver_metadata["original_dtypes"] = {col: str(dtype) for col, dtype in df.dtypes.items()}
-        
-        # Create a DuckDB connection to use SQL for type conversion
         try:
-            conn = duckdb.connect(database=':memory:')
-            conn.register('df_raw', df)
+            # Get column names
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
             
-            # Generate a SQL query to cast columns to appropriate types
-            casts = []
+            # Identify potential date columns
+            date_columns = []
+            for col in columns:
+                if any(date_term in col.lower() for date_term in 
+                      ['date', 'dato', 'godkendelsesdato', 'udløbsdato', 'expiry']):
+                    date_columns.append(col)
             
-            # Process numeric columns first
-            for col in df.columns:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    # Check if it's an integer or decimal
-                    if df[col].dropna().apply(lambda x: x == int(x) if pd.notnull(x) else True).all():
-                        casts.append(f'CAST("{col}" AS INTEGER) AS {col}')
+            # If we have date columns, parse them
+            if date_columns:
+                # Create SQL for date parsing
+                date_casts = []
+                for col in columns:
+                    if col in date_columns:
+                        # Try to cast to DATE
+                        date_casts.append(f'TRY_CAST({col} AS DATE) AS {col}')
                     else:
-                        casts.append(f'CAST("{col}" AS DOUBLE) AS {col}')
-                elif pd.api.types.is_datetime64_dtype(df[col]):
-                    casts.append(f'CAST("{col}" AS DATE) AS {col}')
-                else:
-                    casts.append(f'CAST("{col}" AS VARCHAR) AS {col}')
-            
-            # Create the SQL query
-            sql = f"""
-            SELECT 
-                {", ".join(casts)}
-            FROM df_raw
-            """
-            
-            # Execute the query
-            df_typed = conn.execute(sql).df()
-            
-            # Close the connection
-            conn.close()
-            
-            # Store the new dtypes
-            self.silver_metadata["applied_dtypes"] = {col: str(dtype) for col, dtype in df_typed.dtypes.items()}
-            
-            return df_typed
-            
+                        date_casts.append(col)
+                
+                # Create a table with parsed dates
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE date_parsed AS
+                    SELECT {', '.join(date_casts)}
+                    FROM {table_name};
+                """)
+                
+                # Log the date columns found
+                logger.info(f"Parsed date columns: {date_columns}")
+                
+                return "date_parsed"
+            else:
+                logger.info("No date columns found to parse")
+                return table_name
+        
         except Exception as e:
-            logger.exception(f"Error applying types with DuckDB: {e}")
-            logger.warning("Falling back to pandas for type conversion")
-            
-            # Fallback to pandas
-            for col in df.columns:
-                try:
-                    if pd.api.types.is_numeric_dtype(df[col]):
-                        # Try to convert to int or float
-                        if df[col].dropna().apply(lambda x: x == int(x) if pd.notnull(x) else True).all():
-                            df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')  # nullable int
-                        else:
-                            df[col] = pd.to_numeric(df[col], errors='coerce')
-                except Exception as col_err:
-                    logger.warning(f"Error converting column {col}: {col_err}")
-            
-            # Store the new dtypes
-            self.silver_metadata["applied_dtypes"] = {col: str(dtype) for col, dtype in df.dtypes.items()}
-            
-            return df
+            logger.exception(f"Error parsing dates: {e}")
+            raise
     
-    def validate_data(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, List[str]]]:
+    def validate_data(self, table_name: str) -> Tuple[str, Dict[str, List[str]]]:
         """
         Validate the cleaned data and report issues.
         
         Args:
-            df: Cleaned DataFrame
+            table_name: Name of the DuckDB table
             
         Returns:
-            Tuple of (validated DataFrame, validation issues)
+            Tuple of (table_name, validation issues)
         """
         logger.info("Validating data")
         
         validation_issues = {}
         
-        # Check for missing values
-        missing_counts = df.isna().sum()
-        if missing_counts.any():
-            missing_cols = missing_counts[missing_counts > 0]
-            validation_issues["missing_values"] = [
-                f"{col}: {count} missing values ({count/len(df):.1%})" 
-                for col, count in missing_cols.items()
-            ]
-            logger.warning(f"Found columns with missing values: {missing_cols.to_dict()}")
-        
-        # Check for outliers in numeric columns
-        for col in df.select_dtypes(include=['int64', 'float64']).columns:
-            try:
-                # Simple outlier detection using IQR
-                q1 = df[col].quantile(0.25)
-                q3 = df[col].quantile(0.75)
-                iqr = q3 - q1
-                lower_bound = q1 - 1.5 * iqr
-                upper_bound = q3 + 1.5 * iqr
+        try:
+            # Get column names
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
+            
+            # Get row count
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            
+            # Check for missing values
+            missing_values = []
+            for col in columns:
+                null_count = self.conn.execute(f"""
+                    SELECT COUNT(*) 
+                    FROM {table_name} 
+                    WHERE {col} IS NULL
+                """).fetchone()[0]
                 
-                outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
-                if len(outliers) > 0:
-                    pct = len(outliers) / len(df)
-                    if pct > 0.01:  # Only report if more than 1% are outliers
-                        if "outliers" not in validation_issues:
-                            validation_issues["outliers"] = []
-                        validation_issues["outliers"].append(
-                            f"{col}: {len(outliers)} outliers ({pct:.1%})"
-                        )
-                        logger.warning(f"Found outliers in {col}: {len(outliers)} values ({pct:.1%})")
-            except Exception as e:
-                logger.warning(f"Could not check outliers for {col}: {e}")
+                if null_count > 0:
+                    missing_values.append(f"{col}: {null_count} missing values ({null_count/row_count:.1%})")
+                    logger.warning(f"Column {col} has {null_count} missing values ({null_count/row_count:.1%})")
+            
+            if missing_values:
+                validation_issues["missing_values"] = missing_values
+            
+            
+            #TODO: check outlier later
+            
+            # Store validation results in metadata
+            self.silver_metadata["validation"] = {
+                "has_issues": bool(validation_issues),
+                "issues": validation_issues
+            }
+            
+            return table_name, validation_issues
         
-        # Store validation results in metadata
-        self.silver_metadata["validation"] = {
-            "has_issues": bool(validation_issues),
-            "issues": validation_issues
-        }
-        
-        return df, validation_issues
+        except Exception as e:
+            logger.exception(f"Error validating data: {e}")
+            raise
     
-    def save_parquet(self, df: pd.DataFrame) -> Path:
+    def save_parquet(self, table_name: str) -> Path:
         """
-        Save the processed DataFrame as a Parquet file.
+        Save the processed data as a Parquet file.
         
         Args:
-            df: Processed DataFrame
+            table_name: Name of the DuckDB table
             
         Returns:
             Path to the saved Parquet file
@@ -333,21 +433,32 @@ class BMDTransformer:
         
         logger.info(f"Saving Parquet file to {output_path}")
         
-        # Convert to PyArrow Table and write Parquet
-        table = pa.Table.from_pandas(df)
-        pq.write_table(table, output_path)
+        try:
+            # Export directly from DuckDB to Parquet
+            self.conn.execute(f"""
+                COPY (SELECT * FROM {table_name}) 
+                TO '{output_path}' (FORMAT 'parquet')
+            """)
+            
+            self.conn.execute(f"""
+                COPY (SELECT * FROM {table_name}) 
+                TO '{self.output_dir/f"bmd_data_{self.timestamp}.xlsx"}' (FORMAT 'xlsx')
+            """)            
+            # Save metadata file
+            metadata_path = self.output_dir / "metadata.json"
+            self.silver_metadata["output_file"] = str(output_path)
+            self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
+            
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Saved metadata to {metadata_path}")
+            
+            return output_path
         
-        # Save metadata file
-        metadata_path = self.output_dir / "metadata.json"
-        self.silver_metadata["output_file"] = str(output_path)
-        self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
-        
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"Saved metadata to {metadata_path}")
-        
-        return output_path
+        except Exception as e:
+            logger.exception(f"Error saving parquet: {e}")
+            raise
     
     def transform(self) -> Path:
         """
@@ -358,29 +469,33 @@ class BMDTransformer:
         """
         logger.info(f"Starting transformation of {self.input_file}")
         
-        # 1. Read the Excel file
-        df = self.read_excel()
-        
-        # 2. Clean column names
-        df = self.clean_column_names(df)
-        
-        # 3. Clean and normalize data
-        df = self.clean_data(df)
-        
-        # 4. Parse dates
-        df = self.parse_dates(df)
-        
-        # 5. Apply correct types
-        df = self.apply_types(df)
-        
-        # 6. Validate data
-        df, validation_issues = self.validate_data(df)
-        
-        # 7. Save to Parquet
-        output_path = self.save_parquet(df)
-        
-        logger.info(f"Transformation completed successfully: {output_path}")
-        return output_path
+        try:
+            # 1. Read the Excel file into DuckDB
+            table_name = self.read_excel()
+            
+            # 2. Clean column names
+            table_name = self.clean_column_names(table_name)
+            
+            # 3. Clean and normalize data
+            table_name = self.clean_data(table_name)
+            
+            # 4. Parse dates
+            table_name = self.parse_dates(table_name)
+            
+            # 5. Validate data
+            table_name, validation_issues = self.validate_data(table_name)
+            
+            # 6. Save to Parquet
+            output_path = self.save_parquet(table_name)
+            
+            logger.info(f"Transformation completed successfully: {output_path}")
+            return output_path
+            
+        finally:
+            # Close the DuckDB connection
+            if self.conn is not None:
+                self.conn.close()
+                self.conn = None
 
 
 def upload_to_gcs(local_path: Path, bucket_name: str) -> bool:
