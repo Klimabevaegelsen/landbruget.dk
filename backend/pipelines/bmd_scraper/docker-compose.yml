@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  bmd_scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount the code directory for development
+      - .:/app
+      # Mount data directories for persistence between runs
+      - ../../data/bronze/bmd:/data/bronze/bmd
+      - ../../data/silver/bmd:/data/silver/bmd
+    environment:
+      - ENVIRONMENT=development
+      # Add other environment variables or refer to .env file
+    env_file:
+      - .env
+    # For development, you might want to keep the container running
+    # command: tail -f /dev/null 
