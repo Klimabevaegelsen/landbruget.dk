@@ -75,7 +75,7 @@ jobs:
           
           # Add GCS settings for production
           if [ "${{ env.ENVIRONMENT }}" == "production" ]; then
-            echo "GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}" >> .env
+            echo "GCS_BUCKET=${{ secrets.GCS_BUCKET }}" >> .env
           fi
           
           # Run the pipeline
