@@ -5,7 +5,7 @@ Manages file system operations and data persistence.
 """
 
 import logging
-import pandas as pd
+import duckdb
 from pathlib import Path
 
 # Configure logging
@@ -20,16 +20,16 @@ class DataLoader:
     def __init__(self):
         pass
 
-    def save_data(self, df: pd.DataFrame, output_dir: Path, filename: str) -> None:
+    def save_data(self, result: duckdb.DuckDBPyRelation, output_dir: Path, filename: str) -> None:
         """Persists processed data to disk in Parquet format"""
-        if df.empty:
-            logger.warning("Empty DataFrame, skipping save")
+        if result is None:
+            logger.warning("Empty result, skipping save")
             return
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save as parquet
+        # Save as parquet using DuckDB's native parquet export
         output_path = output_dir / f"{filename}.parquet"
-        df.to_parquet(output_path)
+        result.write_parquet(str(output_path))
         logger.info(f"Saved data to {output_path}")

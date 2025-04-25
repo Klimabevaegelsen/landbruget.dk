@@ -6,7 +6,6 @@ Handles CRS transformation and calculates key metrics like averages, min/max val
 
 import logging
 import duckdb
-import pandas as pd
 import geopandas as gpd
 
 # Configure logging
@@ -21,23 +20,20 @@ class DataTransformer:
     def __init__(self):
         self.TARGET_CRS = "EPSG:4326"  # Required target CRS
 
-    def transform_data(self, gdf: gpd.GeoDataFrame) -> pd.DataFrame:
-        """Transforms raw climate data into processed statistics"""
+    def transform_data(self, gdf: gpd.GeoDataFrame) -> duckdb.DuckDBPyRelation:
+        """Transforms raw climate data into processed statistics using DuckDB"""
         if gdf.empty:
-            return pd.DataFrame()
+            return None
 
         # Convert CRS to target CRS
         gdf = gdf.to_crs(self.TARGET_CRS)
         logger.info(f"Converted GeoDataFrame to target CRS: {self.TARGET_CRS}")
 
-        # Convert to DataFrame for DuckDB processing
-        df = pd.DataFrame(gdf.drop(columns=['geometry']))
-
         # Create DuckDB connection
         con = duckdb.connect(':memory:')
 
-        # Register DataFrame
-        con.register('climate_data', df)
+        # Register GeoDataFrame directly with DuckDB
+        con.register('climate_data', gdf)
 
         # Process data using DuckDB
         result = con.execute("""
@@ -53,6 +49,6 @@ class DataTransformer:
             FROM climate_data
             GROUP BY parameter_id, valid_time, created, geo_crs_source
             ORDER BY valid_time DESC
-        """).df()
+        """)
 
         return result
