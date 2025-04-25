@@ -13,14 +13,11 @@ RUN pip install uv
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy only necessary files for dependency installation first to leverage Docker cache
-COPY pyproject.toml ./
+# Copy all files first
+COPY . .
 
 # Install dependencies using uv
 RUN uv pip install --system . --no-cache
-
-# Copy the rest of the application code
-COPY . .
 
 # Command to run the application
 CMD ["python", "main.py"]

@@ -1,7 +1,7 @@
 """
 DMI Climate Data Transformation Layer
 Processes raw geospatial climate data into aggregated statistics using DuckDB.
-Calculates key metrics like averages, min/max values, and counts per time period.
+Handles CRS transformation and calculates key metrics like averages, min/max values, and counts per time period.
 """
 
 import logging
@@ -17,14 +17,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DataTransformer:
-    """Transforms raw climate data into aggregated statistics using DuckDB"""
+    """Transforms raw climate data into processed statistics"""
     def __init__(self):
-        pass
+        self.TARGET_CRS = "EPSG:4326"  # Required target CRS
 
     def transform_data(self, gdf: gpd.GeoDataFrame) -> pd.DataFrame:
-        """Aggregates climate data into time-based statistics"""
+        """Transforms raw climate data into processed statistics"""
         if gdf.empty:
             return pd.DataFrame()
+
+        # Convert CRS to target CRS
+        gdf = gdf.to_crs(self.TARGET_CRS)
+        logger.info(f"Converted GeoDataFrame to target CRS: {self.TARGET_CRS}")
 
         # Convert to DataFrame for DuckDB processing
         df = pd.DataFrame(gdf.drop(columns=['geometry']))

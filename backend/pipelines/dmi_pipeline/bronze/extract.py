@@ -1,7 +1,7 @@
 """
 DMI Climate Data Extraction Layer
 Handles API communication and data retrieval from the Danish Meteorological Institute.
-Converts raw API responses into geospatial dataframes with proper coordinate systems.
+Saves raw data without any transformations.
 """
 
 import logging
@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DMIConfig:
-    """Configuration for DMI API access and data transformation settings"""
+    """Configuration for DMI API access"""
     def __init__(self):
         self.api_key = os.getenv('DMI_GOV_CLOUD_API_KEY')
         if not self.api_key:
@@ -30,12 +30,10 @@ class DMIConfig:
         self.base_url = "https://dmigw.govcloud.dk/v2/climateData"
         self.max_retries = int(os.getenv('MAX_RETRIES', 3))
         self.retry_delay = int(os.getenv('RETRY_DELAY', 5))
-        # Define CRS constants
         self.SOURCE_CRS = "EPSG:25832"  # DMI's native CRS
-        self.TARGET_CRS = "EPSG:4326"   # Required target CRS
 
 class DMIApiClient:
-    """Client for interacting with DMI's climate data API and processing geospatial data"""
+    """Client for interacting with DMI's climate data API"""
     def __init__(self, config: DMIConfig):
         self.config = config
         self.headers = {
@@ -66,7 +64,7 @@ class DMIApiClient:
                 raise
 
     async def fetch_grid_data(self, parameter_id: str, start_time: datetime, end_time: datetime) -> gpd.GeoDataFrame:
-        """Fetch and process climate grid data into a geospatial dataframe"""
+        """Fetch raw climate grid data and save as is"""
         params = {
             "parameterId": parameter_id,
             "limit": 1000,
@@ -102,15 +100,9 @@ class DMIApiClient:
             # Create GeoDataFrame with explicit geometry column
             gdf = gpd.GeoDataFrame(features, geometry="geometry")
 
-            # Set initial CRS to match DMI's native CRS
+            # Set CRS to match DMI's native CRS
             gdf.set_crs(self.config.SOURCE_CRS, inplace=True)
-
-            # Log CRS information before conversion
             logger.info(f"Created GeoDataFrame with source CRS: {self.config.SOURCE_CRS}")
-
-            # Convert to target CRS
-            gdf = gdf.to_crs(self.config.TARGET_CRS)
-            logger.info(f"Converted GeoDataFrame to target CRS: {self.config.TARGET_CRS}")
 
             return gdf
 

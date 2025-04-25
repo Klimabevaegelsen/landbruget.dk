@@ -45,22 +45,28 @@ async def main():
         end_time = datetime.now(UTC)
         start_time = end_time - timedelta(days=args.days)
 
-        # Create timestamped output directory for data storage
+        # Create timestamped output directories for data storage
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(f"data/bronze/{timestamp}")
-        output_dir.mkdir(parents=True, exist_ok=True)
+        bronze_dir = Path(f"data/bronze/{timestamp}")
+        silver_dir = Path(f"data/silver/{timestamp}")
+        bronze_dir.mkdir(parents=True, exist_ok=True)
+        silver_dir.mkdir(parents=True, exist_ok=True)
 
         # Extract climate data from DMI API
         logger.info(f"Fetching {args.parameter} data from {start_time} to {end_time}")
         gdf = await extractor.fetch_grid_data(args.parameter, start_time, end_time)
 
         if not gdf.empty:
+            # Save raw data in bronze layer
+            loader.save_data(gdf, bronze_dir / "raw", f"{args.parameter}_raw")
+            logger.info(f"Saved raw data to bronze layer: {bronze_dir}")
+
             # Transform raw grid data into structured format
             processed_df = transformer.transform_data(gdf)
 
-            # Save both raw and processed data
-            loader.save_data(gdf, output_dir / "raw", f"{args.parameter}_raw")
-            loader.save_data(processed_df, output_dir / "processed", f"{args.parameter}_processed")
+            # Save processed data in silver layer
+            loader.save_data(processed_df, silver_dir / "processed", f"{args.parameter}_processed")
+            logger.info(f"Saved processed data to silver layer: {silver_dir}")
 
             logger.info(f"Successfully processed {len(processed_df)} records")
         else:
