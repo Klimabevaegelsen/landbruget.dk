@@ -61,14 +61,16 @@ async def main():
             loader.save_data(gdf, bronze_dir / "raw", f"{args.parameter}_raw")
             logger.info(f"Saved raw data to bronze layer: {bronze_dir}")
 
-            # Transform raw grid data into structured format
-            processed_df = transformer.transform_data(gdf)
+            # Transform raw grid data into structured format using DuckDB
+            processed_result = transformer.transform_data(gdf)
 
             # Save processed data in silver layer
-            loader.save_data(processed_df, silver_dir / "processed", f"{args.parameter}_processed")
+            loader.save_data(processed_result, silver_dir / "processed", f"{args.parameter}_processed")
             logger.info(f"Saved processed data to silver layer: {silver_dir}")
 
-            logger.info(f"Successfully processed {len(processed_df)} records")
+            # Get count of processed records
+            count = processed_result.execute("SELECT COUNT(*) as count").fetchone()[0]
+            logger.info(f"Successfully processed {count} records")
         else:
             logger.warning("No data returned from DMI API")
 
