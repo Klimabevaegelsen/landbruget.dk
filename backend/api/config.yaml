@@ -94,7 +94,8 @@ pageBuilder:
       params:
         source: 'yearly_financials'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "revenue"
               label: "Omsætning"
@@ -152,7 +153,8 @@ pageBuilder:
       params:
         source: 'land_use_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "total_ha"
               label: "Antal Hektar (Total)"
@@ -216,7 +218,8 @@ pageBuilder:
       params:
         source: 'bnbo_summary'
         category:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           categoryColumn: 'status'
           valueColumn: 'area_ha'
 
@@ -227,7 +230,8 @@ pageBuilder:
       params:
         source: 'bnbo_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           filter:
              status: 'not_dealt_with'
           metrics:
@@ -249,7 +253,8 @@ pageBuilder:
       params:
         source: 'wetlands_summary'
         category:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           categoryColumn: 'status'
           valueColumn: 'area_ha'
 
@@ -260,7 +265,8 @@ pageBuilder:
       params:
         source: 'wetlands_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           filter:
              status: 'not_dealt_with'
           metrics:
@@ -282,7 +288,8 @@ pageBuilder:
       params:
         source: 'environment_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "fertiliser_kg"
               label: "Kg Gødning Brugt"
@@ -465,7 +472,8 @@ pageBuilder:
       params:
         source: 'worker_yearly_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "employees"
               label: "Gns. Antal Ansatte (År)"
@@ -531,7 +539,8 @@ pageBuilder:
       params:
         source: 'animal_welfare_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "sites"
               label: "Antal Produktionssteder"
@@ -780,7 +789,8 @@ pageBuilder:
       params:
         source: 'carbon_summary'
         kpis:
-          timeContext: 'latest_year'
+          timeContext: 'last_n_years'
+          n: 1
           metrics:
             - key: "total_co2e"
               label: "Total CO2e Emissioner (ton)"
