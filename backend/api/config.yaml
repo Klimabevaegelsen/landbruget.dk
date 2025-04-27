@@ -184,15 +184,15 @@ pageBuilder:
       params:
         source: 'field_yearly_data'
         category:
-          timeContext: 'last_n_years'
-          n: 1
+          timeContext: 'last_n_years' 
+          n: 1 
           categoryColumn: 'crop_name'
           valueColumn: 'area_ha'
           stackByColumn: 'is_organic'
-          topN: 9
-        orderBy:
-          - column: 'area_ha'
-            direction: 'desc'
+          topN: 9 
+          orderBy:
+            - column: 'area_ha'
+              direction: 'desc'
 
   - _key: land-use-field-map
     _type: mapChart
@@ -372,9 +372,9 @@ pageBuilder:
         source: 'field_yearly_data'
         table:
           columns:
-            - key: "field_name"
-              label: "Mark Navn"
-              column: "field_name"
+            - key: "field_id"
+              label: "Mark ID"
+              column: "field_boundary_id"
             - key: "year"
               label: "År"
               column: "year"
@@ -391,7 +391,7 @@ pageBuilder:
         orderBy:
           - column: 'year'
             direction: 'desc'
-          - column: 'field_name'
+          - column: 'field_boundary_id'
             direction: 'asc'
 
   - _key: environment-pesticide-load
@@ -518,7 +518,7 @@ pageBuilder:
     title: "Arbejdsskader pr. År (Rapporteret Antal)"
     dataSource:
       params:
-        source: 'worker_injury_yearly_counts'
+        source: 'worker_yearly_summary'
         table:
           columns:
             - key: "year"
