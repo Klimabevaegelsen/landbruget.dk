@@ -179,19 +179,20 @@ pageBuilder:
 
   - _key: land-use-crop-distribution
     _type: horizontalStackedBarChart
-    title: "Afgrødefordeling (Top 9 + Rest, pr. År)"
+    title: "Afgrødefordeling (Seneste År, Øko/Konv)"
     dataSource:
       params:
         source: 'field_yearly_data'
-        timeSeries:
-          timeColumn: 'year'
+        category:
+          timeContext: 'last_n_years'
+          n: 1
+          categoryColumn: 'crop_name'
           valueColumn: 'area_ha'
-          groupByColumn: 'crop_name'
-          topN: 9
           stackByColumn: 'is_organic'
+          topN: 9
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: 'area_ha'
+            direction: 'desc'
 
   - _key: land-use-field-map
     _type: mapChart
@@ -480,8 +481,6 @@ pageBuilder:
               column: "average_employee_count"
             - key: "injuries"
               label: "Arbejdsskader (År)"
-              column: "injuries_total"
-              source: 'worker_injury_yearly_counts'
               column: 'injury_count_reported'
 
   - _key: worker-welfare-employees-monthly
