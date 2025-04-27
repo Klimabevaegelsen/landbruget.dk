@@ -1,0 +1,856 @@
+metadata:
+  configVersion: "1.3"
+
+pageBuilder:
+
+  - _key: company-identity
+    _type: infoCard
+    title: "Virksomhed Identitet"
+    dataSource:
+      params:
+        source: 'companies'
+        record:
+          mappings:
+            - label: "Navn"
+              column: "company_name"
+            - label: "CVR"
+              column: "cvr_number"
+            - label: "Adresse"
+              column: "address"
+            - label: "Postnummer"
+              column: "postal_code"
+            - label: "By"
+              column: "city"
+            - label: "Reklamebeskyttelse"
+              column: "advertisement_protection"
+              format: "boolean"
+
+  - _key: company-ownership
+    _type: dataGrid
+    title: "Ejerforhold (Oversigt)"
+    dataSource:
+      params:
+        source: 'company_owners'
+        table:
+          columns:
+            - key: "owner"
+              label: "Ejer / Enhed"
+              column: "owner_name"
+            - key: "share_bucket"
+              label: "Ejerandel (Bucket)"
+              column: "ownership_percentage"
+
+  - _key: company-leadership
+    _type: dataGrid
+    title: "Ledelse"
+    dataSource:
+      params:
+        source: 'company_leadership'
+        table:
+          columns:
+            - key: "name"
+              label: "Navn"
+              column: "person_name"
+            - key: "role"
+              label: "Stilling"
+              column: "role_title"
+            - key: "since"
+              label: "Siden"
+              column: "start_date"
+              format: "date"
+
+  - _key: company-map-overview
+    _type: mapChart
+    title: "Kort: Bygninger, Marker, Virksomhedens adresse"
+    dataSource:
+      params:
+        map:
+          layers:
+            - name: "Bygninger"
+              source: 'building_footprints'
+              geometryColumn: 'geom'
+              properties:
+                - 'building_name'
+                - 'type'
+              style: 'building'
+            - name: "Marker"
+              source: 'field_boundaries'
+              geometryColumn: 'geom'
+              properties:
+                - 'field_identifier'
+                - 'area_ha'
+              style: 'field'
+            - name: "Virksomhedens adresse"
+              source: 'companies'
+              geometryColumn: 'address_geom'
+              properties:
+                - 'address'
+              style: 'hq_marker'
+
+  - _key: financials-latest-kpis
+    _type: kpiGroup
+    title: "Finansielle Nøgletal (Seneste År)"
+    dataSource:
+      params:
+        source: 'yearly_financials'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "revenue"
+              label: "Omsætning"
+              column: "revenue"
+              format: "currency"
+            - key: "profit"
+              label: "Resultat"
+              column: "profit"
+              format: "currency"
+            - key: "subsidies"
+              label: "Tilskud (Total)"
+              column: "total_subsidies"
+              format: "currency"
+
+  - _key: financials-history
+    _type: barChart
+    title: "Økonomisk Udvikling (pr. År)"
+    dataSource:
+      params:
+        source: 'yearly_financials'
+        timeSeries:
+          timeColumn: 'year'
+          metrics:
+            - key: 'revenue'
+              column: 'revenue'
+              seriesName: 'Omsætning'
+            - key: 'profit'
+              column: 'profit'
+              seriesName: 'Resultat'
+            - key: 'subsidies'
+              column: 'total_subsidies'
+              seriesName: 'Tilskud'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: subsidies-history-stacked
+    _type: stackedBarChart
+    title: "Tilskud Fordelt på Type (pr. År)"
+    dataSource:
+      params:
+        source: 'subsidy_details'
+        timeSeries:
+          timeColumn: 'year'
+          valueColumn: 'amount_dkk'
+          groupByColumn: 'subsidy_type'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: land-use-kpis
+    _type: kpiGroup
+    title: "Arealanvendelse Nøgletal"
+    dataSource:
+      params:
+        source: 'land_use_summary'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "total_ha"
+              label: "Antal Hektar (Total)"
+              column: "total_area_ha"
+              format: "number"
+            - key: "organic_ha"
+              label: "Økologisk Hektar (Total)"
+              column: "organic_area_ha"
+              format: "number"
+            - key: "rank_dk_ha"
+              label: "Placering DK (Ha)"
+              column: "rank_dk_total_area"
+            - key: "rank_mun_ha"
+              label: "Placering Kommune (Ha)"
+              column: "rank_municipality_total_area"
+            - key: "rank_dk_org"
+              label: "Placering DK (Ha Øko)"
+              column: "rank_dk_organic_total_area"
+            - key: "rank_mun_org"
+              label: "Placering Kommune (Ha Øko)"
+              column: "rank_municipality_organic_total_area"
+
+  - _key: land-use-crop-distribution
+    _type: horizontalStackedBarChart
+    title: "Afgrødefordeling (Top 9 + Rest, pr. År)"
+    dataSource:
+      params:
+        source: 'field_yearly_data'
+        timeSeries:
+          timeColumn: 'year'
+          valueColumn: 'area_ha'
+          groupByColumn: 'crop_name'
+          topN: 9
+          stackByColumn: 'is_organic'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: land-use-field-map
+    _type: mapChart
+    title: "Markernes Placering & Status (Seneste År)"
+    dataSource:
+      params:
+        map:
+          layers:
+            - name: "Marker"
+              source: 'field_boundaries'
+              geometryColumn: 'geom'
+              properties:
+                - 'field_identifier'
+                - 'field_name'
+                - 'area_ha'
+                - 'crop_name'
+                - 'is_organic'
+              style: 'field_detailed'
+
+  - _key: land-use-bnbo-chart
+    _type: horizontalStackedBarChart
+    title: "BNBO Status Fordeling (Snapshot)"
+    dataSource:
+      params:
+        source: 'bnbo_summary'
+        category:
+          timeContext: 'latest_year'
+          categoryColumn: 'status'
+          valueColumn: 'area_ha'
+
+  - _key: land-use-bnbo-kpis
+    _type: kpiGroup
+    title: "BNBO Nøgletal & Placering"
+    dataSource:
+      params:
+        source: 'bnbo_summary'
+        kpis:
+          timeContext: 'latest_year'
+          filter:
+             status: 'not_dealt_with'
+          metrics:
+             - key: "ha_not_dealt_with"
+               label: "Hektar ikke håndteret"
+               column: "area_ha"
+               format: "number"
+             - key: "rank_dk_bnbo_not_dealt_with"
+               label: "Placering DK (BNBO)"
+               column: "rank_dk_area_not_dealt_with"
+             - key: "rank_mun_bnbo_not_dealt_with"
+               label: "Placering Kommune (BNBO)"
+               column: "rank_municipality_area_not_dealt_with"
+
+  - _key: land-use-wetlands-chart
+    _type: horizontalStackedBarChart
+    title: "Vådområder Status Fordeling (Snapshot)"
+    dataSource:
+      params:
+        source: 'wetlands_summary'
+        category:
+          timeContext: 'latest_year'
+          categoryColumn: 'status'
+          valueColumn: 'area_ha'
+
+  - _key: land-use-wetlands-kpis
+    _type: kpiGroup
+    title: "Vådområder Nøgletal & Placering"
+    dataSource:
+      params:
+        source: 'wetlands_summary'
+        kpis:
+          timeContext: 'latest_year'
+          filter:
+             status: 'not_dealt_with'
+          metrics:
+             - key: "ha_not_dealt_with"
+               label: "Hektar ikke håndteret"
+               column: "area_ha"
+               format: "number"
+             - key: "rank_dk_wetlands_not_dealt_with"
+               label: "Placering DK (Vådomr.)"
+               column: "rank_dk_area_not_dealt_with"
+             - key: "rank_mun_wetlands_not_dealt_with"
+               label: "Placering Kommune (Vådomr.)"
+               column: "rank_municipality_area_not_dealt_with"
+
+  - _key: environment-kpis
+    _type: kpiGroup
+    title: "Miljø Nøgletal"
+    dataSource:
+      params:
+        source: 'environment_summary'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "fertiliser_kg"
+              label: "Kg Gødning Brugt"
+              column: "total_fertiliser_kg"
+            - key: "nitrogen_leached_kg"
+              label: "Kg Kvælstof Udledt"
+              column: "total_n_leached_kg"
+            - key: "nitrogen_leached_kg_ha"
+              label: "Kg Kvælstof Udledt pr. Ha"
+              column: "n_leached_kg_per_ha"
+            - key: "pesticide_load"
+              label: "Pesticidbelastning (Total)"
+              column: "total_pesticide_load_index"
+            - key: "pesticide_load_ha"
+              label: "Pesticidbelastning pr. Ha"
+              column: "pesticide_load_index_per_ha"
+            - key: "rank_dk_fertiliser"
+              label: "Placering DK (Gødning)"
+              column: "rank_dk_total_fertiliser_kg"
+            - key: "rank_mun_fertiliser"
+              label: "Placering Kommune (Gødning)"
+              column: "rank_municipality_total_fertiliser_kg"
+            - key: "rank_dk_n_leached_ha"
+              label: "Placering DK (N/Ha)"
+              column: "rank_dk_n_leached_kg_per_ha"
+            - key: "rank_mun_n_leached_ha"
+              label: "Placering Kommune (N/Ha)"
+              column: "rank_municipality_n_leached_kg_per_ha"
+            - key: "rank_dk_pest_load_ha"
+              label: "Placering DK (Pest./Ha)"
+              column: "rank_dk_pesticide_load_index_per_ha"
+            - key: "rank_mun_pest_load_ha"
+              label: "Placering Kommune (Pest./Ha)"
+              column: "rank_municipality_pesticide_load_index_per_ha"
+
+  - _key: environment-slurry-incidents
+    _type: timeline
+    title: "Hændelser med Gylleudslip"
+    dataSource:
+      params:
+        source: 'incidents'
+        events:
+          filter:
+            type: 'slurry_leak'
+          dateColumn: 'incident_date'
+          descriptionColumn: 'description'
+        orderBy:
+          - column: 'incident_date'
+            direction: 'desc'
+
+  - _key: environment-nitrogen-leaching
+    _type: comboChart
+    title: "Kvælstofudvaskning (Total og pr. Hektar)"
+    dataSource:
+      params:
+        source: 'environment_summary'
+        timeSeries:
+          timeColumn: 'year'
+          metrics:
+            - key: "total_n"
+              seriesName: "Total Kg N Udledt"
+              column: "total_n_leached_kg"
+              type: "bar"
+              yAxis: "left"
+            - key: "n_per_ha"
+              seriesName: "Kg N Udledt pr. Ha"
+              column: "n_leached_kg_per_ha"
+              type: "line"
+              yAxis: "right"
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: environment-nitrogen-per-field
+    _type: collapsibleDataGrid
+    title: "Kvælstofudvaskning pr. Mark (Detaljeret)"
+    dataSource:
+      params:
+        source: 'field_yearly_data'
+        table:
+          columns:
+            - key: "field_name"
+              label: "Mark Navn"
+              column: "field_name"
+            - key: "year"
+              label: "År"
+              column: "year"
+              isFilterable: true
+              isHidden: true
+            - key: "n_leached_kg"
+              label: "Udledt N (kg)"
+              column: "n_leached_kg"
+              format: "number"
+          initialFilter:
+            year: 'latest'
+          isCollapsible: true
+          allowFiltering: true
+        orderBy:
+          - column: 'year'
+            direction: 'desc'
+          - column: 'field_name'
+            direction: 'asc'
+
+  - _key: environment-pesticide-load
+    _type: comboChart
+    title: "Pesticidbelastning (Total og pr. Hektar)"
+    dataSource:
+      params:
+        source: 'environment_summary'
+        timeSeries:
+          timeColumn: 'year'
+          metrics:
+            - key: "total_load"
+              seriesName: "Total Belastning"
+              column: "total_pesticide_load_index"
+              type: "bar"
+              yAxis: "left"
+            - key: "load_per_ha"
+              seriesName: "Belastning pr. Ha"
+              column: "pesticide_load_index_per_ha"
+              type: "line"
+              yAxis: "right"
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: environment-pesticide-risks
+    _type: filterableDataGrid
+    title: "Pesticidanvendelse Detaljer og Risici"
+    dataSource:
+      params:
+        source: 'pesticide_applications'
+        table:
+          columns:
+            - key: "year"
+              label: "År"
+              column: "year"
+              isFilterable: true
+              isHidden: true
+            - key: "risk_category"
+              label: "Risiko Kategori"
+              column: "risk_category"
+              isFilterable: true
+            - key: "pesticide"
+              label: "Pesticid"
+              column: "pesticide_name"
+              isFilterable: true
+            - key: "risk_details"
+              label: "Specifik Risiko Detalje"
+              column: "risk_details"
+            - key: "ha_sprayed"
+              label: "Antal Ha Sprøjtet"
+              column: "ha_sprayed"
+            - key: "pfas"
+              label: "Indeholder PFAS"
+              column: "contains_pfas"
+              format: "boolean"
+            - key: "prox_water"
+              label: "Nærhed Vandløb (m)"
+              column: "proximity_water_m"
+            - key: "prox_housing"
+              label: "Nærhed Beboelse (m)"
+              column: "proximity_housing_m"
+            - key: "prox_school"
+              label: "Nærhed Skole (m)"
+              column: "proximity_school_m"
+          initialFilter:
+            year: 'latest'
+          allowFiltering: true
+        orderBy:
+          - column: 'risk_category'
+            direction: 'asc'
+          - column: 'pesticide_name'
+            direction: 'asc'
+
+  - _key: worker-welfare-kpis
+    _type: kpiGroup
+    title: "Medarbejderforhold Nøgletal (Seneste)"
+    dataSource:
+      params:
+        source: 'worker_yearly_summary'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "employees"
+              label: "Gns. Antal Ansatte (År)"
+              column: "average_employee_count"
+            - key: "injuries"
+              label: "Arbejdsskader (År)"
+              column: "injuries_total"
+              source: 'worker_injury_yearly_counts'
+              column: 'injury_count_reported'
+
+  - _key: worker-welfare-employees-monthly
+    _type: barChart
+    title: "Antal Ansatte pr. Måned"
+    dataSource:
+      params:
+        source: 'employee_monthly_counts'
+        timeSeries:
+          timeColumn: 'month_year'
+          metrics:
+            - key: 'employee_count'
+              column: 'employee_count'
+              seriesName: 'Antal Ansatte'
+        orderBy:
+          - column: 'month_year'
+            direction: 'asc'
+
+  - _key: worker-welfare-visas
+    _type: stackedBarChart
+    title: "Førstegangstilladelser pr. År (Fordelt på Nationalitet)"
+    dataSource:
+      params:
+        source: 'visa_yearly_counts'
+        timeSeries:
+          timeColumn: 'year'
+          valueColumn: 'first_permits_count'
+          groupByColumn: 'nationality'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: worker-welfare-injuries
+    _type: dataGrid
+    title: "Arbejdsskader pr. År (Rapporteret Antal)"
+    dataSource:
+      params:
+        source: 'worker_injury_yearly_counts'
+        table:
+          columns:
+            - key: "year"
+              label: "År"
+              column: "year"
+            - key: "count"
+              label: "Antal Skader Rapporteret"
+              column: "injury_count_reported"
+        orderBy:
+          - column: 'year'
+            direction: 'desc'
+
+  - _key: animal-welfare-kpis-overall
+    _type: kpiGroup
+    title: "Dyrevelærd Nøgletal (Samlet)"
+    dataSource:
+      params:
+        source: 'animal_welfare_summary'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "sites"
+              label: "Antal Produktionssteder"
+              column: "site_count"
+            - key: "prod_equiv"
+              label: "Produktion (Dyreækvivalenter)"
+              column: "total_animal_equivalents"
+            - key: "antibiotics_total"
+              label: "Antibiotika Total (DDD)"
+              column: "total_ddd_usage"
+            - key: "animals_transported"
+              label: "Antal Dyr Transporteret"
+              column: "total_animals_transported"
+            - key: "rank_dk_prod"
+              label: "Placering DK (Prod. Ækv.)"
+              column: "rank_dk_total_animal_equivalents"
+            - key: "rank_mun_prod"
+              label: "Placering Kommune (Prod. Ækv.)"
+              column: "rank_municipality_total_animal_equivalents"
+            - key: "rank_dk_antibiotics"
+              label: "Placering DK (Antibiotika)"
+              column: "rank_dk_total_ddd_usage"
+            - key: "rank_mun_antibiotics"
+              label: "Placering Kommune (Antibiotika)"
+              column: "rank_municipality_total_ddd_usage"
+            - key: "rank_dk_transport"
+              label: "Placering DK (Transport)"
+              column: "rank_dk_total_animals_transported"
+            - key: "rank_mun_transport"
+              label: "Placering Kommune (Transport)"
+              column: "rank_municipality_total_animals_transported"
+
+  - _key: animal-welfare-production-species-chart
+    _type: stackedBarChart
+    title: "Dyreproduktion pr. År (Samlet, Fordelt på Art)"
+    dataSource:
+      params:
+        source: 'animal_production_log'
+        timeSeries:
+          timeColumn: 'year'
+          valueColumn: 'production_volume_equiv'
+          groupByColumn: 'species_name'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: animal-welfare-antibiotics-usage-chart
+    _type: comboChart
+    title: "Antibiotikaforbrug (Samlet, Total og Rate)"
+    dataSource:
+      params:
+        source: 'animal_welfare_summary'
+        timeSeries:
+          timeColumn: 'year'
+          metrics:
+            - key: "total_usage"
+              seriesName: "Total Forbrug (DDD)"
+              column: "total_ddd_usage"
+              type: "bar"
+              yAxis: "left"
+            - key: "usage_rate"
+              seriesName: "Forbrugsrate (DDD/dyr)"
+              column: "ddd_usage_rate"
+              type: "line"
+              yAxis: "right"
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: animal-welfare-site-map
+    _type: mapChart
+    title: "Produktionssteder (Sites)"
+    dataSource:
+      params:
+        source: 'production_sites'
+        map:
+          layers:
+            - name: "Produktionssteder"
+              source: 'production_sites'
+              geometryColumn: 'location_geom'
+              properties:
+                - 'chr'
+                - 'site_name'
+                - 'main_species_name'
+                - 'capacity'
+              style: 'production_site_marker'
+
+  - _key: animal-welfare-sites-iteration
+    _type: iteratedSection
+    title: "Detaljer pr. Produktionssted (Site)"
+    iteratorDataSource:
+      params:
+        source: 'production_sites'
+        columns:
+          - 'chr'
+          - 'site_name'
+    iterationConfig:
+      layout: 'collapsible'
+      titleField: 'site_name'
+
+    template:
+      - _key: site-details-{iteratorContext.chr}
+        _type: infoCard
+        title: "Site Basis Info ({iteratorContext.site_name})"
+        dataSource:
+          params:
+            source: 'site_details_summary_ranked'
+            record:
+              filter:
+                chr: '{iteratorContext.chr}'
+                year: 'latest'
+              mappings:
+                - label: "Site CHR"
+                  column: "chr"
+                - label: "Adresse"
+                  column: "address"
+                - label: "Ejer CVR"
+                  column: "owner_cvr"
+                - label: "Kapacitet"
+                  column: "capacity"
+                - label: "Aktuel Sygdomsstatus"
+                  column: "current_disease_status"
+
+      - _key: site-kpis-{iteratorContext.chr}
+        _type: kpiGroup
+        title: "Site Nøgletal & Placering"
+        dataSource:
+          params:
+            source: 'site_details_summary_ranked'
+            kpis:
+              filter:
+                chr: '{iteratorContext.chr}'
+                year: 'latest'
+              metrics:
+                - key: "production"
+                  label: "Produktion (Ækv.)"
+                  column: "production_equiv"
+                - key: "antibiotics"
+                  label: "Antibiotika (DDD)"
+                  column: "antibiotics_ddd"
+                - key: "transport"
+                  label: "Transporterede Dyr"
+                  column: "transport_count"
+                - key: "rank_mun_site_prod"
+                  label: "Placering Kommune (Site Prod.)"
+                  column: "rank_municipality_site_production"
+                - key: "rank_mun_site_antibiotics"
+                  label: "Placering Kommune (Site Antibiotika)"
+                  column: "rank_municipality_site_antibiotics"
+                - key: "rank_mun_site_transport"
+                  label: "Placering Kommune (Site Transport)"
+                  column: "rank_municipality_site_transport"
+
+      - _key: site-vet-events-{iteratorContext.chr}
+        _type: timeline
+        title: "Site Veterinære Hændelser"
+        dataSource:
+          params:
+            source: 'vet_events'
+            events:
+              filter:
+                chr: '{iteratorContext.chr}'
+              dateColumn: 'event_date'
+              descriptionColumn: 'description'
+              groupByColumns:
+                - 'event_type'
+              filterColumns:
+                - 'event_type'
+            orderBy:
+              - column: 'event_date'
+                direction: 'desc'
+
+      - _key: site-species-iteration-{iteratorContext.chr}
+        _type: iteratedSection
+        title: "Detaljer pr. Dyreart på Site"
+        iteratorDataSource:
+          params:
+            source: 'site_species_production_ranked'
+            filter:
+              chr: '{iteratorContext.chr}'
+            columns:
+              - 'species_id'
+              - 'species_name'
+        iterationConfig:
+          layout: 'collapsible'
+          titleField: 'species_name'
+
+        template:
+          - _key: species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}
+            _type: kpiGroup
+            title: "{iteratorContext.species_name} Produktion & Placering"
+            dataSource:
+              params:
+                source: 'site_species_production_ranked'
+                kpis:
+                  filter:
+                    chr: '{iteratorContext.chr}'
+                    species_id: '{iteratorContext.species_id}'
+                    year: 'latest'
+                  metrics:
+                    - key: "production_animals"
+                      label: "Produktion (Antal/Ækv.)"
+                      column: "production_volume_equiv"
+                    - key: "rank_dk_species_prod"
+                      label: "Placering DK (Art Prod.)"
+                      column: "rank_dk_species_production"
+                    - key: "rank_mun_species_prod"
+                      label: "Placering Kommune (Art Prod.)"
+                      column: "rank_municipality_species_production"
+
+          - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
+            _type: stackedBarChart
+            title: "{iteratorContext.species_name} Produktion pr. År (Aldersgruppe)"
+            dataSource:
+              params:
+                source: 'animal_production_log'
+                timeSeries:
+                  filter:
+                    chr: '{iteratorContext.chr}'
+                    species_id: '{iteratorContext.species_id}'
+                  timeColumn: 'year'
+                  valueColumn: 'production_volume_equiv'
+                  groupByColumn: 'age_group'
+                orderBy:
+                  - column: 'year'
+                    direction: 'asc'
+
+  - _key: animal-welfare-transport-chart
+    _type: barChart
+    title: "Dyretransporter pr. Uge (Samlet, Fordelt på Destination)"
+    dataSource:
+      params:
+        source: 'animal_transport_weekly_summary'
+        timeSeries:
+          timeColumn: 'transport_date_week_start'
+          valueColumn: 'animal_count'
+          groupByColumn: 'destination_type'
+        orderBy:
+          - column: 'transport_date_week_start'
+            direction: 'asc'
+
+  - _key: carbon-accounting-kpis
+    _type: kpiGroup
+    title: "Klimaregnskab Nøgletal (Seneste År)"
+    dataSource:
+      params:
+        source: 'carbon_summary'
+        kpis:
+          timeContext: 'latest_year'
+          metrics:
+            - key: "total_co2e"
+              label: "Total CO2e Emissioner (ton)"
+              column: "total_co2e_tonnes"
+            - key: "rank_dk_co2e"
+              label: "Placering DK (CO2e)"
+              column: "rank_dk_total_co2e_tonnes"
+            - key: "rank_mun_co2e"
+              label: "Placering Kommune (CO2e)"
+              column: "rank_municipality_total_co2e_tonnes"
+
+  - _key: carbon-accounting-history
+    _type: stackedBarChart
+    title: "CO2e Emissioner pr. År (Fordelt på Kilde)"
+    dataSource:
+      params:
+        source: 'carbon_emission_details_yearly'
+        timeSeries:
+          timeColumn: 'year'
+          valueColumn: 'co2e_tonnes'
+          groupByColumn: 'emission_source'
+        orderBy:
+          - column: 'year'
+            direction: 'asc'
+
+  - _key: carbon-accounting-details
+    _type: collapsibleDataGrid
+    title: "Detaljeret Klimaregnskab (Kilde x Faktor pr. År)"
+    dataSource:
+      params:
+        source: 'carbon_emission_factors'
+        table:
+          columns:
+            - key: "year"
+              label: "År"
+              column: "year"
+              isFilterable: true
+              isHidden: true
+            - key: "category"
+              label: "Kategori"
+              column: "source_category"
+              isFilterable: true
+            - key: "source"
+              label: "Kilde"
+              column: "sub_source"
+              isFilterable: true
+            - key: "activity"
+              label: "Aktivitetsdata"
+              column: "activity_data"
+            - key: "activity_unit"
+              label: "Enhed (Aktivitet)"
+              column: "activity_unit"
+            - key: "factor"
+              label: "Emissionsfaktor"
+              column: "emission_factor"
+            - key: "factor_unit"
+              label: "Enhed (Faktor)"
+              column: "emission_factor_unit"
+            - key: "co2e"
+              label: "CO2e (ton)"
+              column: "co2e_tonnes"
+              format: "number"
+          initialFilter:
+            year: 'latest'
+          isCollapsible: true
+          allowFiltering: true
+        orderBy:
+          - column: 'year'
+            direction: 'desc'
+          - column: 'source_category'
+            direction: 'asc'
+          - column: 'sub_source'
+            direction: 'asc'
