@@ -6,4 +6,4 @@ services:
       - ./data:/app/data
     env_file:
       - .env
-    command: python main.py --parameter pot_evaporation_makkink --days 30
+    command: python main.py --log-level INFO --progress --environment prod
