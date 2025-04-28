@@ -6,18 +6,14 @@ Saves raw data without any transformations.
 
 import logging
 import os
+import json
 from datetime import datetime
 from typing import Dict, Any
 import aiohttp
 from fastapi import HTTPException
-import geopandas as gpd
-from shapely.geometry import shape
+from pathlib import Path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 class DMIConfig:
@@ -30,7 +26,6 @@ class DMIConfig:
         self.base_url = "https://dmigw.govcloud.dk/v2/climateData"
         self.max_retries = int(os.getenv('MAX_RETRIES', 3))
         self.retry_delay = int(os.getenv('RETRY_DELAY', 5))
-        self.SOURCE_CRS = "EPSG:25832"  # DMI's native CRS
 
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
@@ -63,8 +58,25 @@ class DMIApiClient:
                 logger.error(f"Error making request to DMI API: {str(e)}")
                 raise
 
-    async def fetch_grid_data(self, parameter_id: str, start_time: datetime, end_time: datetime) -> gpd.GeoDataFrame:
-        """Fetch raw climate grid data and save as is"""
+    def save_raw_data(self, data: Dict, output_dir: Path, filename: str) -> bool:
+        """Save raw JSON data to the bronze layer"""
+        try:
+            # Create output directory if it doesn't exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save as JSON file
+            output_path = output_dir / f"{filename}.json"
+            with open(output_path, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            logger.info(f"Successfully saved raw data to {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving raw data to {output_dir}: {str(e)}")
+            return False
+
+    async def fetch_grid_data(self, parameter_id: str, start_time: datetime, end_time: datetime, output_dir: Path = None) -> Dict:
+        """Fetch raw climate grid data and return as JSON"""
         params = {
             "parameterId": parameter_id,
             "limit": 1000,
@@ -73,39 +85,18 @@ class DMIApiClient:
 
         try:
             data = await self._make_request("collections/10kmGridValue/items", params)
-            if not data or "features" not in data:
-                return gpd.GeoDataFrame()
+            if not data or "features" not in data or not data["features"]:
+                logger.warning(f"No data returned for parameter {parameter_id}")
+                return {"features": []}
 
-            # Process features into GeoDataFrame
-            features = []
-            for feature in data["features"]:
-                properties = feature.get("properties", {})
-                geometry = feature.get("geometry", {})
+            logger.info(f"Successfully fetched {len(data['features'])} records for {parameter_id}")
 
-                if geometry:
-                    # Convert GeoJSON geometry to Shapely geometry
-                    shapely_geometry = shape(geometry)
-                    features.append({
-                        "geometry": shapely_geometry,
-                        "value": properties.get("value"),
-                        "parameter_id": properties.get("parameterId"),
-                        "valid_time": properties.get("validTime"),
-                        "created": properties.get("created"),
-                        "geo_crs_source": self.config.SOURCE_CRS
-                    })
+            # Save raw data if output directory is provided
+            if output_dir:
+                self.save_raw_data(data, output_dir, f"{parameter_id}_raw")
 
-            if not features:
-                return gpd.GeoDataFrame()
-
-            # Create GeoDataFrame with explicit geometry column
-            gdf = gpd.GeoDataFrame(features, geometry="geometry")
-
-            # Set CRS to match DMI's native CRS
-            gdf.set_crs(self.config.SOURCE_CRS, inplace=True)
-            logger.info(f"Created GeoDataFrame with source CRS: {self.config.SOURCE_CRS}")
-
-            return gdf
+            return data
 
         except Exception as e:
-            logger.error(f"Error fetching grid data: {str(e)}")
-            return gpd.GeoDataFrame()
+            logger.error(f"Error fetching grid data for {parameter_id}: {str(e)}")
+            return {"features": []}
