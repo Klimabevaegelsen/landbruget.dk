@@ -3,30 +3,47 @@ name: DMI Climate Data Pipeline
 on:
   workflow_dispatch:
     inputs:
-      parameter:
-        description: 'Climate parameter ID to fetch'
-        required: true
-        type: string
-        default: 'temperature'
-      days:
-        description: 'Number of days of data to fetch'
-        type: number
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
         required: false
-        default: 30
-      test_mode:
-        description: 'Run in test mode with limited data'
-        type: boolean
-        default: false
+        type: string
+      end_date:
+        description: 'End date (YYYY-MM-DD)'
+        required: false
+        type: string
       log_level:
         description: 'Logging level'
         type: choice
-        required: true
+        required: false
         options:
           - WARNING
           - INFO
           - DEBUG
           - ERROR
         default: 'WARNING'
+      progress:
+        description: 'Show progress information'
+        type: boolean
+        required: false
+        default: false
+      environment:
+        description: 'Environment to use'
+        type: choice
+        required: false
+        options:
+          - prod
+          - test
+        default: 'prod'
+      test:
+        description: 'Run in test mode with limited data'
+        type: boolean
+        required: false
+        default: false
+      max_concurrent_fetches:
+        description: 'Maximum number of concurrent API calls'
+        type: number
+        required: false
+        default: 5
 
 jobs:
   run-pipeline:
@@ -82,23 +99,36 @@ jobs:
     - name: Run Pipeline
       working-directory: backend/pipelines/dmi_pipeline
       run: |
-        # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
-        LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
+        # Build base command
+        CMD="python main.py"
 
-        # Build base command with common arguments
-        CMD="python main.py --parameter ${{ inputs.parameter }} --log-level $LOG_LEVEL"
+        # Add date arguments if provided
+        if [ -n "${{ inputs.start_date }}" ]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [ -n "${{ inputs.end_date }}" ]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        fi
 
-        # Add days argument
-        CMD="$CMD --days ${{ inputs.days || 30 }}"
+        # Add log level
+        CMD="$CMD --log-level ${{ inputs.log_level || 'WARNING' }}"
 
         # Add progress flag if enabled
-        if [ "${{ inputs.show_progress }}" = "true" ]; then
+        if [ "${{ inputs.progress }}" = "true" ]; then
           CMD="$CMD --progress"
         fi
 
+        # Add environment
+        CMD="$CMD --environment ${{ inputs.environment || 'prod' }}"
+
         # Add test mode flag if enabled
-        if [ "${{ inputs.test_mode }}" = "true" ]; then
+        if [ "${{ inputs.test }}" = "true" ]; then
           CMD="$CMD --test"
+        fi
+
+        # Add max concurrent fetches if provided
+        if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
+          CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
         fi
 
         echo "Running command: $CMD"
