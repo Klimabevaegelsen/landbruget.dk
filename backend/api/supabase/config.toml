@@ -248,9 +248,7 @@ secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 redirect_uri = ""
 # Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
 # or any other third-party OIDC providers.
-url = ""
-# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
-skip_nonce_check = false
+# url = ""
 
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
@@ -317,3 +315,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 ## Specifies static files to be bundled with the function. Supports glob patterns.
 ## For example, if you want to serve static HTML pages in your function:
 ## static_files = [ "./functions/hello-world/*.html" ]
+
+# Specify the path to your Supabase edge functions relative to the project root
+[functions]
+  # Path to the directory containing Edge Functions.
+  path = "backend/api/supabase/functions"
