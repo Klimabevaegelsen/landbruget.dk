@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      # Trigger on changes within the backend/api directory, including the Supabase config
       - 'backend/api/**'
   workflow_dispatch:
 
@@ -23,12 +24,9 @@ jobs:
           version: latest
       
       - name: Deploy Edge Function
+        # Change the working directory to where the Supabase project now lives
+        working-directory: backend/api
         run: |
-          # Create the standard Supabase functions directory structure
-          mkdir -p supabase/functions/api
-          
-          # Copy function files to the standard location
-          cp -r backend/api/* supabase/functions/api/
-          
-          # Deploy the function from the project root, specifying the function name
+          # Deploy the function from within the backend/api directory.
+          # The CLI should automatically find the function 'api' inside './supabase/functions/api/'
           supabase functions deploy api --project-ref $PROJECT_ID --no-verify-jwt 

@@ -21,17 +21,32 @@ This document outlines the process and considerations for populating the Postgre
     3.  `production_sites` (references `companies` and `species`)
     4.  `field_boundaries` (references `companies`)
     5.  All other tables (referencing the above)
-*   **Consistency:** Use consistent primary keys (`id` for `companies`, `chr` for `production_sites`, `id` for `field_boundaries`) when inserting related data across multiple tables. Using SQL variables or noting down the generated/used IDs is essential.
+*   **Consistency:** Use consistent primary keys (`id` for `companies`, `chr` for `production_sites`, generated `id` for `field_boundaries`) when inserting related data across multiple tables. Using SQL variables within a `DO $$ ... END $$;` block is highly recommended for managing these IDs.
+*   **UUID Generation:** While you can pre-generate UUIDs, hardcoding them in scripts can be fragile and lead to errors if hidden characters or encoding issues occur (as seen during testing). For IDs like `field_boundaries.id` where precise values aren't needed beforehand, it's more robust to generate them dynamically within the script using `uuid_generate_v4()`:
+    ```sql
+    DO $$
+    DECLARE
+        field1_id uuid := uuid_generate_v4();
+        field2_id uuid := uuid_generate_v4();
+        -- ... other variables ...
+    BEGIN
+        INSERT INTO public.field_boundaries (id, ...) VALUES (field1_id, ...);
+        INSERT INTO public.field_yearly_data (field_boundary_id, ...) VALUES (field1_id, ...);
+        -- ... etc ...
+    END $$;
+    ```
+    *Ensure the `uuid-ossp` extension is enabled (`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`).*
 *   **`species_id` Handling:**
     *   When inserting into `public.species`, you **must** provide the predefined integer `species_id` value you have chosen for that species. The database will **not** auto-generate it.
     *   When inserting into related tables (`animal_production_log`, `vet_events`, `animal_transports`, `production_sites`), use the corresponding predefined integer `species_id` for the relevant species. **No lookup is needed** if you know the IDs beforehand.
+*   **Schema Verification:** **Crucially, verify your `INSERT` statements against the *actual* current database schema** before running population scripts. Schemas can drift from documentation. Use `\\d table_name` in `psql` or inspect a recent database dump (`pg_dump`) to confirm column names, data types, and nullability constraints. Errors like "column ... does not exist" or "null value in column ... violates not-null constraint" often indicate a mismatch between the script and the live schema.
 *   **Data Types:** Ensure inserted values match the column's `data_type`:
     *   `text`, `character varying`: Use single quotes (e.g., `'Svin'`, `'Markvej 1'`).
     *   `integer`, `numeric`: Do not use quotes (e.g., `2023`, `150.5`).
     *   `boolean`: Use `true` or `false` (no quotes).
     *   `date`: Use single quotes in 'YYYY-MM-DD' format (e.g., `'2023-10-27'`).
     *   `timestamp with time zone`: Use single quotes (e.g., `'2023-10-27 10:30:00+02'`) or database functions like `now()`.
-    *   `uuid`: Use single quotes with a valid UUID string (e.g., `'a1a1a1a1-0001-0001-0001-a1a1a1a1a1a1'`). Generate these beforehand.
+    *   `uuid`: Use single quotes with a valid UUID string (if hardcoding) or use generated variables (recommended).
     *   `USER-DEFINED` (Geometry): Use PostGIS functions within single quotes:
         *   Point: `ST_GeomFromText('POINT(longitude latitude)', 4326)`
         *   Polygon: `ST_GeomFromText('POLYGON((lon1 lat1, lon2 lat2, ..., lon1 lat1))', 4326)` (Ensure coordinates use SRID 4326).
@@ -158,13 +173,34 @@ This document outlines the process and considerations for populating the Postgre
 
 ### `field_yearly_data`
 
-*   **Purpose:** Annual data per field (crop, organic status, calculated environmental impacts). Note: BNBO/Wetland status columns removed.
-*   **Key Columns:** `field_boundary_id` (FK -> `field_boundaries.id`), `year`, `crop_name`.
-*   **Example:**
-    ```sql
-    INSERT INTO public.field_yearly_data (field_boundary_id, year, crop_name, area_ha, is_organic, n_leached_kg, pesticide_load_index) VALUES
-    (field1_id, 2023, 'Vinterhvede', 25.5, false, 2040, 51); -- Example calculated values
-    ```
+This table stores yearly aggregated or calculated data specific to a field boundary.
+
+**Columns (as per current schema + recent migration):**
+
+*   `id` (uuid, PK, default gen_random_uuid()): Unique identifier for the yearly record.
+*   `field_boundary_id` (uuid, FK -> field_boundaries.id, NOT NULL): Links to the specific field boundary.
+*   `year` (integer, NOT NULL): The year the data pertains to.
+*   `crop_name` (text): Name of the crop grown (e.g., 'Wheat', 'Barley').
+*   `area_ha` (numeric, NOT NULL): The area of the field boundary for that year.
+*   `fertilizer_amount_kg_ha` (numeric, NULL): Amount of fertilizer applied in kg per hectare. *(Note: This column was recently added via migration)*.
+*   `is_organic` (boolean, default false): Indicates if cultivation was organic.
+*   `n_leached_kg` (numeric): Calculated nitrogen leached in kg.
+*   `pesticide_load_index` (numeric): Calculated pesticide load index.
+*   `created_at` (timestamptz, default now(), NOT NULL): Timestamp of record creation.
+*   `updated_at` (timestamptz, default now(), NOT NULL): Timestamp of last update.
+
+**Notes:**
+
+*   Columns like `fertilizer_type` and `cultivation_practices` were present in earlier designs but **do not exist** in the current schema based on `database-dump.sql`.
+*   The `fertilizer_amount_kg_ha` column was recently added via migration and should be populated.
+*   The `area_ha` column must be populated.
+
+**Example:**
+```sql
+-- Assuming field1_id is a declared UUID variable referencing a field_boundary
+INSERT INTO public.field_yearly_data (field_boundary_id, year, crop_name, area_ha, fertilizer_amount_kg_ha, n_leached_kg, pesticide_load_index) VALUES
+(field1_id, 2023, 'Winter Wheat', 25.5, 180, 45.2, 1.9); -- Added fertilizer_amount_kg_ha
+```
 
 ---
 
@@ -194,12 +230,12 @@ This document outlines the process and considerations for populating the Postgre
 
 ### `incidents`
 
-*   **Purpose:** Log of specific incidents (e.g., slurry leaks). Note: `severity` column removed.
-*   **Key Columns:** `company_id` (FK -> `companies.id`), `incident_date`, `type`.
+*   **Purpose:** Log of specific incidents (e.g., slurry leaks).
+*   **Key Columns:** `company_id` (FK -> `companies.id`), `incident_date`, `type`. Note: There is **no `chr`** column in this table according to the current schema.
 *   **Example:**
     ```sql
     INSERT INTO public.incidents (company_id, incident_date, type, description) VALUES
-    (company3_id, '2022-08-15 10:00:00+02', 'slurry_leak', 'Mindre overløb fra fortank ved CHR00302 under kraftig regn. Stoppet hurtigt.');
+    (company3_id, '2022-08-15 10:00:00+02', 'slurry_leak', 'Mindre overløb fra fortank ved CHR00302 under kraftig regn.'); -- Description might mention CHR, but it's not a separate column
     ```
 
 ---
@@ -255,14 +291,14 @@ This document outlines the process and considerations for populating the Postgre
 
 ### `worker_injury_yearly_counts`
 
-*   **Purpose:** Aggregated injury counts per year, potentially bucketed.
-*   **Key Columns:** `company_id` (FK -> `companies.id`), `year`, `injury_count_reported` (TEXT).
-*   **Example:**
+*   **Purpose:** Originally intended for aggregated injury counts per year.
+*   **Status:** **This table was found *not* to exist** in the current database schema based on `database-dump.sql`. `INSERT` statements targeting this table in older scripts will fail and should be removed or adapted if the schema is changed later.
+*   **(Original) Key Columns:** `company_id` (FK -> `companies.id`), `year`, `injury_count_reported` (TEXT).
+*   **(Original) Example:**
     ```sql
-    INSERT INTO public.worker_injury_yearly_counts (company_id, year, injury_count_reported) VALUES
-    (company3_id, 2023, '2');
-    INSERT INTO public.worker_injury_yearly_counts (company_id, year, injury_count_reported) VALUES
-    (company1_id, 2023, '<5');
+    -- NOTE: The following will fail unless the table is created.
+    -- INSERT INTO public.worker_injury_yearly_counts (company_id, year, injury_count_reported) VALUES
+    -- (company3_id, 2023, '2');
     ```
 
 ---
@@ -270,11 +306,11 @@ This document outlines the process and considerations for populating the Postgre
 ### `animal_production_log`
 
 *   **Purpose:** Log of animal production numbers.
-*   **Key Columns:** `chr` (FK -> `production_sites.chr`), `year`, `species_id` (FK -> `species.species_id`). Requires **known integer** `species_id`.
+*   **Key Columns:** `chr` (FK -> `production_sites.chr`), `year`, `species_id` (FK -> `species.species_id`), `species_name` (**TEXT NOT NULL**). Requires **known integer** `species_id` and the corresponding **species name**.
 *   **Example:**
     ```sql
-    INSERT INTO public.animal_production_log (chr, year, species_id, age_group, production_volume_equiv) VALUES
-    ('CHR00101', 2023, 102, 'Kalve', 70); -- Assuming 102 is Cattle ID
+    INSERT INTO public.animal_production_log (chr, year, species_id, species_name, age_group, production_volume_equiv) VALUES
+    ('CHR00101', 2023, 102, 'Kvæg', 'Kalve', 70); -- Assuming 102 is Cattle ID and 'Kvæg' is the name
     ```
 
 ---
@@ -306,11 +342,11 @@ This document outlines the process and considerations for populating the Postgre
 ### `animal_transports`
 
 *   **Purpose:** Log of animal movements.
-*   **Key Columns:** `company_id` (FK -> `companies.id`), `transport_date`, `species_id` (Optional FK -> `species.species_id`). Requires **known integer** `species_id`.
+*   **Key Columns:** `company_id` (FK -> `companies.id`), `transport_date`, `animal_count`, `species_id` (Optional FK -> `species.species_id`), `species_name` (TEXT). Requires **known integer** `species_id` if used. Note: There is **no `chr`** column in this table.
 *   **Example:**
     ```sql
-    INSERT INTO public.animal_transports (company_id, transport_date, animal_count, species_id, destination_type, destination_details) VALUES
-    (company3_id, '2023-11-25', 280, 101, 'Slagteri', 'Tican Thisted'); -- Assuming 101 is Pig ID
+    INSERT INTO public.animal_transports (company_id, transport_date, animal_count, species_id, species_name, destination_type, destination_details) VALUES
+    (company3_id, '2023-11-25', 280, 101, 'Svin', 'Slagteri', 'Tican Thisted'); -- Assuming 101 is Pig ID and 'Svin' is the name
     ```
 
 ---
