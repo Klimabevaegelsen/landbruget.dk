@@ -24,6 +24,11 @@ jobs:
       
       - name: Deploy Edge Function
         run: |
-          # Deploy directly from the backend/api folder
-          cd backend/api
+          # Create the standard Supabase functions directory structure
+          mkdir -p supabase/functions/api
+          
+          # Copy function files to the standard location
+          cp -r backend/api/* supabase/functions/api/
+          
+          # Deploy the function from the project root, specifying the function name
           supabase functions deploy api --project-ref $PROJECT_ID --no-verify-jwt 
