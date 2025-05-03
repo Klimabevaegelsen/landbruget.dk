@@ -1,5 +1,5 @@
 import { serve } from 'std/http/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import yaml from 'js-yaml';
 // --- Configuration ---
 const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/config.yaml';
@@ -15,7 +15,7 @@ const TABLES_WITH_MUNICIPALITY_SUMMARY = [
   'site_details_summary_ranked' // Include if ranks depend on municipality
 ];
 // --- In-memory Cache ---
-let cachedConfig = null;
+let cachedConfig: any = null;
 let lastFetchTimestamp = 0;
 // --- Helper: Fetch and Cache YAML Config ---
 async function getYamlConfig() {
@@ -43,7 +43,7 @@ async function getYamlConfig() {
   }
 }
 // --- Helper: Get Company Details (Lookup by ID - UUID) ---
-async function getCompanyDetails(supabase, companyId) {
+async function getCompanyDetails(supabase: SupabaseClient, companyId: string) {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(companyId)) {
     console.warn(`Received invalid format for company ID: ${companyId}`);
@@ -56,15 +56,48 @@ async function getCompanyDetails(supabase, companyId) {
   }
   return data || null;
 }
+// Define a basic type for chart data structures
+type ChartData = {
+  xAxis?: { label: string; values?: any[] }; // Made values optional
+  yAxis?: { label: string; values?: any[] }; 
+  series?: { name: string; data: any[]; type?: string; yAxis?: string }[];
+};
+// Define a general type for component processing results
+type ComponentResult = {
+  _key: string;
+  _type: string;
+  title?: string;
+  error?: string;
+  // Add specific fields from different component types as optional
+  items?: any[]; // For infoCard
+  rows?: any[]; // For dataGrid
+  columns?: any[]; // For dataGrid
+  allowFiltering?: boolean; // For dataGrid
+  isCollapsible?: boolean; // For collapsibleDataGrid
+  kpis?: any[]; // For kpiGroup
+  data?: ChartData | any; // For charts, maps, timeline etc.
+  config?: any; // For timeline
+  sections?: any[]; // For iteratedSection
+  iterationConfig?: any; // For iteratedSection
+  [key: string]: any; // Allow other properties
+};
+// Define a type for DataGrid results specifically
+type DataGridResult = {
+  rows: any[];
+  columns: any[];
+  allowFiltering: boolean;
+  error?: string;
+  isCollapsible?: boolean; // Optional property
+};
 // --- Helper: Get Latest Year (Generalized) ---
-async function getLatestYearForCompany(supabase, sourceTable, companyId, yearColumn = 'year', filterContext = {}) {
+async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: string, companyId: string, yearColumn = 'year', filterContext: Record<string, any> | null = {}) {
   // Refined to potentially filter by CHR if provided
   let query = supabase.from(sourceTable).select(yearColumn, {
     count: 'exact',
     head: false
   });
   // Apply context filter (CHR for site-specific latest year)
-  if (filterContext.chr && await tableHasColumn(supabase, sourceTable, 'chr')) {
+  if (filterContext?.chr && await tableHasColumn(supabase, sourceTable, 'chr')) {
     query = query.eq('chr', filterContext.chr);
     console.log(`getLatestYearForCompany: Filtering by CHR ${filterContext.chr} for ${sourceTable}`);
   } else if (await tableHasColumn(supabase, sourceTable, 'company_id')) {
@@ -81,13 +114,15 @@ async function getLatestYearForCompany(supabase, sourceTable, companyId, yearCol
     console.warn(`Could not determine latest year for ${sourceTable} (Company ${companyId}, Context ${JSON.stringify(filterContext)}):`, error.message);
     return null;
   }
-  const latestYear = data ? data[yearColumn] : null;
+  // Line 84 fix: Assume data is Record<string, any> or cast
+  const resultData = data as Record<string, any> | null;
+  const latestYear = resultData ? resultData[yearColumn] : null;
   console.log(`getLatestYearForCompany: Determined latest year for ${sourceTable} (Company ${companyId}, Context ${JSON.stringify(filterContext)}) as: ${latestYear}`);
   return latestYear;
 }
 // --- Helper: Check if table has a column (simple check, needs improvement/caching) ---
 const columnExistenceCache = new Map();
-async function tableHasColumn(supabase, tableName, columnName) {
+async function tableHasColumn(supabase: SupabaseClient, tableName: string, columnName: string): Promise<boolean> {
   const cacheKey = `${tableName}.${columnName}`;
   if (columnExistenceCache.has(cacheKey)) {
     return columnExistenceCache.get(cacheKey);
@@ -109,12 +144,12 @@ async function tableHasColumn(supabase, tableName, columnName) {
   }
 }
 // --- Data Processing Functions ---
-async function processInfoCard(supabase, companyId, municipality, params, context) {
+async function processInfoCard(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
   const { source, record } = params;
   const { mappings, filter: recordFilter } = record || {};
   if (!source || !mappings) throw new Error(`Invalid config for infoCard: missing source or mappings.`);
   console.log(`processInfoCard: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(recordFilter)}`);
-  const selectColumns = mappings.map((m)=>m.column).join(',');
+  const selectColumns = mappings.map((m: any) => m.column).join(',');
   let query = supabase.from(source).select(selectColumns);
   // Apply company_id or primary ID filter
   if (source === 'companies') {
@@ -171,7 +206,7 @@ async function processInfoCard(supabase, companyId, municipality, params, contex
       items: []
     };
   }
-  const items = mappings.map((mapping)=>({
+  const items = mappings.map((mapping: any) => ({
       label: mapping.label,
       value: formatValue(data[mapping.column], mapping.format)
     }));
@@ -179,65 +214,88 @@ async function processInfoCard(supabase, companyId, municipality, params, contex
     items
   };
 }
-async function processDataGrid(supabase, companyId, _municipality, params, allowFiltering = false, context) {
+async function processDataGrid(supabase: SupabaseClient, companyId: string, _municipality: string, params: any, allowFiltering = false, context: Record<string, any> | null): Promise<DataGridResult> {
   const { source, table, orderBy, initialFilter } = params;
   const { columns } = table || {};
   if (!source || !columns) throw new Error(`Invalid config for dataGrid: missing source or columns.`);
   console.log(`processDataGrid: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(initialFilter)}`);
-  const selectColumns = columns.map((c)=>c.column).join(',');
-  let query = supabase.from(source).select(selectColumns);
-  // Apply company_id filter if applicable
+
+  // --- Reverted Logic: Standard approach --- 
+  const selectColumns = columns.map((c: any) => c.column).join(',');
+  let query: any = supabase.from(source).select(selectColumns);
+
+  // Apply company_id filter if applicable (This should now work for field_yearly_data)
   if (await tableHasColumn(supabase, source, 'company_id')) {
+    console.log(`processDataGrid: Applying company_id filter for ${source}`);
     query = query.eq('company_id', companyId);
+  } else {
+    console.log(`processDataGrid: Skipping company_id filter for ${source}`);
   }
-  // Apply initial filters (potentially using context)
+
+  // Apply initial filters (potentially using context) 
   if (initialFilter) {
-    for(const key in initialFilter){
+    for (const key in initialFilter) {
       let filterValue = initialFilter[key];
       // Resolve context placeholder if present
       if (typeof filterValue === 'string' && filterValue.startsWith('{iteratorContext.') && context) {
-        const ctxKey = filterValue.match(/\{iteratorContext\.([^}]+)\}/)?.[1];
+        const ctxKey = filterValue.match(/\{iteratorContext\.([^}]+)\}/)?.[1]; // Adjusted regex back
         if (ctxKey && context[ctxKey] !== undefined) {
           filterValue = context[ctxKey];
           console.log(`processDataGrid: Resolved filter ${key}=${filterValue} from context.`);
         } else {
           console.warn(`processDataGrid: Could not resolve context for filter ${key}=${filterValue}`);
-          return {
-            rows: [],
-            columns: columns,
-            allowFiltering,
-            error: `Unresolved context for filter ${key}`
-          };
+          return { rows: [], columns: columns, allowFiltering, error: `Unresolved context for filter ${key}` };
         }
       }
-      // Apply the filter
+
+      // Apply the filter 
       if (filterValue === 'latest') {
-        const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context);
+         // Check latest year based on the source table 
+        const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context); 
         if (latestYear) {
-          query = query.eq('year', latestYear);
+           if (await tableHasColumn(supabase, source, 'year')) {
+               query = query.eq('year', latestYear);
+           } else {
+               console.warn(`processDataGrid: Cannot apply 'latest' year filter. 'year' column not found on source ${source}.`);
+               return { rows: [], columns: columns, allowFiltering };
+           }
         } else {
           console.warn(`processDataGrid: Cannot apply 'latest' filter for ${source}, no year found for context ${JSON.stringify(context)}.`);
-          // Allow query without year filter to proceed? Or return empty? Returning empty.
-          return {
-            rows: [],
-            columns: columns,
-            allowFiltering
-          };
+          return { rows: [], columns: columns, allowFiltering };
         }
       } else {
-        query = query.eq(key, filterValue);
+        // Apply other filters 
+        if (await tableHasColumn(supabase, source, key)){
+             query = query.eq(key, filterValue);
+        } else {
+             console.warn(`processDataGrid: Cannot apply filter ${key}=${filterValue}. Column not found on source ${source}.`);
+             // Skip filter if column doesn't exist
+        }
       }
     }
   }
-  // Apply ordering
+
+  // Apply ordering 
   if (orderBy?.length > 0) {
-    orderBy.forEach((order)=>query = query.order(order.column, {
-        ascending: order.direction === 'asc'
-      }));
+    orderBy.forEach((order: any) => {
+        // Check if order column exists before applying
+        if (columns.some((c:any) => c.column === order.column)) {
+             query = query.order(order.column, { ascending: order.direction === 'asc' });
+        } else {
+            console.warn(`processDataGrid: Cannot order by column ${order.column} as it's not selected from ${source}`);
+        }
+    });
   }
+
+  // DEBUG: Log the final query structure before execution
+  console.log(`DEBUG processDataGrid (${source}): Query before execution:`, query);
+  // END DEBUG
+
   const { data, error } = await query;
+
   if (error) {
-    console.error(`Error fetching data for dataGrid (${source}):`, error);
+    // Keep the improved error logging
+    console.error(`Error fetching data for dataGrid (${source}) with filter ${JSON.stringify(initialFilter)} and order ${JSON.stringify(orderBy)}:`, error);
     return {
       rows: [],
       columns: columns,
@@ -245,18 +303,23 @@ async function processDataGrid(supabase, companyId, _municipality, params, allow
       error: `Database error: ${error.message}`
     };
   }
-  const rows = data.map((row)=>{
-    const rowData = {};
-    columns.forEach((col)=>rowData[col.key] = formatValue(row[col.column], col.format));
+
+  // --- Reverted Logic: Standard data processing --- 
+  const processedData = data; // No need for special handling anymore
+
+  const rows = processedData.map((row: any) => {
+    const rowData: Record<string, any> = {};
+    columns.forEach((col: any) => rowData[col.key] = formatValue(row[col.column], col.format));
     return rowData;
   });
+
   return {
     rows,
     columns: columns,
     allowFiltering
   };
 }
-async function processKpiGroup(supabase, companyId, municipality, params, context) {
+async function processKpiGroup(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
   const { source, kpis } = params;
   const { timeContext, n = 1, metrics, filter: kpiFilter } = kpis || {};
   if (!source || !metrics) throw new Error(`Invalid config for kpiGroup: missing source or metrics.`);
@@ -283,8 +346,8 @@ async function processKpiGroup(supabase, companyId, municipality, params, contex
   // Select necessary columns
   const selectColumns = [
     'year',
-    ...metrics.map((m)=>m.column),
-    ...kpiFilter ? Object.keys(kpiFilter).map((k)=>k) : []
+    ...metrics.map((m: any)=>m.column),
+    ...kpiFilter ? Object.keys(kpiFilter).map((k: any)=>k) : []
   ].filter((v, i, a)=>a.indexOf(v) === i).join(',');
   let query = supabase.from(source).select(selectColumns);
   // Apply company_id filter
@@ -336,7 +399,7 @@ async function processKpiGroup(supabase, companyId, municipality, params, contex
       kpis: []
     };
   }
-  const kpiResults = metrics.map((metric)=>({
+  const kpiResults = metrics.map((metric: any)=>({
       key: metric.key,
       label: metric.label,
       value: formatValue(resultData[metric.column], metric.format)
@@ -345,7 +408,7 @@ async function processKpiGroup(supabase, companyId, municipality, params, contex
     kpis: kpiResults
   };
 }
-async function processTimeSeriesChart(supabase, companyId, _municipality, params, chartType, context) {
+async function processTimeSeriesChart(supabase: SupabaseClient, companyId: string, _municipality: string, params: any, chartType: string, context: Record<string, any> | null) {
   const { source, timeSeries, orderBy } = params;
   const { timeColumn, metrics, valueColumn, groupByColumn, filter } = timeSeries || {};
   const isSimpleSeries = metrics?.length > 0;
@@ -357,7 +420,7 @@ async function processTimeSeriesChart(supabase, companyId, _municipality, params
   ];
   if (isSimpleSeries) selectList = [
     ...selectList,
-    ...metrics.map((m)=>m.column)
+    ...metrics.map((m: any)=>m.column)
   ];
   else if (isGroupedSeries) selectList = [
     ...selectList,
@@ -412,7 +475,7 @@ async function processTimeSeriesChart(supabase, companyId, _municipality, params
   }
   // Apply ordering
   if (orderBy?.length > 0) {
-    orderBy.forEach((order)=>query = query.order(order.column, {
+    orderBy.forEach((order: any)=>query = query.order(order.column, {
         ascending: order.direction === 'asc'
       }));
   } else {
@@ -435,34 +498,34 @@ async function processTimeSeriesChart(supabase, companyId, _municipality, params
     };
   }
   const timeValues = [
-    ...new Set(data.map((d)=>d[timeColumn]))
+    ...new Set(data.map((d: any)=>d[timeColumn]))
   ].sort((a, b)=>a - b);
-  let chartData = {};
+  let chartData: ChartData = {};
   if (isSimpleSeries) {
     chartData.xAxis = {
       label: timeColumn,
       values: timeValues
     };
-    chartData.series = metrics.map((metric)=>({
+    chartData.series = metrics.map((metric: any)=>({
         name: metric.seriesName || metric.key,
         type: metric.type,
         yAxis: metric.yAxis,
-        data: timeValues.map((t)=>data.find((d)=>d[timeColumn] === t)?.[metric.column] ?? null)
+        data: timeValues.map((t: any)=>data.find((d: any)=>d[timeColumn] === t)?.[metric.column] ?? null)
       }));
     chartData.yAxis = {
       label: "Value"
     };
   } else if (isGroupedSeries) {
     const groupKeys = [
-      ...new Set(data.map((d)=>d[groupByColumn]))
+      ...new Set(data.map((d: any)=>d[groupByColumn]))
     ].sort();
     chartData.xAxis = {
       label: timeColumn,
       values: timeValues
     };
-    chartData.series = groupKeys.map((group)=>({
+    chartData.series = groupKeys.map((group: any)=>({
         name: group,
-        data: timeValues.map((t)=>data.find((d)=>d[timeColumn] === t && d[groupByColumn] === group)?.[valueColumn] ?? 0)
+        data: timeValues.map((t: any)=>data.find((d: any)=>d[timeColumn] === t && d[groupByColumn] === group)?.[valueColumn] ?? 0)
       }));
     chartData.yAxis = {
       label: valueColumn
@@ -472,7 +535,7 @@ async function processTimeSeriesChart(supabase, companyId, _municipality, params
     data: chartData
   };
 }
-async function processCategoryChart(supabase, companyId, _municipality, params, chartType, context) {
+async function processCategoryChart(supabase: SupabaseClient, companyId: string, _municipality: string, params: any, chartType: string, context: Record<string, any> | null) {
   const { source, category, orderBy } = params;
   const { timeContext, n = 1, categoryColumn, valueColumn, stackByColumn, topN, filter } = category || {};
   if (!source || !categoryColumn || !valueColumn) throw new Error(`Invalid config for ${chartType}: missing required category params.`);
@@ -542,7 +605,7 @@ async function processCategoryChart(supabase, companyId, _municipality, params, 
   }
   // Apply ordering if specified (useful for topN)
   if (orderBy?.length > 0) {
-    orderBy.forEach((order)=>query = query.order(order.column, {
+    orderBy.forEach((order: any)=>query = query.order(order.column, {
         ascending: order.direction === 'asc'
       }));
   } else if (topN) {
@@ -570,22 +633,18 @@ async function processCategoryChart(supabase, companyId, _municipality, params, 
     }; // Return empty chart data structure
   }
   // --- Data Transformation for Category Charts (Horizontal Stacked Bar Example) ---
-  let chartData = {};
-  const categories = [
-    ...new Set(data.map((d)=>d[categoryColumn]))
-  ]; // Get unique categories from the fetched (potentially limited by topN) data
+  let chartData: ChartData = {};
+  const categories = [...new Set(data.map((d: any)=>d[categoryColumn]))]; // Get unique categories from the fetched (potentially limited by topN) data
   if (stackByColumn) {
-    const stackKeys = [
-      ...new Set(data.map((d)=>d[stackByColumn]))
-    ].sort(); // Unique stack keys
+    const stackKeys = [...new Set(data.map((d: any)=>d[stackByColumn]))].sort(); // Unique stack keys
     chartData.yAxis = {
       label: categoryColumn,
       values: categories
     }; // Categories on Y axis for horizontal
-    chartData.series = stackKeys.map((stack)=>({
+    chartData.series = stackKeys.map((stack: any)=>({
         name: formatValue(stack, 'boolean'),
-        data: categories.map((cat)=>{
-          const point = data.find((d)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
+        data: categories.map((cat: any)=>{
+          const point = data.find((d: any)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
           return point ? point[valueColumn] : 0; // Value for this category/stack combo
         })
       }));
@@ -601,8 +660,8 @@ async function processCategoryChart(supabase, companyId, _municipality, params, 
     chartData.series = [
       {
         name: valueColumn,
-        data: categories.map((cat)=>{
-          const point = data.find((d)=>d[categoryColumn] === cat);
+        data: categories.map((cat: any)=>{
+          const point = data.find((d: any)=>d[categoryColumn] === cat);
           return point ? point[valueColumn] : 0;
         })
       }
@@ -615,7 +674,7 @@ async function processCategoryChart(supabase, companyId, _municipality, params, 
     data: chartData
   };
 }
-async function processMapChart(supabase, companyId, _municipality, params, _context) {
+async function processMapChart(supabase: SupabaseClient, companyId: string, _municipality: string, params: any, _context: Record<string, any> | null) {
   const { map } = params;
   const { layers } = map || {};
   if (!layers?.length) throw new Error(`Invalid config for mapChart: missing or invalid layers.`);
@@ -642,7 +701,7 @@ async function processMapChart(supabase, companyId, _municipality, params, _cont
     if (source === 'field_boundaries' && (properties.includes('crop_name') || properties.includes('is_organic'))) {
       console.warn(`Map layer "${name}": Fetching basic field boundaries. Joining latest yearly data requires an RPC function.`);
       // Falling back to selecting only base properties defined in the YAML from field_boundaries
-      const baseProperties = properties.filter((p)=>p !== 'crop_name' && p !== 'is_organic');
+      const baseProperties = properties.filter((p: string) => p !== 'crop_name' && p !== 'is_organic');
       const simpleSelectString = `${baseProperties.join(',')}, geojson: ${geometryColumn}`;
       query = supabase.from(source).select(simpleSelectString).eq('company_id', companyId); // Assuming company_id exists
     }
@@ -670,9 +729,9 @@ async function processMapChart(supabase, companyId, _municipality, params, _cont
       });
       continue;
     }
-    const features = data.map((feature)=>{
-      const featureProperties = {};
-      properties.forEach((prop)=>{
+    const features = data.map((feature: any)=>{
+      const featureProperties: Record<string, any> = {};
+      properties.forEach((prop: any)=>{
         if (feature.hasOwnProperty(prop)) {
           featureProperties[prop] = feature[prop];
         }
@@ -712,7 +771,7 @@ async function processMapChart(supabase, companyId, _municipality, params, _cont
     }
   };
 }
-async function processTimeline(supabase, companyId, _municipality, params, context) {
+async function processTimeline(supabase: SupabaseClient, companyId: string, _municipality: string, params: any, context: Record<string, any> | null) {
   const { source, events, orderBy } = params;
   const { filter, dateColumn, descriptionColumn, groupByColumns, filterColumns } = events || {};
   if (!source || !dateColumn || !descriptionColumn) throw new Error(`Invalid config for timeline: missing required event parameters.`);
@@ -764,7 +823,7 @@ async function processTimeline(supabase, companyId, _municipality, params, conte
   }
   // Apply ordering
   if (orderBy?.length > 0) {
-    orderBy.forEach((order)=>query = query.order(order.column, {
+    orderBy.forEach((order: any)=>query = query.order(order.column, {
         ascending: order.direction === 'asc'
       }));
   } else {
@@ -781,13 +840,13 @@ async function processTimeline(supabase, companyId, _municipality, params, conte
       error: `Database error: ${error.message}`
     };
   }
-  const processedEvents = data.map((event)=>{
-    const eventData = {
+  const processedEvents = data.map((event: any)=>{
+    const eventData: Record<string, any> = {
       date: formatValue(event[dateColumn], 'datetime'),
       description: event[descriptionColumn]
     };
-    if (groupByColumns) groupByColumns.forEach((col)=>eventData[col] = event[col]);
-    if (filterColumns) filterColumns.forEach((col)=>eventData[col] = event[col]);
+    if (groupByColumns) groupByColumns.forEach((col: any)=>eventData[col] = event[col]);
+    if (filterColumns) filterColumns.forEach((col: any)=>eventData[col] = event[col]);
     return eventData;
   });
   return {
@@ -799,7 +858,7 @@ async function processTimeline(supabase, companyId, _municipality, params, conte
   };
 }
 // --- Helper function for data formatting ---
-function formatValue(value, format) {
+function formatValue(value: any, format: any): string {
   if (value === null || value === undefined) return 'N/A';
   try {
     switch(format){
@@ -830,12 +889,12 @@ function formatValue(value, format) {
   }
 }
 // --- Recursive Component Processor ---
-async function processComponent(componentConfig, supabase, companyId, municipality, parentContext// Context from parent iterator (e.g., { chr: 'DK...', site_name: '...' })
-) {
+async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
   const { _key, _type, title, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
   console.log(`Processing component: ${_key} (${_type}), Context: ${JSON.stringify(parentContext)}`);
-  let resultData = null;
-  let processingError = null;
+  let resultData: any = null; // Use any temporarily for varied results
+  let processingError: string | null = null;
+
   try {
     // --- Handle Iterated Sections Recursively ---
     if (_type === 'iteratedSection' && iteratorDataSource && template) {
@@ -897,7 +956,7 @@ async function processComponent(componentConfig, supabase, companyId, municipali
             }
             const resolvedTemplateConfig = JSON.parse(resolvedTemplateConfigStr);
             // Recursively process the template component with the current 'item' as context
-            const processedItem = await processComponent(resolvedTemplateConfig, supabase, companyId, municipality, item);
+            const processedItem: ComponentResult = await processComponent(resolvedTemplateConfig, supabase, companyId, municipality, item);
             sectionContent.push(processedItem);
           } // End template component loop
           iteratedSections.push({
@@ -919,8 +978,11 @@ async function processComponent(componentConfig, supabase, companyId, municipali
       if (_type === 'infoCard') resultData = await processInfoCard(supabase, companyId, municipality, params, parentContext);
       else if (_type === 'dataGrid' || _type === 'filterableDataGrid' || _type === 'collapsibleDataGrid') {
         const allowFiltering = _type !== 'dataGrid';
-        resultData = await processDataGrid(supabase, companyId, municipality, params, allowFiltering, parentContext);
-        if (_type === 'collapsibleDataGrid') resultData.isCollapsible = true;
+        let gridResult: DataGridResult = await processDataGrid(supabase, companyId, municipality, params, allowFiltering, parentContext);
+        if (_type === 'collapsibleDataGrid' && !gridResult.error) {
+            gridResult.isCollapsible = true;
+        }
+        resultData = gridResult;
       } else if (_type === 'kpiGroup') resultData = await processKpiGroup(supabase, companyId, municipality, params, parentContext);
       else if (_type === 'barChart' || _type === 'stackedBarChart' || _type === 'comboChart' || _type === 'lineChart' || _type === 'multiLineChart') resultData = await processTimeSeriesChart(supabase, companyId, municipality, params, _type, parentContext);
       else if (_type === 'horizontalStackedBarChart') resultData = await processCategoryChart(supabase, companyId, municipality, params, _type, parentContext);
@@ -931,23 +993,25 @@ async function processComponent(componentConfig, supabase, companyId, municipali
       processingError = `Component "${_key}" (${_type}) is missing dataSource or params.`;
     }
   } catch (error) {
-    console.error(`Error processing component "${_key}" (${_type}) with context ${JSON.stringify(parentContext)}:`, error);
-    processingError = `Failed to load data: ${error.message}`;
+    const err = error as Error;
+    console.error(`Error processing component "${_key}" (${_type}) with context ${JSON.stringify(parentContext)}:`, err);
+    processingError = `Failed to load data: ${err.message}`;
   }
   // Structure the final output for this component
-  if (resultData && !resultData.error && !processingError) {
+  const finalResultData = resultData as (ComponentResult | null);
+  if (finalResultData && !finalResultData.error && !processingError) {
+    // Spread finalResultData first, then set title
     return {
-      _key: _key,
-      _type: _type,
-      title: title,
-      ...resultData
+      ...finalResultData, // Includes _key, _type, and other processed data
+      title: title       // Ensure title from componentConfig is used
     };
   } else {
+    // Error path remains the same
     return {
-      _key: _key,
-      _type: "error",
+      _key: _key,       
+      _type: "error",   
       title: title || _key,
-      error: resultData?.error || processingError || "Unknown processing error"
+      error: finalResultData?.error || processingError || "Unknown processing error"
     };
   }
 }
@@ -977,9 +1041,14 @@ serve(async (req)=>{
   });
   let config;
   let companyInfo = null;
-  let supabase;
+  let supabase: SupabaseClient;
   try {
-    supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.');
+    }
+    supabase = createClient(supabaseUrl, supabaseKey, {
       global: {
         fetch: fetch.bind(globalThis)
       }
@@ -1020,13 +1089,14 @@ serve(async (req)=>{
       headers
     });
   } catch (error) {
-    console.error('Critical error in edge function:', error);
+    const err = error as Error;
+    console.error('Critical error in edge function:', err);
     const errorHeaders = {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*'
     };
     return new Response(JSON.stringify({
-      error: `Internal Server Error: ${error.message}`
+      error: `Internal Server Error: ${err.message}`
     }), {
       status: 500,
       headers: errorHeaders
