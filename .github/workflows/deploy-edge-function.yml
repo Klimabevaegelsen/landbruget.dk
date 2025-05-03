@@ -26,4 +26,4 @@ jobs:
         run: |
           # Deploy directly from the backend/api folder
           cd backend/api
-          supabase functions deploy . --project-ref $PROJECT_ID --no-verify-jwt 
+          supabase functions deploy api --project-ref $PROJECT_ID --no-verify-jwt 
