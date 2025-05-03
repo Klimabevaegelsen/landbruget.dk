@@ -42,8 +42,14 @@ async function getYamlConfig() {
     throw error;
   }
 }
+// Define type for company details
+type CompanyInfo = {
+  id: string;
+  municipality: string;
+  cvr_number: string;
+};
 // --- Helper: Get Company Details (Lookup by ID - UUID) ---
-async function getCompanyDetails(supabase: SupabaseClient, companyId: string) {
+async function getCompanyDetails(supabase: SupabaseClient, companyId: string): Promise<CompanyInfo | null> {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(companyId)) {
     console.warn(`Received invalid format for company ID: ${companyId}`);
@@ -89,6 +95,14 @@ type DataGridResult = {
   error?: string;
   isCollapsible?: boolean; // Optional property
 };
+// Define a type for map layer results
+type MapLayerResult = {
+  name: string;
+  type: 'geojson' | 'error';
+  style?: string;
+  data?: any; // GeoJSON FeatureCollection
+  error?: string;
+}
 // --- Helper: Get Latest Year (Generalized) ---
 async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: string, companyId: string, yearColumn = 'year', filterContext: Record<string, any> | null = {}) {
   // Refined to potentially filter by CHR if provided
@@ -368,7 +382,16 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
     for(const key in kpiFilter){
       let filterValue = kpiFilter[key];
       // Resolve context placeholder if present
-      if (typeof filterValue === 'string' && filterValue.startsWith('{iteratorContext.') && context) {
+      if (typeof filterValue === 'string' && filterValue.startsWith('{iteratorContext.')) {
+        if (!context) {
+            console.warn(`processKpiGroup: Cannot resolve filter ${key}=${filterValue} because context is null.`);
+            // Decide if this is an error or if the filter should be skipped
+            // Returning error state for now, matching previous behaviour when resolution failed.
+            return {
+                kpis: [],
+                error: `Cannot resolve context for filter ${key}: Context is null`
+            };
+        }
         const ctxKey = filterValue.match(/\{iteratorContext\.([^}]+)\}/)?.[1];
         if (ctxKey && context[ctxKey] !== undefined) {
           filterValue = context[ctxKey];
@@ -382,7 +405,21 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
         }
       }
       // Apply the filter
-      query = query.eq(key, filterValue);
+      // SPECIAL HANDLING for 'latest' year filter
+      if (key === 'year' && filterValue === 'latest') {
+        const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context);
+        if (latestYear !== null) {
+          query = query.eq('year', latestYear);
+          console.log(`processKpiGroup: Applied 'latest' year filter as year = ${latestYear}`);
+        } else {
+          console.warn(`processKpiGroup: Cannot apply filter ${key}='latest' as latest year could not be determined for ${source} and context ${JSON.stringify(context)}.`);
+          // Return empty results if latest year is crucial and not found
+          return { kpis: [] };
+        }
+      } else {
+          // Apply standard filter for other keys/values
+          query = query.eq(key, filterValue);
+      }
     }
   }
   const { data: resultData, error } = await query.maybeSingle();
@@ -678,7 +715,9 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
   const { map } = params;
   const { layers } = map || {};
   if (!layers?.length) throw new Error(`Invalid config for mapChart: missing or invalid layers.`);
-  const processedLayers = [];
+
+  const processedLayers: MapLayerResult[] = [];
+
   for (const layer of layers){
     const { name, source, geometryColumn, properties = [], style } = layer;
     if (!source || !geometryColumn) {
@@ -888,6 +927,12 @@ function formatValue(value: any, format: any): string {
     return String(value);
   }
 }
+// Define type for iterated section results
+type IteratedSectionResult = {
+    title: string;
+    layout: string;
+    content: ComponentResult[];
+}
 // --- Recursive Component Processor ---
 async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
   const { _key, _type, title, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
@@ -901,11 +946,14 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
       const iteratorParams = iteratorDataSource.params;
       const { source: iterSource, columns: iterColumns, filter: iterFilter } = iteratorParams;
       if (!iterSource || !iterColumns) throw new Error(`Invalid iteratorDataSource for ${_key}`);
+
       let iterQuery = supabase.from(iterSource).select(iterColumns.join(','));
-      // Apply base company_id filter to iterator source if applicable
-      if (await tableHasColumn(supabase, iterSource, 'company_id')) {
+
+      // Apply base company_id filter to iterator source if applicable AND source is not the problematic one
+      if (iterSource !== 'site_species_production_ranked' && await tableHasColumn(supabase, iterSource, 'company_id')) {
         iterQuery = iterQuery.eq('company_id', companyId);
       }
+
       // Apply specific iterator filters (potentially using parent context)
       if (iterFilter) {
         for(const key in iterFilter){
@@ -921,14 +969,17 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
           iterQuery = iterQuery.eq(key, filterValue);
         }
       }
+
       // TODO: Add iterator ordering?
       const { data: iteratorItems, error: iterError } = await iterQuery;
       if (iterError) throw new Error(`Failed to fetch iterator items for ${_key}: ${iterError.message}`);
-      const iteratedSections = [];
+
+      const iteratedSections: IteratedSectionResult[] = [];
+
       if (iteratorItems?.length > 0) {
         for (const item of iteratorItems){
           console.log(` > Iterating item for ${_key}:`, item);
-          const sectionContent = [];
+          const sectionContent: ComponentResult[] = [];
           for (const templateComponent of template){
             // IMPORTANT: Resolve placeholders in the template component's config using the current 'item' as context
             let resolvedTemplateConfigStr = JSON.stringify(templateComponent);
@@ -1040,7 +1091,7 @@ serve(async (req)=>{
     headers
   });
   let config;
-  let companyInfo = null;
+  let companyInfo: CompanyInfo | null = null;
   let supabase: SupabaseClient;
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -1067,9 +1118,10 @@ serve(async (req)=>{
     config = await getYamlConfig();
     if (!config?.pageBuilder) throw new Error("Invalid or empty configuration loaded.");
     // Process Page Builder Components using the recursive processor
-    const pageBuilderResults = [];
+    const pageBuilderResults: ComponentResult[] = [];
     for (const componentConfig of config.pageBuilder){
-      const processedResult = await processComponent(componentConfig, supabase, companyInfo.id, companyInfo.municipality, null); // Start with null context
+      // Use non-null assertion after null check guarantees it's safe
+      const processedResult: ComponentResult = await processComponent(componentConfig, supabase, companyInfo!.id, companyInfo!.municipality, null);
       pageBuilderResults.push(processedResult);
     }
     // Construct Final Response
@@ -1078,10 +1130,11 @@ serve(async (req)=>{
         api_version: "1.2.0",
         generated_at: new Date().toISOString(),
         config_version: config?.metadata?.configVersion || "unknown",
-        data_updated_at: null,
-        company_id: companyInfo.id,
-        company_cvr: companyInfo.cvr_number,
-        municipality: companyInfo.municipality
+        data_updated_at: null, // TODO: Could potentially get this from source tables?
+        // Use non-null assertion after null check guarantees it's safe
+        company_id: companyInfo!.id,
+        company_cvr: companyInfo!.cvr_number,
+        municipality: companyInfo!.municipality
       },
       pageBuilder: pageBuilderResults
     };
