@@ -317,6 +317,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 ## static_files = [ "./functions/hello-world/*.html" ]
 
 # Specify the path to your Supabase edge functions relative to the project root
-[functions]
-  # Path to the directory containing Edge Functions.
-  path = "backend/api/supabase/functions"
+# [functions]
+#   # Path to the directory containing Edge Functions.
+#   path = "backend/api/supabase/functions"
