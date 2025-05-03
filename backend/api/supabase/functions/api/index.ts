@@ -2,7 +2,7 @@ import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import yaml from 'js-yaml';
 // --- Configuration ---
-const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/config.yaml';
+const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/supabase/functions/api/config.yaml';
 const CONFIG_CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour cache
 // List of tables/views where municipality filter is expected/valid in KPIs/Summaries
 const TABLES_WITH_MUNICIPALITY_SUMMARY = [
