@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  dmi_pipeline:
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    command: python main.py --log-level INFO --progress --environment prod

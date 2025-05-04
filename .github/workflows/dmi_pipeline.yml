@@ -1,0 +1,151 @@
+name: DMI Climate Data Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
+        required: false
+        type: string
+      end_date:
+        description: 'End date (YYYY-MM-DD)'
+        required: false
+        type: string
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: false
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'WARNING'
+      progress:
+        description: 'Show progress information'
+        type: boolean
+        required: false
+        default: false
+      environment:
+        description: 'Environment to use'
+        type: choice
+        required: false
+        options:
+          - prod
+          - test
+        default: 'prod'
+      test:
+        description: 'Run in test mode with limited data'
+        type: boolean
+        required: false
+        default: false
+      max_concurrent_fetches:
+        description: 'Maximum number of concurrent API calls'
+        type: number
+        required: false
+        default: 5
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/dmi_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: landbrugsdata-raw-data
+        DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/dmi_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "DMI_GOV_CLOUD_API_KEY=$DMI_GOV_CLOUD_API_KEY" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
+        # Create data directories
+        mkdir -p /data/bronze/dmi
+        mkdir -p /data/silver/dmi
+
+    - name: Run Pipeline
+      working-directory: backend/pipelines/dmi_pipeline
+      run: |
+        # Build base command
+        CMD="python main.py"
+
+        # Add date arguments if provided
+        if [ -n "${{ inputs.start_date }}" ]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [ -n "${{ inputs.end_date }}" ]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        fi
+
+        # Add log level
+        CMD="$CMD --log-level ${{ inputs.log_level || 'WARNING' }}"
+
+        # Add progress flag if enabled
+        if [ "${{ inputs.progress }}" = "true" ]; then
+          CMD="$CMD --progress"
+        fi
+
+        # Add environment
+        CMD="$CMD --environment ${{ inputs.environment || 'prod' }}"
+
+        # Add test mode flag if enabled
+        if [ "${{ inputs.test }}" = "true" ]; then
+          CMD="$CMD --test"
+        fi
+
+        # Add max concurrent fetches if provided
+        if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
+          CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
+        fi
+
+        echo "Running command: $CMD"
+        $CMD
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "Pipeline failed. Please check the logs above for details."
+        exit 1
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload even if the pipeline fails
+      with:
+        name: dmi-pipeline-output
+        path: |
+          backend/pipelines/dmi_pipeline/data/bronze/dmi
+          backend/pipelines/dmi_pipeline/data/silver/dmi
+        retention-days: 7
