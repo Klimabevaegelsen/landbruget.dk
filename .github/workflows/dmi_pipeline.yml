@@ -93,8 +93,8 @@ jobs:
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
 
         # Create data directories
-        mkdir -p /tmp/data/bronze/dmi
-        mkdir -p /tmp/data/silver/dmi
+        mkdir -p /data/bronze/dmi
+        mkdir -p /data/silver/dmi
 
     - name: Run Pipeline
       working-directory: backend/pipelines/dmi_pipeline
