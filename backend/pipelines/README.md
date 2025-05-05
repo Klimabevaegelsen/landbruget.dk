@@ -13,6 +13,21 @@ We recommend using `uv` for faster Python package management and virtual environ
 
 ## Pipeline Structure
 
+```
+backend/pipelines
+├── pipeline_name_1/
+├── pipeline_name_2/
+├── pipeline_name_3/
+....
+├── common/
+    ├── logger_utils.py
+    ├── argparser_utils.py 
+    ├── storage.py      # Google Cloud Storage utils
+    ├── config.py
+├── pyproject.toml
+├── README.md
+```
+
 Each pipeline should follow this standard directory structure:
 
 ```
@@ -23,11 +38,12 @@ pipeline_name/
 ├── main.py              # Main pipeline code
 ├── Dockerfile           # Container definition
 ├── docker-compose.yml   # Container orchestration
-├── pyproject.toml       # Python dependencies
 ├── bronze/             # Bronze layer output directory
 │   └── ...             # Raw data code and files
 └── silver/             # Silver layer output directory
     └── ...             # Processed data code and files
+└── handler/             # Google cloud function handler for the pipeline (optional)
+    └── ...  
 ```
 
 ## Getting Started
