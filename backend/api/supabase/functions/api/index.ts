@@ -1053,8 +1053,10 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   if (finalResultData && !finalResultData.error && !processingError) {
     // Spread finalResultData first, then set title
     return {
-      ...finalResultData, // Includes _key, _type, and other processed data
-      title: title       // Ensure title from componentConfig is used
+      ...finalResultData, // Spread the processed data
+      _key: _key,       // Ensure _key from config is used
+      _type: _type,     // Ensure _type from config is used
+      title: title       // Ensure title from config is used
     };
   } else {
     // Error path remains the same
