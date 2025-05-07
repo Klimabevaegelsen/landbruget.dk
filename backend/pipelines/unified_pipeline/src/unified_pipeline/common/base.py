@@ -1,9 +1,18 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
-from unified_pipeline.model.base_config import BaseJobConfig
+from pydantic import BaseModel
+
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
+
+
+class BaseJobConfig(BaseModel):
+    """
+    Base configuration for all data sources.
+    This class defines common configuration properties that all data sources share.
+    """
+
 
 T = TypeVar("T", bound=BaseJobConfig)
 

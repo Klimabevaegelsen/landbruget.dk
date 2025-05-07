@@ -39,7 +39,7 @@ class Logger(metaclass=Singleton):
     }
 
     DEFAULT_LOG_DIR = "/tmp/unified_pipeline/"
-    LOG = None
+    LOG: Optional[loguru.Logger] = None
     DEFAULT_LOG = "INFO"
 
     def __init__(self) -> None:

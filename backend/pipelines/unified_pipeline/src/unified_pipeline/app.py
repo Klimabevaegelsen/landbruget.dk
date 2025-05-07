@@ -1,11 +1,13 @@
 import asyncio
+from typing import Optional
 
 import click
 
-from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze
+from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
+from unified_pipeline.common.base import BaseSource
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
-from unified_pipeline.model.bnbo_status import BNBOStatusConfig
+from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
@@ -17,18 +19,24 @@ def execute(cli_config: cli.CliConfig) -> None:
 
     gcs_util = GCSUtil(GCSConfig())
 
-    if (cli_config.source == cli.Source.bnbo) and (
-        cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all
-    ):
-        source = BNBOStatusBronze(
-            config=BNBOStatusConfig(),
-            gcs_util=gcs_util,
-        )
+    source: Optional[BaseSource] = None
+    if cli_config.source == cli.Source.bnbo:
+        if cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all:
+            source = BNBOStatusBronze(
+                config=BNBOStatusBronzeConfig(),
+                gcs_util=gcs_util,
+            )
+        if cli_config.stage == cli.Stage.silver or cli_config.stage == cli.Stage.all:
+            source = BNBOStatusSilver(
+                config=BNBOStatusSilverConfig(),
+                gcs_util=gcs_util,
+            )
     else:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     log.info(f"Running source {cli_config.source} in stage {cli_config.stage}.")
-    asyncio.run(source.run())
+    if source is not None:
+        asyncio.run(source.run())
     log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
 
 
