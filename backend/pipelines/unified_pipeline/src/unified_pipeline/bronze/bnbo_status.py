@@ -1,19 +1,48 @@
 import os
 import ssl
 import xml.etree.ElementTree as ET
+from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
 import pandas as pd
+from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.bronze.base import BaseSource
-from unified_pipeline.model.bnbo_status import BNBOStatusConfig
+from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 
 
-class BNBOStatusBronze(BaseSource[BNBOStatusConfig]):
-    def __init__(self, config: BNBOStatusConfig, gcs_util: GCSUtil):
+class BNBOStatusBronzeConfig(BaseJobConfig):
+    """
+    Configuration for BNBO status data source.
+    """
+
+    name: str = "Danish BNBO Status"
+    dataset: str = "bnbo_status"
+    type: str = "wfs"
+    description: str = "Municipal status for well-near protection areas (BNBO)"
+    url: str = "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
+    layer: str = "dai:status_bnbo"
+    frequency: str = "weekly"
+    bucket: str = "landbrugsdata-raw-data"
+    create_dissolved: bool = True
+
+    batch_size: int = 100
+    max_concurrent: int = 3
+    request_timeout: int = 300
+    storage_batch_size: int = 5000
+    request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
+        total=request_timeout, connect=60, sock_read=300
+    )
+    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    request_semaphore: Semaphore = Semaphore(max_concurrent)
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+
+class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
+    def __init__(self, config: BNBOStatusBronzeConfig, gcs_util: GCSUtil):
         super().__init__(config, gcs_util)
         self.config = config
 
@@ -115,27 +144,18 @@ class BNBOStatusBronze(BaseSource[BNBOStatusConfig]):
         df["created_at"] = pd.Timestamp.now()
         df["updated_at"] = pd.Timestamp.now()
 
-        # Handle working/final files
-        temp_working_dir = "/tmp/bronze/"
-        os.makedirs(temp_working_dir, exist_ok=True)
-        temp_working = f"/tmp/bronze/{dataset}_working.parquet"
-        working_blob = bucket.blob(f"bronze/{dataset}/working.parquet")
+        temp_dir = f"/tmp/bronze/{dataset}"
+        os.makedirs(temp_dir, exist_ok=True)
+        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+        temp_file = f"{temp_dir}/{current_date}.parquet"
+        working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
 
-        if working_blob.exists():
-            working_blob.download_to_filename(temp_working)
-            existing_df = pd.read_parquet(temp_working)
-            self.log.info(f"Appending {len(df):,} features to existing {len(existing_df):,}")
-            combined_df = pd.concat([existing_df, df], ignore_index=True)
-        else:
-            combined_df = df
-
-        # Write working file
-        combined_df.to_parquet(temp_working)
-        working_blob.upload_from_filename(temp_working)
-        self.log.info(f"Updated working file now has {len(combined_df):,} features")
+        df.to_parquet(temp_file)
+        working_blob.upload_from_filename(temp_file)
+        self.log.info(f"Uploaded working file has {len(df):,} features")
 
     async def run(self) -> None:
-        """Run the data source"""
+        """Run the job"""
         self.log.info("Running BNBO status data source")
         raw_data = await self._fetch_raw_data()
         if raw_data is None:
