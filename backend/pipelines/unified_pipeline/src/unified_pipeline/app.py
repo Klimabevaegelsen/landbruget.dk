@@ -1,18 +1,19 @@
 import asyncio
 
 import click
+
+from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
+from unified_pipeline.model.bnbo_status import BNBOStatusConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
-from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze
-from unified_pipeline.model.bnbo_status import BNBOStatusConfig
 
 
 def execute(cli_config: cli.CliConfig) -> None:
     """Main function."""
     log = Logger.get_logger()
-    log.info(f"Starting Unified Pipeline.")
+    log.info("Starting Unified Pipeline.")
 
     gcs_util = GCSUtil(GCSConfig())
 

@@ -62,7 +62,9 @@ class Logger(metaclass=Singleton):
         """
         if cls.LOG is None:
             if level is None:
-                level = cls._get_alias_log_level(os.environ.get("LOG_LEVEL", cls.DEFAULT_LOG))
+                level = cls._get_alias_log_level(
+                    os.environ.get("LOG_LEVEL", cls.DEFAULT_LOG).upper()
+                )
             else:
                 level = level.upper()
             log_dir = os.environ.get("LOG_DIR", cls.DEFAULT_LOG_DIR)

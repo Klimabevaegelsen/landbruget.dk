@@ -1,7 +1,5 @@
-from shapely.geometry import Polygon, MultiPolygon
-from shapely.geometry.polygon import orient
 import geopandas as gpd
-from shapely.ops import unary_union
+from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.util.log_util import Logger
 
@@ -118,7 +116,8 @@ def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) 
         self_intersecting = ~gdf.geometry.is_simple
         if self_intersecting.any():
             logger.warning(
-                f"{dataset_name}: Found {self_intersecting.sum()} self-intersecting geometries in WGS84"
+                f"{dataset_name}: Found {self_intersecting.sum()} self-intersecting "
+                "geometries in WGS84"
             )
             raise ValueError(f"Found {self_intersecting.sum()} self-intersecting geometries")
 

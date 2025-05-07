@@ -1,4 +1,5 @@
 from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,4 +10,5 @@ class GCSConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_prefix="GCS_",
+        extra="allow",
     )
