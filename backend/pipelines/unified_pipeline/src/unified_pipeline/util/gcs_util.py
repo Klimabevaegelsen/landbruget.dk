@@ -30,7 +30,8 @@ class GCSUtil(metaclass=Singleton):
                 )
                 if self.gcs_config is None:
                     raise ValueError(
-                        "Google cloud configs are not set. Unable to initialize google cloud storage client."
+                        "Google cloud configs are not set. Unable to initialize "
+                        "google cloud storage client."
                     )
                 if self.gcs_config.credentials_path is None:
                     raise ValueError(
@@ -41,15 +42,16 @@ class GCSUtil(metaclass=Singleton):
                 self.gcs_client = self._get_gcs_client_using_file(self.gcs_config.credentials_path)
                 if self.gcs_client is None:
                     raise ValueError(
-                        "Unable to initialize google cloud storage client using service account key file."
+                        "Unable to initialize google cloud storage client "
+                        "using service account key file."
                     )
         return self.gcs_client
 
     def _get_gcs_client_using_adc(self) -> Optional[Client]:
         """
-        Get google cloud storage client using Application Default Credentials (ADC) provided by Google Cloud.
-        ADC allows the application to use the credentials of the service account associated with the Cloud Run service,
-        making it a secure and convenient way to authenticate.
+        Get google cloud storage client using Application Default Credentials (ADC) provided
+        by Google Cloud. ADC allows the application to use the credentials of the service account
+        associated with the Cloud Run service,making it a secure and convenient way to authenticate.
         """
         try:
             # Attempt to use Application Default Credentials (ADC)

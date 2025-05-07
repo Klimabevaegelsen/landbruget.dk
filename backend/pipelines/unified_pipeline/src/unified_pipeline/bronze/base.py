@@ -5,7 +5,6 @@ from unified_pipeline.model.base_config import BaseJobConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
-
 T = TypeVar("T", bound=BaseJobConfig)
 
 

@@ -1,4 +1,5 @@
 from asyncio import Semaphore
+
 from aiohttp import ClientTimeout
 from pydantic import ConfigDict
 
@@ -11,13 +12,15 @@ class BNBOStatusConfig(BaseJobConfig):
     """
 
     name: str = "Danish BNBO Status"
+    dataset: str = "bnbo_status"
     type: str = "wfs"
     description: str = "Municipal status for well-near protection areas (BNBO)"
     url: str = "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
     layer: str = "dai:status_bnbo"
     frequency: str = "weekly"
     enabled: bool = True
-    bucket: str = "landbrugsdata-raw-data"
+    # bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "rahul_apeability"
     create_dissolved: bool = True
 
     batch_size: int = 100

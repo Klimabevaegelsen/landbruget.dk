@@ -78,7 +78,8 @@ clean-docs:  ## Remove documentation artifacts
 .PHONY: format
 format: ## Format the code using ruff
 	@echo "🚀 Formatting code: Running ruff"
-	@uv run ruff format ${SRC_DIR}
+	@uv run ruff check ${SRC_DIR} --select I --fix ;\
+	uv run ruff format ${SRC_DIR}
 
 .PHONY: lint
 lint: ## Lint the code using flake8
