@@ -5,7 +5,7 @@ Programming language used in the backend is Python. SQL may be used to execute t
 
 ## Stack
 
-Pipelines run through will be run on Github workflows and actions
+Pipelines run through will be mostly run on Github workflows and actions.
 
 We use a [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) for our data storage and pipeline infrastructure.
 
@@ -16,7 +16,7 @@ Bronze and Silver layer processes may run in the same pipeline. Gold layer proce
 - Do not share identifiers and credentials in commits.
 - If you're concerned whether your data contains PII data, reach out to the maintainers before committing data.
 - Data should in the dev environment be saved and processed locally, ideally using DuckDB and Ibis.
-- Data should in the prod environment be saved on GCS for Bronze layer, CloudSQL for Silver and Gold layer.
+- Data should in the prod environment be saved on GCS for Bronze layer, GCS for Silver and Supabase for Gold layer, ideally using DuckDB and Ibis.
 - CRS conversions of geospatial data should be avoided (as it may changes the data).
 - Utilise optimal Github actions  ensuring separation of responsibility for modules.
 - Do add comments in the code and do add logs for steps within each module.
@@ -95,12 +95,9 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 
 ## (WIP) Gold layer
 - If a process uncovers the identity of anonymised individuals or companies through the cross-matching of datasets, reach out to the maintainers before committing data.
-- Data should be fetched from CloudSQL.
+- Data should be fetched from GCS.
 
 # (WIP) APIs
-
-## Stack
-
-We use FastAPI.
+- We use Supabase
 
  
