@@ -142,7 +142,7 @@ function SearchOverlay({
           className="h-12 rounded-lg border-none focus:ring-0 focus-visible:ring-0"
           endIcon={<MagnifyingGlassIcon className="size-6" />}
         />
-        <div className="flex gap-2 mt-0 mb-2 bg-primary-foreground items-stretch">
+        <div className="flex gap-2 mt-0 mb-2 bg-primary-foreground items-stretch overflow-x-auto">
           {tabs.map((tab, i) => (
             <div
               key={tab}
@@ -157,7 +157,7 @@ function SearchOverlay({
             </div>
           ))}
         </div>
-        <div className="bg-white rounded-xl  mt-2 min-h-[200px]">
+        <div className="bg-white rounded-xl  mt-2 min-h-[200px] max-h-[400px] overflow-auto">
           {searchResults.map((result) => (
             <SearchResultCard key={result.id} result={result} />
           ))}
