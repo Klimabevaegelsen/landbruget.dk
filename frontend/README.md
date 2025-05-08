@@ -1,59 +1,36 @@
-# Agricultural Data Frontend
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Interactive map visualization of Danish agricultural and environmental data.
+## Getting Started
 
-## Features
-- Interactive map showing:
-  - Agricultural fields
-  - Wetland areas
-- Real-time data updates
-- Layer controls
-- Data filtering
+First, run the development server:
 
-## Tech Stack
-- React 18
-- MapLibre GL JS
-- TypeScript
-- Tailwind CSS
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-## Development Setup
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Requirements
-- Node.js 16+
-- npm or yarn
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-### Installation Steps
-1. Install dependencies: `npm install`
-2. Start development server: `npm start`
-3. Visit http://localhost:3000
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Project Structure
+## Learn More
 
-src/
-├── components/ # React components
-│ ├── Map/ # Map-related components
-│ └── UI/ # UI components
-├── api/ # Backend API client
-├── hooks/ # Custom React hooks
-└── types/ # TypeScript 
+To learn more about Next.js, take a look at the following resources:
 
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-## API Integration
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-Example of fetching data:
-typescript
-import { fetchSources, fetchSourceData } from '../api/sources';
-// List available sources
-const sources = await fetchSources();
-// Fetch specific source data
-const data = await fetchSourceData('agricultural_fields');
+## Deploy on Vercel
 
-## Adding New Features
-1. Create component in appropriate directory
-2. Add API integration if needed
-3. Update map layers if required
-4. Add to main App.tsx
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-## Environment Variables
-Required in `.env`:
-- REACT_APP_API_URL: Backend API URL
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
