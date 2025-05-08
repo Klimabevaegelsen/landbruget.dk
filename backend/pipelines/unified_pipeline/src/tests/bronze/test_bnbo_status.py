@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
 import pytest
+from tenacity import stop_after_attempt
 
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
@@ -64,7 +65,7 @@ def test_get_params(bnbo_status_bronze: BNBOStatusBronze) -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_chunck_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
-    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'
+    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'  # noqa: E501
 
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -86,6 +87,10 @@ async def test_fetch_chunck_success(bnbo_status_bronze: BNBOStatusBronze) -> Non
 
 
 @pytest.mark.asyncio
+@patch(
+    "unified_pipeline.bronze.bnbo_status.BNBOStatusBronze._fetch_chunck.retry.stop",
+    stop_after_attempt(1),
+)
 async def test_fetch_chunck_http_error(bnbo_status_bronze: BNBOStatusBronze) -> None:
     mock_response = AsyncMock()
     mock_response.status = 500
@@ -98,6 +103,10 @@ async def test_fetch_chunck_http_error(bnbo_status_bronze: BNBOStatusBronze) -> 
 
 
 @pytest.mark.asyncio
+@patch(
+    "unified_pipeline.bronze.bnbo_status.BNBOStatusBronze._fetch_chunck.retry.stop",
+    stop_after_attempt(1),
+)
 async def test_fetch_chunck_xml_parse_error(bnbo_status_bronze: BNBOStatusBronze) -> None:
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -153,19 +162,19 @@ async def test_fetch_raw_data_multiple_batches(
     # Define responses for each chunk
     chunk_responses = [
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 0,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 2,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 4,
             "total_features": 5,
             "returned_features": 1,
