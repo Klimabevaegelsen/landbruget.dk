@@ -5,6 +5,7 @@ export default function CompanyPage({ params }: { params: { id: string } }) {
   return (
     <div>
       <Container className="min-h-[85vh] flex flex-col justify-center items-center">
+        <p className="text-4xl text-center">🧑‍🌾</p>
         <h1>CompanyPage {id}</h1>
       </Container>
     </div>
