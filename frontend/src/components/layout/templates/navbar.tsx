@@ -13,6 +13,7 @@ import { Container } from "../container";
 import { cn } from "@/lib/utils";
 import { GlobalSearch } from "@/components/global-search";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/?section=overview", label: "Oversigt" },
@@ -22,17 +23,20 @@ const links = [
 
 function DesktopNav() {
   return (
-    <nav className="relative hidden lg:flex">
+    <nav className="relative hidden lg:flex items-center gap-4">
       {links.map(({ href, label }) => (
         <div key={href} className="relative flex">
           <Link
             href={href}
-            className="flex items-center px-4 py-3 text-base font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%]"
+            className="flex items-center px-4 py-3 text-base font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%] text-sm"
           >
             {label}
           </Link>
         </div>
       ))}
+      <Link href="/?section=help" className="text-sm">
+        <Button>Hjælp til</Button>
+      </Link>
     </nav>
   );
 }
@@ -63,7 +67,10 @@ function MobileNavSearch({ onClick }: { onClick: () => void }) {
 function MobileNav() {
   return (
     <DisclosurePanel className="lg:hidden">
-      <div className="flex flex-col gap-6 py-4">
+      <Link href="/?section=help" className="text-sm">
+        <Button>Hjælp til</Button>
+      </Link>
+      <div className="flex flex-col gap-6 py-4 ml-2">
         {links.map(({ href, label }, linkIndex) => (
           <motion.div
             initial={{ opacity: 0, rotateX: -90 }}
@@ -104,10 +111,7 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
                 </Link>
               </div>
             </div>
-            <MobileNavSearch
-              onClick={() => setSearchOpen(true)}
-              className="lg:hidden"
-            />
+            <MobileNavSearch onClick={() => setSearchOpen(true)} />
             <GlobalSearch className="hidden lg:flex" defaultOpen={false} />
             <DesktopNav />
           </div>
