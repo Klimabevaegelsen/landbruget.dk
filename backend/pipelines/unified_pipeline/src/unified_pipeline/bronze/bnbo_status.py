@@ -107,8 +107,6 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
         ) as session:
             try:
                 raw_data = await self._fetch_chunck(session, 0)
-                if raw_data is None:
-                    return None
                 total_features = raw_data["total_features"]
                 returned_features = raw_data["returned_features"]
                 raw_features.append(raw_data["text"])
@@ -118,8 +116,6 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
                 for start_index in range(returned_features, total_features, self.config.batch_size):
                     try:
                         raw_data = await self._fetch_chunck(session, start_index)
-                        if raw_data is None:
-                            return None
                         raw_features.append(raw_data["text"])
                         fetched_features_count += raw_data["returned_features"]
                         self.log.info(f"Fetched {fetched_features_count} out of {total_features}")
