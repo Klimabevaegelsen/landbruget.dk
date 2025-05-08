@@ -7,17 +7,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Button } from "./ui/button";
 
 export function GlobalSearch({
   className,
   defaultOpen,
   parentOpen,
   onClose,
+  borderless,
+  searchSuggestions,
 }: {
   className?: string;
   defaultOpen?: boolean;
   parentOpen?: boolean;
   onClose?: () => void;
+  borderless?: boolean;
+  searchSuggestions?: string[];
 }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(defaultOpen);
@@ -29,9 +34,9 @@ export function GlobalSearch({
   return (
     <div
       className={cn(
-        " relative overflow flex items-center w-full ",
+        " relative overflow flex flex-col gap-y-4 items-center w-full ",
         className,
-        !parentOpen && "hidden"
+        parentOpen === false && "hidden"
       )}
     >
       <Input
@@ -46,11 +51,30 @@ export function GlobalSearch({
         className="px-auto h-12"
         endIcon={<MagnifyingGlassIcon className="size-6" />}
       />
+      {searchSuggestions && (
+        <div className=" flex items-center justify-center gap-x-2">
+          {searchSuggestions.map((suggestion) => (
+            <Button
+              key={suggestion}
+              variant="secondary"
+              className="bg-white/75 hover:bg-white/90"
+              onClick={() => {
+                setSearch(suggestion);
+                setOpen(true);
+              }}
+            >
+              <MagnifyingGlassIcon />
+              {suggestion}
+            </Button>
+          ))}
+        </div>
+      )}
       <AnimatePresence>
         {open && (
           <SearchOverlay
             search={search}
             setSearch={setSearch}
+            borderless={borderless}
             onClose={() => {
               setOpen(false);
               onClose?.();
@@ -75,10 +99,12 @@ function SearchOverlay({
   search,
   setSearch,
   onClose,
+  borderless,
 }: {
   search: string;
   setSearch: (v: string) => void;
   onClose: () => void;
+  borderless?: boolean;
 }) {
   // Tabs for categories
   const tabs = ["Alle", "CVR", "Firmanavn", "Person", "Lokation"];
@@ -129,20 +155,25 @@ function SearchOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.1 }}
-      className="absolute  left-0 top-0 right-0 bottom-0 z-50 bg-white/90 flex flex-col items-center justify-start"
+      className="absolute  left-0 top-0 right-0 bottom-0 z-50  flex flex-col items-center justify-start"
       ref={overlayRef}
     >
-      <div className="w-full  h-auto shadow-lg border border-gray-100 rounded-lg">
+      <div
+        className={cn(
+          "w-full  h-auto shadow-lg  rounded-lg",
+          !borderless && "border border-gray-100"
+        )}
+      >
         <Input
           autoFocus
           type="text"
           placeholder="Søg efter CVR, firmanavn eller person"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-12 rounded-lg border-none focus:ring-0 focus-visible:ring-0"
+          className="h-12 rounded-b-none rounded-t-lg border-none focus:ring-0 focus-visible:ring-0"
           endIcon={<MagnifyingGlassIcon className="size-6" />}
         />
-        <div className="flex gap-2 mt-0 mb-2 bg-primary-foreground items-stretch overflow-x-auto">
+        <div className="flex gap-2   bg-primary-foreground items-stretch overflow-x-auto">
           {tabs.map((tab, i) => (
             <div
               key={tab}
@@ -157,7 +188,7 @@ function SearchOverlay({
             </div>
           ))}
         </div>
-        <div className="bg-white rounded-xl  mt-2 min-h-[200px] max-h-[400px] overflow-auto">
+        <div className="bg-white rounded-b-lg min-h-[200px] max-h-[400px] overflow-auto">
           {searchResults.map((result) => (
             <SearchResultCard key={result.id} result={result} />
           ))}
