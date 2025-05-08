@@ -1,4 +1,10 @@
+import { Metadata } from "next";
 import Image from "next/image";
+
+export const metadata: Metadata = {
+  title: "Landbruget.dk",
+  description: "Dansk landbrugsdata - samlet ét sted",
+};
 
 export default function Home() {
   return (
