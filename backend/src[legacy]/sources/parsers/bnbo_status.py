@@ -213,7 +213,7 @@ class BNBOStatus(GeospatialSource):
             # Handle working/final files
             temp_working = f"/tmp/{dataset}_working.parquet"
             working_blob = self.bucket.blob(f'raw/{dataset}/working.parquet')
-            pd
+
             if working_blob.exists():
                 working_blob.download_to_filename(temp_working)
                 existing_gdf = gpd.read_parquet(temp_working)
