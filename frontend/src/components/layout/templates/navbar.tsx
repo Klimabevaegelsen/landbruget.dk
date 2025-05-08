@@ -6,7 +6,7 @@ import {
   DisclosurePanel,
 } from "@headlessui/react";
 import { Bars3Icon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Logo } from "@/components/layout/templates/logo";
 import Link from "next/link";
 import { Container } from "../container";
@@ -28,7 +28,7 @@ function DesktopNav() {
         <div key={href} className="relative flex">
           <Link
             href={href}
-            className="flex items-center px-4 py-3 text-base font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%] text-sm"
+            className="flex items-center px-4 py-3 font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%] text-sm"
           >
             {label}
           </Link>
