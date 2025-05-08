@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="da">
+    <html lang="da" className="bg-primary-foreground">
       <body className={`${plusJakartaSans.variable} antialiased`}>
         {children}
       </body>
