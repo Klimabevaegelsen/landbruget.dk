@@ -200,7 +200,7 @@ function SearchOverlay({
 
 function SearchResultCard({ result }: { result: SearchResult }) {
   return (
-    <Link href={`/company/${result.id}`}>
+    <Link href={`/virksomhed/${result.id}`}>
       <div className="flex  gap-2 items-center justify-between hover:bg-gray-100 p-4 group">
         <div className="flex gap-2 items-center">
           <Image
