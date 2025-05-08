@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <div className="bg-primary-foreground">
       <Container>
-        <div className="flex py-6 justify-between items-center">
+        <div className="flex flex-col gap-4 lg:flex-row py-6 justify-between items-center">
           <Logo className="h-[26px]" />
           <div className="flex  gap-4">
             <Link className="text-sm font-medium" href="/">
