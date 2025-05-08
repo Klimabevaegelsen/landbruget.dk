@@ -1,3 +1,11 @@
+"""
+Main application module for the unified pipeline.
+
+This module contains the main entry point and CLI interface for the unified
+data pipeline application. It orchestrates different data processing stages
+(bronze, silver) for various data sources.
+"""
+
 import asyncio
 from typing import Optional
 
@@ -13,7 +21,19 @@ from unified_pipeline.util.log_util import Logger
 
 
 def execute(cli_config: cli.CliConfig) -> None:
-    """Main function."""
+    """
+    Main execution function for processing pipeline data.
+
+    This function initializes the appropriate data processing pipeline based on
+    the provided CLI configuration. It handles source selection and processing
+    stage (bronze, silver, or all stages).
+
+    Args:
+        cli_config (cli.CliConfig): Configuration containing source and stage settings
+
+    Raises:
+        ValueError: If the requested source/stage combination is not supported
+    """
     log = Logger.get_logger()
     log.info("Starting Unified Pipeline.")
 
@@ -71,12 +91,19 @@ def run_cli(
     stage: str,
 ) -> None:
     """
-    This function returns the application configuration.
+    CLI entry point for the unified pipeline application.
 
-    :param env: The environment to use.
-    :param source: The source to use.
-    :param stage: The stage to use.
-    :return: The application configuration.
+    This function parses command-line arguments and initializes the pipeline
+    with the appropriate configuration. It serves as the main entry point
+    when running the application from the command line.
+
+    Args:
+        env: The environment to use (prod, dev, etc.)
+        source: The data source to process
+        stage: The processing stage (bronze, silver, all)
+
+    Example:
+        $ python -m unified_pipeline -s bnbo -j bronze
     """
     app_config = cli.CliConfig(
         env=cli.Env(env),

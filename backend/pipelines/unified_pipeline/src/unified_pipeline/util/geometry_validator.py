@@ -14,6 +14,11 @@ def is_valid_for_bigquery(geom: Polygon) -> bool:
     - No empty rings
     - Edges can't cross
     - Proper ring orientation
+
+    Args:
+        geom: Shapely geometry to check
+    Returns:
+        bool: True if geometry is valid for BigQuery, False otherwise
     """
     try:
         if not geom.is_valid or not geom.is_simple:

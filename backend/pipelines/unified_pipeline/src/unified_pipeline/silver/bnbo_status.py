@@ -13,7 +13,19 @@ from unified_pipeline.util.geometry_validator import validate_and_transform_geom
 
 class BNBOStatusSilverConfig(BaseJobConfig):
     """
-    Configuration for BNBO status data source.
+    Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source.
+
+    This class defines the configuration parameters for processing BNBO status data
+    in the silver layer of the data pipeline. It specifies dataset names, storage
+    settings, and mappings for transforming status values.
+
+    Attributes:
+        dataset (str): The name of the dataset, defaults to "bnbo_status".
+        bucket (str): The GCS bucket name where data is stored,
+                        defaults to "landbrugsdata-raw-data".
+        storage_batch_size (int): The batch size for storage operations, defaults to 5000.
+        status_mapping (dict): A mapping from detailed status descriptions to simplified categories.
+        gml_ns (str): The GML namespace used in the XML data.
     """
 
     dataset: str = "bnbo_status"
@@ -31,12 +43,46 @@ class BNBOStatusSilverConfig(BaseJobConfig):
 
 
 class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
+    """
+    Silver layer processor for BNBO status data.
+
+    This class handles the processing of BNBO status data from the bronze layer
+    to the silver layer. It reads, transforms, and saves the data according to
+    the data pipeline architecture. The class handles XML processing, geometry
+    operations, and data storage in GCS.
+
+    Attributes:
+        config (BNBOStatusSilverConfig): Configuration object containing settings for the processor.
+    """
+
     def __init__(self, config: BNBOStatusSilverConfig, gcs_util: GCSUtil):
+        """
+        Initialize the BNBOStatusSilver processor.
+
+        Args:
+            config (BNBOStatusSilverConfig): Configuration object for the processor.
+            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
+        """
         super().__init__(config, gcs_util)
         self.config = config
 
     def read_data(self, dataset: str) -> Optional[pd.DataFrame]:
-        """Read data from the source"""
+        """
+        Read data from the bronze layer.
+
+        This method retrieves BNBO status data from the bronze layer in Google Cloud Storage.
+        It downloads the parquet file for the current date and loads it into a DataFrame.
+
+        Args:
+            dataset (str): The name of the dataset to read.
+
+        Returns:
+            Optional[pd.DataFrame]: A DataFrame containing the bronze layer data,
+                                    or None if no data is found.
+
+        Raises:
+            Exception: If there are issues accessing or downloading the data.
+        """
         self.log.info("Reading BNBO status data from bronze layer")
 
         # Get the GCS bucket
@@ -64,21 +110,70 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         return raw_data
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
-        """Get the namespace from the XML root element"""
+        """
+        Extract the namespace from an XML root element.
+
+        This method iterates through the XML elements to find and extract
+        the first namespace used in the document.
+
+        Args:
+            root (ET.Element): The root element of an XML document.
+
+        Returns:
+            Optional[str]: The namespace string if found, None otherwise.
+
+        Example:
+            >>> namespace = get_first_namespace(root)
+            >>> print(namespace)
+            'http://www.opengis.net/gml/3.2'
+        """
         for elem in root.iter():
             if "}" in elem.tag:
                 return elem.tag.split("}")[0].strip("{")
         return None
 
     def clean_value(self, value: Any) -> Optional[str]:
-        """Clean string values"""
+        """
+        Clean and standardize string values from XML.
+
+        This method converts values to strings and removes leading/trailing whitespace.
+        Empty strings are converted to None.
+
+        Args:
+            value (Any): The value to clean, can be any type.
+
+        Returns:
+            Optional[str]: The cleaned string value, or None if the value is empty.
+
+        Example:
+            >>> clean_value("  Example  ")
+            'Example'
+            >>> clean_value("")
+            None
+        """
         if not isinstance(value, str):
             return str(value)
         value = value.strip()
         return value if value else None
 
     def _parse_geometry(self, geom_elem: ET.Element) -> Optional[Dict[str, Any]]:
-        """Parse GML geometry into WKT and calculate area"""
+        """
+        Parse GML geometry into WKT format and calculate area.
+
+        This method extracts polygon coordinates from GML elements and constructs
+        Shapely geometry objects. It also calculates the area in hectares.
+
+        Args:
+            geom_elem (ET.Element): The XML element containing GML geometry data.
+
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary containing the WKT representation
+                                     and area (in hectares) of the geometry, or None
+                                     if parsing fails.
+
+        Raises:
+            Exception: If there are issues parsing the geometry.
+        """
         try:
             multi_surface = geom_elem.find(f".//{self.config.gml_ns}MultiSurface")
             if multi_surface is None:
@@ -117,7 +212,23 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             return None
 
     def _parse_feature(self, feature: ET.Element) -> Optional[Dict[str, Any]]:
-        """Parse a single feature into a dictionary"""
+        """
+        Parse a single XML feature into a dictionary of attributes.
+
+        This method extracts geometry and attribute data from an XML feature element.
+        It processes the geometry using _parse_geometry and extracts all other attributes
+        as key-value pairs.
+
+        Args:
+            feature (ET.Element): The XML element containing feature data.
+
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary containing feature attributes including
+                                     geometry and area, or None if parsing fails.
+
+        Raises:
+            Exception: If there are issues parsing the feature.
+        """
         try:
             namespace = feature.tag.split("}")[0].strip("{")
 
@@ -154,7 +265,23 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             return None
 
     def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
-        """Process XML data from bronze layer"""
+        """
+        Process XML data from the bronze layer into a GeoDataFrame.
+
+        This method iterates through all XML data in the input DataFrame, parses
+        features using _parse_feature, and constructs a GeoDataFrame with the
+        extracted geometries and attributes.
+
+        Args:
+            raw_data (pd.DataFrame): DataFrame containing XML data in a 'payload' column.
+
+        Returns:
+            Optional[gpd.GeoDataFrame]: A GeoDataFrame containing the processed features,
+                                       or None if processing fails.
+
+        Raises:
+            Exception: If there are issues processing the XML data.
+        """
         if raw_data is None or raw_data.empty:
             self.log.warning("No raw data to process")
             return None
@@ -190,7 +317,24 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
-        """Create a dissolved DataFrame"""
+        """
+        Create a dissolved GeoDataFrame by merging geometries by status category.
+
+        This method groups geometries by their status category ("Action Required" or
+        "Completed"), dissolves them into unified geometries, and handles overlapping
+        areas by giving priority to "Action Required" areas.
+
+        Args:
+            df (gpd.GeoDataFrame): The input GeoDataFrame containing features with geometries
+                                  and status_category attributes.
+            dataset (str): The name of the dataset, used for logging and validation.
+
+        Returns:
+            gpd.GeoDataFrame: A new GeoDataFrame containing the dissolved geometries.
+
+        Raises:
+            Exception: If there are issues during the dissolve operation.
+        """
         try:
             # Convert to WGS84 before processing
             if df.crs.to_epsg() != 4326:
@@ -251,7 +395,22 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             raise e
 
     def _save_data(self, df: gpd.GeoDataFrame, dataset: str) -> None:
-        """Save processed data to GCS"""
+        """
+        Save processed data to Google Cloud Storage.
+
+        This method saves a GeoDataFrame to GCS as a parquet file. It creates
+        a temporary local file and then uploads it to the specified GCS bucket.
+
+        Args:
+            df (gpd.GeoDataFrame): The GeoDataFrame to save.
+            dataset (str): The name of the dataset, used to determine the save path.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If there are issues saving the data.
+        """
         if df is None or df.empty:
             self.log.warning("No processed data to save")
             return
@@ -267,10 +426,26 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
 
         df.to_parquet(temp_file)
         working_blob.upload_from_filename(temp_file)
-        self.log.info(f"Uploaded working file has {len(df):,} features")
+        self.log.info(
+            f"Uploaded to: gs://{self.config.bucket}/silver/{dataset}/{current_date}.parquet"
+        )
 
     async def run(self) -> None:
-        """Run the job"""
+        """
+        Run the complete BNBO status silver layer processing job.
+
+        This is the main entry point that orchestrates the entire process:
+        1. Reads data from the bronze layer
+        2. Processes XML data into a GeoDataFrame
+        3. Creates a dissolved version of the GeoDataFrame
+        4. Saves both the original and dissolved data to GCS
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If there are issues at any step in the process.
+        """
         self.log.info("Running BNBO status silver job")
         raw_data = self.read_data(self.config.dataset)
         if raw_data is None:
