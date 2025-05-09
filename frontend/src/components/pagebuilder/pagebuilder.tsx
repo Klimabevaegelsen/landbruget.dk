@@ -30,11 +30,11 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
   }));
 
   return (
-    <div className="flex w-full gap-30 relative">
-      <div className="w-4/12 sticky top-4 max-h-screen overflow-y-auto">
+    <div className="flex flex-col md:flex-row w-full gap-10 md:gap-30 relative">
+      <div className="w-full md:w-4/12 md:sticky md:top-4 md:max-h-screen md:overflow-y-auto border-b md:border-b-0 md:border-none">
         <Sidenav navigation={navigationItems} title="Indholdsfortegnelse" />
       </div>
-      <div className="w-8/12  flex flex-col gap-11">
+      <div className="w-full md:w-8/12 flex flex-col gap-11">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
             <BlockContainer title={item.title} href={`#${item._key}`}>
