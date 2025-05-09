@@ -1,5 +1,4 @@
 import { BaseDataGrid } from "@/services/supabase/types";
-import { JsonRender } from "@/components/common/json-render";
 import { DynamicDataTable } from "@/components/table/dynamic-table";
 import { ColumnDef } from "@tanstack/react-table";
 
