@@ -1,10 +1,12 @@
 import { PageBuilderItem } from "@/services/supabase/types";
 import { NavigationItem, Sidenav } from "../layout/sidenav";
 import { PlaceholderBlock } from "./pageBlocks/placeholder-block";
+import { InfoCardBlock } from "./pageBlocks/info-card-block";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
     case "infoCard":
+      return <InfoCardBlock infoCard={block} />;
     case "dataGrid":
     case "kpiGroup":
     case "barChart":
