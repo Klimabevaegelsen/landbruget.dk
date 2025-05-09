@@ -18,10 +18,11 @@ export async function CompanyPage({ id }: { id: string }) {
   return <Company company={company} />;
 }
 
-export default async function CompanyPageWrapper({ params }: Props) {
+export default async function CompanyPageWrapper(props: Props) {
+  const { id } = await props.params;
   return (
     <Suspense fallback={<CompanySkeleton />}>
-      <CompanyPage id={params.id} />
+      <CompanyPage id={id} />
     </Suspense>
   );
 }

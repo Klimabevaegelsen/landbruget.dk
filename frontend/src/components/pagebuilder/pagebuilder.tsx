@@ -2,6 +2,7 @@ import { PageBuilderItem } from "@/services/supabase/types";
 import { NavigationItem, Sidenav } from "../layout/sidenav";
 import { PlaceholderBlock } from "./pageBlocks/placeholder-block";
 import { InfoCardBlock } from "./pageBlocks/info-card-block";
+import { BlockContainer } from "./pageBlocks/block-container";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
@@ -36,7 +37,9 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
       <div className="w-8/12  flex flex-col gap-11">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
-            <PageBlock block={item} />
+            <BlockContainer title={item.title} href={`#${item._key}`}>
+              <PageBlock block={item} />
+            </BlockContainer>
           </div>
         ))}
       </div>
