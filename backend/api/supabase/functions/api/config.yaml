@@ -365,7 +365,7 @@ pageBuilder:
             direction: 'asc'
 
   - _key: environment-nitrogen-per-field
-    _type: collapsibleDataGrid
+    _type: dataGrid
     title: "Kvælstofudvaskning pr. Mark (Detaljeret)"
     dataSource:
       params:
@@ -386,13 +386,13 @@ pageBuilder:
               format: "number"
           initialFilter:
             year: 'latest'
-          isCollapsible: true
-          allowFiltering: true
         orderBy:
           - column: 'year'
             direction: 'desc'
           - column: 'field_boundary_id'
             direction: 'asc'
+    isCollapsible: true
+    allowFiltering: true
 
   - _key: environment-pesticide-load
     _type: comboChart
@@ -418,7 +418,7 @@ pageBuilder:
             direction: 'asc'
 
   - _key: environment-pesticide-risks
-    _type: filterableDataGrid
+    _type: dataGrid
     title: "Pesticidanvendelse Detaljer og Risici"
     dataSource:
       params:
@@ -459,12 +459,13 @@ pageBuilder:
               column: "proximity_school_m"
           initialFilter:
             year: 'latest'
-          allowFiltering: true
         orderBy:
           - column: 'risk_category'
             direction: 'asc'
           - column: 'pesticide_name'
             direction: 'asc'
+    allowFiltering: true
+    isCollapsible: false
 
   - _key: worker-welfare-kpis
     _type: kpiGroup
@@ -530,6 +531,8 @@ pageBuilder:
         orderBy:
           - column: 'year'
             direction: 'desc'
+    allowFiltering: false
+    isCollapsible: false
 
   - _key: animal-welfare-kpis-overall
     _type: kpiGroup
@@ -816,7 +819,7 @@ pageBuilder:
             direction: 'asc'
 
   - _key: carbon-accounting-details
-    _type: collapsibleDataGrid
+    _type: dataGrid
     title: "Detaljeret Klimaregnskab (Kilde x Faktor pr. År)"
     dataSource:
       params:
@@ -854,8 +857,6 @@ pageBuilder:
               format: "number"
           initialFilter:
             year: 'latest'
-          isCollapsible: true
-          allowFiltering: true
         orderBy:
           - column: 'year'
             direction: 'desc'
@@ -863,3 +864,5 @@ pageBuilder:
             direction: 'asc'
           - column: 'sub_source'
             direction: 'asc'
+    isCollapsible: true
+    allowFiltering: true
