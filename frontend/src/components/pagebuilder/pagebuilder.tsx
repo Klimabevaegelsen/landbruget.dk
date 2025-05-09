@@ -3,12 +3,14 @@ import { NavigationItem, Sidenav } from "../layout/sidenav";
 import { PlaceholderBlock } from "./pageBlocks/placeholder-block";
 import { InfoCardBlock } from "./pageBlocks/info-card-block";
 import { BlockContainer } from "./pageBlocks/block-container";
+import { BlockTable } from "./pageBlocks/block-table";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
     case "infoCard":
       return <InfoCardBlock infoCard={block} />;
     case "dataGrid":
+      return <BlockTable grid={block} />;
     case "kpiGroup":
     case "barChart":
     case "stackedBarChart":
