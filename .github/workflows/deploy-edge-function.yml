@@ -18,6 +18,15 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+      
+      - name: Convert YAML to JSON
+        # Convert the config.yaml to config.json inside the function directory
+        run: yq eval -o=json backend/api/supabase/functions/api/config.yaml > backend/api/supabase/functions/api/config.json
       
       - uses: supabase/setup-cli@v1
         with:
@@ -29,4 +38,5 @@ jobs:
         run: |
           # Deploy the function from within the backend/api directory.
           # The CLI should automatically find the function 'api' inside './supabase/functions/api/'
+          # and will now include the generated config.json
           supabase functions deploy api --project-ref $PROJECT_ID --no-verify-jwt 
