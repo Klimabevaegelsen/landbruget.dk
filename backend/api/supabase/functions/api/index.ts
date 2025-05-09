@@ -2,8 +2,8 @@ import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import yaml from 'js-yaml';
 // --- Configuration ---
-const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/supabase/functions/api/config.yaml';
-const CONFIG_CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour cache
+// const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/supabase/functions/api/config.yaml'; // Removed
+// const CONFIG_CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour cache // Removed
 // List of tables/views where municipality filter is expected/valid in KPIs/Summaries
 const TABLES_WITH_MUNICIPALITY_SUMMARY = [
   'land_use_summary',
@@ -16,29 +16,33 @@ const TABLES_WITH_MUNICIPALITY_SUMMARY = [
 ];
 // --- In-memory Cache ---
 let cachedConfig: any = null;
-let lastFetchTimestamp = 0;
+// let lastFetchTimestamp = 0; // Removed
 // --- Helper: Fetch and Cache YAML Config ---
 async function getYamlConfig() {
-  const now = Date.now();
-  if (cachedConfig && now - lastFetchTimestamp < CONFIG_CACHE_DURATION_MS) {
-    console.log("Serving cached config.");
+  // const now = Date.now(); // Removed
+  // if (cachedConfig && now - lastFetchTimestamp < CONFIG_CACHE_DURATION_MS) { // Removed
+  //   console.log("Serving cached config."); // Removed
+  //   return cachedConfig; // Removed
+  // } // Removed
+
+  // New logic to read local file
+  if (cachedConfig) {
+    console.log("Serving in-memory config.");
     return cachedConfig;
   }
-  console.log("Fetching fresh config from:", YAML_CONFIG_URL);
+
+  console.log("Reading local config.yaml");
   try {
-    const response = await fetch(YAML_CONFIG_URL);
-    if (!response.ok) throw new Error(`Failed to fetch YAML config: ${response.statusText}`);
-    const yamlText = await response.text();
+    // Assuming config.yaml is in the same directory as index.ts when deployed
+    const yamlText = await Deno.readTextFile('./config.yaml');
     cachedConfig = yaml.load(yamlText);
-    lastFetchTimestamp = now;
-    console.log("Config fetched and cached successfully.");
+    console.log("Config read and cached successfully.");
     return cachedConfig;
   } catch (error) {
-    console.error("Error fetching or parsing YAML config:", error);
-    if (cachedConfig) {
-      console.warn("Returning stale cached config due to fetch error.");
-      return cachedConfig;
-    }
+    console.error("Error reading or parsing local config.yaml:", error);
+    // If there was a previously cached version (e.g. from a prior successful read in a long-running instance, though less likely in serverless)
+    // This part might be less relevant now as we expect the file to always be present.
+    // Consider if an error here should be fatal. For now, it re-throws.
     throw error;
   }
 }
