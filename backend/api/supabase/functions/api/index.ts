@@ -1,6 +1,7 @@
 import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import yaml from 'js-yaml';
+// import yaml from 'js-yaml'; // No longer needed
+import appConfig from './config.json' assert { type: 'json' }; // Import JSON directly
 // --- Configuration ---
 // const YAML_CONFIG_URL = 'https://raw.githubusercontent.com/Klimabevaegelsen/landbruget.dk/main/backend/api/supabase/functions/api/config.yaml'; // Removed
 // const CONFIG_CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour cache // Removed
@@ -17,48 +18,24 @@ const TABLES_WITH_MUNICIPALITY_SUMMARY = [
 // --- In-memory Cache ---
 let cachedConfig: any = null;
 // let lastFetchTimestamp = 0; // Removed
-// --- Helper: Fetch and Cache YAML Config ---
-async function getYamlConfig() {
-  // const now = Date.now(); // Removed
-  // if (cachedConfig && now - lastFetchTimestamp < CONFIG_CACHE_DURATION_MS) { // Removed
-  //   console.log("Serving cached config."); // Removed
-  //   return cachedConfig; // Removed
-  // } // Removed
-
-  // New logic to read local file
+// --- Helper: Load Config (renamed from getYamlConfig) ---
+function getConfig() {
   if (cachedConfig) {
     console.log("Serving in-memory config.");
     return cachedConfig;
   }
-
-  console.log("Attempting to read local config.yaml");
+  console.log("Loading config from imported JSON module.");
   try {
-    // Construct path relative to the current file.
-    // import.meta.url is like 'file:///path/to/index.ts'
-    const currentDir = new URL('.', import.meta.url).pathname;
-    console.log(`Current module directory: ${currentDir}`);
-
-    // Log files in the current directory for debugging
-    try {
-      console.log("Files in current directory:");
-      for await (const entry of Deno.readDir(currentDir)) {
-        console.log(`- ${entry.name}${entry.isDirectory ? "/" : ""}`);
-      }
-    } catch (dirError) {
-      console.error("Could not list directory contents:", dirError);
+    // The config is now directly imported as appConfig
+    cachedConfig = appConfig;
+    if (!cachedConfig) {
+      // This case should ideally not happen if the import is successful
+      throw new Error("Imported config is null or undefined.");
     }
-
-    const configPath = new URL('config.yaml', import.meta.url).pathname;
-    console.log(`Attempting to read config from: ${configPath}`);
-    const yamlText = await Deno.readTextFile(configPath);
-    cachedConfig = yaml.load(yamlText);
-    console.log("Config read and cached successfully.");
+    console.log("Config loaded and cached successfully from JSON module.");
     return cachedConfig;
   } catch (error) {
-    console.error("Error reading or parsing local config.yaml:", error);
-    // DEBUG: Log more details about the error
-    console.error(`Error details: Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
-    // END DEBUG
+    console.error("Error loading or processing imported config.json:", error);
     throw error; // Re-throw to ensure failure is visible
   }
 }
@@ -1144,7 +1121,7 @@ serve(async (req)=>{
         headers
       });
     }
-    config = await getYamlConfig();
+    config = await getConfig();
     if (!config?.pageBuilder) throw new Error("Invalid or empty configuration loaded.");
     // Process Page Builder Components using the recursive processor
     const pageBuilderResults: ComponentResult[] = [];
