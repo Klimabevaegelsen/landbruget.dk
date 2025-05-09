@@ -100,13 +100,37 @@ type MapLayerResult = {
   data?: any; // GeoJSON FeatureCollection
   error?: string;
 }
+// Cache for getLatestYearForCompany results within a single request invocation
+const latestYearCache = new Map<string, number | null>();
+
 // --- Helper: Get Latest Year (Generalized) ---
 async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: string, companyId: string, yearColumn = 'year', filterContext: Record<string, any> | null = {}) {
+  const cacheKey = `${sourceTable}_${companyId}_${yearColumn}_${JSON.stringify(filterContext || {})}`;
+  if (latestYearCache.has(cacheKey)) {
+    // console.log(`getLatestYearForCompany: Serving from cache for key: ${cacheKey}`);
+    return latestYearCache.get(cacheKey);
+  }
+
   // Refined to potentially filter by CHR if provided
   let query = supabase.from(sourceTable).select(yearColumn, {
     count: 'exact',
     head: false
   });
+
+  // --- DEBUGGING for site_species_production_ranked --- 
+  if (sourceTable === 'site_species_production_ranked') {
+    console.log(`DEBUG_SSPR: getLatestYearForCompany for ${sourceTable}`);
+    console.log(`DEBUG_SSPR: filterContext:`, filterContext);
+    const hasChrCol = await tableHasColumn(supabase, sourceTable, 'chr');
+    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'chr') result: ${hasChrCol}`);
+    const hasCompanyIdCol = await tableHasColumn(supabase, sourceTable, 'company_id');
+    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'company_id') result: ${hasCompanyIdCol}`);
+    if (filterContext?.chr) {
+        console.log(`DEBUG_SSPR: filterContext.chr value: ${filterContext.chr}`);
+    }
+  }
+  // --- END DEBUGGING ---
+
   // Apply context filter (CHR for site-specific latest year)
   if (filterContext?.chr && await tableHasColumn(supabase, sourceTable, 'chr')) {
     query = query.eq('chr', filterContext.chr);
@@ -129,6 +153,7 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
   const resultData = data as Record<string, any> | null;
   const latestYear = resultData ? resultData[yearColumn] : null;
   console.log(`getLatestYearForCompany: Determined latest year for ${sourceTable} (Company ${companyId}, Context ${JSON.stringify(filterContext)}) as: ${latestYear}`);
+  latestYearCache.set(cacheKey, latestYear); // Store in cache
   return latestYear;
 }
 // --- Helper: Check if table has a column (simple check, needs improvement/caching) ---
@@ -299,7 +324,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   }
 
   // DEBUG: Log the final query structure before execution
-  console.log(`DEBUG processDataGrid (${source}): Query before execution:`, query);
+  // console.log(`DEBUG processDataGrid (${source}): Query before execution:`, query); // DEBUG: DataGrid Query Object - Remove or keep commented for production
   // END DEBUG
 
   const { data, error } = await query;
@@ -1074,6 +1099,10 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
 }
 // --- Main Request Handler ---
 serve(async (req)=>{
+  // Clear caches at the beginning of each request
+  latestYearCache.clear();
+  columnExistenceCache.clear();
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -1121,15 +1150,15 @@ serve(async (req)=>{
         headers
       });
     }
-    config = await getConfig();
+    config = getConfig();
     if (!config?.pageBuilder) throw new Error("Invalid or empty configuration loaded.");
-    // Process Page Builder Components using the recursive processor
-    const pageBuilderResults: ComponentResult[] = [];
-    for (const componentConfig of config.pageBuilder){
-      // Use non-null assertion after null check guarantees it's safe
-      const processedResult: ComponentResult = await processComponent(componentConfig, supabase, companyInfo!.id, companyInfo!.municipality, null);
-      pageBuilderResults.push(processedResult);
-    }
+
+    // Process Page Builder Components using the recursive processor in parallel
+    const pageBuilderPromises = config.pageBuilder.map((componentConfig: any) =>
+      processComponent(componentConfig, supabase, companyInfo!.id, companyInfo!.municipality, null)
+    );
+    const pageBuilderResults: ComponentResult[] = await Promise.all(pageBuilderPromises);
+
     // Construct Final Response
     const responseBody = {
       metadata: {
