@@ -1027,14 +1027,21 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
       const params = dataSource.params;
       // Pass parentContext down to processing functions
       if (_type === 'infoCard') resultData = await processInfoCard(supabase, companyId, municipality, params, parentContext);
-      else if (_type === 'dataGrid' || _type === 'filterableDataGrid' || _type === 'collapsibleDataGrid') {
-        const allowFiltering = _type !== 'dataGrid';
+      // Unified dataGrid handling
+      else if (_type === 'dataGrid') {
+        // Pass allowFiltering and isCollapsible from componentConfig directly
+        const allowFiltering = componentConfig.allowFiltering || false;
+        const isCollapsible = componentConfig.isCollapsible || false;
+
         let gridResult: DataGridResult = await processDataGrid(supabase, companyId, municipality, params, allowFiltering, parentContext);
-        if (_type === 'collapsibleDataGrid' && !gridResult.error) {
+        
+        // Set isCollapsible on the result if it was configured at the component level
+        if (isCollapsible && !gridResult.error) {
             gridResult.isCollapsible = true;
         }
         resultData = gridResult;
-      } else if (_type === 'kpiGroup') resultData = await processKpiGroup(supabase, companyId, municipality, params, parentContext);
+      }
+      else if (_type === 'kpiGroup') resultData = await processKpiGroup(supabase, companyId, municipality, params, parentContext);
       else if (_type === 'barChart' || _type === 'stackedBarChart' || _type === 'comboChart' || _type === 'lineChart' || _type === 'multiLineChart') resultData = await processTimeSeriesChart(supabase, companyId, municipality, params, _type, parentContext);
       else if (_type === 'horizontalStackedBarChart') resultData = await processCategoryChart(supabase, companyId, municipality, params, _type, parentContext);
       else if (_type === 'mapChart') resultData = await processMapChart(supabase, companyId, municipality, params, parentContext);
