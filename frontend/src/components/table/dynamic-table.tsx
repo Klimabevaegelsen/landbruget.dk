@@ -32,9 +32,9 @@ export function DynamicDataTable<TData, TValue>({
   });
 
   return (
-    <div className="rounded-md border">
+    <div className="border rounded border-slate-300">
       <Table>
-        <TableHeader>
+        <TableHeader className="">
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
@@ -54,8 +54,9 @@ export function DynamicDataTable<TData, TValue>({
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
+            table.getRowModel().rows.map((row, index) => (
               <TableRow
+                index={index}
                 key={row.id}
                 data-state={row.getIsSelected() && "selected"}
               >
