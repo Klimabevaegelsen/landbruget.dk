@@ -44,6 +44,7 @@
 
 @theme {
   --color-primary-darker: #166534;
+  --color-foreground-darker: #e0f5e8;
 }
 
 :root {
@@ -88,5 +89,9 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-plus-jakarta-sans);
+  }
+
+  .skeleton-item {
+    @apply bg-gray-200 rounded-md;
   }
 }
