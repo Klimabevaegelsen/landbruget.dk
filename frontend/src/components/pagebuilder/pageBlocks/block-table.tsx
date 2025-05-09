@@ -13,11 +13,6 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   return (
     <div className="">
       <DynamicDataTable columns={columns} data={grid.rows} />
-
-      <JsonRender
-        json={JSON.parse(JSON.stringify(grid))}
-        title={`Component dataGrid placeholder (data)`}
-      />
     </div>
   );
 }
