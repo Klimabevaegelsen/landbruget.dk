@@ -31,21 +31,35 @@ async function getYamlConfig() {
     return cachedConfig;
   }
 
-  console.log("Reading local config.yaml");
+  console.log("Attempting to read local config.yaml");
   try {
-    // Assuming config.yaml is in the same directory as index.ts when deployed
-    // const yamlText = await Deno.readTextFile('./config.yaml'); // Old way
+    // Construct path relative to the current file.
+    // import.meta.url is like 'file:///path/to/index.ts'
+    const currentDir = new URL('.', import.meta.url).pathname;
+    console.log(`Current module directory: ${currentDir}`);
+
+    // Log files in the current directory for debugging
+    try {
+      console.log("Files in current directory:");
+      for await (const entry of Deno.readDir(currentDir)) {
+        console.log(`- ${entry.name}${entry.isDirectory ? "/" : ""}`);
+      }
+    } catch (dirError) {
+      console.error("Could not list directory contents:", dirError);
+    }
+
     const configPath = new URL('config.yaml', import.meta.url).pathname;
+    console.log(`Attempting to read config from: ${configPath}`);
     const yamlText = await Deno.readTextFile(configPath);
     cachedConfig = yaml.load(yamlText);
     console.log("Config read and cached successfully.");
     return cachedConfig;
   } catch (error) {
     console.error("Error reading or parsing local config.yaml:", error);
-    // If there was a previously cached version (e.g. from a prior successful read in a long-running instance, though less likely in serverless)
-    // This part might be less relevant now as we expect the file to always be present.
-    // Consider if an error here should be fatal. For now, it re-throws.
-    throw error;
+    // DEBUG: Log more details about the error
+    console.error(`Error details: Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
+    // END DEBUG
+    throw error; // Re-throw to ensure failure is visible
   }
 }
 // Define type for company details
