@@ -30,8 +30,8 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
   }));
 
   return (
-    <div className="flex w-full gap-30">
-      <div className="w-4/12">
+    <div className="flex w-full gap-30 relative">
+      <div className="w-4/12 sticky top-4 max-h-screen overflow-y-auto">
         <Sidenav navigation={navigationItems} title="Indholdsfortegnelse" />
       </div>
       <div className="w-8/12  flex flex-col gap-11">
