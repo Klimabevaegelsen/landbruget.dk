@@ -19,15 +19,41 @@ function SidenavClient({
   const [current, setCurrent] = useState<string>("");
 
   useEffect(() => {
-    console.log(window.location.hash);
+    const hash = window.location.hash;
+    if (hash) {
+      setCurrent(hash);
+    } else {
+      const firstItem = navigation[0];
+      if (firstItem) {
+        setCurrent(firstItem.href);
+      }
+    }
+  }, [navigation]);
 
-    setCurrent(window.location.hash);
+  useEffect(() => {
+    const onHashChanged = () => setCurrent(window.location.hash);
+    const { pushState, replaceState } = window.history;
+    window.history.pushState = function (...args) {
+      pushState.apply(window.history, args);
+      setTimeout(() => setCurrent(window.location.hash));
+    };
+    window.history.replaceState = function (...args) {
+      replaceState.apply(window.history, args);
+      setTimeout(() => setCurrent(window.location.hash));
+    };
+    window.addEventListener("hashchange", onHashChanged);
+    return () => {
+      window.removeEventListener("hashchange", onHashChanged);
+    };
   }, []);
 
   const handleClick = (item: NavigationItem) => {
     const hash = item.href.split("#")[1];
     if (hash) {
       setCurrent("#" + hash);
+
+      // replace the current url with the new hash without reloading the page
+      window.history.pushState({}, "", item.href);
 
       const element = document.getElementById(hash);
       if (element) {
