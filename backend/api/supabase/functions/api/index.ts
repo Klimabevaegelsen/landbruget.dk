@@ -34,7 +34,9 @@ async function getYamlConfig() {
   console.log("Reading local config.yaml");
   try {
     // Assuming config.yaml is in the same directory as index.ts when deployed
-    const yamlText = await Deno.readTextFile('./config.yaml');
+    // const yamlText = await Deno.readTextFile('./config.yaml'); // Old way
+    const configPath = new URL('config.yaml', import.meta.url).pathname;
+    const yamlText = await Deno.readTextFile(configPath);
     cachedConfig = yaml.load(yamlText);
     console.log("Config read and cached successfully.");
     return cachedConfig;
