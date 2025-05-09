@@ -134,7 +134,7 @@ function SidenavClient({
                       isCurrent
                         ? "text-black font-bold"
                         : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                      "group flex gap-x-3 p-4 pl-0"
+                      "group flex gap-x-3 p-4 pl-0 cursor-pointer"
                     )}
                     onClick={() => {
                       handleClick(item);

@@ -22,7 +22,9 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
             <div className="w-full h-12 skeleton-item"></div>
             <div className="w-full h-12 skeleton-item"></div>
             <div className="w-full h-12 skeleton-item"></div>
-            <div className="w-full h-12 skeleton-item"></div>
+            <div className="w-full h-12 skeleton-item flex items-center justify-center">
+              <span className="text-gray-400 text-xs italic">Placeholder</span>
+            </div>
             <div className="w-full h-12 skeleton-item"></div>
             <div className="w-full h-12 skeleton-item"></div>
             <div className="w-full h-12 skeleton-item"></div>
