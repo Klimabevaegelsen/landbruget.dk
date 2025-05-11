@@ -3,6 +3,7 @@
 Interactive map visualization of Danish agricultural and environmental data.
 
 ## Features
+
 - Interactive map showing:
   - Agricultural fields
   - Wetland areas
@@ -11,49 +12,40 @@ Interactive map visualization of Danish agricultural and environmental data.
 - Data filtering
 
 ## Tech Stack
-- React 18
+
+- React 19
+- Nextjs 15
 - MapLibre GL JS
 - TypeScript
 - Tailwind CSS
 
-## Development Setup
-
-### Requirements
-- Node.js 16+
-- npm or yarn
-
-### Installation Steps
-1. Install dependencies: `npm install`
-2. Start development server: `npm start`
-3. Visit http://localhost:3000
-
-## Project Structure
-
-src/
-├── components/ # React components
-│ ├── Map/ # Map-related components
-│ └── UI/ # UI components
-├── api/ # Backend API client
-├── hooks/ # Custom React hooks
-└── types/ # TypeScript 
-
-
-## API Integration
-
-Example of fetching data:
-typescript
-import { fetchSources, fetchSourceData } from '../api/sources';
-// List available sources
-const sources = await fetchSources();
-// Fetch specific source data
-const data = await fetchSourceData('agricultural_fields');
-
-## Adding New Features
-1. Create component in appropriate directory
-2. Add API integration if needed
-3. Update map layers if required
-4. Add to main App.tsx
-
 ## Environment Variables
-Required in `.env`:
-- REACT_APP_API_URL: Backend API URL
+
+Copy over `.env.example` to a local `.env` and fill out the variables:
+
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
