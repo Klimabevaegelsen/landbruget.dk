@@ -30,6 +30,8 @@ dependencies = [
     "prompt-toolkit==3.0.51",
     "psutil==7.0.0",
     "pure-eval==0.2.3",
+    "pyarrow>=20.0.0",
+    "pyarrow-hotfix>=0.7",
     "pyee==13.0.0",
     "pygments==2.19.1",
     "pyinstaller==6.11.1",
