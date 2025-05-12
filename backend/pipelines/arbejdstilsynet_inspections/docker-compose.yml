@@ -1,0 +1,11 @@
+services:
+  arbejdstilsynet_inspections:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SOURCE_CSV_URL=${SOURCE_CSV_URL}
+    working_dir: /app
+
+
+
