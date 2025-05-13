@@ -8,22 +8,73 @@ from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 import tempfile
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file
 load_dotenv()
 
+class GCSStorage:
+    """Google Cloud Storage backend for arbejdstilsynet_inspections files."""
+    
+    def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections"):
+        self.bucket_name = bucket_name
+        self.prefix = prefix
+        self.is_available = self._check_gcs_available()
+        
+    def _check_gcs_available(self):
+        """Check if GCS is available (Google Cloud Storage library is installed)."""
+        try:
+            from google.cloud import storage
+            return True
+        except ImportError:
+            logging.warning("Google Cloud Storage library not available. Using local storage only.")
+            return False
+            
+    def upload_file(self, local_path, gcs_path=None):
+        """Upload a file to GCS bucket."""
+        if not self.is_available:
+            logging.warning("GCS not available, skipping upload")
+            return False
+            
+        if gcs_path is None:
+            # Use the file structure from local path but with GCS prefix
+            relative_path = os.path.relpath(local_path, start=os.path.dirname(os.path.dirname(local_path)))
+            gcs_path = f"{self.prefix}/{relative_path}"
+            
+        try:
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_filename(local_path)
+            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to upload to GCS: {e}")
+            return False
+
 class BronzePipeline:
-    def __init__(self, pipeline_name: str, source_url: str | None):
+    def __init__(self, pipeline_name: str, source_url: str | None, gcs_bucket: str | None = None, log_level: str = "INFO"):
         self.pipeline_name = pipeline_name
         self.source_url = source_url
         self.pipeline_root_dir = Path(__file__).resolve().parent.parent
-        self.bronze_data_dir = self.pipeline_root_dir / "bronze" / "data" 
+        self.bronze_data_dir = self.pipeline_root_dir / "bronze" / "data"
+        self.gcs_bucket = gcs_bucket
+        self.log_level = log_level
+        
+        # Set logging level
+        logging.basicConfig(
+            level=getattr(logging, self.log_level),
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
 
         if not self.source_url:
             logging.error("SOURCE_CSV_URL for pipeline %s is not set. Please set it in the .env file.", self.pipeline_name)
             raise ValueError("SOURCE_CSV_URL for %s is missing." % self.pipeline_name)
+        
+        # Initialize GCS storage if bucket is provided
+        self.gcs = None
+        if self.gcs_bucket:
+            self.gcs = GCSStorage(bucket_name=self.gcs_bucket, prefix=f"bronze/{self.pipeline_name}")
+            logging.info(f"GCS storage initialized with bucket: {self.gcs_bucket}")
 
     async def fetch_data_with_playwright(self, filters_to_apply=None) -> list[tuple[str, bytes]]:
         """Fetches data using Playwright automation. Returns list of (filter_name, csv_bytes)."""        
@@ -264,6 +315,10 @@ class BronzePipeline:
         # Create metadata
         self.create_metadata_file(timestamp_str, merged_file_path)
 
+        # Upload merged file to GCS if available
+        if self.gcs:
+            self.gcs.upload_file(local_path=str(merged_file_path))
+
         # Delete the temp directory and all its contents
         import shutil
         try:
@@ -274,7 +329,7 @@ class BronzePipeline:
 
         logging.info("[%s] Bronze layer processing completed for merged data.", self.pipeline_name)
 
-def main():
+def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
     """Main function to run the bronze pipeline."""
     PIPELINE_NAME = "arbejdstilsynet_inspections"
     source_url_from_env = os.getenv("SOURCE_CSV_URL")
@@ -285,7 +340,7 @@ def main():
         )
         exit(1)
     try:
-        pipeline = BronzePipeline(pipeline_name=PIPELINE_NAME, source_url=source_url_from_env)
+        pipeline = BronzePipeline(pipeline_name=PIPELINE_NAME, source_url=source_url_from_env, gcs_bucket=gcs_bucket, log_level=log_level)
         pipeline.run()
     except ValueError as e:
         logging.error("Failed to initialize pipeline: %s", e)

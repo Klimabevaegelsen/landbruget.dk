@@ -8,7 +8,8 @@ XVFB_PID=$!
 sleep 2
 
 echo "[run.sh] Running pipeline (main.py) ..."
-python /app/main.py
+cd /app
+python main.py
 
 # Kill Xvfb cleanly if still running
 kill $XVFB_PID

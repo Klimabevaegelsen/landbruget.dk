@@ -38,6 +38,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "duckdb" },
     { name = "executing" },
+    { name = "google-cloud" },
     { name = "greenlet" },
     { name = "ibis" },
     { name = "ipython" },
@@ -83,6 +84,7 @@ requires-dist = [
     { name = "dotenv", specifier = "==0.9.9" },
     { name = "duckdb", specifier = "==1.2.2" },
     { name = "executing", specifier = "==2.2.0" },
+    { name = "google-cloud", specifier = ">=0.34.0" },
     { name = "greenlet", specifier = "==3.2.2" },
     { name = "ibis", specifier = "==3.3.0" },
     { name = "ipython", specifier = "==8.12.3" },
@@ -215,6 +217,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/91/50/a9d80c47ff289c611ff12e63f7c5d13942c65d68125160cefd768c73e6e4/executing-2.2.0.tar.gz", hash = "sha256:5d108c028108fe2551d1a7b2e8b713341e2cb4fc0aa7dcf966fa4327a5226755", size = 978693, upload_time = "2025-01-22T15:41:29.403Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/8f/c4d9bafc34ad7ad5d8dc16dd1347ee0e507a52c3adb6bfa8887e1c6a26ba/executing-2.2.0-py2.py3-none-any.whl", hash = "sha256:11387150cad388d62750327a53d3339fad4888b39a6fe233c3afbb54ecffd3aa", size = 26702, upload_time = "2025-01-22T15:41:25.929Z" },
+]
+
+[[package]]
+name = "google-cloud"
+version = "0.34.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/0e/8bf108fa9e3e036fe37a86598f1315e7b8de90b89012fd65704dc30ac6ad/google-cloud-0.34.0.tar.gz", hash = "sha256:01430187cf56df10a9ba775dd547393185d4b40741db0ea5889301f8e7a9d5d3", size = 2514, upload_time = "2018-07-30T19:08:17.761Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/b1/7c54d1950e7808df06642274e677dbcedba57f75307adf2e5ad8d39e5e0e/google_cloud-0.34.0-py2.py3-none-any.whl", hash = "sha256:fb1ab7b0548fe44b3d538041f0a374505b7f990d448a935ea36649c5ccab5acf", size = 1839, upload_time = "2018-07-30T19:08:16.739Z" },
 ]
 
 [[package]]
