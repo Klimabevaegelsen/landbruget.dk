@@ -1,6 +1,6 @@
 import { InfoCard } from "@/services/supabase/types";
 
-export function InfoCardBlock({ infoCard }: { infoCard: InfoCard }) {
+export function BlockInfoCard({ infoCard }: { infoCard: InfoCard }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {infoCard.items.map((item, index) => (
