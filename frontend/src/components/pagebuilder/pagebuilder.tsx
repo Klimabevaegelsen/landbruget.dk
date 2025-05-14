@@ -1,24 +1,26 @@
 import { PageBuilderItem } from "@/services/supabase/types";
 import { NavigationItem, Sidenav } from "../layout/sidenav";
-import { PlaceholderBlock } from "./pageBlocks/placeholder-block";
-import { InfoCardBlock } from "./pageBlocks/info-card-block";
+import { BlockPlaceholder } from "./pageBlocks/block-placeholder";
+import { BlockInfoCard } from "./pageBlocks/block-info-card";
 import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
+import { BlockBarChart } from "./pageBlocks/block-bar-chart";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
     case "infoCard":
-      return <InfoCardBlock infoCard={block} />;
+      return <BlockInfoCard infoCard={block} />;
     case "dataGrid":
       return <BlockTable grid={block} />;
-    case "kpiGroup":
     case "barChart":
+      return <BlockBarChart chart={block} />;
+    case "kpiGroup":
     case "stackedBarChart":
     case "horizontalStackedBarChart":
     case "comboChart":
     case "iteratedSection":
     default:
-      return <PlaceholderBlock block={block} />;
+      return <BlockPlaceholder block={block} />;
   }
 }
 
