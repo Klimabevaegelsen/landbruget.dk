@@ -391,7 +391,6 @@ pageBuilder:
             direction: 'desc'
           - column: 'field_boundary_id'
             direction: 'asc'
-    isCollapsible: true
     allowFiltering: true
 
   - _key: environment-pesticide-load
@@ -465,7 +464,6 @@ pageBuilder:
           - column: 'pesticide_name'
             direction: 'asc'
     allowFiltering: true
-    isCollapsible: false
 
   - _key: worker-welfare-kpis
     _type: kpiGroup
@@ -532,7 +530,6 @@ pageBuilder:
           - column: 'year'
             direction: 'desc'
     allowFiltering: false
-    isCollapsible: false
 
   - _key: animal-welfare-kpis-overall
     _type: kpiGroup
@@ -864,5 +861,4 @@ pageBuilder:
             direction: 'asc'
           - column: 'sub_source'
             direction: 'asc'
-    isCollapsible: true
     allowFiltering: true
