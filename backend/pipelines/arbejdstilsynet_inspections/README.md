@@ -8,6 +8,28 @@ This pipeline is responsible for fetching, storing, and processing inspection da
 
 It follows the Medallion architecture (Bronze -> Silver -> Gold layers).
 
+## Command-line Arguments
+
+The pipeline supports the following command-line arguments:
+
+* `--start-date`: Start date in YYYY-MM-DD format (default: 6 months ago)
+* `--end-date`: End date in YYYY-MM-DD format (default: today)
+* `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR) (default: INFO)
+* `--gcs-bucket`: Google Cloud Storage bucket for export (optional)
+* `--stage`: Pipeline stage to run ('all', 'bronze', 'silver') (default: 'all')
+
+### Usage Example
+
+To specify custom parameters, edit the `run.sh` file:
+
+```bash
+# Original command
+python main.py
+
+# Example with custom parameters
+python main.py --start-date 2025-01-01 --end-date 2025-05-01 --log-level DEBUG --stage silver
+```
+
 ## Bronze Layer
 
 ### Purpose
@@ -23,10 +45,13 @@ The Bronze layer fetches the raw inspection data and stores it without any modif
 
 1.  **Prerequisites**:
     *   Docker and Docker Compose installed.
-    *   Create a `.env` file in the `backend/pipelines/arbejdstilsynet_inspections/` directory by copying `.env.example` and filling in the `SOURCE_CSV_URL`.
+    *   Create a `.env` file in the `backend/pipelines/arbejdstilsynet_inspections/` directory by copying `.env.example` and filling in the required environment variables:
         ```bash
         cp .env.example .env
-        # Then edit .env with the correct URL
+        # Then edit .env with the correct values:
+        # - SOURCE_CSV_URL (required)
+        # - GOOGLE_APPLICATION_CREDENTIALS (required for GCS export)
+        # - GCS_BUCKET (optional)
         ```
 
 2.  **Navigate to the pipeline directory**:
@@ -40,9 +65,28 @@ The Bronze layer fetches the raw inspection data and stores it without any modif
     ```
     This will build the Docker image (if not already built or if changes were made) and run the `main.py` script inside the container.
 
+4.  **Run with Custom Parameters**:
+    
+    Edit the `run.sh` script to modify the command-line parameters before building:
+    ```bash
+    # Inside run.sh:
+    python main.py --start-date 2025-01-01 --end-date 2025-05-01 --log-level DEBUG --stage silver
+    ```
+    
+    Or pass them directly using environment variables:
+    ```bash
+    PIPELINE_ARGS="--start-date 2025-01-01 --end-date 2025-05-01 --stage silver" docker-compose up --build
+    ```
+    This requires adding the following line to the `docker-compose.yml` file's `command`:
+    ```yaml
+    command: bash -c "PIPELINE_ARGS=${PIPELINE_ARGS:-""} /app/run.sh"
+    ```
+
 ### Environment Variables
 
 *   `SOURCE_CSV_URL`: **Required**. The URL to the source CSV data file.
+*   `GOOGLE_APPLICATION_CREDENTIALS`: Path to your Google Cloud service account key JSON file. Required only if using Google Cloud Storage export.
+*   `GCS_BUCKET`: Optional default Google Cloud Storage bucket name. Can be overridden with the `--gcs-bucket` command line argument.
 
 ### Output Structure (Bronze Layer)
 
@@ -74,14 +118,17 @@ The Silver layer takes the raw CSV data, cleans it, normalizes values, and conve
 ### Process
 
 1. **Data Loading**: Reads the latest Bronze layer CSV data.
-2. **Cleaning**: 
+2. **Date Filtering**: 
+   - Filters data based on the specified date range (`--start-date` and `--end-date` command-line arguments)
+   - Default date range is from 6 months ago to the current date if not specified
+3. **Cleaning**: 
    - Renames columns to follow consistent naming conventions
    - Deduplicates rows
    - Normalizes enum values and special characters (æ, ø, å)
    - Converts empty strings to null values
    - Applies appropriate type casting
 
-3. **Privacy Protection**:
+4. **Privacy Protection**:
    - Checks for and anonymizes potential PII data
 
 4. **Export**: Saves the processed data as a Parquet file for efficient querying.
@@ -97,6 +144,45 @@ Upon successful execution, the Silver layer will produce the following in the `b
 ## Gold Layer
 
 *(To be implemented. This layer will provide aggregated data ready for consumption, e.g., for APIs or visualizations.)*
+
+## Google Cloud Storage Export
+
+When the `--gcs-bucket` parameter is provided, the pipeline will export data to the specified Google Cloud Storage bucket in addition to local storage. This enables:
+
+1. **Data Integration**: Seamlessly integrate with other GCP services like BigQuery
+2. **Data Sharing**: Make data accessible to other applications and teams
+3. **Backup**: Maintain a cloud backup of all pipeline outputs
+
+### Setup for GCS Export
+
+1. **Authentication**: Configure Google Cloud authentication by either:
+   * Setting the `GOOGLE_APPLICATION_CREDENTIALS` environment variable in your `.env` file to point to a service account key JSON file
+   * Using the Google Cloud SDK's application default credentials: `gcloud auth application-default login`
+   * When running in Google Cloud (e.g., Cloud Run, GKE), using the attached service account
+
+2. **Required Permissions**: The service account needs the following permissions:
+   * `storage.objects.create`
+   * `storage.objects.get` 
+   * `storage.objects.list`
+
+3. **Data Storage Path**: The pipeline will export data to: `gs://<bucket-name>/arbejdstilsynet_inspections/<layer>/<timestamp>/`
+
+### Example Usage
+
+```bash
+# Run the pipeline with GCS export
+python main.py --gcs-bucket your-landbruget-data-bucket --stage all
+```
+
+> **Note:** When running in a Docker container, make sure to mount your service account key file into the container and set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to point to the mounted location. For example:
+>
+> ```yaml
+> # In docker-compose.yml
+> volumes:
+>   - /path/to/your/credentials.json:/app/credentials.json
+> environment:
+>   - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+> ```
 
 ## Docker Environment Configuration
 
