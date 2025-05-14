@@ -14,9 +14,7 @@ RUN apt-get update && apt-get install -y \
     libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create and use virtual environment
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+
 
 # Set GDAL environment variables
 ENV GDAL_VERSION=3.10.0
