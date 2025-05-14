@@ -76,7 +76,6 @@ type ComponentResult = {
   rows?: any[]; // For dataGrid
   columns?: any[]; // For dataGrid
   allowFiltering?: boolean; // For dataGrid
-  isCollapsible?: boolean; // For collapsibleDataGrid
   kpis?: any[]; // For kpiGroup
   data?: ChartData | any; // For charts, maps, timeline etc.
   config?: any; // For timeline
@@ -90,7 +89,6 @@ type DataGridResult = {
   columns: any[];
   allowFiltering: boolean;
   error?: string;
-  isCollapsible?: boolean; // Optional property
 };
 // Define a type for map layer results
 type MapLayerResult = {
@@ -1051,16 +1049,9 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
       if (_type === 'infoCard') resultData = await processInfoCard(supabase, companyId, municipality, params, parentContext);
       // Unified dataGrid handling
       else if (_type === 'dataGrid') {
-        // Pass allowFiltering and isCollapsible from componentConfig directly
+        // Pass allowFiltering from componentConfig directly
         const allowFiltering = componentConfig.allowFiltering || false;
-        const isCollapsible = componentConfig.isCollapsible || false;
-
         let gridResult: DataGridResult = await processDataGrid(supabase, companyId, municipality, params, allowFiltering, parentContext);
-        
-        // Set isCollapsible on the result if it was configured at the component level
-        if (isCollapsible && !gridResult.error) {
-            gridResult.isCollapsible = true;
-        }
         resultData = gridResult;
       }
       else if (_type === 'kpiGroup') resultData = await processKpiGroup(supabase, companyId, municipality, params, parentContext);
