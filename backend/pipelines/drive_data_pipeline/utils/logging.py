@@ -1,94 +1,136 @@
-"""Logging utilities for Google Drive Data Pipeline."""
+"""Logging configuration for the pipeline."""
 
-import contextvars
-import json
+import logging
 import sys
 from typing import Any, Dict, Optional
 
-from loguru import logger
-from loguru._defaults import LOGURU_FORMAT
+# Create a custom logger
+logger = logging.getLogger("drive_data_pipeline")
+
+# Define ANSI color codes for different log levels and components
+COLORS = {
+    # Log levels
+    'DEBUG': '\033[36m',     # Cyan
+    'INFO': '\033[32m',      # Green
+    'WARNING': '\033[33m',   # Yellow
+    'ERROR': '\033[31m',     # Red
+    'CRITICAL': '\033[41m',  # Red background
+    
+    # Other log components
+    'DATETIME': '\033[34m',  # Blue
+    'MODULE': '\033[35m',    # Magenta
+    
+    'RESET': '\033[0m'       # Reset to default
+}
 
 
-# Context variables to store context data like file_id, folder, etc.
-context_data = contextvars.ContextVar("context_data", default={})
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter adding colors to log components."""
+
+    def format(self, record):
+        """Format the log record with colors."""
+        # Add color to levelname
+        levelname = record.levelname
+        if levelname in COLORS:
+            colored = f"{COLORS[levelname]}{levelname}{COLORS['RESET']}"
+            record.levelname = colored
+            
+        # Store the original format
+        original_fmt = self._style._fmt
+        
+        # Apply colors to other parts of the format string
+        colored_fmt = original_fmt.replace(
+            "%(asctime)s", 
+            f"{COLORS['DATETIME']}%(asctime)s{COLORS['RESET']}"
+        )
+        
+        # Color for module:function:lineno
+        module_part = "%(name)s:%(funcName)s:%(lineno)d"
+        colored_module = f"{COLORS['MODULE']}{module_part}{COLORS['RESET']}"
+        colored_fmt = colored_fmt.replace(module_part, colored_module)
+        
+        # Set the colored format
+        self._style._fmt = colored_fmt
+        
+        # Format the record
+        result = super().format(record)
+        
+        # Restore the original format
+        self._style._fmt = original_fmt
+        
+        return result
 
 
-def setup_logging(log_level: str = "INFO") -> None:
-    """Set up logging with the specified log level.
-
-    Args:
-        log_level: The log level to use (DEBUG, INFO, WARNING, ERROR)
-    """
-    # Remove default handler
-    logger.remove()
-
-    # Add a handler with custom format
-    logger.add(
-        sys.stderr,
-        format=_format_record,
-        level=log_level,
-        colorize=True,
-        diagnose=True,
-    )
-    logger.info(f"Logging initialized at level {log_level}")
-
-
-def _format_record(record: Dict[str, Any]) -> str:
-    """Format log records with additional context.
-
-    Args:
-        record: The log record to format
-
-    Returns:
-        Formatted log record as string
-    """
-    # Get context data
-    ctx_data = context_data.get()
-
-    # Add context to record extras if there is context data
-    if ctx_data:
-        for key, value in ctx_data.items():
-            record["extra"][key] = value
-
-    # Use standard format if message is not a dict
-    if isinstance(record["message"], str):
-        formatted = LOGURU_FORMAT
-
-    # If message is a dict, add it to the extras
-    elif isinstance(record["message"], dict):
-        record["extra"].update(record["message"])
-        formatted = "{time} | {level} | {extra}"
-    else:
-        formatted = LOGURU_FORMAT
-
-    return formatted
-
-
-def get_logger():
+def get_logger() -> logging.Logger:
     """Get the configured logger.
 
     Returns:
-        The configured logger
+        Logger instance
     """
     return logger
 
 
-def set_context(**kwargs) -> None:
-    """Set context data for log messages.
+def set_context(**kwargs: Any) -> None:
+    """Set context for logging.
 
     Args:
-        **kwargs: Key-value pairs to add to the context
+        **kwargs: Key-value pairs to add to the logging context
     """
-    # Get current context
-    current_ctx = context_data.get()
-    
-    # Update with new values
-    current_ctx.update(kwargs)
-    
-    # Set updated context
-    context_data.set(current_ctx)
+    # This is a placeholder for more sophisticated context handling
+    # In a production system, this could use something like contextvars
+    # or logging adapters
+    pass
 
 
-def clear_context() -> None:
-    """Clear all context data."""
-    context_data.set({}) 
+def setup_logging(log_level: str = "INFO") -> None:
+    """Set up logging configuration.
+
+    Args:
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+    """
+    # Set level
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    logger.setLevel(level)
+
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+
+    # Create formatter - Remove the newline character at the end
+    format_str = (
+        "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d"
+        " - %(message)s"
+    )
+    # Use a standard time format without microseconds
+    time_format = "%Y-%m-%d %H:%M:%S"
+    formatter = ColoredFormatter(format_str, time_format)
+    console_handler.setFormatter(formatter)
+
+    # Add handler to logger
+    logger.handlers = []  # Clear any existing handlers
+    logger.addHandler(console_handler)
+    logger.propagate = False  # Prevent duplicate logs
+
+    logger.info(f"Logging initialized at level {log_level}")
+
+
+def log_exception(
+    exception: Exception, 
+    level: str = "ERROR", 
+    context: Optional[Dict[str, Any]] = None
+) -> None:
+    """Log an exception with context.
+
+    Args:
+        exception: Exception to log
+        level: Logging level (ERROR or CRITICAL)
+        context: Additional context information
+    """
+    log_func = logger.error if level == "ERROR" else logger.critical
+    message = f"Exception: {type(exception).__name__}: {str(exception)}"
+
+    if context:
+        context_str = ", ".join([f"{k}={v}" for k, v in context.items()])
+        message = f"{message} (Context: {context_str})"
+
+    log_func(message, exc_info=True) 

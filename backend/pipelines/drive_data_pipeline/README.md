@@ -11,6 +11,8 @@ This pipeline accesses a Google Drive folder containing multiple subfolders with
 - Google Drive API integration with authentication and retries
 - Bronze layer for raw data storage with metadata
 - Silver layer for cleaned and transformed data
+- Robust Excel processing with automatic data type standardization
+- Parquet file output with CSV fallback for challenging data formats
 - Configurable via environment variables and command-line arguments
 - Containerized for consistent execution
 
@@ -93,7 +95,11 @@ The pipeline follows a medallion architecture with the following components:
 1. **Fetcher**: Retrieves files from Google Drive using the Google Drive API
 2. **Bronze Layer Processor**: Stores raw files with metadata
 3. **Silver Layer Processor**: Transforms and cleans data
+   - **Excel Transformer**: Converts Excel files to Parquet/CSV with standardized schemas
+   - **PDF Transformer**: Extracts data from PDFs into structured formats
 4. **Storage Manager**: Handles file storage and organization
+   - **LocalStorageManager**: For local file system operations
+   - **GCSStorageManager**: Placeholder for Google Cloud Storage
 
 ## Project Structure
 
@@ -106,13 +112,46 @@ backend/pipelines/drive_data_pipeline/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── pyproject.toml              # Project dependencies
 ├── config/                     # Configuration management
+│   ├── storage.py              # Storage managers (Local, GCS)
+│   └── logging.py              # Logging configuration
 ├── utils/                      # Utility functions
 ├── bronze/                     # Bronze layer implementation
+│   ├── fetcher.py              # Google Drive fetcher
+│   ├── processor.py            # Bronze data processor
+│   ├── metadata.py             # Metadata management
+│   └── storage.py              # Bronze storage management
 ├── silver/                     # Silver layer implementation
+│   ├── processor.py            # Silver data processor
+│   ├── storage.py              # Silver storage management
+│   ├── parquet_manager.py      # Parquet output management
+│   ├── transformers/           # Data transformers
+│   │   ├── excel_transformer.py # Excel file transformer
+│   │   └── pdf_transformer.py  # PDF file transformer
+│   └── models/                 # Data models and schemas
 ├── tests/                      # Test suite
 ├── docs/                       # Documentation
 └── data/                       # Local data directory (gitignored)
 ```
+
+## Data Processing
+
+### Excel Transformer
+
+The Excel transformer reads Excel files (.xlsx, .xls) and converts them to Parquet format:
+
+- Reads all sheets from the Excel file
+- Standardizes column names (snake_case, special character handling)
+- Performs data type detection and standardization
+- Converts to Parquet format with appropriate schema
+- Falls back to CSV if Parquet conversion fails due to complex data types
+
+### Storage Management
+
+The storage system provides abstraction over different storage backends:
+
+- **StorageManager**: Abstract base class defining the interface
+- **LocalStorageManager**: Concrete implementation for local file system
+- **GCSStorageManager**: Placeholder for Google Cloud Storage
 
 ## Development
 

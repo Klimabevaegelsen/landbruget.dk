@@ -15,11 +15,13 @@ env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(env_path)
 
 # Use absolute imports
+from drive_data_pipeline.bronze import BronzeProcessor
+from drive_data_pipeline.bronze.drive import get_drive_service, GoogleDriveFetcher
+from drive_data_pipeline.bronze.metadata import MetadataManager
 from drive_data_pipeline.config import parse_args, get_settings
+from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import setup_logging, get_logger
 from drive_data_pipeline.utils.storage import get_storage_manager
-from drive_data_pipeline.bronze.drive import get_drive_service, GoogleDriveFetcher
-from drive_data_pipeline.bronze import BronzeProcessor
 
 
 def main() -> int:
@@ -40,10 +42,14 @@ def main() -> int:
         logger.info("Starting Google Drive Data Pipeline")
         
         # Debug: Print environment variables
-        logger.info(f"GOOGLE_DRIVE_FOLDER_ID: {os.environ.get('GOOGLE_DRIVE_FOLDER_ID')}")
-        logger.info(f"GOOGLE_APPLICATION_CREDENTIALS: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')}")
+        folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID')
+        credentials = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        logger.info(f"GOOGLE_DRIVE_FOLDER_ID: {folder_id}")
+        logger.info(f"GOOGLE_APPLICATION_CREDENTIALS: {credentials}")
         logger.info(f"Current directory: {os.getcwd()}")
-        logger.info(f"Env file exists: {os.path.exists(os.path.join(os.getcwd(), '.env'))}")
+        
+        env_exists = os.path.exists(os.path.join(os.getcwd(), '.env'))
+        logger.info(f"Env file exists: {env_exists}")
         
         # Load settings
         settings = get_settings()
@@ -62,6 +68,9 @@ def main() -> int:
             storage_type=settings.storage_type.value,
             bucket_name=settings.gcs_bucket,
         )
+        
+        # Initialize metadata manager
+        metadata_manager = MetadataManager(settings.bronze_path)
         
         # Initialize Google Drive service
         drive_service = get_drive_service(settings.google_application_credentials)
@@ -88,17 +97,55 @@ def main() -> int:
             storage_manager=storage_manager,
         )
         
-        # Process the Google Drive folder
+        # Process the Google Drive folder (Bronze layer)
+        bronze_run_path = None
         if not args.silver_only:
             bronze_processor.process_drive_folder(
                 folder_id=settings.google_drive_folder_id,
                 specific_subfolders=subfolders,
                 supported_file_types=file_types,
             )
+            bronze_run_path = bronze_processor.run_path
         
-        # TODO: Silver layer processing will be implemented in subsequent sprints
+        # Process Silver layer if not bronze_only
         if not args.bronze_only:
-            logger.info("Silver layer processing not yet implemented")
+            # Initialize Silver processor
+            silver_processor = SilverProcessor(
+                settings=settings,
+                storage_manager=storage_manager,
+                metadata_manager=metadata_manager,
+            )
+            
+            # If no bronze_run_path (silver_only mode), find the latest bronze run
+            if args.silver_only and not bronze_run_path:
+                # Find the latest bronze run directory
+                bronze_runs = sorted(
+                    Path(settings.bronze_path).glob("*"),
+                    key=lambda p: p.stat().st_mtime if p.is_dir() else 0,
+                    reverse=True
+                )
+                
+                if not bronze_runs:
+                    logger.error("No Bronze runs found for Silver processing")
+                    return 1
+                
+                bronze_run_path = bronze_runs[0]
+                logger.info(
+                    f"Using latest Bronze run for Silver processing: {bronze_run_path}"
+                )
+            
+            # Process Bronze files to Silver
+            if bronze_run_path:
+                logger.info(
+                    f"Processing Bronze files to Silver layer from: {bronze_run_path}"
+                )
+                silver_processor.process_bronze_files(
+                    bronze_run_path=bronze_run_path,
+                    specific_subfolders=subfolders,
+                    supported_file_types=file_types,
+                )
+            else:
+                logger.error("No Bronze run path available for Silver processing")
         
         logger.info("Google Drive Data Pipeline completed successfully")
         return 0
