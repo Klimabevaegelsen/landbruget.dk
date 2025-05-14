@@ -1,10 +1,10 @@
 """Silver layer data models module."""
 
 from .schema import (
-    DataType,
     ColumnSchema,
-    TableSchema,
     DatasetSchema,
+    DataType,
+    TableSchema,
     create_animal_welfare_schema,
     create_farm_schema,
 )

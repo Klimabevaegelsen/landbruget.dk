@@ -2,7 +2,6 @@
 
 import argparse
 import datetime
-from typing import List, Optional
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def split_comma_separated(value: Optional[str]) -> Optional[List[str]]:
+def split_comma_separated(value: str | None) -> list[str] | None:
     """Split a comma-separated string into a list of strings.
 
     Args:

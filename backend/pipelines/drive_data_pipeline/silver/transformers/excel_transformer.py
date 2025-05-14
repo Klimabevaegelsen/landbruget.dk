@@ -1,7 +1,6 @@
 """Excel transformer for Silver layer."""
 
 from pathlib import Path
-from typing import List, Tuple
 
 import pandas as pd
 
@@ -120,7 +119,7 @@ class ExcelTransformer(BaseTransformer):
                 error=error_msg,
             )
 
-    def _read_excel(self, file_path: Path) -> List[Tuple[str, pd.DataFrame]]:
+    def _read_excel(self, file_path: Path) -> list[tuple[str, pd.DataFrame]]:
         """Read Excel file and returns data from all sheets.
 
         Args:

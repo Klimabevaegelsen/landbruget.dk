@@ -1,10 +1,9 @@
 """Geospatial validator for Silver layer."""
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, LineString, Polygon
+import pandas as pd
 from shapely.validation import explain_validity
 
 from ...utils.logging import get_logger

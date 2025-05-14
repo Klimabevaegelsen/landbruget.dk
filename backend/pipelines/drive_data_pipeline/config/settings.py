@@ -3,11 +3,9 @@
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
-from pydantic import BaseModel, Field, validator
 from dotenv import load_dotenv
-
+from pydantic import BaseModel, Field, validator
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
@@ -34,8 +32,8 @@ class Settings(BaseModel):
     """Application settings loaded from environment variables."""
 
     # Google Drive settings
-    google_drive_folder_id: Optional[str] = Field(None, description="ID of the Google Drive folder to process")
-    google_application_credentials: Optional[Path] = Field(
+    google_drive_folder_id: str | None = Field(None, description="ID of the Google Drive folder to process")
+    google_application_credentials: Path | None = Field(
         None, description="Path to Google application credentials JSON file"
     )
 
@@ -43,7 +41,7 @@ class Settings(BaseModel):
     storage_type: StorageType = Field(
         StorageType.LOCAL, description="Storage type (local or gcs)"
     )
-    gcs_bucket: Optional[str] = Field(None, description="GCS bucket name (if using GCS)")
+    gcs_bucket: str | None = Field(None, description="GCS bucket name (if using GCS)")
 
     # Logging settings
     log_level: LogLevel = Field(LogLevel.INFO, description="Logging level")
@@ -64,14 +62,14 @@ class Settings(BaseModel):
         case_sensitive = False
 
     @validator("gcs_bucket")
-    def validate_gcs_bucket(cls, v: Optional[str], values: dict) -> Optional[str]:
+    def validate_gcs_bucket(cls, v: str | None, values: dict) -> str | None:
         """Validate that GCS bucket is provided when using GCS storage."""
         if values.get("storage_type") == StorageType.GCS and not v:
             raise ValueError("GCS bucket must be specified when using GCS storage")
         return v
 
     @validator("google_application_credentials")
-    def validate_credentials_file(cls, v: Optional[Path]) -> Optional[Path]:
+    def validate_credentials_file(cls, v: Path | None) -> Path | None:
         """Validate that the credentials file exists if provided."""
         if v is not None:
             # Check if it's an empty Path

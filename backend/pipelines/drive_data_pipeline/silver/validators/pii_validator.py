@@ -1,8 +1,7 @@
 """PII validator for detecting and handling sensitive data."""
 
-import re
 from enum import Enum
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import pandas as pd
 
@@ -50,10 +49,10 @@ class PIIValidator(BaseValidator):
 
     def __init__(
         self,
-        pii_types: Set[PIIType] = None,
+        pii_types: set[PIIType] = None,
         action: PIIAction = PIIAction.REPORT,
         threshold: float = 0.3,
-        column_name_hints: Dict[PIIType, List[str]] = None,
+        column_name_hints: dict[PIIType, list[str]] = None,
     ):
         """Initialize the PII validator.
 

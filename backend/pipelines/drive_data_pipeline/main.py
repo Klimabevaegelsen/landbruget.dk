@@ -3,6 +3,7 @@
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to enable imports
@@ -16,11 +17,11 @@ load_dotenv(env_path)
 
 # Use absolute imports
 from drive_data_pipeline.bronze import BronzeProcessor
-from drive_data_pipeline.bronze.drive import get_drive_service, GoogleDriveFetcher
+from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
 from drive_data_pipeline.bronze.metadata import MetadataManager
-from drive_data_pipeline.config import parse_args, get_settings
+from drive_data_pipeline.config import get_settings, parse_args
 from drive_data_pipeline.silver import SilverProcessor
-from drive_data_pipeline.utils.logging import setup_logging, get_logger
+from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
 
 

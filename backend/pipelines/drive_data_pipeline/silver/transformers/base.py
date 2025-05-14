@@ -3,7 +3,7 @@
 import abc
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...bronze.metadata import FileMetadata
 from ...utils.logging import get_logger
@@ -17,11 +17,11 @@ class TransformResult:
     """Result of a transformation operation."""
 
     success: bool
-    output_path: Optional[Path] = None
-    error: Optional[str] = None
-    row_count: Optional[int] = None
-    schema: Optional[Dict[str, str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    output_path: Path | None = None
+    error: str | None = None
+    row_count: int | None = None
+    schema: dict[str, str] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class BaseTransformer(abc.ABC):
@@ -50,7 +50,7 @@ class BaseTransformer(abc.ABC):
         """
         pass
     
-    def _standardize_column_names(self, columns: List[str]) -> List[str]:
+    def _standardize_column_names(self, columns: list[str]) -> list[str]:
         """Standardize column names according to project conventions.
 
         Args:
@@ -90,7 +90,7 @@ class BaseTransformer(abc.ABC):
         
         return standardized
     
-    def _create_schema_dict(self, df: Any) -> Dict[str, str]:
+    def _create_schema_dict(self, df: Any) -> dict[str, str]:
         """Create a schema dictionary from a dataframe.
 
         Args:

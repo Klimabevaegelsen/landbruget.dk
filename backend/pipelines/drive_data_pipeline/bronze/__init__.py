@@ -1,6 +1,6 @@
 """Bronze layer for Google Drive Data Pipeline."""
 
-from .processor import BronzeProcessor
 from .metadata import MetadataManager
+from .processor import BronzeProcessor
 
 __all__ = ["BronzeProcessor", "MetadataManager"] 

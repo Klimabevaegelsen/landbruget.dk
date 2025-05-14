@@ -3,10 +3,11 @@
 Simple test for geopandas functionality.
 """
 
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
 from pathlib import Path
+
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point
 
 
 def test_geopandas():
@@ -27,7 +28,7 @@ def test_geopandas():
     # Create geometry column
     geometry = [
         Point(lon, lat) 
-        for lon, lat in zip(df['longitude'], df['latitude'])
+        for lon, lat in zip(df['longitude'], df['latitude'], strict=False)
     ]
     
     # Create GeoDataFrame

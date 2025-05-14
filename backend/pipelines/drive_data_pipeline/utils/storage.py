@@ -1,11 +1,9 @@
 """Storage utilities for Google Drive Data Pipeline."""
 
 import abc
-import io
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Union, BinaryIO
+from typing import Any, BinaryIO
 
 from .error_handling import StorageError
 from .logging import get_logger
@@ -18,7 +16,7 @@ class StorageManager(abc.ABC):
     """Abstract base class for storage managers."""
 
     @abc.abstractmethod
-    def save_file(self, data: Union[bytes, BinaryIO], path: Union[str, Path]) -> None:
+    def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to the given path.
 
         Args:
@@ -31,7 +29,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def read_file(self, path: Union[str, Path]) -> bytes:
+    def read_file(self, path: str | Path) -> bytes:
         """Read file data from the given path.
 
         Args:
@@ -46,7 +44,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def save_json(self, data: Dict[str, Any], path: Union[str, Path]) -> None:
+    def save_json(self, data: dict[str, Any], path: str | Path) -> None:
         """Save JSON data to the given path.
 
         Args:
@@ -59,7 +57,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def read_json(self, path: Union[str, Path]) -> Dict[str, Any]:
+    def read_json(self, path: str | Path) -> dict[str, Any]:
         """Read JSON data from the given path.
 
         Args:
@@ -74,7 +72,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def list_files(self, path: Union[str, Path], pattern: Optional[str] = None) -> List[Path]:
+    def list_files(self, path: str | Path, pattern: str | None = None) -> list[Path]:
         """List files in the given path.
 
         Args:
@@ -90,7 +88,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def ensure_directory_exists(self, path: Union[str, Path]) -> None:
+    def ensure_directory_exists(self, path: str | Path) -> None:
         """Ensure that the directory exists, creating it if necessary.
 
         Args:
@@ -102,7 +100,7 @@ class StorageManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def file_exists(self, path: Union[str, Path]) -> bool:
+    def file_exists(self, path: str | Path) -> bool:
         """Check if a file exists at the given path.
 
         Args:
@@ -117,7 +115,7 @@ class StorageManager(abc.ABC):
 class LocalStorageManager(StorageManager):
     """Storage manager for local file system."""
 
-    def save_file(self, data: Union[bytes, BinaryIO], path: Union[str, Path]) -> None:
+    def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to local file system.
 
         Args:
@@ -148,7 +146,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def read_file(self, path: Union[str, Path]) -> bytes:
+    def read_file(self, path: str | Path) -> bytes:
         """Read file data from local file system.
 
         Args:
@@ -172,7 +170,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def save_json(self, data: Dict[str, Any], path: Union[str, Path]) -> None:
+    def save_json(self, data: dict[str, Any], path: str | Path) -> None:
         """Save JSON data to local file system.
 
         Args:
@@ -197,7 +195,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def read_json(self, path: Union[str, Path]) -> Dict[str, Any]:
+    def read_json(self, path: str | Path) -> dict[str, Any]:
         """Read JSON data from local file system.
 
         Args:
@@ -211,7 +209,7 @@ class LocalStorageManager(StorageManager):
         """
         path = Path(path)
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             
             logger.debug(f"Read JSON from {path}")
@@ -221,7 +219,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def list_files(self, path: Union[str, Path], pattern: Optional[str] = None) -> List[Path]:
+    def list_files(self, path: str | Path, pattern: str | None = None) -> list[Path]:
         """List files in the given path on local file system.
 
         Args:
@@ -254,7 +252,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def ensure_directory_exists(self, path: Union[str, Path]) -> None:
+    def ensure_directory_exists(self, path: str | Path) -> None:
         """Ensure that the directory exists, creating it if necessary.
 
         Args:
@@ -273,7 +271,7 @@ class LocalStorageManager(StorageManager):
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
-    def file_exists(self, path: Union[str, Path]) -> bool:
+    def file_exists(self, path: str | Path) -> bool:
         """Check if a file exists at the given path.
 
         Args:
@@ -303,7 +301,7 @@ class GCSStorageManager(StorageManager):
         logger.info(f"GCS storage manager initialized with bucket {bucket_name}")
         # TODO: Initialize GCS client
 
-    def save_file(self, data: Union[bytes, BinaryIO], path: Union[str, Path]) -> None:
+    def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to Google Cloud Storage.
 
         Args:
@@ -318,7 +316,7 @@ class GCSStorageManager(StorageManager):
         logger.debug(f"Would save file to gs://{self.bucket_name}/{path_str}")
         raise NotImplementedError("GCS storage is not yet implemented")
 
-    def read_file(self, path: Union[str, Path]) -> bytes:
+    def read_file(self, path: str | Path) -> bytes:
         """Read file data from Google Cloud Storage.
 
         Args:
@@ -335,7 +333,7 @@ class GCSStorageManager(StorageManager):
         logger.debug(f"Would read file from gs://{self.bucket_name}/{path_str}")
         raise NotImplementedError("GCS storage is not yet implemented")
 
-    def save_json(self, data: Dict[str, Any], path: Union[str, Path]) -> None:
+    def save_json(self, data: dict[str, Any], path: str | Path) -> None:
         """Save JSON data to Google Cloud Storage.
 
         Args:
@@ -350,7 +348,7 @@ class GCSStorageManager(StorageManager):
         logger.debug(f"Would save JSON to gs://{self.bucket_name}/{path_str}")
         raise NotImplementedError("GCS storage is not yet implemented")
 
-    def read_json(self, path: Union[str, Path]) -> Dict[str, Any]:
+    def read_json(self, path: str | Path) -> dict[str, Any]:
         """Read JSON data from Google Cloud Storage.
 
         Args:
@@ -367,7 +365,7 @@ class GCSStorageManager(StorageManager):
         logger.debug(f"Would read JSON from gs://{self.bucket_name}/{path_str}")
         raise NotImplementedError("GCS storage is not yet implemented")
 
-    def list_files(self, path: Union[str, Path], pattern: Optional[str] = None) -> List[Path]:
+    def list_files(self, path: str | Path, pattern: str | None = None) -> list[Path]:
         """List files in the given path on Google Cloud Storage.
 
         Args:
@@ -385,7 +383,7 @@ class GCSStorageManager(StorageManager):
         logger.debug(f"Would list files from gs://{self.bucket_name}/{path_str}")
         raise NotImplementedError("GCS storage is not yet implemented")
 
-    def ensure_directory_exists(self, path: Union[str, Path]) -> None:
+    def ensure_directory_exists(self, path: str | Path) -> None:
         """Ensure that the directory prefix exists.
         
         Note: GCS doesn't have actual directories, only objects with / in their names.
@@ -397,7 +395,7 @@ class GCSStorageManager(StorageManager):
         # GCS doesn't have directories, so this is a no-op
         pass
 
-    def file_exists(self, path: Union[str, Path]) -> bool:
+    def file_exists(self, path: str | Path) -> bool:
         """Check if a file exists at the given path in Google Cloud Storage.
 
         Args:
@@ -412,7 +410,7 @@ class GCSStorageManager(StorageManager):
         raise NotImplementedError("GCS storage is not yet implemented")
 
 
-def get_storage_manager(storage_type: str, bucket_name: Optional[str] = None) -> StorageManager:
+def get_storage_manager(storage_type: str, bucket_name: str | None = None) -> StorageManager:
     """Get a storage manager instance based on the specified type.
 
     Args:

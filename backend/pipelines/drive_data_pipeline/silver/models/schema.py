@@ -1,9 +1,8 @@
 """Schema models for Silver layer data standardization."""
 
 from enum import Enum
-from typing import Dict, List, Optional, Union, Any
+from typing import Any
 
-import pydantic
 from pydantic import BaseModel, Field
 
 
@@ -25,36 +24,36 @@ class ColumnSchema(BaseModel):
     name: str = Field(..., description="Column name")
     data_type: DataType = Field(..., description="Data type")
     nullable: bool = Field(True, description="Whether the column can be null")
-    description: Optional[str] = Field(None, description="Column description")
+    description: str | None = Field(None, description="Column description")
     
     # Validation constraints
-    min_value: Optional[Union[int, float]] = Field(
+    min_value: int | float | None = Field(
         None, description="Minimum value (for numeric types)"
     )
-    max_value: Optional[Union[int, float]] = Field(
+    max_value: int | float | None = Field(
         None, description="Maximum value (for numeric types)"
     )
     unique: bool = Field(False, description="Whether values must be unique")
-    pattern: Optional[str] = Field(
+    pattern: str | None = Field(
         None, description="Regex pattern for validation (for string type)"
     )
     
     # Transformations
-    transform: Optional[str] = Field(
+    transform: str | None = Field(
         None, description="Transformation expression to apply"
     )
-    source_column: Optional[str] = Field(
+    source_column: str | None = Field(
         None, description="Source column name if different"
     )
-    default_value: Optional[Any] = Field(
+    default_value: Any | None = Field(
         None, description="Default value for missing data"
     )
     
     # Geospatial properties
-    srid: Optional[int] = Field(
+    srid: int | None = Field(
         None, description="Spatial reference ID (for geometry type)"
     )
-    geometry_type: Optional[str] = Field(
+    geometry_type: str | None = Field(
         None, description="Geometry type (point, line, polygon, etc.)"
     )
 
@@ -63,20 +62,20 @@ class TableSchema(BaseModel):
     """Schema definition for a table."""
 
     name: str = Field(..., description="Table name")
-    description: Optional[str] = Field(None, description="Table description")
-    columns: List[ColumnSchema] = Field(..., description="Column schemas")
-    partition_by: Optional[List[str]] = Field(
+    description: str | None = Field(None, description="Table description")
+    columns: list[ColumnSchema] = Field(..., description="Column schemas")
+    partition_by: list[str] | None = Field(
         None, description="List of columns to partition by"
     )
-    primary_key: Optional[Union[str, List[str]]] = Field(
+    primary_key: str | list[str] | None = Field(
         None, description="Primary key column(s)"
     )
-    source_type: Optional[str] = Field(
+    source_type: str | None = Field(
         None, description="Source file type (PDF, Excel, etc.)"
     )
     
     @property
-    def column_dict(self) -> Dict[str, ColumnSchema]:
+    def column_dict(self) -> dict[str, ColumnSchema]:
         """Get columns as a dictionary keyed by name.
         
         Returns:
@@ -89,13 +88,13 @@ class DatasetSchema(BaseModel):
     """Schema definition for a complete dataset."""
 
     name: str = Field(..., description="Dataset name")
-    description: Optional[str] = Field(None, description="Dataset description")
+    description: str | None = Field(None, description="Dataset description")
     version: str = Field("1.0", description="Schema version")
-    tables: List[TableSchema] = Field(..., description="Table schemas")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    tables: list[TableSchema] = Field(..., description="Table schemas")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     
     @property
-    def table_dict(self) -> Dict[str, TableSchema]:
+    def table_dict(self) -> dict[str, TableSchema]:
         """Get tables as a dictionary keyed by name.
         
         Returns:
@@ -103,7 +102,7 @@ class DatasetSchema(BaseModel):
         """
         return {table.name: table for table in self.tables}
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the schema to a dictionary.
         
         Returns:
@@ -120,7 +119,7 @@ class DatasetSchema(BaseModel):
         return self.json(by_alias=True, exclude_none=True, indent=2)
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DatasetSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "DatasetSchema":
         """Create a schema from a dictionary.
         
         Args:

@@ -1,15 +1,16 @@
 """Google Drive file fetcher for Bronze layer."""
 
 import io
-import tempfile
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from googleapiclient.discovery import Resource
 from googleapiclient.http import MediaIoBaseDownload
 
-from ...utils.error_handling import GoogleDriveAPIError, FileDownloadError, retry_with_exponential_backoff
+from ...utils.error_handling import (
+    FileDownloadError,
+    GoogleDriveAPIError,
+    retry_with_exponential_backoff,
+)
 from ...utils.logging import get_logger, set_context
 from .models import DriveFile, DriveFolder
 
@@ -119,7 +120,7 @@ class GoogleDriveFetcher:
         min_wait_seconds=1,
         max_wait_seconds=60,
     )
-    def _get_file_metadata(self, file_id: str) -> Dict[str, Any]:
+    def _get_file_metadata(self, file_id: str) -> dict[str, Any]:
         """Get metadata for a file or folder.
 
         Args:
@@ -156,7 +157,7 @@ class GoogleDriveFetcher:
         min_wait_seconds=2,
         max_wait_seconds=30,
     )
-    def download_file(self, file_id: str) -> Tuple[bytes, Dict[str, Any]]:
+    def download_file(self, file_id: str) -> tuple[bytes, dict[str, Any]]:
         """Download a file from Google Drive.
 
         Args:

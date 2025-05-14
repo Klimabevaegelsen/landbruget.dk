@@ -5,8 +5,9 @@ This script tests the DuckDBHelper class to ensure it works properly.
 """
 
 import sys
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 # Add the parent directory to sys.path
 sys.path.append(str(Path(__file__).parent))

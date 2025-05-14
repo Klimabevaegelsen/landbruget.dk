@@ -2,7 +2,7 @@
 
 import abc
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from ...utils.logging import get_logger
 
@@ -15,8 +15,8 @@ class ValidationResult:
     """Result of a validation operation."""
 
     is_valid: bool
-    errors: List[str] = None
-    warnings: List[str] = None
+    errors: list[str] = None
+    warnings: list[str] = None
     
     def __post_init__(self):
         """Initialize lists if None."""
@@ -70,7 +70,7 @@ class BaseValidator(abc.ABC):
 class SchemaValidator(BaseValidator):
     """Validator for checking data schema."""
 
-    def __init__(self, required_columns: Optional[Set[str]] = None):
+    def __init__(self, required_columns: set[str] | None = None):
         """Initialize the schema validator.
 
         Args:
@@ -102,7 +102,7 @@ class SchemaValidator(BaseValidator):
         
         return result
     
-    def _get_columns(self, data: Any) -> List[str]:
+    def _get_columns(self, data: Any) -> list[str]:
         """Get column names from data.
 
         Args:
@@ -126,7 +126,7 @@ class SchemaValidator(BaseValidator):
 class DataTypeValidator(BaseValidator):
     """Validator for checking data types."""
 
-    def __init__(self, expected_types: Dict[str, str]):
+    def __init__(self, expected_types: dict[str, str]):
         """Initialize the data type validator.
 
         Args:

@@ -7,9 +7,10 @@ Standalone test for geopandas integration.
 import sys
 from pathlib import Path
 
+import geopandas as gpd
+
 # Third-party imports
 import pandas as pd
-import geopandas as gpd
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent

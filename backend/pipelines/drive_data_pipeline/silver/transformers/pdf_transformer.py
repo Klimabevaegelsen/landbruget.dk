@@ -1,7 +1,6 @@
 """PDF transformer for Silver layer."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import tabula
@@ -107,7 +106,7 @@ class PDFTransformer(BaseTransformer):
                 error=error_msg,
             )
 
-    def _extract_tables(self, file_path: Path) -> List[pd.DataFrame]:
+    def _extract_tables(self, file_path: Path) -> list[pd.DataFrame]:
         """Extract tables from PDF file.
 
         Args:

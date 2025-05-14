@@ -6,9 +6,10 @@ ParquetManager.
 """
 
 import sys
-import pandas as pd
-import geopandas as gpd
 from pathlib import Path
+
+import geopandas as gpd
+import pandas as pd
 
 # Add the parent directory to sys.path
 sys.path.append(str(Path(__file__).parent))

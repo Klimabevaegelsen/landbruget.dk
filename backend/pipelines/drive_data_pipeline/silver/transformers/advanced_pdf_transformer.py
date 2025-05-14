@@ -1,18 +1,15 @@
 """Advanced PDF transformer with enhanced extraction capabilities."""
 
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-import tabula
 import pdfplumber
-from pdf2image import convert_from_path
 import pytesseract
+import tabula
+from pdf2image import convert_from_path
 
-from ...bronze.metadata import FileMetadata
-from ...utils.logging import get_logger, set_context
-from ..storage import SilverStorageManager
+from ...utils.logging import get_logger
 from .pdf_transformer import PDFTransformer
 
 # Get logger
@@ -27,7 +24,7 @@ class AdvancedPDFTransformer(PDFTransformer):
         use_ocr: bool = False,
         ocr_language: str = "eng",
         min_table_size: int = 3,
-        extraction_methods: List[str] = None,
+        extraction_methods: list[str] = None,
     ):
         """Initialize the advanced PDF transformer.
 
@@ -45,7 +42,7 @@ class AdvancedPDFTransformer(PDFTransformer):
         self.extraction_methods = extraction_methods or ["tabula", "pdfplumber", "ocr"]
         logger.info(f"Initialized AdvancedPDFTransformer with {len(self.extraction_methods)} methods")
 
-    def _extract_tables(self, file_path: Path) -> List[pd.DataFrame]:
+    def _extract_tables(self, file_path: Path) -> list[pd.DataFrame]:
         """Extract tables from PDF file using multiple methods.
 
         Args:
@@ -87,7 +84,7 @@ class AdvancedPDFTransformer(PDFTransformer):
         logger.info(f"Extracted {len(all_tables)} total tables from {file_path}")
         return all_tables
 
-    def _extract_with_tabula(self, file_path: Path) -> List[pd.DataFrame]:
+    def _extract_with_tabula(self, file_path: Path) -> list[pd.DataFrame]:
         """Extract tables using tabula-py.
 
         Args:
@@ -144,7 +141,7 @@ class AdvancedPDFTransformer(PDFTransformer):
             logger.warning(f"Tabula extraction failed: {str(e)}")
             return []
 
-    def _extract_with_pdfplumber(self, file_path: Path) -> List[pd.DataFrame]:
+    def _extract_with_pdfplumber(self, file_path: Path) -> list[pd.DataFrame]:
         """Extract tables using pdfplumber, which works better for complex layouts.
 
         Args:
@@ -179,7 +176,7 @@ class AdvancedPDFTransformer(PDFTransformer):
             logger.warning(f"PDFPlumber extraction failed: {str(e)}")
             return []
 
-    def _extract_with_ocr(self, file_path: Path) -> List[pd.DataFrame]:
+    def _extract_with_ocr(self, file_path: Path) -> list[pd.DataFrame]:
         """Extract tables using OCR for scanned PDFs.
 
         Args:
@@ -242,7 +239,7 @@ class AdvancedPDFTransformer(PDFTransformer):
             logger.warning(f"OCR extraction failed: {str(e)}")
             return []
 
-    def _is_duplicate_table(self, new_table: pd.DataFrame, existing_tables: List[pd.DataFrame]) -> bool:
+    def _is_duplicate_table(self, new_table: pd.DataFrame, existing_tables: list[pd.DataFrame]) -> bool:
         """Check if a table is a duplicate of an existing table.
 
         Args:

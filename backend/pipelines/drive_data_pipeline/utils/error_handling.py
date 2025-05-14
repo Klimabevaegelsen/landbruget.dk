@@ -1,15 +1,15 @@
 """Error handling utilities for Google Drive Data Pipeline."""
 
 import functools
-import time
-from typing import Any, Callable, Type, Union, List, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from tenacity import (
+    RetryError,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    RetryError,
 )
 
 from .logging import get_logger
@@ -23,7 +23,7 @@ logger = get_logger()
 
 def retry_with_exponential_backoff(
     max_attempts: int = 5,
-    retry_exceptions: Union[Type[Exception], List[Type[Exception]]] = Exception,
+    retry_exceptions: type[Exception] | list[type[Exception]] = Exception,
     min_wait_seconds: float = 1,
     max_wait_seconds: float = 60,
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:

@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Create a custom logger
 logger = logging.getLogger("drive_data_pipeline")
@@ -117,7 +117,7 @@ def setup_logging(log_level: str = "INFO") -> None:
 def log_exception(
     exception: Exception, 
     level: str = "ERROR", 
-    context: Optional[Dict[str, Any]] = None
+    context: dict[str, Any] | None = None
 ) -> None:
     """Log an exception with context.
 

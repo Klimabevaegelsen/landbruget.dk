@@ -2,15 +2,14 @@
 
 import datetime
 import json
-import hashlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from pydantic import BaseModel, Field, validator
 
-from ..utils.helpers import calculate_file_checksum, generate_timestamp
-from ..utils.logging import get_logger
 from ..utils.error_handling import StorageError
+from ..utils.helpers import calculate_file_checksum
+from ..utils.logging import get_logger
 
 # Get logger
 logger = get_logger()
@@ -36,8 +35,8 @@ class FileMetadata(BaseModel):
     file_extension: str = Field(..., description="File extension")
     
     # Content details
-    record_count: Optional[int] = Field(None, description="Number of records (where applicable)")
-    content_type: Optional[str] = Field(None, description="Type of content (e.g., PDF, Excel)")
+    record_count: int | None = Field(None, description="Number of records (where applicable)")
+    content_type: str | None = Field(None, description="Type of content (e.g., PDF, Excel)")
     
     # Source details
     modified_time: str = Field(..., description="Last modified time in ISO format")
@@ -45,11 +44,11 @@ class FileMetadata(BaseModel):
     
     # Processing details
     processing_status: str = Field("downloaded", description="Status of processing")
-    processing_notes: Optional[str] = Field(None, description="Notes about processing")
+    processing_notes: str | None = Field(None, description="Notes about processing")
     
     # Validation
     is_valid: bool = Field(True, description="Whether the file is valid")
-    validation_errors: List[str] = Field(default_factory=list, description="Validation errors")
+    validation_errors: list[str] = Field(default_factory=list, description="Validation errors")
 
     @validator("file_extension")
     def validate_file_extension(cls, v: str) -> str:
@@ -81,7 +80,7 @@ class MetadataManager:
         file_size: int,
         modified_time: datetime.datetime,
         drive_path: str,
-        record_count: Optional[int] = None,
+        record_count: int | None = None,
     ) -> FileMetadata:
         """Generate metadata for a file.
 
@@ -170,7 +169,7 @@ class MetadataManager:
             StorageError: If the metadata file could not be read
         """
         try:
-            with open(metadata_path, "r", encoding="utf-8") as f:
+            with open(metadata_path, encoding="utf-8") as f:
                 metadata_dict = json.load(f)
             
             metadata = FileMetadata.model_validate(metadata_dict)
@@ -217,7 +216,7 @@ class MetadataManager:
     
     def find_duplicates(
         self, run_dir: Path, checksum: str
-    ) -> List[Path]:
+    ) -> list[Path]:
         """Find duplicate files based on checksum.
 
         Args:
@@ -246,7 +245,7 @@ class MetadataManager:
         return duplicates
     
     def update_metadata(
-        self, metadata_path: Path, updates: Dict[str, Any]
+        self, metadata_path: Path, updates: dict[str, Any]
     ) -> FileMetadata:
         """Update metadata for a file.
 

@@ -1,15 +1,13 @@
 """Bronze layer processor for Google Drive data pipeline."""
 
-import datetime
 from pathlib import Path
-from typing import List, Optional, Set, Union
 
 from ..config.settings import Settings
 from ..utils.helpers import generate_timestamp
 from ..utils.logging import get_logger, set_context
 from ..utils.storage import StorageManager
-from .drive import GoogleDriveFetcher, DriveFile, DriveFolder
-from .metadata import MetadataManager, FileMetadata
+from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
+from .metadata import MetadataManager
 from .storage import BronzeStorageManager
 
 # Get logger
@@ -53,8 +51,8 @@ class BronzeProcessor:
     def process_drive_folder(
         self,
         folder_id: str,
-        specific_subfolders: Optional[List[str]] = None,
-        supported_file_types: Optional[Set[str]] = None,
+        specific_subfolders: list[str] | None = None,
+        supported_file_types: set[str] | None = None,
     ) -> int:
         """Process files from a Google Drive folder.
 
@@ -91,8 +89,8 @@ class BronzeProcessor:
     def _process_folder(
         self,
         folder: DriveFolder,
-        specific_subfolders: Optional[List[str]] = None,
-        supported_file_types: Optional[Set[str]] = None,
+        specific_subfolders: list[str] | None = None,
+        supported_file_types: set[str] | None = None,
     ) -> int:
         """Process a folder and its contents.
 

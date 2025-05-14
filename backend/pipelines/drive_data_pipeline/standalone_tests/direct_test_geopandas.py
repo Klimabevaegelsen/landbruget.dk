@@ -12,12 +12,13 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Third-party imports
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import Point
 
 # Import the logger directly
 from utils.logging import get_logger
+
 logger = get_logger()
 
 
@@ -44,7 +45,7 @@ class ParquetManager:
             # Create geometry column
             geometry = [
                 Point(lon, lat) if pd.notna(lon) and pd.notna(lat) else None
-                for lon, lat in zip(df_copy[longitude_col], df_copy[latitude_col])
+                for lon, lat in zip(df_copy[longitude_col], df_copy[latitude_col], strict=False)
             ]
             
             # Create GeoDataFrame

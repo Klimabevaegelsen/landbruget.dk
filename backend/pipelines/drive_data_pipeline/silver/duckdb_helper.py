@@ -1,11 +1,10 @@
 """DuckDB and Ibis integration for Silver layer."""
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
-import pandas as pd
 import duckdb
 import ibis
+import pandas as pd
 
 from ..utils.logging import get_logger
 
@@ -16,7 +15,7 @@ logger = get_logger()
 class DuckDBHelper:
     """Helper class for DuckDB and Ibis operations."""
     
-    def __init__(self, database_path: Optional[Path] = None):
+    def __init__(self, database_path: Path | None = None):
         """Initialize the DuckDB helper.
         
         Args:
@@ -113,7 +112,7 @@ class DuckDBHelper:
             logger.error(f"Failed to save table to Parquet: {str(e)}")
             raise
     
-    def get_schema(self, table: ibis.expr.types.Table) -> Dict[str, str]:
+    def get_schema(self, table: ibis.expr.types.Table) -> dict[str, str]:
         """Get the schema of an Ibis table.
         
         Args:
@@ -124,7 +123,7 @@ class DuckDBHelper:
         """
         try:
             schema = {}
-            for col_name, dtype in zip(table.columns, table.dtypes):
+            for col_name, dtype in zip(table.columns, table.dtypes, strict=False):
                 schema[col_name] = str(dtype)
             
             logger.debug(f"Retrieved schema with {len(schema)} columns")
@@ -135,7 +134,7 @@ class DuckDBHelper:
             raise
     
     def cast_column_types(
-        self, table: ibis.expr.types.Table, type_mapping: Dict[str, str]
+        self, table: ibis.expr.types.Table, type_mapping: dict[str, str]
     ) -> ibis.expr.types.Table:
         """Cast columns to specified types.
         

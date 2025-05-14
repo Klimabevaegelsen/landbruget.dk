@@ -1,13 +1,12 @@
 """Bronze layer storage management."""
 
-import datetime
 import os
 from pathlib import Path
-from typing import Dict, Optional, Union, Any
+from typing import Any
 
 from ..utils.helpers import generate_timestamp
 from ..utils.logging import get_logger
-from ..utils.storage import StorageManager, StorageError
+from ..utils.storage import StorageError, StorageManager
 
 # Get logger
 logger = get_logger()
@@ -31,7 +30,7 @@ class BronzeStorageManager:
         self.base_path = base_path
         logger.info(f"Initialized Bronze storage manager with base path: {base_path}")
 
-    def create_run_directory(self, timestamp: Optional[str] = None) -> Path:
+    def create_run_directory(self, timestamp: str | None = None) -> Path:
         """Create a timestamped run directory.
 
         Args:
@@ -120,7 +119,7 @@ class BronzeStorageManager:
 
     def save_metadata(
         self, 
-        metadata: Dict[str, Any], 
+        metadata: dict[str, Any], 
         file_path: Path
     ) -> Path:
         """Save metadata for a file.
@@ -172,7 +171,7 @@ class BronzeStorageManager:
         file_path = target_dir / filename
         return self.storage_manager.file_exists(file_path)
 
-    def list_files_in_run(self, run_dir: Path, pattern: Optional[str] = None) -> Dict[str, Path]:
+    def list_files_in_run(self, run_dir: Path, pattern: str | None = None) -> dict[str, Path]:
         """List all files in a run directory.
 
         Args:

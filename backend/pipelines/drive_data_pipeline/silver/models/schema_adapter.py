@@ -1,15 +1,12 @@
 """Schema adapter for applying schemas to data."""
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
-import pandas as pd
-import duckdb
 import ibis
+import pandas as pd
 
 from ...utils.logging import get_logger
 from ..duckdb_helper import DuckDBHelper
-from .schema import DatasetSchema, ColumnSchema, DataType, TableSchema
+from .schema import ColumnSchema, DataType, TableSchema
 
 # Get logger
 logger = get_logger()
@@ -18,7 +15,7 @@ logger = get_logger()
 class SchemaAdapter:
     """Adapter for applying schema definitions to data."""
 
-    def __init__(self, duckdb_helper: Optional[DuckDBHelper] = None):
+    def __init__(self, duckdb_helper: DuckDBHelper | None = None):
         """Initialize the schema adapter.
 
         Args:
@@ -219,7 +216,7 @@ class SchemaAdapter:
 
     def validate_data_against_schema(
         self, df: pd.DataFrame, table_schema: TableSchema
-    ) -> Dict[str, List[str]]:
+    ) -> dict[str, list[str]]:
         """Validate data against a schema.
 
         Args:

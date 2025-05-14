@@ -1,7 +1,7 @@
 """Pydantic models for Google Drive API responses."""
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -12,15 +12,15 @@ class DriveFile(BaseModel):
     id: str = Field(..., description="Google Drive file ID")
     name: str = Field(..., description="File name")
     mime_type: str = Field(..., description="MIME type of the file")
-    parent_ids: List[str] = Field(default_factory=list, description="Parent folder IDs")
+    parent_ids: list[str] = Field(default_factory=list, description="Parent folder IDs")
     modified_time: datetime = Field(..., description="Last modified time")
-    size: Optional[int] = Field(None, description="File size in bytes")
-    web_view_link: Optional[str] = Field(None, description="Web view link")
-    download_url: Optional[str] = Field(None, description="Download URL")
-    path: Optional[str] = Field(None, description="Full path within Drive")
+    size: int | None = Field(None, description="File size in bytes")
+    web_view_link: str | None = Field(None, description="Web view link")
+    download_url: str | None = Field(None, description="Download URL")
+    path: str | None = Field(None, description="Full path within Drive")
 
     @classmethod
-    def from_api_response(cls, file_data: Dict[str, Any], parent_path: str = "") -> "DriveFile":
+    def from_api_response(cls, file_data: dict[str, Any], parent_path: str = "") -> "DriveFile":
         """Create a DriveFile from a Google Drive API response.
 
         Args:
@@ -51,13 +51,13 @@ class DriveFolder(BaseModel):
 
     id: str = Field(..., description="Google Drive folder ID")
     name: str = Field(..., description="Folder name")
-    parent_ids: List[str] = Field(default_factory=list, description="Parent folder IDs")
+    parent_ids: list[str] = Field(default_factory=list, description="Parent folder IDs")
     path: str = Field("", description="Full path of the folder")
-    files: List[DriveFile] = Field(default_factory=list, description="Files in the folder")
-    subfolders: List["DriveFolder"] = Field(default_factory=list, description="Subfolders")
+    files: list[DriveFile] = Field(default_factory=list, description="Files in the folder")
+    subfolders: list["DriveFolder"] = Field(default_factory=list, description="Subfolders")
 
     @classmethod
-    def from_api_response(cls, folder_data: Dict[str, Any], parent_path: str = "") -> "DriveFolder":
+    def from_api_response(cls, folder_data: dict[str, Any], parent_path: str = "") -> "DriveFolder":
         """Create a DriveFolder from a Google Drive API response.
 
         Args:

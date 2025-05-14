@@ -6,10 +6,8 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from google.oauth2 import service_account
-from googleapiclient.discovery import Resource
-
 from drive_data_pipeline.bronze.drive.auth import get_drive_service
+from googleapiclient.discovery import Resource
 
 
 @pytest.fixture

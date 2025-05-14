@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Union
 
 from ..utils.logging import get_logger
 
@@ -13,7 +12,7 @@ logger = get_logger()
 class SchemaManager:
     """Manager for data schemas in the Silver layer."""
 
-    def __init__(self, schema_dir: Optional[Path] = None):
+    def __init__(self, schema_dir: Path | None = None):
         """Initialize the schema manager.
 
         Args:
@@ -36,7 +35,7 @@ class SchemaManager:
             
             for schema_file in schema_files:
                 try:
-                    with open(schema_file, "r", encoding="utf-8") as f:
+                    with open(schema_file, encoding="utf-8") as f:
                         schema = json.load(f)
                     
                     # Schema name is the filename without extension
@@ -53,7 +52,7 @@ class SchemaManager:
         except Exception as e:
             logger.error(f"Failed to load schemas: {str(e)}")
 
-    def get_schema(self, schema_name: str) -> Optional[Dict]:
+    def get_schema(self, schema_name: str) -> dict | None:
         """Get a schema by name.
 
         Args:
@@ -65,7 +64,7 @@ class SchemaManager:
         return self.schemas.get(schema_name)
 
     def create_schema(
-        self, schema_name: str, schema: Dict, save_to_file: bool = True
+        self, schema_name: str, schema: dict, save_to_file: bool = True
     ) -> bool:
         """Create a new schema.
 
@@ -102,7 +101,7 @@ class SchemaManager:
             return False
 
     def update_schema(
-        self, schema_name: str, schema: Dict, save_to_file: bool = True
+        self, schema_name: str, schema: dict, save_to_file: bool = True
     ) -> bool:
         """Update an existing schema.
 
@@ -155,7 +154,7 @@ class SchemaManager:
             logger.error(f"Failed to delete schema {schema_name}: {str(e)}")
             return False
 
-    def get_schema_by_subfolder(self, subfolder: str) -> Optional[Dict]:
+    def get_schema_by_subfolder(self, subfolder: str) -> dict | None:
         """Get a schema based on the subfolder name.
 
         This method tries to find a schema matching the subfolder name or a prefix.
@@ -183,7 +182,7 @@ class SchemaManager:
         logger.warning(f"No schema found for subfolder: {subfolder}")
         return None
 
-    def list_schemas(self) -> List[str]:
+    def list_schemas(self) -> list[str]:
         """List all available schemas.
 
         Returns:

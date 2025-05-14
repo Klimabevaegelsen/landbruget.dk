@@ -1,18 +1,16 @@
 """Silver layer processor for Google Drive data pipeline."""
 
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Any
 
 from ..bronze.metadata import FileMetadata, MetadataManager
 from ..config.settings import Settings
 from ..utils.logging import get_logger, set_context
 from ..utils.storage import StorageManager
-from .storage import SilverStorageManager
+from .models.schema_adapter import SchemaAdapter
 from .parquet_manager import ParquetManager
 from .schema_manager import SchemaManager
-from .models.schema import TableSchema
-from .models.schema_adapter import SchemaAdapter
-from .validators.pii_validator import PIIValidator, PIIAction, PIIType
+from .storage import SilverStorageManager
+from .validators.pii_validator import PIIAction, PIIValidator
 
 # Get logger
 logger = get_logger()
@@ -26,7 +24,7 @@ class SilverProcessor:
         settings: Settings,
         storage_manager: StorageManager,
         metadata_manager: MetadataManager,
-        schema_dir: Optional[Path] = None,
+        schema_dir: Path | None = None,
     ):
         """Initialize the Silver processor.
 
@@ -65,9 +63,8 @@ class SilverProcessor:
         )
         
         # Import transformers here to avoid circular imports
-        from .transformers.excel_transformer import ExcelTransformer
-        from .transformers.pdf_transformer import PDFTransformer
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
+        from .transformers.excel_transformer import ExcelTransformer
         
         # Initialize transformers map
         self.transformers = {
@@ -83,8 +80,8 @@ class SilverProcessor:
     def process_bronze_files(
         self,
         bronze_run_path: Path,
-        specific_subfolders: Optional[List[str]] = None,
-        supported_file_types: Optional[Set[str]] = None,
+        specific_subfolders: list[str] | None = None,
+        supported_file_types: set[str] | None = None,
         apply_schemas: bool = True,
         handle_pii: bool = True,
     ) -> int:
@@ -137,9 +134,9 @@ class SilverProcessor:
     def _list_bronze_files(
         self,
         bronze_run_path: Path,
-        specific_subfolders: Optional[List[str]] = None,
-        supported_file_types: Optional[Set[str]] = None,
-    ) -> List[Tuple[Path, Path]]:
+        specific_subfolders: list[str] | None = None,
+        supported_file_types: set[str] | None = None,
+    ) -> list[tuple[Path, Path]]:
         """List files in the Bronze layer to be processed.
 
         Args:
@@ -253,7 +250,7 @@ class SilverProcessor:
 
     def _apply_schema_to_file(
         self, output_path: Path, metadata: FileMetadata, silver_run_path: Path
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Apply schema to a processed file.
 
         Args:
@@ -308,7 +305,7 @@ class SilverProcessor:
             logger.warning(f"Failed to apply schema to {output_path}: {str(e)}")
             return None
 
-    def _handle_pii_in_file(self, output_path: Path, silver_run_path: Path) -> Optional[Path]:
+    def _handle_pii_in_file(self, output_path: Path, silver_run_path: Path) -> Path | None:
         """Detect and handle PII in a processed file.
 
         Args:

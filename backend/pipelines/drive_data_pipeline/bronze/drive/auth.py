@@ -1,6 +1,5 @@
 """Authentication with Google Drive API."""
 
-import os
 from pathlib import Path
 from typing import Any
 

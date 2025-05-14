@@ -2,13 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
+import geopandas as gpd
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import geopandas as gpd
-from shapely.geometry import Point, LineString, Polygon
+from shapely.geometry import Point
 
 from ..utils.logging import get_logger
 
@@ -22,7 +21,7 @@ class ParquetManager:
     def __init__(
         self,
         compression: str = "snappy",
-        partition_by: Optional[List[str]] = None,
+        partition_by: list[str] | None = None,
     ):
         """Initialize the Parquet manager.
 
@@ -38,7 +37,7 @@ class ParquetManager:
         self,
         df: pd.DataFrame,
         output_path: Path,
-        schema_metadata: Optional[Dict] = None,
+        schema_metadata: dict | None = None,
         row_group_size: int = 100000,
     ) -> Path:
         """Save a DataFrame to Parquet format.
@@ -132,10 +131,10 @@ class ParquetManager:
 
     def save_geodataframe_to_geoparquet(
         self,
-        gdf: Union[gpd.GeoDataFrame, pd.DataFrame],
+        gdf: gpd.GeoDataFrame | pd.DataFrame,
         output_path: Path,
         geometry_column: str = "geometry",
-        schema_metadata: Optional[Dict] = None,
+        schema_metadata: dict | None = None,
     ) -> Path:
         """Save a GeoDataFrame to GeoParquet format.
 
@@ -233,7 +232,7 @@ class ParquetManager:
             # Create geometry column
             geometry = [
                 Point(lon, lat) if pd.notna(lon) and pd.notna(lat) else None
-                for lon, lat in zip(df_copy[longitude_col], df_copy[latitude_col])
+                for lon, lat in zip(df_copy[longitude_col], df_copy[latitude_col], strict=False)
             ]
             
             # Create GeoDataFrame

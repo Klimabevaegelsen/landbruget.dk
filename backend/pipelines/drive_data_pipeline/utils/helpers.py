@@ -4,7 +4,6 @@ import datetime
 import hashlib
 import mimetypes
 from pathlib import Path
-from typing import Set, Union, Optional
 
 
 def generate_timestamp() -> str:
@@ -16,7 +15,7 @@ def generate_timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def calculate_file_checksum(file_path: Union[str, Path], algorithm: str = "sha256") -> str:
+def calculate_file_checksum(file_path: str | Path, algorithm: str = "sha256") -> str:
     """Calculate a checksum for a file.
 
     Args:
@@ -51,7 +50,7 @@ def calculate_file_checksum(file_path: Union[str, Path], algorithm: str = "sha25
     return hash_func.hexdigest()
 
 
-def get_mime_type(file_path: Union[str, Path]) -> str:
+def get_mime_type(file_path: str | Path) -> str:
     """Get the MIME type of a file.
 
     Args:
@@ -77,7 +76,7 @@ def get_mime_type(file_path: Union[str, Path]) -> str:
     return mime_type
 
 
-def is_supported_file_type(file_path: Union[str, Path], supported_types: Optional[Set[str]] = None) -> bool:
+def is_supported_file_type(file_path: str | Path, supported_types: set[str] | None = None) -> bool:
     """Check if a file is of a supported type.
 
     Args:

@@ -3,8 +3,9 @@
 Simple test for DuckDB functionality.
 """
 
-import pandas as pd
 import duckdb
+import pandas as pd
+
 
 def test_duckdb():
     """Test basic DuckDB functionality."""

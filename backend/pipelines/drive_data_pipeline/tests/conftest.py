@@ -6,9 +6,8 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 from drive_data_pipeline.config.settings import Settings
-from drive_data_pipeline.utils.storage import LocalStorageManager, StorageManager
+from drive_data_pipeline.utils.storage import LocalStorageManager
 
 
 @pytest.fixture

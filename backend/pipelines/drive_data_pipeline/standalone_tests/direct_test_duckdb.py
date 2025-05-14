@@ -12,12 +12,13 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Third-party imports
-import pandas as pd
 import duckdb
 import ibis
+import pandas as pd
 
 # Import the logger directly
 from utils.logging import get_logger
+
 logger = get_logger()
 
 
@@ -94,7 +95,7 @@ class DuckDBHelper:
         """Get the schema of an Ibis table."""
         try:
             schema = {}
-            for col_name, dtype in zip(table.columns, table.dtypes):
+            for col_name, dtype in zip(table.columns, table.dtypes, strict=False):
                 schema[col_name] = str(dtype)
             
             logger.debug(f"Retrieved schema with {len(schema)} columns")

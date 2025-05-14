@@ -1,13 +1,13 @@
 """Silver layer storage management."""
 
-import os
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any
+
+import pandas as pd
 
 from ..utils.helpers import generate_timestamp
 from ..utils.logging import get_logger
-from ..utils.storage import StorageManager, StorageError
-import pandas as pd
+from ..utils.storage import StorageError, StorageManager
 
 # Get logger
 logger = get_logger()
@@ -31,7 +31,7 @@ class SilverStorageManager:
         self.base_path = base_path
         logger.info(f"Initialized Silver storage manager with base path: {base_path}")
 
-    def create_run_directory(self, timestamp: Optional[str] = None) -> Path:
+    def create_run_directory(self, timestamp: str | None = None) -> Path:
         """Create a timestamped run directory.
 
         Args:
@@ -56,8 +56,8 @@ class SilverStorageManager:
     def create_output_directory(
         self, 
         run_dir: Path, 
-        source_subfolder: Optional[str] = None,
-        content_type: Optional[str] = None
+        source_subfolder: str | None = None,
+        content_type: str | None = None
     ) -> Path:
         """Create output directory for a specific file or content type.
 
