@@ -10,6 +10,7 @@ from ..utils.logging import get_logger, set_context
 from ..utils.storage import StorageManager
 from .drive import GoogleDriveFetcher, DriveFile, DriveFolder
 from .metadata import MetadataManager, FileMetadata
+from .storage import BronzeStorageManager
 
 # Get logger
 logger = get_logger()
@@ -33,15 +34,19 @@ class BronzeProcessor:
         """
         self.settings = settings
         self.drive_fetcher = drive_fetcher
-        self.storage_manager = storage_manager
+        
+        # Initialize Bronze-specific storage manager
+        self.bronze_storage = BronzeStorageManager(
+            storage_manager=storage_manager,
+            base_path=settings.bronze_path,
+        )
+        
+        # Initialize metadata manager
         self.metadata_manager = MetadataManager(settings.bronze_path)
         
-        # Generate a timestamp for this run
+        # Generate a timestamp for this run and create run directory
         self.run_timestamp = generate_timestamp()
-        self.run_path = settings.get_bronze_path_for_run(self.run_timestamp)
-        
-        # Ensure the run directory exists
-        self.storage_manager.ensure_directory_exists(self.run_path)
+        self.run_path = self.bronze_storage.create_run_directory(self.run_timestamp)
         
         logger.info(f"Initialized Bronze processor with run timestamp: {self.run_timestamp}")
 
@@ -88,7 +93,6 @@ class BronzeProcessor:
         folder: DriveFolder,
         specific_subfolders: Optional[List[str]] = None,
         supported_file_types: Optional[Set[str]] = None,
-        current_path: Optional[Path] = None,
     ) -> int:
         """Process a folder and its contents.
 
@@ -96,20 +100,10 @@ class BronzeProcessor:
             folder: DriveFolder to process
             specific_subfolders: List of specific subfolder names to process (optional)
             supported_file_types: Set of supported file extensions (optional)
-            current_path: Current path within the run directory (optional)
 
         Returns:
             Number of files processed
         """
-        # Determine the current path
-        if current_path is None:
-            current_path = self.run_path
-        else:
-            current_path = current_path / folder.name
-        
-        # Create the folder
-        self.storage_manager.ensure_directory_exists(current_path)
-        
         processed_count = 0
         
         # Process files in the folder
@@ -122,7 +116,7 @@ class BronzeProcessor:
                     continue
             
             # Download and save the file
-            if self._process_file(file, current_path, folder.name):
+            if self._process_file(file, folder.path, folder.name):
                 processed_count += 1
         
         # Process subfolders
@@ -131,25 +125,25 @@ class BronzeProcessor:
             for subfolder in folder.subfolders:
                 if subfolder.name in specific_subfolders:
                     processed_count += self._process_folder(
-                        subfolder, None, supported_file_types, current_path
+                        subfolder, None, supported_file_types
                     )
         else:
             # Process all subfolders
             for subfolder in folder.subfolders:
                 processed_count += self._process_folder(
-                    subfolder, None, supported_file_types, current_path
+                    subfolder, None, supported_file_types
                 )
         
         return processed_count
 
     def _process_file(
-        self, file: DriveFile, folder_path: Path, folder_name: str
+        self, file: DriveFile, folder_path: str, folder_name: str
     ) -> bool:
         """Process a file.
 
         Args:
             file: DriveFile to process
-            folder_path: Path to the folder where the file should be saved
+            folder_path: Path of the file in the source (e.g., Google Drive)
             folder_name: Name of the folder containing the file
 
         Returns:
@@ -159,14 +153,21 @@ class BronzeProcessor:
             set_context(file_id=file.id, file_name=file.name)
             logger.info(f"Processing file: {file.name} (ID: {file.id})")
             
-            # Determine the target path
-            target_path = folder_path / file.name
+            # Check if file already exists in this run
+            if self.bronze_storage.file_exists(self.run_path, folder_path, file.name):
+                logger.info(f"File {file.name} already exists in this run, skipping")
+                return True
             
             # Download the file
             file_content, metadata = self.drive_fetcher.download_file(file.id)
             
             # Save the file
-            self.storage_manager.save_file(file_content, target_path)
+            target_path = self.bronze_storage.save_file(
+                content=file_content,
+                run_dir=self.run_path,
+                source_path=folder_path,
+                filename=file.name,
+            )
             
             # Generate and save metadata
             file_metadata = self.metadata_manager.generate_metadata(
@@ -180,7 +181,10 @@ class BronzeProcessor:
                 drive_path=file.path,
             )
             
-            self.metadata_manager.save_metadata(file_metadata, target_path)
+            self.bronze_storage.save_metadata(
+                metadata=file_metadata.model_dump(),
+                file_path=target_path,
+            )
             
             logger.info(f"Successfully processed file: {file.name}")
             return True
