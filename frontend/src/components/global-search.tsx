@@ -210,7 +210,7 @@ function SearchResultCard({ result }: { result: SearchResult }) {
             height={25}
           />
 
-          <div className="flex-col">
+          <div className="flex-col text-left">
             <div className="text-sm font-medium group-hover:underline">
               {result.name}
             </div>
