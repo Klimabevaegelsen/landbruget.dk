@@ -114,6 +114,7 @@ export interface InfoCard {
 
 export interface DataGrid extends BaseDataGrid {
   _type: "dataGrid";
+  isCollapsible?: boolean;
 }
 
 export interface KPIGroup {
@@ -166,15 +167,6 @@ export interface Timeline {
   config: TimelineConfig;
 }
 
-export interface FilterableDataGrid extends BaseDataGrid {
-  _type: "filterableDataGrid";
-}
-
-export interface CollapsibleDataGrid extends BaseDataGrid {
-  _type: "collapsibleDataGrid";
-  isCollapsible: boolean;
-}
-
 export interface IteratedSection {
   _key: string;
   _type: "iteratedSection";
@@ -201,8 +193,6 @@ export type PageBuilderItem =
   | HorizontalStackedBarChart
   | ComboChart
   | Timeline
-  | FilterableDataGrid
-  | CollapsibleDataGrid
   | IteratedSection;
 
 // Main response type
