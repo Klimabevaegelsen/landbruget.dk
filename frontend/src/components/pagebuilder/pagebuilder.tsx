@@ -16,8 +16,6 @@ function PageBlock({ block }: { block: PageBuilderItem }) {
     case "stackedBarChart":
     case "horizontalStackedBarChart":
     case "comboChart":
-    case "filterableDataGrid":
-    case "collapsibleDataGrid":
     case "iteratedSection":
     default:
       return <PlaceholderBlock block={block} />;
@@ -39,7 +37,11 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
       <div className="w-full md:w-8/12 flex flex-col gap-11">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
-            <BlockContainer title={item.title} href={`#${item._key}`}>
+            <BlockContainer
+              title={item.title}
+              href={`#${item._key}`}
+              secondaryTitle={item._type}
+            >
               <PageBlock block={item} />
             </BlockContainer>
           </div>
