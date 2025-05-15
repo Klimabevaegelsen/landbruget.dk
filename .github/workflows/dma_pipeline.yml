@@ -1,0 +1,103 @@
+name: DMA Monthly Data Scraper
+
+on:
+  schedule:
+    # Run weekly
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+    # Allow manual triggering
+    inputs:
+      environment:
+        description: 'Environment to run the pipeline in'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+jobs:
+  run-dma-scraper:
+    name: Run DMA Scraper Pipeline
+    runs-on: ubuntu-latest
+    
+    # Use environment variables
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          
+          # Install the DMA scraper package with appropriate extras
+          cd backend/pipelines/dma_scraper
+          if [ "${{ env.ENVIRONMENT }}" == "production" ]; then
+            pip install -e ".[production]"
+          else
+            pip install -e .
+          fi
+      
+      - name: Authenticate to Google Cloud (Production only)
+        id: auth
+        if: env.ENVIRONMENT == 'production'
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK (Production only)
+        if: env.ENVIRONMENT == 'production'
+        uses: google-github-actions/setup-gcloud@v1
+      
+      - name: Create data directories
+        run: |
+          mkdir -p data/bronze/dma
+          mkdir -p data/silver/dma
+      
+      - name: Run DMA Scraper Pipeline
+        run: |
+          cd backend/pipelines/dma_scraper
+          
+          # Create .env file
+          echo "ENVIRONMENT=${{ env.ENVIRONMENT }}" > .env
+          echo "BRONZE_OUTPUT_DIR=$(pwd)/../../data/bronze/dma" >> .env
+          echo "SILVER_OUTPUT_DIR=$(pwd)/../../data/silver/dma" >> .env
+          
+          # Add GCS settings for production
+          if [ "${{ env.ENVIRONMENT }}" == "production" ]; then
+            echo "GCS_BUCKET=${{ secrets.GCS_BUCKET }}" >> .env
+          fi
+          
+          # Run the pipeline
+          python main.py
+      
+      - name: Upload artifacts (Development only)
+        if: env.ENVIRONMENT == 'development'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dma-data
+          path: |
+            data/bronze/dma
+            data/silver/dma
+          retention-days: 30
+      
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "DMA Scraper Pipeline completed successfully on $(date)"
+          # Add notifications (Slack, email, etc.) here if needed
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "DMA Scraper Pipeline failed on $(date)"
+          # Add failure notifications here 
