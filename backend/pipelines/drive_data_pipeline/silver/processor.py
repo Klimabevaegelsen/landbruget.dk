@@ -1,5 +1,6 @@
 """Silver layer processor for Google Drive data pipeline."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 from ..bronze.metadata import FileMetadata, MetadataManager
@@ -25,6 +26,7 @@ class SilverProcessor:
         storage_manager: StorageManager,
         metadata_manager: MetadataManager,
         schema_dir: Path | None = None,
+        progress_callback: Callable[[int, bool], None] | None = None,
     ):
         """Initialize the Silver processor.
 
@@ -33,8 +35,10 @@ class SilverProcessor:
             storage_manager: Storage manager for file operations
             metadata_manager: Metadata manager from Bronze layer
             schema_dir: Directory containing schema definitions (optional)
+            progress_callback: Optional callback function for progress tracking
         """
         self.settings = settings
+        self.progress_callback = progress_callback
         
         # Initialize Silver-specific storage manager
         self.silver_storage = SilverStorageManager(
@@ -115,13 +119,19 @@ class SilverProcessor:
             
             # Process each file
             for file_path, metadata_path in bronze_files:
-                if self._process_file(
+                success = self._process_file(
                     file_path, 
                     metadata_path, 
                     silver_run_path,
                     apply_schemas,
                     handle_pii,
-                ):
+                )
+                
+                # Update progress tracking if callback is provided
+                if self.progress_callback:
+                    self.progress_callback(1, success)
+                    
+                if success:
                     processed_count += 1
             
             logger.info(f"Successfully processed {processed_count} files to Silver layer")

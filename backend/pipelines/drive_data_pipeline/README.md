@@ -1,3 +1,5 @@
+"""Update the README with new features from Sprint 5."""
+
 # Google Drive Data Pipeline
 
 A data pipeline that fetches files from Google Drive, processes them according to the medallion architecture (Bronze and Silver layers), and prepares them for analysis.
@@ -13,8 +15,10 @@ This pipeline accesses a Google Drive folder containing multiple subfolders with
 - Silver layer for cleaned and transformed data
 - Robust Excel processing with automatic data type standardization
 - Parquet file output with CSV fallback for challenging data formats
-- Configurable via environment variables and command-line arguments
+- Configurable via environment variables, command-line arguments, and JSON config files
 - Containerized for consistent execution
+- Comprehensive progress tracking and reporting
+- Detailed technical documentation
 
 ## Setup
 
@@ -76,6 +80,28 @@ Available arguments:
 - `--bronze-only`: Run only the Bronze layer processing
 - `--silver-only`: Run only the Silver layer processing (requires existing Bronze data)
 - `--log-level`: Set logging level (DEBUG, INFO, WARNING, ERROR)
+- `--verbose`: Enable detailed progress information
+- `--quiet`: Suppress non-essential output
+- `--config-file`: Path to JSON configuration file with settings
+
+### Configuration Files
+
+You can use JSON configuration files to store frequently used settings:
+
+```json
+{
+  "subfolders": "animal_welfare,pesticides",
+  "file_types": "pdf,xlsx",
+  "start_date": "2023-01-01",
+  "verbose": true
+}
+```
+
+Run with a configuration file:
+
+```bash
+python main.py --config-file config.json
+```
 
 ### Environment Variables
 
@@ -112,7 +138,8 @@ backend/pipelines/drive_data_pipeline/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── pyproject.toml              # Project dependencies
 ├── config/                     # Configuration management
-│   ├── storage.py              # Storage managers (Local, GCS)
+│   ├── cli.py                  # Command-line interface
+│   ├── settings.py             # Configuration settings
 │   └── logging.py              # Logging configuration
 ├── utils/                      # Utility functions
 ├── bronze/                     # Bronze layer implementation
@@ -129,7 +156,16 @@ backend/pipelines/drive_data_pipeline/
 │   │   └── pdf_transformer.py  # PDF file transformer
 │   └── models/                 # Data models and schemas
 ├── tests/                      # Test suite
+│   ├── bronze/                 # Bronze layer tests
+│   ├── silver/                 # Silver layer tests
+│   ├── integration/            # Integration tests
+│   └── utils/                  # Utility tests
 ├── docs/                       # Documentation
+│   ├── setup.md                # Setup instructions
+│   ├── user_guide.md           # User guide
+│   ├── architecture.md         # Architecture documentation
+│   ├── troubleshooting.md      # Troubleshooting guide
+│   └── index.md                # Documentation index
 └── data/                       # Local data directory (gitignored)
 ```
 
@@ -153,6 +189,15 @@ The storage system provides abstraction over different storage backends:
 - **LocalStorageManager**: Concrete implementation for local file system
 - **GCSStorageManager**: Placeholder for Google Cloud Storage
 
+## Progress Tracking and Reporting
+
+The pipeline provides real-time progress updates and summary reports:
+
+- Detailed progress information in verbose mode
+- End-of-run summary with file counts and statistics
+- Error tracking and reporting
+- Performance metrics (execution time, data volume)
+
 ## Development
 
 ### Testing
@@ -163,6 +208,12 @@ Run the tests with pytest:
 pytest
 ```
 
+For integration tests specifically:
+
+```bash
+pytest tests/integration/
+```
+
 ### Linting and Type Checking
 
 The codebase uses Ruff for linting and mypy for type checking:
@@ -171,6 +222,16 @@ The codebase uses Ruff for linting and mypy for type checking:
 ruff check .
 mypy .
 ```
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- `setup.md`: Detailed setup instructions
+- `user_guide.md`: How to use the pipeline
+- `architecture.md`: Technical architecture and design
+- `troubleshooting.md`: Solutions to common problems
+- `index.md`: Documentation index
 
 ## License
 

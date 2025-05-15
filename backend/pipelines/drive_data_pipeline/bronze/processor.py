@@ -1,5 +1,6 @@
 """Bronze layer processor for Google Drive data pipeline."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 from ..config.settings import Settings
@@ -22,6 +23,7 @@ class BronzeProcessor:
         settings: Settings,
         drive_fetcher: GoogleDriveFetcher,
         storage_manager: StorageManager,
+        progress_callback: Callable[[int, bool, int], None] | None = None,
     ):
         """Initialize the Bronze processor.
 
@@ -29,9 +31,11 @@ class BronzeProcessor:
             settings: Application settings
             drive_fetcher: Fetcher for Google Drive files
             storage_manager: Storage manager for file operations
+            progress_callback: Optional callback function for progress tracking
         """
         self.settings = settings
         self.drive_fetcher = drive_fetcher
+        self.progress_callback = progress_callback
         
         # Initialize Bronze-specific storage manager
         self.bronze_storage = BronzeStorageManager(
@@ -71,12 +75,15 @@ class BronzeProcessor:
             set_context(folder_id=folder_id, run_timestamp=self.run_timestamp)
             logger.info(f"Processing Google Drive folder: {folder_id}")
             
-            # List folder contents
-            root_folder = self.drive_fetcher.list_folder_contents(folder_id)
+            # Get folder contents
+            drive_folder = self.drive_fetcher.list_folder_contents(
+                folder_id=folder_id,
+                recursive=True
+            )
             
             # Process the folder
             processed_count = self._process_folder(
-                root_folder, specific_subfolders, supported_file_types
+                drive_folder, specific_subfolders, supported_file_types
             )
             
             logger.info(f"Successfully processed {processed_count} files from folder {folder_id}")
@@ -114,8 +121,13 @@ class BronzeProcessor:
                     continue
             
             # Download and save the file
-            if self._process_file(file, folder.path, folder.name):
-                processed_count += 1
+            success = self._process_file(file, folder.path, folder.name)
+            processed_count += 1 if success else 0
+            
+            # Update progress
+            if self.progress_callback:
+                file_size = int(file.size) if hasattr(file, 'size') and file.size else 0
+                self.progress_callback(1, success, file_size)
         
         # Process subfolders
         if specific_subfolders:
