@@ -8,15 +8,15 @@ import { BlockBarChart } from "./pageBlocks/block-bar-chart";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
+    case "kpiGroup":
     case "infoCard":
       return <BlockInfoCard infoCard={block} />;
     case "dataGrid":
       return <BlockTable grid={block} />;
-    case "barChart":
-      return <BlockBarChart chart={block} />;
-    case "kpiGroup":
     case "stackedBarChart":
     case "horizontalStackedBarChart":
+    case "barChart":
+      return <BlockBarChart chart={block} />;
     case "comboChart":
     case "iteratedSection":
     default:
