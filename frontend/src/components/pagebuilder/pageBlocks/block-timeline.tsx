@@ -39,6 +39,10 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   // Get unique event types and assign colors
   const eventTypes = useMemo(() => {
     const validEvents = timeline.events.filter(isValidEvent);
+    // Only get unique event types if we have filterColumns
+    if (!timeline.config?.filterColumns?.length) {
+      return {};
+    }
     const types = Array.from(
       new Set(validEvents.map((event) => event.event_type))
     );
@@ -46,19 +50,35 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
       acc[type] = VizColors[index % VizColors.length];
       return acc;
     }, {} as Record<string, string>);
-  }, [timeline.events]);
+  }, [timeline.events, timeline.config?.filterColumns]);
 
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => {
     const validEvents = timeline.events.filter(isValidEvent);
+    // If no filterColumns, return empty set
+    if (!timeline.config?.filterColumns?.length) {
+      return new Set();
+    }
     return new Set(validEvents.map((event) => event.event_type));
   });
 
   const filteredEvents = useMemo(() => {
-    return timeline.events
-      .filter(isValidEvent)
+    if (!timeline.config?.filterColumns?.length) {
+      return timeline.events.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }
+
+    const validEvents = timeline.events.filter(isValidEvent);
+    // If no filterColumns, return all valid events
+    if (!timeline.config?.filterColumns?.length) {
+      return validEvents.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }
+    return validEvents
       .filter((event) => selectedTypes.has(event.event_type))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [timeline.events, selectedTypes]);
+  }, [timeline.events, selectedTypes, timeline.config?.filterColumns]);
 
   const toggleEventType = (type: string) => {
     const newSelected = new Set(selectedTypes);
@@ -85,28 +105,32 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
 
   return (
     <div className="w-full max-w-6xl mx-auto py-4">
-      {/* Filter buttons */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        {Object.entries(eventTypes).map(([type, color]) => (
-          <Button
-            size="sm"
-            key={type}
-            onClick={() => toggleEventType(type)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors
-              ${
-                selectedTypes.has(type)
-                  ? "text-white"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            style={{
-              backgroundColor: selectedTypes.has(type) ? color : "transparent",
-              border: `1px solid ${color}`,
-            }}
-          >
-            {type}
-          </Button>
-        ))}
-      </div>
+      {/* Filter buttons - only show if we have filterColumns */}
+      {timeline.config?.filterColumns?.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-8">
+          {Object.entries(eventTypes).map(([type, color]) => (
+            <Button
+              size="sm"
+              key={type}
+              onClick={() => toggleEventType(type)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors
+                ${
+                  selectedTypes.has(type)
+                    ? "text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              style={{
+                backgroundColor: selectedTypes.has(type)
+                  ? color
+                  : "transparent",
+                border: `1px solid ${color}`,
+              }}
+            >
+              {type}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Timeline */}
       <VerticalTimeline lineColor="#e5e7eb" animate={false} layout="2-columns">
