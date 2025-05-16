@@ -135,7 +135,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
       {/* Timeline */}
       <VerticalTimeline lineColor="#e5e7eb" animate={false} layout="2-columns">
         {filteredEvents.map((event, index) => {
-          const color = eventTypes[event.event_type] ?? VizColors[0];
+          const color = eventTypes[event.event_type ?? ""] ?? VizColors[0];
 
           return (
             <VerticalTimelineElement

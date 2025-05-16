@@ -8,6 +8,12 @@ type Props = {
   params: { id: string };
 };
 
+export const revalidate = 3600;
+
+export async function generateStaticParams() {
+  return [];
+}
+
 export async function CompanyPage({ id }: { id: string }) {
   const company = await getCompanyById(id);
 
