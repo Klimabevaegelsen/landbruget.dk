@@ -50,6 +50,7 @@ export interface ChartData {
   series: ChartSeries[];
   yAxis: {
     label: string;
+    values?: (string | number)[];
   };
 }
 
@@ -102,6 +103,7 @@ export interface BaseDataGrid {
   rows: Record<string, string | number | boolean>[];
   columns: Column[];
   allowFiltering: boolean;
+  isCollapsible?: boolean;
 }
 
 // Component types
@@ -166,15 +168,6 @@ export interface Timeline {
   config: TimelineConfig;
 }
 
-export interface FilterableDataGrid extends BaseDataGrid {
-  _type: "filterableDataGrid";
-}
-
-export interface CollapsibleDataGrid extends BaseDataGrid {
-  _type: "collapsibleDataGrid";
-  isCollapsible: boolean;
-}
-
 export interface IteratedSection {
   _key: string;
   _type: "iteratedSection";
@@ -201,8 +194,6 @@ export type PageBuilderItem =
   | HorizontalStackedBarChart
   | ComboChart
   | Timeline
-  | FilterableDataGrid
-  | CollapsibleDataGrid
   | IteratedSection;
 
 // Main response type

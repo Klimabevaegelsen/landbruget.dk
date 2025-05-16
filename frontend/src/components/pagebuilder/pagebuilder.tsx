@@ -1,26 +1,30 @@
 import { PageBuilderItem } from "@/services/supabase/types";
 import { NavigationItem, Sidenav } from "../layout/sidenav";
-import { PlaceholderBlock } from "./pageBlocks/placeholder-block";
-import { InfoCardBlock } from "./pageBlocks/info-card-block";
+import { BlockPlaceholder } from "./pageBlocks/block-placeholder";
+import { BlockInfoCard } from "./pageBlocks/block-info-card";
 import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
+import { BlockBarChart } from "./pageBlocks/block-bar-chart";
+import { BlockTimeline } from "./pageBlocks/block-timeline";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
+    case "kpiGroup":
     case "infoCard":
-      return <InfoCardBlock infoCard={block} />;
+      return <BlockInfoCard infoCard={block} />;
     case "dataGrid":
       return <BlockTable grid={block} />;
-    case "kpiGroup":
-    case "barChart":
     case "stackedBarChart":
     case "horizontalStackedBarChart":
+    case "barChart":
+      return <BlockBarChart chart={block} />;
+    case "timeline":
+      return <BlockTimeline timeline={block} />;
+    case "mapChart":
     case "comboChart":
-    case "filterableDataGrid":
-    case "collapsibleDataGrid":
     case "iteratedSection":
     default:
-      return <PlaceholderBlock block={block} />;
+      return <BlockPlaceholder block={block} />;
   }
 }
 
@@ -39,7 +43,11 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
       <div className="w-full md:w-8/12 flex flex-col gap-11">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
-            <BlockContainer title={item.title} href={`#${item._key}`}>
+            <BlockContainer
+              title={item.title}
+              href={`#${item._key}`}
+              secondaryTitle={item._type}
+            >
               <PageBlock block={item} />
             </BlockContainer>
           </div>
