@@ -140,7 +140,7 @@ export function BlockBarChart({
                 width={yWidth}
               />
             )}
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#E0F5E8" }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#eef8f2" }} />
             <Legend content={<CustomLegend />} />
             {chart.data.series.map((s, index) => (
               <Bar
