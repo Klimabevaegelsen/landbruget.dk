@@ -62,11 +62,24 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
 
   const toggleEventType = (type: string) => {
     const newSelected = new Set(selectedTypes);
-    if (newSelected.has(type)) {
-      newSelected.delete(type);
-    } else {
+
+    // If all types are currently selected and we're clicking one
+    if (selectedTypes.size === Object.keys(eventTypes).length) {
+      // Clear all and only select the clicked type
+      newSelected.clear();
       newSelected.add(type);
+    } else if (selectedTypes.size === 1 && selectedTypes.has(type)) {
+      // If this is the last active type being clicked, enable all types
+      Object.keys(eventTypes).forEach((t) => newSelected.add(t));
+    } else {
+      // Normal toggle behavior
+      if (newSelected.has(type)) {
+        newSelected.delete(type);
+      } else {
+        newSelected.add(type);
+      }
     }
+
     setSelectedTypes(newSelected);
   };
 
