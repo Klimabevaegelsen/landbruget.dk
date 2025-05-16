@@ -6,11 +6,14 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   Legend,
   ResponsiveContainer,
+  Tooltip,
 } from "recharts";
 import { BarChart as BarChartType, ChartData } from "@/services/supabase/types";
+import CustomTooltip from "@/components/chart/custom-tooltip";
+import { useEffect, useState } from "react";
+import CustomLegend from "@/components/chart/custom-legend";
 
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -32,6 +35,28 @@ const transformDataForRecharts = (chartData: ChartData) => {
 
 export function BlockBarChart({ chart }: { chart: BarChartType }) {
   const transformedData = transformDataForRecharts(chart.data);
+  const [yWidth, setYWidth] = useState(60);
+
+  // we have to calculate the width of the y-axis based on the longest tick. https://github.com/recharts/recharts/issues/1127
+  useEffect(() => {
+    const longestTick = transformedData.reduce((max, dataPoint) => {
+      // Get all values from the dataPoint object except 'name'
+      const allValues = Object.entries(dataPoint)
+        .filter(([key]) => key !== "name")
+        .map(([, value]) =>
+          typeof value === "number"
+            ? value.toLocaleString("da-DK")
+            : String(value)
+        );
+
+      // Find the longest string among all values
+      const currentMax = Math.max(...allValues.map((str) => str.length));
+      return Math.max(max, currentMax);
+    }, 0);
+
+    // Add some padding to the width
+    setYWidth(longestTick * 8 + 15);
+  }, [transformedData]);
 
   if (!transformedData.length) {
     return <div>No data available for chart.</div>;
@@ -40,39 +65,37 @@ export function BlockBarChart({ chart }: { chart: BarChartType }) {
   // Assuming a simple case with a few predefined colors.
   // You might want to make this more dynamic or configurable.
   const barColors = [
-    "#8884d8",
-    "#82ca9d",
-    "#ffc658",
-    "#ff7300",
-    "#0088FE",
-    "#00C49F",
-    "#FFBB28",
-    "#FF8042",
+    "#4F5D75",
+    "#C67750",
+    "#467968",
+    "#775120",
+    "#7F2E39",
+    "#2D673D",
+    "#503955",
+    "#5F318B",
   ];
 
   return (
-    <div style={{ width: "100%", height: 400 }}>
+    <div style={{ width: "100%", height: 400 }} className="mt-4">
       <ResponsiveContainer>
         <RechartsBarChart
           data={transformedData}
-          margin={{
-            top: 5,
-            right: 30,
-            left: 20,
-            bottom: 5,
+          {...{
+            overflow: "visible",
           }}
         >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" />
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="name" tickLine={true} axisLine={true} />
           <YAxis
-            label={{
-              value: chart.data.yAxis?.label,
-              angle: -90,
-              position: "insideLeft",
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(tick) => {
+              return tick.toLocaleString("DA-dk");
             }}
+            width={yWidth}
           />
-          <Tooltip />
-          <Legend />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: "#E0F5E8" }} />
+          <Legend content={<CustomLegend />} />
           {chart.data.series.map((s, index) => (
             <Bar
               key={s.name}
