@@ -1,11 +1,9 @@
 import { Company } from "@/components/company/company";
-import { CompanySkeleton } from "@/components/skeleton/templates/company";
 import { getCompanyById } from "@/services/supabase/company";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export const revalidate = 3600;
@@ -14,7 +12,8 @@ export async function generateStaticParams() {
   return [];
 }
 
-export async function CompanyPage({ id }: { id: string }) {
+export default async function CompanyPage({ params }: Props) {
+  const { id } = await params;
   const company = await getCompanyById(id);
 
   if (!company) {
@@ -119,13 +118,4 @@ export async function CompanyPage({ id }: { id: string }) {
   });
 
   return <Company company={company} />;
-}
-
-export default async function CompanyPageWrapper(props: Props) {
-  const { id } = await props.params;
-  return (
-    <Suspense fallback={<CompanySkeleton />}>
-      <CompanyPage id={id} />
-    </Suspense>
-  );
 }
