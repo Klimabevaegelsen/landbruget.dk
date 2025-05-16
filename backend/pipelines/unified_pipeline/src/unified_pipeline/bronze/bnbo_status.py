@@ -1,11 +1,10 @@
-import os
+import asyncio
 import ssl
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -27,10 +26,8 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
         type (str): Type of the data source, in this case "wfs" for Web Feature Service.
         description (str): A brief description of the data source.
         url (str): The endpoint URL for the WFS service.
-        layer (str): The WFS layer name to fetch data from.
         frequency (str): How often the data should be updated.
         bucket (str): Google Cloud Storage bucket name for storing the data.
-        create_dissolved (bool): Whether to create dissolved (merged) geometries.
         batch_size (int): Number of features to fetch in a single request.
         max_concurrent (int): Maximum number of concurrent requests.
         request_timeout (int): Timeout for HTTP requests in seconds.
@@ -45,10 +42,8 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     type: str = "wfs"
     description: str = "Municipal status for well-near protection areas (BNBO)"
     url: str = "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
-    layer: str = "dai:status_bnbo"
     frequency: str = "weekly"
     bucket: str = "landbrugsdata-raw-data"
-    create_dissolved: bool = True
 
     batch_size: int = 100
     max_concurrent: int = 3
@@ -84,7 +79,6 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
         super().__init__(config, gcs_util)
-        self.config = config
 
     def _get_params(self, start_index: int = 0) -> dict:
         """
@@ -217,63 +211,36 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
                 fetched_features_count = returned_features
                 self.log.info(f"Fetched {fetched_features_count} out of {total_features}")
 
+                # Create a list of tasks for all remaining chunks to fetch
+                tasks = []
                 for start_index in range(returned_features, total_features, self.config.batch_size):
-                    try:
-                        raw_data = await self._fetch_chunck(session, start_index)
-                        raw_features.append(raw_data["text"])
-                        fetched_features_count += raw_data["returned_features"]
-                        self.log.info(f"Fetched {fetched_features_count} out of {total_features}")
-                    except Exception as e:
-                        self.log.error(f"Error occured while fetching chunk: {e}")
-                        raise e
+                    tasks.append(self._fetch_chunck(session, start_index))
 
+                # Fetch all chunks in parallel using asyncio.gather
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process the results
+                for result in results:
+                    if isinstance(result, Exception):
+                        self.log.error(f"Error occurred while fetching chunk: {result}")
+                        raise result
+
+                    if isinstance(result, dict):
+                        raw_features.append(result["text"])
+                        fetched_features_count += result["returned_features"]
+                        self.log.debug(
+                            f"Processed chunk with {result['returned_features']} features"
+                        )
+                    else:
+                        self.log.error(f"Unexpected result type: {type(result)}")
+
+                self.log.info(
+                    f"Fetched all {fetched_features_count} out of {total_features} features"
+                )
                 return raw_features
             except Exception as e:
                 self.log.error(f"Error occured while fetching chunk: {e}")
                 raise e
-
-    async def _save_raw_data(self, raw_data: list[str], dataset: str) -> None:
-        """
-        Save raw XML data to Google Cloud Storage.
-
-        This method creates a DataFrame with the raw XML data and metadata,
-        saves it as a parquet file locally, then uploads it to Google Cloud Storage.
-
-        Args:
-            raw_data (list[str]): A list of XML strings to save.
-            dataset (str): The name of the dataset, used to determine the save path.
-
-        Returns:
-            None
-
-        Raises:
-            Exception: If there are issues saving the data.
-
-        Note:
-            The data is saved in the bronze layer, which contains raw, unprocessed data.
-            The file is named with the current date in YYYY-MM-DD format.
-        """
-        bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = self.config.name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
-
-        temp_dir = f"/tmp/bronze/{dataset}"
-        os.makedirs(temp_dir, exist_ok=True)
-        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        temp_file = f"{temp_dir}/{current_date}.parquet"
-        working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
-
-        df.to_parquet(temp_file)
-        working_blob.upload_from_filename(temp_file)
-        self.log.info(
-            f"Uploaded to: gs://{self.config.bucket}/bronze/{dataset}/{current_date}.parquet"
-        )
 
     async def run(self) -> None:
         """
@@ -298,5 +265,5 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
             self.log.error("Failed to fetch raw data")
             return
         self.log.info("Fetched raw data successfully")
-        await self._save_raw_data(raw_data, self.config.dataset)
+        self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
         self.log.info("Saved raw data successfully")

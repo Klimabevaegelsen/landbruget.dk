@@ -11,11 +11,9 @@ from typing import Optional
 
 import click
 
-from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
 from unified_pipeline.common.base import BaseSource
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
-from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
@@ -42,13 +40,44 @@ def execute(cli_config: cli.CliConfig) -> None:
     source: Optional[BaseSource] = None
     if cli_config.source == cli.Source.bnbo:
         if cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all:
+            from unified_pipeline.bronze.bnbo_status import (
+                BNBOStatusBronze,
+                BNBOStatusBronzeConfig,
+            )
+
             source = BNBOStatusBronze(
                 config=BNBOStatusBronzeConfig(),
                 gcs_util=gcs_util,
             )
         if cli_config.stage == cli.Stage.silver or cli_config.stage == cli.Stage.all:
+            from unified_pipeline.silver.bnbo_status import (
+                BNBOStatusSilver,
+                BNBOStatusSilverConfig,
+            )
+
             source = BNBOStatusSilver(
                 config=BNBOStatusSilverConfig(),
+                gcs_util=gcs_util,
+            )
+    elif cli_config.source == cli.Source.agricultural_fields:
+        if cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all:
+            from unified_pipeline.bronze.agricultural_fields import (
+                AgriculturalFieldsBronze,
+                AgriculturalFieldsBronzeConfig,
+            )
+
+            source = AgriculturalFieldsBronze(
+                config=AgriculturalFieldsBronzeConfig(),
+                gcs_util=gcs_util,
+            )
+        if cli_config.stage == cli.Stage.silver or cli_config.stage == cli.Stage.all:
+            from unified_pipeline.silver.agricultural_fields import (
+                AgriculturalFieldsSilver,
+                AgriculturalFieldsSilverConfig,
+            )
+
+            source = AgriculturalFieldsSilver(
+                config=AgriculturalFieldsSilverConfig(),
                 gcs_util=gcs_util,
             )
     else:

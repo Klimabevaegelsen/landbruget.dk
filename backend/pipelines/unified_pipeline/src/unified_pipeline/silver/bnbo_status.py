@@ -1,4 +1,3 @@
-import os
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
 
@@ -64,50 +63,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
         super().__init__(config, gcs_util)
-        self.config = config
-
-    def read_data(self, dataset: str) -> Optional[pd.DataFrame]:
-        """
-        Read data from the bronze layer.
-
-        This method retrieves BNBO status data from the bronze layer in Google Cloud Storage.
-        It downloads the parquet file for the current date and loads it into a DataFrame.
-
-        Args:
-            dataset (str): The name of the dataset to read.
-
-        Returns:
-            Optional[pd.DataFrame]: A DataFrame containing the bronze layer data,
-                                    or None if no data is found.
-
-        Raises:
-            Exception: If there are issues accessing or downloading the data.
-        """
-        self.log.info("Reading BNBO status data from bronze layer")
-
-        # Get the GCS bucket
-        bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
-
-        # Define the path to the bronze data
-        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        bronze_path = f"bronze/{dataset}/{current_date}.parquet"
-        blob = bucket.blob(bronze_path)
-
-        if not blob.exists():
-            self.log.error(f"Bronze data not found at {bronze_path}")
-            return None
-
-        # Download to temporary file
-        temp_dir = f"/tmp/bronze/{dataset}"
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_file = f"{temp_dir}/{current_date}.parquet"
-        blob.download_to_filename(temp_file)
-
-        # Load the parquet file
-        raw_data = pd.read_parquet(temp_file)
-        self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
-
-        return raw_data
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """
@@ -394,42 +349,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error during dissolve operation: {str(e)}")
             raise e
 
-    def _save_data(self, df: gpd.GeoDataFrame, dataset: str) -> None:
-        """
-        Save processed data to Google Cloud Storage.
-
-        This method saves a GeoDataFrame to GCS as a parquet file. It creates
-        a temporary local file and then uploads it to the specified GCS bucket.
-
-        Args:
-            df (gpd.GeoDataFrame): The GeoDataFrame to save.
-            dataset (str): The name of the dataset, used to determine the save path.
-
-        Returns:
-            None
-
-        Raises:
-            Exception: If there are issues saving the data.
-        """
-        if df is None or df.empty:
-            self.log.warning("No processed data to save")
-            return
-
-        self.log.info("Saving processed BNBO status data to GCS")
-        bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
-
-        temp_dir = f"/tmp/silver/{dataset}"
-        os.makedirs(temp_dir, exist_ok=True)
-        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        temp_file = f"{temp_dir}/{current_date}.parquet"
-        working_blob = bucket.blob(f"silver/{dataset}/{current_date}.parquet")
-
-        df.to_parquet(temp_file)
-        working_blob.upload_from_filename(temp_file)
-        self.log.info(
-            f"Uploaded to: gs://{self.config.bucket}/silver/{dataset}/{current_date}.parquet"
-        )
-
     async def run(self) -> None:
         """
         Run the complete BNBO status silver layer processing job.
@@ -447,7 +366,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running BNBO status silver job")
-        raw_data = self.read_data(self.config.dataset)
+        raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
         if raw_data is None:
             self.log.error("Failed to read raw data")
             return
@@ -458,6 +377,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             return
         self.log.info("Processed raw data successfully")
         dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-        self._save_data(geo_df, self.config.dataset)
-        self._save_data(dissolved_df, f"{self.config.dataset}_dissolved")
+        self._save_data(geo_df, self.config.dataset, self.config.bucket)
+        self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
         self.log.info("Saved processed data successfully")

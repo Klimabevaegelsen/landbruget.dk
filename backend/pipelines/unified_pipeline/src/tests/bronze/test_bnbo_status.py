@@ -48,7 +48,6 @@ def test_bnbo_status_bronze_config() -> None:
     assert config.name == "Danish BNBO Status"
     assert config.dataset == "bnbo_status"
     assert config.url == "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
-    assert config.layer == "dai:status_bnbo"
     assert config.bucket == "landbrugsdata-raw-data"
 
 
@@ -261,8 +260,8 @@ async def test_fetch_raw_data_with_one_batch_and_exception(
 
 
 @pytest.mark.asyncio
-@patch("unified_pipeline.bronze.bnbo_status.pd.Timestamp")
-@patch("unified_pipeline.bronze.bnbo_status.os.makedirs")
+@patch("unified_pipeline.common.base.pd.Timestamp")
+@patch("unified_pipeline.common.base.os.makedirs")
 async def test_save_raw_data(
     mock_makedirs: MagicMock,
     mock_timestamp: MagicMock,
@@ -293,9 +292,10 @@ async def test_save_raw_data(
     }[column]
 
     with patch(
-        "unified_pipeline.bronze.bnbo_status.pd.DataFrame", return_value=mock_df
+        "unified_pipeline.common.base.pd.DataFrame", return_value=mock_df
     ) as mock_pd_dataframe:
-        await bnbo_status_bronze._save_raw_data(raw_data_list, dataset_name)
+        config = bnbo_status_bronze.config
+        bnbo_status_bronze._save_raw_data(raw_data_list, dataset_name, config.name, config.bucket)
 
         mock_pd_dataframe.assert_called_once_with(
             {
@@ -323,6 +323,14 @@ async def test_run_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
     await bnbo_status_bronze.run()
 
     bnbo_status_bronze._fetch_raw_data.assert_called_once()
+    config = bnbo_status_bronze.config
     bnbo_status_bronze._save_raw_data.assert_called_once_with(
-        ["<xml_payload>"], bnbo_status_bronze.config.dataset
+        ["<xml_payload>"], config.dataset, config.name, config.bucket
     )
+
+
+@pytest.mark.asyncio
+async def test_run_no_data(bnbo_status_bronze: BNBOStatusBronze) -> None:
+    bnbo_status_bronze._fetch_raw_data = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    await bnbo_status_bronze.run()
+    bnbo_status_bronze._fetch_raw_data.assert_called_once()
