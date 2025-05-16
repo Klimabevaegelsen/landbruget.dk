@@ -19,6 +19,7 @@ import {
 import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
+import { JsonRender } from "@/components/common/json-render";
 
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -85,41 +86,49 @@ export function BlockBarChart({
   ];
 
   return (
-    <div style={{ width: "100%", height: 400 }} className="mt-4">
-      <ResponsiveContainer>
-        <RechartsBarChart
-          data={transformedData}
-          {...{
-            overflow: "visible",
-          }}
-          layout={
-            chart._type === "horizontalStackedBarChart"
-              ? "vertical"
-              : "horizontal"
-          }
-        >
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey="name" tickLine={true} axisLine={true} />
-          <YAxis
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={(tick) => {
-              return tick.toLocaleString("DA-dk");
+    <div>
+      <div style={{ width: "100%", height: 400 }} className="mt-4">
+        <ResponsiveContainer>
+          <RechartsBarChart
+            data={transformedData}
+            {...{
+              overflow: "visible",
             }}
-            width={yWidth}
-          />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "#E0F5E8" }} />
-          <Legend content={<CustomLegend />} />
-          {chart.data.series.map((s, index) => (
-            <Bar
-              key={s.name}
-              dataKey={s.name}
-              fill={barColors[index % barColors.length]}
-              stackId={chart._type === "stackedBarChart" ? "stack" : undefined}
+            layout={
+              chart._type === "horizontalStackedBarChart"
+                ? "vertical"
+                : "horizontal"
+            }
+          >
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="name" tickLine={true} axisLine={true} />
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(tick) => {
+                return tick.toLocaleString("DA-dk");
+              }}
+              width={yWidth}
             />
-          ))}
-        </RechartsBarChart>
-      </ResponsiveContainer>
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#E0F5E8" }} />
+            <Legend content={<CustomLegend />} />
+            {chart.data.series.map((s, index) => (
+              <Bar
+                key={s.name}
+                dataKey={s.name}
+                fill={barColors[index % barColors.length]}
+                stackId={
+                  chart._type === "stackedBarChart" ? "stack" : undefined
+                }
+              />
+            ))}
+          </RechartsBarChart>
+        </ResponsiveContainer>
+      </div>
+      <JsonRender
+        json={JSON.parse(JSON.stringify(transformedData))}
+        title={`Component ${chart._type} placeholder (data)`}
+      />
     </div>
   );
 }

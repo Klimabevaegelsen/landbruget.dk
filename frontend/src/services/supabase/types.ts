@@ -50,6 +50,7 @@ export interface ChartData {
   series: ChartSeries[];
   yAxis: {
     label: string;
+    values?: (string | number)[];
   };
 }
 
