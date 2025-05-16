@@ -5,6 +5,7 @@ import { BlockInfoCard } from "./pageBlocks/block-info-card";
 import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
 import { BlockBarChart } from "./pageBlocks/block-bar-chart";
+import { BlockTimeline } from "./pageBlocks/block-timeline";
 
 function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
@@ -17,6 +18,9 @@ function PageBlock({ block }: { block: PageBuilderItem }) {
     case "horizontalStackedBarChart":
     case "barChart":
       return <BlockBarChart chart={block} />;
+    case "timeline":
+      return <BlockTimeline timeline={block} />;
+    case "mapChart":
     case "comboChart":
     case "iteratedSection":
     default:
