@@ -10,7 +10,12 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { BarChart as BarChartType, ChartData } from "@/services/supabase/types";
+import {
+  BarChart as BarChartType,
+  ChartData,
+  HorizontalStackedBarChart,
+  StackedBarChart,
+} from "@/services/supabase/types";
 import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
@@ -33,7 +38,11 @@ const transformDataForRecharts = (chartData: ChartData) => {
   });
 };
 
-export function BlockBarChart({ chart }: { chart: BarChartType }) {
+export function BlockBarChart({
+  chart,
+}: {
+  chart: BarChartType | StackedBarChart | HorizontalStackedBarChart;
+}) {
   const transformedData = transformDataForRecharts(chart.data);
   const [yWidth, setYWidth] = useState(60);
 
@@ -83,6 +92,11 @@ export function BlockBarChart({ chart }: { chart: BarChartType }) {
           {...{
             overflow: "visible",
           }}
+          layout={
+            chart._type === "horizontalStackedBarChart"
+              ? "vertical"
+              : "horizontal"
+          }
         >
           <CartesianGrid vertical={false} />
           <XAxis dataKey="name" tickLine={true} axisLine={true} />
@@ -101,6 +115,7 @@ export function BlockBarChart({ chart }: { chart: BarChartType }) {
               key={s.name}
               dataKey={s.name}
               fill={barColors[index % barColors.length]}
+              stackId={chart._type === "stackedBarChart" ? "stack" : undefined}
             />
           ))}
         </RechartsBarChart>
