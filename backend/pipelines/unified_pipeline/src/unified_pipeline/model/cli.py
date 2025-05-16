@@ -36,6 +36,7 @@ class Source(Enum):
     """
 
     bnbo = "bnbo"
+    agricultural_fields = "agricultural_fields"
 
 
 class Stage(Enum):
