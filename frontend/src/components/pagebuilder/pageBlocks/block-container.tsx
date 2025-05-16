@@ -5,10 +5,12 @@ export function BlockContainer({
   children,
   title,
   href,
+  secondaryTitle,
 }: {
   children: React.ReactNode;
   title: string;
   href: string;
+  secondaryTitle?: string;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -20,6 +22,9 @@ export function BlockContainer({
         >
           <LinkIcon className="size-6 text-primary" />
         </Link>
+        {secondaryTitle && (
+          <h3 className="text-sm  italic">{secondaryTitle}</h3>
+        )}
       </div>
       {children}
     </div>
