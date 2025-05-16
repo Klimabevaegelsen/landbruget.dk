@@ -6,6 +6,7 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
@@ -20,6 +21,8 @@ import {
 } from "@/components/ui/table";
 
 import { Input } from "@/components/ui/input";
+import { DataTablePagination } from "./data-table-pagination";
+import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -35,10 +38,13 @@ export function DynamicDataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState<string>("");
 
+  const rowCount = data.length;
+
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -58,11 +64,16 @@ export function DynamicDataTable<TData, TValue>({
             placeholder="Filtrering"
             value={globalFilter ?? ""}
             onChange={(e) => table.setGlobalFilter(String(e.target.value))}
-            className="max-w-sm ml-auto"
+            className="max-w-sm "
           />
         </div>
       )}
-      <div className="border rounded border-slate-300">
+      <div
+        className={cn(
+          "border rounded border-slate-300 ",
+          rowCount > 10 && "min-h-[575px]"
+        )}
+      >
         <Table>
           <TableHeader className="">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -113,6 +124,7 @@ export function DynamicDataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
+      {rowCount > 10 && <DataTablePagination table={table} />}
     </div>
   );
 }
