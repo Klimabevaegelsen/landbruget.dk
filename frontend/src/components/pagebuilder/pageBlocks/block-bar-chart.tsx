@@ -19,6 +19,7 @@ import {
 import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
+import { VizColors } from "@/lib/utils";
 
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
@@ -99,16 +100,7 @@ export function BlockBarChart({
 
   // Assuming a simple case with a few predefined colors.
   // You might want to make this more dynamic or configurable.
-  const barColors = [
-    "#4F5D75",
-    "#C67750",
-    "#467968",
-    "#775120",
-    "#7F2E39",
-    "#2D673D",
-    "#503955",
-    "#5F318B",
-  ];
+  const barColors = VizColors;
 
   return (
     <div>
