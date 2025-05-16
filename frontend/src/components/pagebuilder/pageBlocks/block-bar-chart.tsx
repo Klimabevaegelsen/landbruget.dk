@@ -65,16 +65,31 @@ export function BlockBarChart({
   // Calculate y-axis width based on the longest value
   useEffect(() => {
     const longestTick = transformedData.reduce((max, dataPoint) => {
-      const values = Object.entries(dataPoint)
-        .filter(([key]) => key !== (isHorizontal ? "category" : "name"))
-        .map(([, value]) =>
-          typeof value === "number"
-            ? value.toLocaleString("da-DK")
-            : String(value)
-        );
-      const currentMax = Math.max(...values.map((str) => str.length));
-      return Math.max(max, currentMax);
+      if (isHorizontal) {
+        // For horizontal charts, we need to consider the category name length
+        const categoryLength = String(dataPoint.category).length;
+        const valueLengths = Object.entries(dataPoint)
+          .filter(([key]) => key !== "category")
+          .map(([, value]) =>
+            typeof value === "number"
+              ? value.toLocaleString("da-DK").length
+              : String(value).length
+          );
+        return Math.max(max, categoryLength, ...valueLengths);
+      } else {
+        // For vertical charts, we only need to consider the value lengths
+        const valueLengths = Object.entries(dataPoint)
+          .filter(([key]) => key !== "name")
+          .map(([, value]) =>
+            typeof value === "number"
+              ? value.toLocaleString("da-DK").length
+              : String(value).length
+          );
+        return Math.max(max, ...valueLengths);
+      }
     }, 0);
+
+    // Add some padding to the width
     setYWidth(longestTick * 8 + 15);
   }, [transformedData, isHorizontal]);
 
@@ -141,9 +156,7 @@ export function BlockBarChart({
                 dataKey={s.name}
                 fill={barColors[index % barColors.length]}
                 stackId={
-                  chart._type === "stackedBarChart" || isHorizontal
-                    ? "stack"
-                    : undefined
+                  chart._type === "stackedBarChart" ? "stack" : undefined
                 }
               />
             ))}
