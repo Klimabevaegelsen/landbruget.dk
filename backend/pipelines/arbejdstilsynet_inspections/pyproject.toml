@@ -47,6 +47,7 @@ dependencies = [
     "traitlets==5.14.3",
     "typing-extensions==4.13.2",
     "wcwidth==0.2.13",
+    "ibis-duckdb==3.2.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -37,6 +37,11 @@ jobs:
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+    - name: Install Xvfb (for headless Playwright with headless=False)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+
     - name: Install dependencies
       run: |
         cd backend/pipelines/arbejdstilsynet_inspections
@@ -71,7 +76,8 @@ jobs:
       working-directory: backend/pipelines/arbejdstilsynet_inspections
       run: |
         LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
-        CMD="python main.py --log-level $LOG_LEVEL"
+        # Wrap the command with xvfb-run for Playwright when headless=False
+        CMD="xvfb-run --auto-servernum --server-args='-screen 0 1280x1024x24' python main.py --log-level $LOG_LEVEL"
         
         echo "Running command: $CMD"
         $CMD

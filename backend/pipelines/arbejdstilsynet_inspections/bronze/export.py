@@ -116,7 +116,7 @@ class BronzePipeline:
                     "--disable-gpu",
                     "--disable-software-rasterizer",
                 ]
-            browser_options = {"args": browser_args, "headless": True}
+            browser_options = {"args": browser_args, "headless": False}
             browser = await playwright.chromium.launch(**browser_options)
             context = await browser.new_context(
                 accept_downloads=True, viewport={"width": 1920, "height": 1080}
