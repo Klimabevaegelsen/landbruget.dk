@@ -388,7 +388,7 @@ class BronzePipeline:
         results = await self.fetch_data_with_playwright(filters)
         if not results:
             logging.error("No data fetched for any filter. Exiting bronze run.")
-            return
+            raise RuntimeError("Bronze pipeline: No data fetched by Playwright.")
 
         from io import BytesIO
 
@@ -418,7 +418,9 @@ class BronzePipeline:
 
         if not dfs:
             logging.error("No valid CSVs to merge. Exiting bronze run.")
-            return
+            raise RuntimeError(
+                "Bronze pipeline: No valid CSVs to merge after fetching."
+            )
 
         merged_df = pd.concat(dfs, ignore_index=True)
 
@@ -437,7 +439,11 @@ class BronzePipeline:
 
         # Upload merged file to GCS if available
         if self.gcs:
-            self.gcs.upload_file(local_path=str(merged_file_path))
+            upload_success = self.gcs.upload_file(local_path=str(merged_file_path))
+            if not upload_success:
+                raise RuntimeError(
+                    f"Bronze pipeline: Failed to upload {merged_file_path} to GCS."
+                )
 
         # Delete the temp directory and all its contents
         import shutil
@@ -467,7 +473,22 @@ def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
         gcs_bucket=gcs_bucket,
         log_level=log_level,
     )
-    asyncio.run(pipeline.run())
+    try:
+        asyncio.run(pipeline.run())
+        logging.info(
+            f"Bronze pipeline ({pipeline_name}) completed successfully through main."
+        )
+    except RuntimeError as e:
+        logging.error(f"Bronze pipeline ({pipeline_name}) failed: {e}")
+        raise
+    except Exception as e:
+        logging.error(
+            f"Bronze pipeline ({pipeline_name}) failed with an unexpected error: {e}",
+            exc_info=True,
+        )
+        raise RuntimeError(
+            f"Bronze pipeline ({pipeline_name}) encountered an unexpected error: {e}"
+        ) from e
 
 
 if __name__ == "__main__":
