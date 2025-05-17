@@ -6,10 +6,6 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
-      gcs_bucket:
-        description: 'Google Cloud Storage bucket name'
-        required: true
-        type: string
       log_level:
         description: 'Logging level'
         type: choice
@@ -50,16 +46,24 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
+    - name: Set up environment variables
+      working-directory: backend/pipelines/arbejdstilsynet_inspections
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        if [ -z "$GCS_BUCKET" ]; then
+          echo "Error: Required secret GCS_BUCKET is not set or is empty."
+          exit 1
+        fi
+        echo "GCS_BUCKET=$GCS_BUCKET" > .env
+        echo "Successfully created .env file with GCS_BUCKET."
+
     - name: Run Pipeline
       working-directory: backend/pipelines/arbejdstilsynet_inspections
       run: |
         LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
         CMD="python main.py --log-level $LOG_LEVEL"
-
-        if [ -n "${{ inputs.gcs_bucket }}" ]; then
-          CMD="$CMD --gcs-bucket ${{ inputs.gcs_bucket }}"
-        fi
-
+        
         echo "Running command: $CMD"
         $CMD
 
