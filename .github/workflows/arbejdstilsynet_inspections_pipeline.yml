@@ -45,7 +45,7 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/arbejdstilsynet_inspections
-        uv pip install --system -e .
+        uv pip install --system -e . -vvv
 
     - name: Install Playwright Browsers
       working-directory: backend/pipelines/arbejdstilsynet_inspections
