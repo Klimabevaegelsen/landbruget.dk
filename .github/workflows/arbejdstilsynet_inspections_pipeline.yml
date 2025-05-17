@@ -42,6 +42,10 @@ jobs:
         cd backend/pipelines/arbejdstilsynet_inspections
         uv pip install --system -e .
 
+    - name: Install Playwright Browsers
+      working-directory: backend/pipelines/arbejdstilsynet_inspections
+      run: playwright install --with-deps
+
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
       uses: 'google-github-actions/auth@v2'
