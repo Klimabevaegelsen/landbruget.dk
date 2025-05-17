@@ -48,3 +48,8 @@ dependencies = [
     "typing-extensions==4.13.2",
     "wcwidth==0.2.13",
 ]
+
+[tool.setuptools.packages.find]
+where = [""] # Look in the current directory, an empty string means project root for setuptools
+include = ["bronze*", "silver*"]
+# exclude = ["tests*"] # Example: if you have a tests directory you want to exclude
