@@ -76,11 +76,9 @@ jobs:
       working-directory: backend/pipelines/arbejdstilsynet_inspections
       run: |
         LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
-        # Wrap the command with xvfb-run for Playwright when headless=False
-        CMD="xvfb-run --auto-servernum --server-args='-screen 0 1280x1024x24' python main.py --log-level $LOG_LEVEL"
-        
-        echo "Running command: $CMD"
-        $CMD
+        echo "Running pipeline with xvfb-run, Log Level: $LOG_LEVEL"
+        xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
+          python main.py --log-level "$LOG_LEVEL"
 
     - name: Handle pipeline failure
       if: failure()
