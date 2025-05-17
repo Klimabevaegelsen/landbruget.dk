@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import uuid
 from datetime import datetime
@@ -499,12 +500,30 @@ def main(start_date=None, end_date=None, gcs_bucket=None, log_level="INFO"):
     pipeline = SilverPipeline(start_date, end_date, gcs_bucket, log_level)
     success = pipeline.run()
 
-    if success:
-        return 0
-    else:
-        return 1
+    if not success:
+        # Raise an exception if the pipeline was not successful
+        raise RuntimeError("Silver pipeline failed to execute.")
+    # Return 0 for success if called as a module, though direct __main__ call will exit
+    return 0
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    exit(exit_code)
+    try:
+        exit_code = main()
+        if exit_code != 0:  # Should not happen if RuntimeError is raised
+            exit(exit_code)  # Defensive, main() now raises
+        exit(0)  # Explicit success exit
+    except RuntimeError as e:
+        # Logger might not be configured if __main__ is run and SilverPipeline init fails before logger setup
+        # So, print to stderr as well
+        print(f"Silver Pipeline ERROR: {e}", file=sys.stderr)
+        logging.getLogger(__name__).error(
+            f"Silver Pipeline execution failed: {e}", exc_info=True
+        )
+        exit(1)
+    except Exception as e:
+        print(f"Silver Pipeline UNEXPECTED ERROR: {e}", file=sys.stderr)
+        logging.getLogger(__name__).error(
+            f"Unexpected error in silver pipeline __main__: {e}", exc_info=True
+        )
+        exit(1)
