@@ -91,5 +91,7 @@ jobs:
       if: always()
       with:
         name: pipeline-output
-        path: backend/pipelines/arbejdstilsynet_inspections/data
+        path: |
+          backend/pipelines/arbejdstilsynet_inspections/bronze/data
+          backend/pipelines/arbejdstilsynet_inspections/silver/data
         retention-days: 7
