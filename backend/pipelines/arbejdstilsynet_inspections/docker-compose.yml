@@ -1,0 +1,18 @@
+services:
+  arbejdstilsynet_inspections:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SOURCE_CSV_URL=${SOURCE_CSV_URL}
+      - PIPELINE_ARGS=${PIPELINE_ARGS:-""}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-""}
+      - GCS_BUCKET=${GCS_BUCKET:-""}
+    volumes:
+      # Optional: Mount Google Cloud credentials if specified
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}
+    working_dir: /app
+    command: bash -c "/app/run.sh"
+
+
+

@@ -1,0 +1,78 @@
+name: Arbejdstilsynet Inspections Pipeline
+
+on:
+  schedule:
+    # Run weekly at 6 AM UTC on Mondays
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      gcs_bucket:
+        description: 'Google Cloud Storage bucket name'
+        required: true
+        type: string
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'WARNING'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/arbejdstilsynet_inspections
+        pip install --no-cache-dir -r requirements.txt
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Run Pipeline
+      working-directory: backend/pipelines/arbejdstilsynet_inspections
+      run: |
+        LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
+        CMD="python main.py --log-level $LOG_LEVEL"
+
+        if [ -n "${{ inputs.gcs_bucket }}" ]; then
+          CMD="$CMD --gcs-bucket ${{ inputs.gcs_bucket }}"
+        fi
+
+        echo "Running command: $CMD"
+        $CMD
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "Pipeline failed. Please check the logs above for details."
+        exit 1
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pipeline-output
+        path: backend/pipelines/arbejdstilsynet_inspections/data
+        retention-days: 7
