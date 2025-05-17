@@ -14,7 +14,7 @@ dependencies = [
     "dotenv==0.9.9",
     "duckdb==1.2.2",
     "executing==2.2.0",
-    "google-cloud>=0.34.0",
+    "google-cloud-storage",
     "greenlet==3.2.2",
     "ibis==3.3.0",
     "ipython==8.12.3",
