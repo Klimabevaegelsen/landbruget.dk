@@ -5,6 +5,7 @@ import sys
 
 import bronze.export
 import silver.transform
+from dotenv import load_dotenv
 
 PIPELINE_ROOT = os.path.dirname(os.path.abspath(__file__))
 print("[DEBUG] DISPLAY =", os.environ.get("DISPLAY"))
@@ -58,6 +59,7 @@ def parse_args():
 if __name__ == "__main__":
     # Parse command line arguments
     args = parse_args()
+    load_dotenv()
 
     # Set logging level
     logging.basicConfig(
@@ -67,6 +69,19 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Starting pipeline with args: {args}")
 
+    # Determine GCS bucket to use
+    actual_gcs_bucket = args.gcs_bucket
+    if not actual_gcs_bucket:
+        actual_gcs_bucket = os.getenv("GCS_BUCKET")
+        if actual_gcs_bucket:
+            logger.info(
+                f"Using GCS_BUCKET from environment variable: {actual_gcs_bucket}"
+            )
+        else:
+            logger.warning(
+                "GCS_BUCKET not provided via --gcs-bucket argument or GCS_BUCKET environment variable. GCS uploads will be skipped."
+            )
+
     bronze_success = True
     silver_success = True
 
@@ -74,10 +89,7 @@ if __name__ == "__main__":
         # Run Bronze Layer
         if args.stage in ["all", "bronze"]:
             print("[main.py] Running Bronze Layer: export.py ...")
-            # Assuming bronze.export.main() also raises an exception on failure or returns a status
-            # For now, let's assume it might raise an exception or we adapt it later.
-            # If bronze.export.main() returns a status like silver's old main, it would need adjustment.
-            bronze.export.main(log_level=args.log_level, gcs_bucket=args.gcs_bucket)
+            bronze.export.main(log_level=args.log_level, gcs_bucket=actual_gcs_bucket)
             print("[main.py] Bronze Layer complete.")
         else:
             logger.info("Skipping Bronze Layer due to --stage setting.")
@@ -102,7 +114,7 @@ if __name__ == "__main__":
                 silver.transform.main(
                     start_date=args.start_date,
                     end_date=args.end_date,
-                    gcs_bucket=args.gcs_bucket,
+                    gcs_bucket=actual_gcs_bucket,
                     log_level=args.log_level,
                 )
                 print("[main.py] Silver Layer complete.")
