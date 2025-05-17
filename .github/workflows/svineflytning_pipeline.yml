@@ -80,7 +80,7 @@ jobs:
 
     - name: 'Set up environment variables'
       env:
-        GCS_BUCKET: landbrugsdata-raw-data
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
         FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
