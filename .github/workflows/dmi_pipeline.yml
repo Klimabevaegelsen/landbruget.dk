@@ -83,7 +83,7 @@ jobs:
 
     - name: Set up environment variables
       env:
-        GCS_BUCKET: landbrugsdata-raw-data
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
