@@ -152,7 +152,7 @@ class SilverPipeline:
     def connect_database(self):
         """Connect to DuckDB via Ibis."""
         try:
-            self.con = ibis.connect("duckdb://data.ddb")
+            self.con = ibis.duckdb.connect("data.ddb")
             self.logger.info("Connected to DuckDB via Ibis")
             return True
         except Exception as e:
