@@ -375,7 +375,7 @@ class BronzePipeline:
                 e,
             )
 
-    def run(self) -> None:
+    async def run(self) -> None:
         """Executes the bronze layer pipeline steps using Playwright only."""
         logging.info(
             "Starting bronze layer processing for pipeline: %s", self.pipeline_name
@@ -385,7 +385,7 @@ class BronzePipeline:
             {"name": "Landbrug, skovbrug og fiskeri", "search_term": "Landbrug"},
             {"name": "Slagterier", "search_term": "Slagter"},
         ]
-        results = asyncio.run(self.fetch_data_with_playwright(filters))
+        results = await self.fetch_data_with_playwright(filters)
         if not results:
             logging.error("No data fetched for any filter. Exiting bronze run.")
             return
