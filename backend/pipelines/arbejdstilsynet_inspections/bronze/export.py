@@ -386,6 +386,14 @@ class BronzePipeline:
             {"name": "Slagterier", "search_term": "Slagter"},
         ]
         results = await self.fetch_data_with_playwright(filters)
+        logging.info(
+            f"Bronze pipeline: fetch_data_with_playwright returned {len(results)} results."
+        )
+        if results:
+            for i, (name, data_sample) in enumerate(results):
+                logging.info(
+                    f"Result {i}: filter_name='{name}', data_len={len(data_sample)}"
+                )
         if not results:
             logging.error("No data fetched for any filter. Exiting bronze run.")
             raise RuntimeError("Bronze pipeline: No data fetched by Playwright.")
