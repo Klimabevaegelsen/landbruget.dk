@@ -60,14 +60,14 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 - Geospatial field names should start with "geo_".
 - Common feature names: 
 - CVR Number: cvr_number
-  - Geometry fields: geometry
-  - CHR Number: chr_number
-  - Herd Number: herd_number
-  - Kommune: municipality
-  - Dyrearttekst: species_name
-  - År: year
-  - Marknummber: field_id
-  - Markbloknummer: field_block_id
+- Geometry fields: geometry
+- CHR Number: chr_number
+- Herd Number: herd_number
+- Kommune: municipality
+- Dyrearttekst: species_name
+- År: year
+- Marknummber: field_id
+- Markbloknummer: field_block_id
 
 ### Data values
 - Null values should be ... null.
@@ -83,7 +83,7 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 ### Types
 - Ensure types are casted as they should be (for example column containing only numbers should be stored as numbers, not text).
 - Dates should be stored as date and represent a calendar date (year, month and day) without any time-of-day information.
-- Timestamps should be stored as datetime and represent a specific moment in time, including both the date and the time, including the year, month, day, hour, minute, second and microsecond).
+- Timestamps should be stored as datetime and represent a specific moment in time, including both the date and the time, including the year, month, day, hour, minute, second and microsecond.
 - Ensure æ,ø,å and other funky characters etc are stored properly.
 - Booleans should be stored as 1s and 0s.
 - Lat/lon coordinates (and all geospatial data) should be stored as a geometry features, not text.
