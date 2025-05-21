@@ -51,9 +51,10 @@ interface TooltipProps {
   x: number;
   y: number;
   properties: Record<string, string | number | boolean>;
+  layerName: string;
 }
 
-function Tooltip({ x, y, properties }: TooltipProps) {
+function Tooltip({ x, y, properties, layerName }: TooltipProps) {
   return (
     <div
       className="absolute p-4 bg-white rounded-lg shadow-md border border-gray-200 z-50"
@@ -64,21 +65,13 @@ function Tooltip({ x, y, properties }: TooltipProps) {
         marginTop: -10,
       }}
     >
-      {Object.entries(properties).map(([key, value], index) => (
-        <p
-          key={key}
-          className={`text-sm font-medium ${index === 0 ? "" : "mt-1"}`}
-        >
-          {index === 0 ? (
-            <span className="text-base font-semibold">{String(value)}</span>
-          ) : (
-            <>
-              <span className="font-medium">{key}:</span>{" "}
-              {typeof value === "number"
-                ? value.toLocaleString("da-DK")
-                : String(value)}
-            </>
-          )}
+      <p className="text-base font-semibold">{layerName}</p>
+      {Object.entries(properties).map(([key, value]) => (
+        <p key={key} className="text-sm font-medium mt-1">
+          <span className="font-medium">{key}:</span>{" "}
+          {typeof value === "number"
+            ? value.toLocaleString("da-DK")
+            : String(value)}
         </p>
       ))}
     </div>
@@ -92,20 +85,29 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
     x: number;
     y: number;
     properties: Record<string, string | number | boolean>;
+    layerName: string;
   } | null>(null);
 
-  const onHover = React.useCallback((event: MapLayerMouseEvent) => {
-    const feature = event.features && event.features[0];
-    if (feature) {
-      setHoverInfo({
-        x: event.point.x,
-        y: event.point.y,
-        properties: feature.properties,
-      });
-    } else {
-      setHoverInfo(null);
-    }
-  }, []);
+  const onHover = React.useCallback(
+    (event: MapLayerMouseEvent) => {
+      const feature = event.features && event.features[0];
+      if (feature) {
+        // Find the layer name from the layer ID
+        const layerIndex = parseInt(feature.layer.id.split("-")[1]);
+        const layerName = layers[layerIndex].name;
+
+        setHoverInfo({
+          x: event.point.x,
+          y: event.point.y,
+          properties: feature.properties,
+          layerName,
+        });
+      } else {
+        setHoverInfo(null);
+      }
+    },
+    [layers]
+  );
 
   return (
     <div className="rounded overflow-hidden relative">
