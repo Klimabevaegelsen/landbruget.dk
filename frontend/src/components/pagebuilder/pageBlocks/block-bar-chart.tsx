@@ -9,6 +9,8 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
+  XAxisProps,
+  YAxisProps,
 } from "recharts";
 import {
   BarChart as BarChartType,
@@ -20,6 +22,19 @@ import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
 import { VizColors } from "@/lib/utils";
+
+export const xAxisDefaultProps: XAxisProps = {
+  tickLine: true,
+  axisLine: true,
+  tickMargin: 8,
+  height: 38,
+};
+
+export const yAxisDefaultProps: YAxisProps = {
+  tickLine: false,
+  axisLine: false,
+  tickMargin: 6,
+};
 
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
@@ -116,27 +131,24 @@ export function BlockBarChart({
               <XAxis
                 type="number"
                 tickFormatter={(tick) => tick.toLocaleString("da-DK")}
-                tickLine={true}
-                axisLine={true}
+                {...xAxisDefaultProps}
               />
             ) : (
-              <XAxis dataKey="name" tickLine={true} axisLine={true} />
+              <XAxis dataKey="name" {...xAxisDefaultProps} />
             )}
             {isHorizontal ? (
               <YAxis
                 dataKey="category"
                 type="category"
-                axisLine={false}
-                tickLine={false}
+                {...yAxisDefaultProps}
                 width={yWidth}
               />
             ) : (
               <YAxis
-                axisLine={false}
-                tickLine={false}
                 tickFormatter={(tick) => {
                   return tick.toLocaleString("DA-dk");
                 }}
+                {...yAxisDefaultProps}
                 width={yWidth}
               />
             )}
