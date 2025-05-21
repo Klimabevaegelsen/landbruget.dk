@@ -8,6 +8,7 @@ import { BlockBarChart } from "./pageBlocks/block-bar-chart";
 import { BlockComboChart } from "./pageBlocks/block-combo-chart";
 import { BlockTimeline } from "./pageBlocks/block-timeline";
 import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
+import { BlockMapChart } from "./pageBlocks/block-map-chart";
 
 export function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
@@ -26,6 +27,7 @@ export function PageBlock({ block }: { block: PageBuilderItem }) {
     case "timeline":
       return <BlockTimeline timeline={block} />;
     case "mapChart":
+      return <BlockMapChart chart={block} />;
     case "iteratedSection":
     default:
       return <BlockPlaceholder block={block} />;
