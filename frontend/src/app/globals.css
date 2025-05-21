@@ -3,6 +3,27 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink {
+  50% {
+    border-color: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-typing {
+    animation: typing 1s steps(20, end), blink 0.75s step-end infinite;
+  }
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

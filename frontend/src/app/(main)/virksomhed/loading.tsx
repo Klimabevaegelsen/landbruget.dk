@@ -1,5 +1,7 @@
-import { CompanySkeleton } from "@/components/skeleton/templates/company";
+//import { CompanySkeleton } from "@/components/skeleton/templates/company";
+import { TractorLoader } from "@/components/skeleton/tractor-loader";
 
 export default function CompanyLoading() {
-  return <CompanySkeleton />;
+  return <TractorLoader />;
+  // return <CompanySkeleton />;
 }
