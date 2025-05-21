@@ -19,6 +19,7 @@ import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
 import { VizColors } from "@/lib/utils";
+import { xAxisDefaultProps } from "./block-bar-chart";
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -54,7 +55,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
     }, 0);
 
     // Add some padding to the width
-    setYWidth(longestTick * 8 + 15);
+    setYWidth(longestTick * 8 + 0);
   }, [transformedData]);
 
   if (!transformedData.length) {
@@ -65,20 +66,26 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   const barSeries = chart.data.series.filter((s) => s.type === "bar");
   const lineSeries = chart.data.series.filter((s) => s.type === "line");
 
+  // Get the colors for each axis
+  const leftAxisColor = barSeries.length > 0 ? VizColors[0] : undefined;
+  const rightAxisColor =
+    lineSeries.length > 0 ? VizColors[barSeries.length] : undefined;
+
   return (
     <div>
       <div style={{ width: "100%", height: 400 }} className="mt-4">
         <ResponsiveContainer>
           <ComposedChart data={transformedData}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="name" tickLine={true} axisLine={true} />
+            <XAxis dataKey="name" {...xAxisDefaultProps} />
 
             {/* Left Y-axis for bar series */}
             <YAxis
               yAxisId="left"
               orientation="left"
-              axisLine={false}
-              tickLine={false}
+              axisLine={{ stroke: leftAxisColor }}
+              tickLine={{ stroke: leftAxisColor }}
+              tick={{ fill: leftAxisColor }}
               tickFormatter={(tick) => tick.toLocaleString("da-DK")}
               width={yWidth}
             />
@@ -87,8 +94,9 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
             <YAxis
               yAxisId="right"
               orientation="right"
-              axisLine={false}
-              tickLine={false}
+              axisLine={{ stroke: rightAxisColor }}
+              tickLine={{ stroke: rightAxisColor }}
+              tick={{ fill: rightAxisColor }}
               tickFormatter={(tick) => tick.toLocaleString("da-DK")}
               width={yWidth}
             />
