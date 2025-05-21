@@ -70,9 +70,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
               type="geojson"
               data={layer.data as GeoJSON.FeatureCollection}
             >
-              {layer.style === "hq_marker" ||
-              layer.style === "Marker" ||
-              layer.style === "production_site_marker" ? (
+              {layer.style.includes("marker") ? (
                 <Layer
                   id={layer.name}
                   type="circle"
