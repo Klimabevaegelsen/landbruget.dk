@@ -5,6 +5,7 @@ import { BlockInfoCard } from "./pageBlocks/block-info-card";
 import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
 import { BlockBarChart } from "./pageBlocks/block-bar-chart";
+import { BlockComboChart } from "./pageBlocks/block-combo-chart";
 import { BlockTimeline } from "./pageBlocks/block-timeline";
 import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 
@@ -20,10 +21,11 @@ export function PageBlock({ block }: { block: PageBuilderItem }) {
     case "horizontalStackedBarChart":
     case "barChart":
       return <BlockBarChart chart={block} />;
+    case "comboChart":
+      return <BlockComboChart chart={block} />;
     case "timeline":
       return <BlockTimeline timeline={block} />;
     case "mapChart":
-    case "comboChart":
     case "iteratedSection":
     default:
       return <BlockPlaceholder block={block} />;
