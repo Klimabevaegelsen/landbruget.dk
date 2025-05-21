@@ -6,10 +6,12 @@ import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
 import { BlockBarChart } from "./pageBlocks/block-bar-chart";
 import { BlockTimeline } from "./pageBlocks/block-timeline";
+import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 
-function PageBlock({ block }: { block: PageBuilderItem }) {
+export function PageBlock({ block }: { block: PageBuilderItem }) {
   switch (block._type) {
     case "kpiGroup":
+      return <BlockKpiGroup kpiGroup={block} />;
     case "infoCard":
       return <BlockInfoCard infoCard={block} />;
     case "dataGrid":
