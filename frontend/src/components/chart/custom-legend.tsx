@@ -14,7 +14,7 @@ export default function CustomLegend({
   }
 
   return (
-    <div className="flex flex-wrap gap-4 ">
+    <div className="flex flex-wrap gap-2 ">
       {payload.map((entry, index) => (
         <button
           key={`legend-item-${index}`}
