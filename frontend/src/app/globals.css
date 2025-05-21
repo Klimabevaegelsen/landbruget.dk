@@ -18,9 +18,24 @@
   }
 }
 
+@keyframes morphShape {
+  0% {
+    border-radius: 70% 30% 40% 60% / 40% 60% 30% 70%;
+  }
+  50% {
+    border-radius: 30% 70% 60% 40% / 60% 40% 70% 30%;
+  }
+  100% {
+    border-radius: 70% 30% 40% 60% / 40% 60% 30% 70%;
+  }
+}
+
 @layer utilities {
   .animate-typing {
-    animation: typing 1s steps(20, end), blink 0.75s step-end infinite;
+    animation: typing 2s steps(20, end), blink 0.75s step-end infinite;
+  }
+  .animate-morph {
+    animation: morphShape 5s ease-in-out infinite;
   }
 }
 

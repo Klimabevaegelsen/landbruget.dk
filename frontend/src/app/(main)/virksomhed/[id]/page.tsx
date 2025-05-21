@@ -16,9 +16,6 @@ export default async function CompanyPage({ params }: Props) {
   const { id } = await params;
   const company = await getCompanyById(id);
 
-  // timeout for ever
-  await new Promise((resolve) => setTimeout(resolve, 4000));
-
   if (!company) {
     return notFound();
   }
