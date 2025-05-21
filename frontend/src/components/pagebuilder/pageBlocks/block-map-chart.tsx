@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Map, { Layer, Source } from "react-map-gl/maplibre";
+import Map, { Layer, Source, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
@@ -47,11 +47,68 @@ const getLayerStyle = (style: string, index: number) => {
   }
 };
 
+interface TooltipProps {
+  x: number;
+  y: number;
+  properties: Record<string, string | number | boolean>;
+}
+
+function Tooltip({ x, y, properties }: TooltipProps) {
+  return (
+    <div
+      className="absolute p-4 bg-white rounded-lg shadow-md border border-gray-200 z-50"
+      style={{
+        left: x,
+        top: y,
+        transform: "translate(-50%, -100%)",
+        marginTop: -10,
+      }}
+    >
+      {Object.entries(properties).map(([key, value], index) => (
+        <p
+          key={key}
+          className={`text-sm font-medium ${index === 0 ? "" : "mt-1"}`}
+        >
+          {index === 0 ? (
+            <span className="text-base font-semibold">{String(value)}</span>
+          ) : (
+            <>
+              <span className="font-medium">{key}:</span>{" "}
+              {typeof value === "number"
+                ? value.toLocaleString("da-DK")
+                : String(value)}
+            </>
+          )}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// https://geojson.io
 export function BlockMapChart({ chart }: { chart: MapChart }) {
   const { center, zoom, layers } = chart.data;
+  const [hoverInfo, setHoverInfo] = React.useState<{
+    x: number;
+    y: number;
+    properties: Record<string, string | number | boolean>;
+  } | null>(null);
+
+  const onHover = React.useCallback((event: MapLayerMouseEvent) => {
+    const feature = event.features && event.features[0];
+    if (feature) {
+      setHoverInfo({
+        x: event.point.x,
+        y: event.point.y,
+        properties: feature.properties,
+      });
+    } else {
+      setHoverInfo(null);
+    }
+  }, []);
 
   return (
-    <div className="rounded overflow-hidden">
+    <div className="rounded overflow-hidden relative">
       <Map
         initialViewState={{
           longitude: center[0],
@@ -60,6 +117,9 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
         }}
         style={{ width: "100%", height: 600 }}
         mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+        interactiveLayerIds={layers.map((_, index) => `layer-${index}`)}
+        onMouseMove={onHover}
+        onMouseLeave={() => setHoverInfo(null)}
       >
         {layers.map((layer, index) => {
           const style = getLayerStyle(layer.style, index);
@@ -72,7 +132,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
             >
               {layer.style.includes("marker") ? (
                 <Layer
-                  id={layer.name}
+                  id={`layer-${index}`}
                   type="circle"
                   paint={{
                     "circle-radius": style.circleRadius,
@@ -83,7 +143,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
                 />
               ) : (
                 <Layer
-                  id={layer.name}
+                  id={`layer-${index}`}
                   type="fill"
                   paint={{
                     "fill-color": style.fillColor,
@@ -96,6 +156,8 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
           );
         })}
       </Map>
+
+      {hoverInfo && <Tooltip {...hoverInfo} />}
 
       {/* Custom legends */}
       <div className="flex flex-wrap gap-4 mt-2">
