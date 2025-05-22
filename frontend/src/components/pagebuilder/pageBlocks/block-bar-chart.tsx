@@ -106,7 +106,7 @@ export function BlockBarChart({
     }, 0);
 
     // Add some padding to the width
-    setYWidth(longestTick * 8 + 15);
+    setYWidth(longestTick * 8 + 20);
   }, [transformedData, isHorizontal]);
 
   if (!transformedData.length) {

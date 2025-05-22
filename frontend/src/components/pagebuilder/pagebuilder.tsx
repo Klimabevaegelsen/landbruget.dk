@@ -9,8 +9,15 @@ import { BlockComboChart } from "./pageBlocks/block-combo-chart";
 import { BlockTimeline } from "./pageBlocks/block-timeline";
 import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 import { BlockMapChart } from "./pageBlocks/block-map-chart";
+import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
 
-export function PageBlock({ block }: { block: PageBuilderItem }) {
+export function PageBlock({
+  block,
+  level = 0,
+}: {
+  block: PageBuilderItem;
+  level?: number;
+}) {
   switch (block._type) {
     case "kpiGroup":
       return <BlockKpiGroup kpiGroup={block} />;
@@ -29,6 +36,7 @@ export function PageBlock({ block }: { block: PageBuilderItem }) {
     case "mapChart":
       return <BlockMapChart chart={block} />;
     case "iteratedSection":
+      return <BlockIteratedSection iteratedSection={block} level={level} />;
     default:
       return <BlockPlaceholder block={block} />;
   }
@@ -53,6 +61,7 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
               title={item.title}
               href={`#${item._key}`}
               secondaryTitle={item._type}
+              stickyTitle={item._type === "iteratedSection"}
             >
               <PageBlock block={item} />
             </BlockContainer>
