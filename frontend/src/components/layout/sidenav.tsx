@@ -25,6 +25,7 @@ function useMediaQuery(query: string) {
 export interface NavigationItem {
   name: string;
   href: string;
+  id?: string;
 }
 
 function SidenavClient({
