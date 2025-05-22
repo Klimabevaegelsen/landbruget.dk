@@ -1,8 +1,0 @@
-export type MapContextValue = {
-  mapLib: MapLib | null;
-  map: MapRef | null;
-};
-
-export const MapContext = React.createContext<MapContextValue>({ mapLib: null, map: null });
-
-type MapInitOptions = Omit<
