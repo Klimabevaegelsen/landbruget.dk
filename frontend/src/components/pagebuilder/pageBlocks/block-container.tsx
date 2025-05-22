@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { LinkIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 
@@ -6,15 +7,22 @@ export function BlockContainer({
   title,
   href,
   secondaryTitle,
+  stickyTitle,
 }: {
   children: React.ReactNode;
   title: string;
   href: string;
   secondaryTitle?: string;
+  stickyTitle?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 group">
+      <div
+        className={cn(
+          "flex items-center gap-2 group",
+          stickyTitle && "sticky top-0 z-40 bg-white py-4"
+        )}
+      >
         <h2 className="text-2xl font-bold">{title}</h2>
         <Link
           href={href}
