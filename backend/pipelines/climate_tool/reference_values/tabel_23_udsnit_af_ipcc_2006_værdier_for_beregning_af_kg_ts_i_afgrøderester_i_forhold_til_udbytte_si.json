@@ -1,0 +1,240 @@
+{
+  "table_name": "Tabel 23: Udsnit af IPCC 2006 værdier for beregning af kg ts i afgrøderester i forhold til udbytte. (Side 86)",
+  "note": "This table is an image and has been transcribed. Some values might be hard to read.",
+  "headers": [
+    "Crop",
+    "Dry matter content of harvested product (DRY)",
+    "Slope (AG residue/harvested yield)",
+    "± 2 s.d. as % of mean (Slope)",
+    "Intercept (AG residue)",
+    "± 2 s.d. as % of mean (Intercept)",
+    "R² adj."
+  ],
+  "data": [
+    {
+      "Crop": "Major crop types",
+      "Dry matter content of harvested product (DRY)": null,
+      "Slope (AG residue/harvested yield)": null,
+      "± 2 s.d. as % of mean (Slope)": null,
+      "Intercept (AG residue)": null,
+      "± 2 s.d. as % of mean (Intercept)": null,
+      "R² adj.": null
+    },
+    {
+      "Crop": "Grains",
+      "Dry matter content of harvested product (DRY)": 0.88,
+      "Slope (AG residue/harvested yield)": 1.09,
+      "± 2 s.d. as % of mean (Slope)": "± 2%",
+      "Intercept (AG residue)": 0.88,
+      "± 2 s.d. as % of mean (Intercept)": "± 0%",
+      "R² adj.": 0.65
+    },
+    {
+      "Crop": "Beans & pulses¹",
+      "Dry matter content of harvested product (DRY)": 0.91,
+      "Slope (AG residue/harvested yield)": 1.13,
+      "± 2 s.d. as % of mean (Slope)": "± 19%",
+      "Intercept (AG residue)": 0.85,
+      "± 2 s.d. as % of mean (Intercept)": "± 56%",
+      "R² adj.": 0.28
+    },
+    {
+      "Crop": "Root crops, other²",
+      "Dry matter content of harvested product (DRY)": 0.94,
+      "Slope (AG residue/harvested yield)": 1.07,
+      "± 2 s.d. as % of mean (Slope)": "± 19%",
+      "Intercept (AG residue)": 1.54,
+      "± 2 s.d. as % of mean (Intercept)": "± 41%",
+      "R² adj.": 0.63
+    },
+    {
+      "Crop": "N-fixing forages",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.3,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Non-N-fixing forages",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.3,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Perennial grasses",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.3,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Grass-clover",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.3,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Individual crops",
+      "Dry matter content of harvested product (DRY)": null,
+      "Slope (AG residue/harvested yield)": null,
+      "± 2 s.d. as % of mean (Slope)": null,
+      "Intercept (AG residue)": null,
+      "± 2 s.d. as % of mean (Intercept)": null,
+      "R² adj.": null
+    },
+    {
+      "Crop": "Maize",
+      "Dry matter content of harvested product (DRY)": 0.87,
+      "Slope (AG residue/harvested yield)": 1.03,
+      "± 2 s.d. as % of mean (Slope)": "± 3%",
+      "Intercept (AG residue)": 0.61,
+      "± 2 s.d. as % of mean (Intercept)": "± 19%",
+      "R² adj.": 0.76
+    },
+    {
+      "Crop": "Wheat",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 1.51,
+      "± 2 s.d. as % of mean (Slope)": "± 3%",
+      "Intercept (AG residue)": 0.52,
+      "± 2 s.d. as % of mean (Intercept)": "± 17%",
+      "R² adj.": 0.68
+    },
+    {
+      "Crop": "Winter wheat",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 1.61,
+      "± 2 s.d. as % of mean (Slope)": "± 3%",
+      "Intercept (AG residue)": 0.4,
+      "± 2 s.d. as % of mean (Intercept)": "± 25%",
+      "R² adj.": 0.67
+    },
+    {
+      "Crop": "Spring wheat",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 1.36,
+      "± 2 s.d. as % of mean (Slope)": "± 19%",
+      "Intercept (AG residue)": 0.46,
+      "± 2 s.d. as % of mean (Intercept)": "± 41%",
+      "R² adj.": 0.76
+    },
+    {
+      "Crop": "Rice",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 0.95,
+      "± 2 s.d. as % of mean (Slope)": "± 9%",
+      "Intercept (AG residue)": 2.46,
+      "± 2 s.d. as % of mean (Intercept)": "± 41%",
+      "R² adj.": 0.47
+    },
+    {
+      "Crop": "Barley",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 0.95,
+      "± 2 s.d. as % of mean (Slope)": "± 8%",
+      "Intercept (AG residue)": 0.29,
+      "± 2 s.d. as % of mean (Intercept)": "± 41%",
+      "R² adj.": 0.68
+    },
+    {
+      "Crop": "Oats",
+      "Dry matter content of harvested product (DRY)": 0.89,
+      "Slope (AG residue/harvested yield)": 0.91,
+      "± 2 s.d. as % of mean (Slope)": "± 3%",
+      "Intercept (AG residue)": 0.89,
+      "± 2 s.d. as % of mean (Intercept)": "± 25%",
+      "R² adj.": 0.45
+    },
+    {
+      "Crop": "Millet",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 1.43,
+      "± 2 s.d. as % of mean (Slope)": "± 18%",
+      "Intercept (AG residue)": 0.14,
+      "± 2 s.d. as % of mean (Intercept)": "± 108%",
+      "R² adj.": 0.5
+    },
+    {
+      "Crop": "Sorghum",
+      "Dry matter content of harvested product (DRY)": 0.88,
+      "Slope (AG residue/harvested yield)": 1.43,
+      "± 2 s.d. as % of mean (Slope)": "± 11%",
+      "Intercept (AG residue)": 0.14,
+      "± 2 s.d. as % of mean (Intercept)": "± 50% default",
+      "R² adj.": 0.36
+    },
+    {
+      "Crop": "Rye¹",
+      "Dry matter content of harvested product (DRY)": 0.88,
+      "Slope (AG residue/harvested yield)": 1.09,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0.88,
+      "± 2 s.d. as % of mean (Intercept)": "± 50% default",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Soyabean³",
+      "Dry matter content of harvested product (DRY)": 0.91,
+      "Slope (AG residue/harvested yield)": 0.93,
+      "± 2 s.d. as % of mean (Slope)": "± 31%",
+      "Intercept (AG residue)": 1.35,
+      "± 2 s.d. as % of mean (Intercept)": "± 49%",
+      "R² adj.": 0.16
+    },
+    {
+      "Crop": "Dry bean³",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.36,
+      "± 2 s.d. as % of mean (Slope)": "± 100%",
+      "Intercept (AG residue)": 0.68,
+      "± 2 s.d. as % of mean (Intercept)": "± 47%",
+      "R² adj.": 0.15
+    },
+    {
+      "Crop": "Potato³",
+      "Dry matter content of harvested product (DRY)": 0.22,
+      "Slope (AG residue/harvested yield)": 0.39,
+      "± 2 s.d. as % of mean (Slope)": "± 29%",
+      "Intercept (AG residue)": 1.06,
+      "± 2 s.d. as % of mean (Intercept)": "± 26%",
+      "R² adj.": 0.18
+    },
+    {
+      "Crop": "Peanut (w/pod)³",
+      "Dry matter content of harvested product (DRY)": 0.91,
+      "Slope (AG residue/harvested yield)": 1.07,
+      "± 2 s.d. as % of mean (Slope)": "± 11%",
+      "Intercept (AG residue)": 1.54,
+      "± 2 s.d. as % of mean (Intercept)": "± 41%",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Alfalfa³",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.29,
+      "± 2 s.d. as % of mean (Slope)": "± 31%",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    },
+    {
+      "Crop": "Non legume hay³",
+      "Dry matter content of harvested product (DRY)": 0.9,
+      "Slope (AG residue/harvested yield)": 0.18,
+      "± 2 s.d. as % of mean (Slope)": "± 50% default",
+      "Intercept (AG residue)": 0,
+      "± 2 s.d. as % of mean (Intercept)": "-",
+      "R² adj.": "-"
+    }
+  ]
+}

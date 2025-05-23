@@ -1,0 +1,45 @@
+{
+  "table_name": "Tabel 15: Beregnet CH4 udskillelse ab dyr for forskellige dyregrupper på baggrund af Normtal (AU, 2020). (Side 55-56)",
+  "data": [
+    {
+      "Dyretype": "1 årsko uden opdræt, malkekvæg, tung race",
+      "kg_CH4_ab_dyr_pr_år": 2.789
+    },
+    {
+      "Dyretype": "1 årsko uden opdræt, malkekvæg, Jersey",
+      "kg_CH4_ab_dyr_pr_år": 2.285
+    },
+    {
+      "Dyretype": "Årsopdræt, 0-6 mdr., småkalv, tung race",
+      "kg_CH4_ab_dyr_pr_år": 0.19
+    },
+    {
+      "Dyretype": "Årsopdræt, 0-6 mdr., småkalv, Jersey",
+      "kg_CH4_ab_dyr_pr_år": 0.142
+    },
+    {
+      "Dyretype": "1 årsopdræt (kvier/stude 6 mdr. - kælvning (27 mdr.)/slagtning, tung race)",
+      "kg_CH4_ab_dyr_pr_år": 0.438
+    },
+    {
+      "Dyretype": "1 årsopdræt (kvier/stude 6 mdr. - kælvning (25 mdr)/slagtning, Jersey)",
+      "kg_CH4_ab_dyr_pr_år": 0.329
+    },
+    {
+      "Dyretype": "1 stk. slagtekalv, 0-6 mdr., tung race.",
+      "kg_CH4_ab_dyr_pr_år": 0.106
+    },
+    {
+      "Dyretype": "1 stk. slagtekalv, 0-6 mdr., Jersey.",
+      "kg_CH4_ab_dyr_pr_år": 0.075
+    },
+    {
+      "Dyretype": "1 stk. slagtekalve, 6 mdr. - slagtning (440 kg), tung race.",
+      "kg_CH4_ab_dyr_pr_år": 0.21
+    },
+    {
+      "Dyretype": "1 stk. slagtekalve 6 mdr. - slagtning (328 kg), Jersey.",
+      "kg_CH4_ab_dyr_pr_år": 0.167
+    }
+  ]
+}

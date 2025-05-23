@@ -1,0 +1,69 @@
+{
+  "table_name": "Tabel 36: Emissioner fra transportsektoren er baseret på følgende værdier baseret på den nationale opgørelse (Kilde Morten Winther, DCE) (Side 113)",
+  "data_gj": [
+    {
+      "Brændstoftype": "Diesel",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "205B",
+      "CO2_kg_GJ": 74.0,
+      "CH4_g_GJ": 0.893,
+      "N2O_g_GJ": 3.531,
+      "NH3_g_GJ": 0.202
+    },
+    {
+      "Brændstoftype": "Benzin",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "208B",
+      "CO2_kg_GJ": 70.72,
+      "CH4_g_GJ": 140.623,
+      "N2O_g_GJ": 1.647,
+      "NH3_g_GJ": 1.382
+    }
+  ],
+  "data_kg_fuel": [
+    {
+      "Brændstoftype": "Diesel",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "205B",
+      "CO2_kg_kg_fuel": 3.16,
+      "CH4_g_kg_fuel": 0.038,
+      "N2O_g_kg_fuel": 0.151,
+      "NH3_g_kg_fuel": 0.009
+    },
+    {
+      "Brændstoftype": "Benzin",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "208B",
+      "CO2_kg_kg_fuel": 3.037,
+      "CH4_g_kg_fuel": 6.038,
+      "N2O_g_kg_fuel": 0.071,
+      "NH3_g_kg_fuel": 0.059
+    }
+  ],
+  "data_l_fuel": [
+    {
+      "Brændstoftype": "Diesel",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "205B",
+      "CO2_kg_l_fuel": 2.654,
+      "CH4_g_l_fuel": 0.032,
+      "N2O_g_l_fuel": 0.127,
+      "NH3_g_l_fuel": 0.007
+    },
+    {
+      "Brændstoftype": "Benzin",
+      "År": 2017,
+      "SNAP_kode": "0806",
+      "Fuel_kode": "208B",
+      "CO2_kg_l_fuel": 2.283,
+      "CH4_g_l_fuel": 4.54,
+      "N2O_g_l_fuel": 0.053,
+      "NH3_g_l_fuel": 0.045
+    }
+  ]
+}

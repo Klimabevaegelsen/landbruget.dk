@@ -1,0 +1,17 @@
+{
+  "table_name": "Default værdier for tyre 6 mdr. til slagtning for jersey, konventionel (Side 16)",
+  "values": [
+    {
+      "parameter": "Foderoptag, kg TS/tyr/dag",
+      "value": "6,8 kg TS"
+    },
+    {
+      "parameter": "Fedtsyre, g/kg TS",
+      "value": "18 g/kg TS"
+    },
+    {
+      "parameter": "Kraftfoderandel",
+      "value": "43 %"
+    }
+  ]
+}

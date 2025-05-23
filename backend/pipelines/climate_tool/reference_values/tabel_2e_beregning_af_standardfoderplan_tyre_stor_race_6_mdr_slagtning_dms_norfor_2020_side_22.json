@@ -1,0 +1,41 @@
+{
+  "table_name": "Tabel 2e: Beregning af standardfoderplan tyre stor race 6 mdr. – slagtning (DMS_NorFor, 2020) (Side 22)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "kg_ts_std_plan": 1.5,
+      "pct_af_foderoptag": 20.0,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilage ( >20 % kløver)",
+      "kg_ts_std_plan": 4.6,
+      "pct_af_foderoptag": 61.33,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Halm",
+      "kg_ts_std_plan": 1.1,
+      "pct_af_foderoptag": 14.67,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Sojaprodukter",
+      "kg_ts_std_plan": 0.2,
+      "pct_af_foderoptag": 2.67,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "mineraler og vitaminer",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 1.33,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "sum",
+      "kg_ts_std_plan": 7.5,
+      "pct_af_foderoptag": 100,
+      "andel_indkøbt_pct": null
+    }
+  ]
+}

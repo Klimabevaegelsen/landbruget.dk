@@ -1,0 +1,103 @@
+{
+  "table_name": "Tabel 33: Normtal for kvælstof/ tons gødning og ts% (Kulstofbalancen i jorden, Side 102)",
+  "data": [
+    {
+      "Gødningstype": "svinegylle",
+      "tørstof_pct": 6.6,
+      "kg_N_t": 4.81,
+      "kg_ts_kg_N": 14,
+      "faktor_kg_C_kg_N": 6
+    },
+    {
+      "Gødningstype": "kvæggylle",
+      "tørstof_pct": 8,
+      "kg_N_t": 4.68,
+      "kg_ts_kg_N": 17,
+      "faktor_kg_C_kg_N": 8
+    },
+    {
+      "Gødningstype": "minkgylle",
+      "tørstof_pct": 12,
+      "kg_N_t": 8.52,
+      "kg_ts_kg_N": 14,
+      "faktor_kg_C_kg_N": 6
+    },
+    {
+      "Gødningstype": "fjerkrægylle",
+      "tørstof_pct": 12,
+      "kg_N_t": 7.26,
+      "kg_ts_kg_N": 17,
+      "faktor_kg_C_kg_N": 7
+    },
+    {
+      "Gødningstype": "blandet gylle",
+      "tørstof_pct": 10.4,
+      "kg_N_t": 6,
+      "kg_ts_kg_N": 17,
+      "faktor_kg_C_kg_N": 8
+    },
+    {
+      "Gødningstype": "fast gødning",
+      "tørstof_pct": 18.2,
+      "kg_N_t": 4.67,
+      "kg_ts_kg_N": 39,
+      "faktor_kg_C_kg_N": 18
+    },
+    {
+      "Gødningstype": "ajle",
+      "tørstof_pct": 3.4,
+      "kg_N_t": 7.35,
+      "kg_ts_kg_N": 5,
+      "faktor_kg_C_kg_N": 2
+    },
+    {
+      "Gødningstype": "dybstrøelse",
+      "tørstof_pct": 30,
+      "kg_N_t": 9.54,
+      "kg_ts_kg_N": 31,
+      "faktor_kg_C_kg_N": 14
+    },
+    {
+      "Gødningstype": "væskefraktion",
+      "tørstof_pct": 1,
+      "kg_N_t": 4,
+      "kg_ts_kg_N": 3,
+      "faktor_kg_C_kg_N": 1
+    },
+    {
+      "Gødningstype": "afgasset biomasse",
+      "tørstof_pct": 4.5,
+      "kg_N_t": 5,
+      "kg_ts_kg_N": 9,
+      "faktor_kg_C_kg_N": 4
+    },
+    {
+      "Gødningstype": "anden husdyrgødning",
+      "tørstof_pct": 26,
+      "kg_N_t": 7.72,
+      "kg_ts_kg_N": 34,
+      "faktor_kg_C_kg_N": 15
+    },
+    {
+      "Gødningstype": "forarbejdet husdyrgødning",
+      "tørstof_pct": 70,
+      "kg_N_t": 15,
+      "kg_ts_kg_N": 47,
+      "faktor_kg_C_kg_N": 21
+    },
+    {
+      "Gødningstype": "blandet husdyrgødning",
+      "tørstof_pct": 10,
+      "kg_N_t": 6.6,
+      "kg_ts_kg_N": 15,
+      "faktor_kg_C_kg_N": 7
+    },
+    {
+      "Gødningstype": "andet organisk gødning",
+      "tørstof_pct": 70,
+      "kg_N_t": 4,
+      "kg_ts_kg_N": 175,
+      "faktor_kg_C_kg_N": 79
+    }
+  ]
+}

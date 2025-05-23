@@ -1,0 +1,41 @@
+{
+  "table_name": "Tabel 2f: Beregning af standardfoderplan Tyre Jersey 6 mdr. - slagtning (DMS_Norfor, 2020) (Side 23)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "kg_ts_std_plan": 1.7,
+      "pct_af_foderoptag": 24.29,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilage ( >20 % kløver)",
+      "kg_ts_std_plan": 3.9,
+      "pct_af_foderoptag": 55.71,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Halm",
+      "kg_ts_std_plan": 1.0,
+      "pct_af_foderoptag": 14.29,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Sojaprodukter",
+      "kg_ts_std_plan": 0.3,
+      "pct_af_foderoptag": 4.29,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "mineraler og vitaminer",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 1.43,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "sum",
+      "kg_ts_std_plan": 7.0,
+      "pct_af_foderoptag": 100,
+      "andel_indkøbt_pct": null
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "table_name": "Beregning for malkekøer tungrace, konventionel (Side 15-16)",
+  "description": "x=ydelse, EKM",
+  "equations": [
+    {
+      "parameter": "Foderoptag, kg TS/ko/dag",
+      "equation": "y = 0,0009x+13,798"
+    },
+    {
+      "parameter": "Fedtsyre, g/kg TS",
+      "equation": "y = 0,0014x + 17,444"
+    },
+    {
+      "parameter": "NDF, g/kg TS",
+      "equation": "y = -0,006x + 371,64"
+    }
+  ]
+}

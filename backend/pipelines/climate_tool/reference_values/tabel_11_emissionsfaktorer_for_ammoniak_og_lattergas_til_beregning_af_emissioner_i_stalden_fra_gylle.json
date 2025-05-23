@@ -1,0 +1,145 @@
+{
+  "table_name": "Tabel 11: Emissionsfaktorer for ammoniak og lattergas til beregning af emissioner i stalden fra gylle og dybstrøelse afhængig af staldtyper. (Side 46)",
+  "data": [
+    {
+      "Staldtype": "Bindestald med grebning",
+      "Gødningsfordeling": "60 % Fast gødning - 40 % ajle",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 10,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 0,
+      "Reference_NH3": null
+    },
+    {
+      "Staldtype": "Bindestald med riste",
+      "Gødningsfordeling": "100% gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 6,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Sengestald med spalter (kanal, bagskyl eller ringkanal)",
+      "Gødningsfordeling": "100% gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 13.5,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Sengestald med spalter (kanal, linespil)",
+      "Gødningsfordeling": "100% gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 12,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Sengestald med fast gulv",
+      "Gødningsfordeling": "100% gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 20,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Sengestald med fast drænet gulv",
+      "Gødningsfordeling": "100% gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 10.4,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse",
+      "Gødningsfordeling": "100 % dybstrøelsessystem",
+      "N2O_pct_af_N_Gylle": null,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": null,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse, kort ædeplads",
+      "Gødningsfordeling": "100 % dybstrøelsessystem",
+      "N2O_pct_af_N_Gylle": null,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": null,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse, lang ædeplads med fast gulv",
+      "Gødningsfordeling": "60 % dybstrøelsessystem - 40 % gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 20,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse, lang ædeplads med spalter (kanal, linespil)",
+      "Gødningsfordeling": "60 % dybstrøelsessystem - 40 % gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 12,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse, lang ædeplads med spalter (kanal, bagskyl eller ringkanal)",
+      "Gødningsfordeling": "60 % dybstrøelsessystem - 40 % gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 13.5,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Dybstrøelse, lang ædeplads, fast drænet gulv med skraber og ajleafløb D",
+      "Gødningsfordeling": "60 % dybstrøelsessystem - 40 % gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": 1,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 10.4,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 6,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Spaltegulvsbokse",
+      "Gødningsfordeling": "100 % gyllesystem",
+      "N2O_pct_af_N_Gylle": 0.2,
+      "N2O_pct_af_N_Dybstrøelse": null,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": 16,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": null,
+      "Reference_NH3": "Normt al 2020"
+    },
+    {
+      "Staldtype": "Afgræsning",
+      "Gødningsfordeling": null,
+      "N2O_pct_af_N_Gylle": null,
+      "N2O_pct_af_N_Dybstrøelse": 2,
+      "Reference_N2O": "IPCC, 2006",
+      "NH3_pct_af_TAN_ab_dyr_Gylle": null,
+      "NH3_pct_af_total_N_ab_dyr_Dybstrøelse": 2,
+      "Reference_NH3": "IPCC, 2006"
+    }
+  ]
+}

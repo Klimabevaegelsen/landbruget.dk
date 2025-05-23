@@ -1,0 +1,18 @@
+{
+  "table_name": "Beregningsgrundlag for emissioner fra fordøjelsen ved økologiske malkekøer - tungrace, økologisk (Side 18-19)",
+  "description": "x=ydelse, EKM per årsko",
+  "equations": [
+    {
+      "parameter": "Foderoptag",
+      "equation": "y = 0,001x+13,225"
+    },
+    {
+      "parameter": "Fedtsyre",
+      "equation": "y = 0,0007x + 19,772"
+    },
+    {
+      "parameter": "NDF",
+      "equation": "y = -0,0069x + 378,65"
+    }
+  ]
+}

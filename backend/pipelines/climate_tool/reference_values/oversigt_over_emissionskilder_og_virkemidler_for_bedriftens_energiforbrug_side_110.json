@@ -1,0 +1,42 @@
+{
+  "table_name": "Oversigt over emissionskilder og virkemidler for bedriftens energiforbrug (Side 110)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 46,
+      "Aktivitetsdata_Beskrivelse": "Elforbrug",
+      "Virkemidler": [
+        "Overgå til vedvarende energi (Klasse A)",
+        "Hent varmen i jorden",
+        "Skift oliefyret ud med biobrændsel",
+        "Opsæt en husstandsmølle",
+        "Hent strøm fra solen",
+        "Investér i en elbil",
+        "Minimér energiforbruget til malkning",
+        "Sæt automatisk styring på kornblæseren",
+        "Brug varmegenvinding (mælk/gødning/kompost)",
+        "Reducér el- og varmeforbrug i slagtekyllingestalden",
+        "Bliv energi- og gødningsproducent"
+      ]
+    },
+    {
+      "Aktivitetsdata_Nummer": 47,
+      "Aktivitetsdata_Beskrivelse": "Dieselforbrug",
+      "Virkemidler": [
+        "Saml din jord",
+        "Indstil maskiner optimalt i marken",
+        "Brug lastbil til transport",
+        "Kend dit dieselforbrug i marken"
+      ]
+    },
+    {
+      "Aktivitetsdata_Nummer": 48,
+      "Aktivitetsdata_Beskrivelse": "Naturgasforbrug",
+      "Virkemidler": []
+    },
+    {
+      "Aktivitetsdata_Nummer": 49,
+      "Aktivitetsdata_Beskrivelse": "Brændselstyper",
+      "Virkemidler": []
+    }
+  ]
+}

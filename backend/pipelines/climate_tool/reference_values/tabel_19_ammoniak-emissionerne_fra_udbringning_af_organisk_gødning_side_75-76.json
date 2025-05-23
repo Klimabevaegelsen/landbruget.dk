@@ -1,0 +1,138 @@
+{
+  "table_name": "Tabel 19: Ammoniak-emissionerne fra udbringning af organisk gødning (Side 75-76)",
+  "data": [
+    {
+      "Gødningstype": "Handelsgødning",
+      "kg_TAN": null,
+      "EFNH3_N": 0.025,
+      "EF_N2O": 0.01,
+      "N20_beregning": "Kg N x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Svinegylle",
+      "kg_TAN": 74.9,
+      "EFNH3_N": 0.107,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Kvæggylle",
+      "kg_TAN": 60.0,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Minkgylle",
+      "kg_TAN": 45.1,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Fjerkrægylle",
+      "kg_TAN": 64.9,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Blandet gylle",
+      "kg_TAN": 65.0,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Fast gødning",
+      "kg_TAN": null,
+      "EFNH3_N": 0.067,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Ajle kg",
+      "kg_TAN": 90.0,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Dybstrøelse",
+      "kg_TAN": null,
+      "EFNH3_N": 0.067,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Væskefraktion efter forarbejdning",
+      "kg_TAN": 45.0,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Afgasset biomasse",
+      "kg_TAN": 65.0,
+      "EFNH3_N": 0.132,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg TAN x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Anden husdyrgødning",
+      "kg_TAN": null,
+      "EFNH3_N": 0.067,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "Forarbejdet husdyrgødning",
+      "kg_TAN": null,
+      "EFNH3_N": 0.067,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x 44/28 x EFN2O"
+    },
+    {
+      "Gødningstype": "spildevandsslam",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    },
+    {
+      "Gødningstype": "komposteret husholdningsaffald",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    },
+    {
+      "Gødningstype": "kartoffelfrugtsaft",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    },
+    {
+      "Gødningstype": "pressesaft fra grønpillefabrik",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    },
+    {
+      "Gødningstype": "andre typer af andet organisk affald",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    },
+    {
+      "Gødningstype": "andet organisk gødning (blandinger)",
+      "kg_TAN": null,
+      "EFNH3_N": 0.066,
+      "EF_N2O": 0.01,
+      "N20_beregning": "kg total N x EFNH3-N x (44/28) x EFN2O"
+    }
+  ]
+}

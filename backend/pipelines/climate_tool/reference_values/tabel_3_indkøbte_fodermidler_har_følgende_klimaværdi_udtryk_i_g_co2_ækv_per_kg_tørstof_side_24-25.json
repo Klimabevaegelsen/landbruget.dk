@@ -1,0 +1,81 @@
+{
+  "table_name": "Tabel 3: Indkøbte fodermidler har følgende klimaværdi udtryk i g CO2 ækv. per kg tørstof (Side 24-25)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "g_CO2_ækv_per_kg_TS": 263,
+      "Reference": "Mogensen et al., 2018"
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilge ( >20 % kløver)",
+      "g_CO2_ækv_per_kg_TS": 475,
+      "Reference": "Mogensen et al., 2018"
+    },
+    {
+      "fodermiddel": "Halm",
+      "g_CO2_ækv_per_kg_TS": 60,
+      "Reference": "Mogensen et al., 2018"
+    },
+    {
+      "fodermiddel": "Andet grovfoder (roer, helsæd mv)",
+      "g_CO2_ækv_per_kg_TS": 292,
+      "Reference": "Mogensen et al., 2018"
+    },
+    {
+      "fodermiddel": "Sojaprodukter",
+      "g_CO2_ækv_per_kg_TS": 1000,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Rapsprodukter",
+      "g_CO2_ækv_per_kg_TS": 643,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Kraftfoder > 25 % protein",
+      "g_CO2_ækv_per_kg_TS": 875,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Kraftfoder < 25 % protein",
+      "g_CO2_ækv_per_kg_TS": 799,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Hestebønner/ærter",
+      "g_CO2_ækv_per_kg_TS": 551,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Andet proteinfoder",
+      "g_CO2_ækv_per_kg_TS": 999,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Korn",
+      "g_CO2_ækv_per_kg_TS": 611,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Roepiller",
+      "g_CO2_ækv_per_kg_TS": 604,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Fedttilskud",
+      "g_CO2_ækv_per_kg_TS": 6255,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Mineraler og vitaminer",
+      "g_CO2_ækv_per_kg_TS": 121,
+      "Reference": "Beregnet ud fra GFLI, 2019"
+    },
+    {
+      "fodermiddel": "Biprodukter (mask, HP-pulp, mv)",
+      "g_CO2_ækv_per_kg_TS": 142,
+      "Reference": "Mogensen et al., 2018"
+    }
+  ],
+  "footnote": "* De beregnede værdier ud fra GFLI skal ses i bilaget (LKV – dokumentation – standard foderplaner og klimaværdier)."
+}

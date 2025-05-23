@@ -1,0 +1,30 @@
+{
+  "table_name": "Tabel 21: Beregnede fraktioner af gødning der afsættes i marken. (Side 77)",
+  "data": [
+    {
+      "Dyreart": "Afgræsning kvæg",
+      "Estimeret_udetid": "afgræsning 7 timer i 200 dage",
+      "Fraktion_af_gødning_der_afsættes_i_marken": 0.16
+    },
+    {
+      "Dyreart": "Afgræsning svin",
+      "Estimeret_udetid": "Afgræsning 24 timer 365 dage for søer plus smågrise indtil 30 kg",
+      "Fraktion_af_gødning_der_afsættes_i_marken": 0.12
+    },
+    {
+      "Dyreart": "Afgræsning heste",
+      "Estimeret_udetid": "200 dage ude i 24 timer",
+      "Fraktion_af_gødning_der_afsættes_i_marken": 0.55
+    },
+    {
+      "Dyreart": "Agræsning Får",
+      "Estimeret_udetid": "330 dage ude i 24 timer",
+      "Fraktion_af_gødning_der_afsættes_i_marken": 0.9
+    },
+    {
+      "Dyreart": "Afgræsning fjerkræ",
+      "Estimeret_udetid": "Ude 2 timer 365 dage",
+      "Fraktion_af_gødning_der_afsættes_i_marken": 0.08
+    }
+  ]
+}

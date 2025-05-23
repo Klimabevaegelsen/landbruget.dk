@@ -1,0 +1,121 @@
+{
+  "table_name": "Tabel 9: Standard foderoptagelse for slagtekyllinger, høner og hønniker, kg per produceret kylling, årshøne eller hønnike. (Side 38-39)",
+  "kilde": "AU normtal 2020",
+  "data": [
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Produktionstid 30 dage (levende vægt ved slagtning 1,67 kg)",
+      "Norm_foderoptagelse_kg": 2.49
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Produktionstid 32 dage (levende vægt ved slagtning 1,85 kg)",
+      "Norm_foderoptagelse_kg": 2.83
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Produktionstid 35 dage (levende vægt ved slagtning 2,13 kg)",
+      "Norm_foderoptagelse_kg": 3.38
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Produktionstid 40 dage (levende vægt ved slagtning 2,6 kg)",
+      "Norm_foderoptagelse_kg": 4.38
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Produktionstid 45 dage (levende vægt ved slagtning 2,77 kg)",
+      "Norm_foderoptagelse_kg": 5.48
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Skrabekyllinger, 44 dage (levende vægt ved slagtning 1,87 kg)",
+      "Norm_foderoptagelse_kg": 3.39
+    },
+    {
+      "Kategori": "Slagtekyllinger",
+      "Type_Produktionstid_Levende_vægt": "Økologiske slagtekyllinger, 63 dage (levende vægt ved slagtning 2,15 kg)",
+      "Norm_foderoptagelse_kg": 5.46
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Friland, konsumæg, gulvdrift+gødningskummer",
+      "Norm_foderoptagelse_kg": 43.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Friland, konsumæg, gulvdrift, uden gødningskummer",
+      "Norm_foderoptagelse_kg": 43.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Friland, konsumæg, gulvdrift, fleretage med gødningsbånd + gylletank",
+      "Norm_foderoptagelse_kg": 43.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Friland, konsumæg, gulvdrift + fler-etagesystem med gødningsbånd",
+      "Norm_foderoptagelse_kg": 43.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Økologiske, konsumæg, gulvdrift + fler-etagesystem med gødningsbånd",
+      "Norm_foderoptagelse_kg": 44.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Økologiske, konsumæg, gulvdrift+gødningskummer",
+      "Norm_foderoptagelse_kg": 44.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Økologiske, konsumæg, gulvdrift + fleretage med gødningsbånd + gylletank",
+      "Norm_foderoptagelse_kg": 44.5
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Skrabehøner, konsumæg, gulvdrift+gødningskummer",
+      "Norm_foderoptagelse_kg": 43
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Skrabehøner, konsumæg, fleretage, gulvdrift+gødningsbånd",
+      "Norm_foderoptagelse_kg": 43
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Skrabehøner, konsum æg, gulvdrift + fler-etagesystem med gødningsbånd + gylletank",
+      "Norm_foderoptagelse_kg": 43
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Burhøns, konsumæg, gødningsbånd",
+      "Norm_foderoptagelse_kg": 40.7
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Burhøns, konsumæg, gødningsbånd+gylle",
+      "Norm_foderoptagelse_kg": 40.7
+    },
+    {
+      "Kategori": "Høner",
+      "Type_Produktionstid_Levende_vægt": "Rugeæg (HPR-høner), gulvdrift+gødingskummer",
+      "Norm_foderoptagelse_kg": 58.4
+    },
+    {
+      "Kategori": "Hønniker/Konsum",
+      "Type_Produktionstid_Levende_vægt": "Konsum, gulvdrift, produktionstid 119 dage",
+      "Norm_foderoptagelse_kg": 5.76
+    },
+    {
+      "Kategori": "Hønniker/Rugeæg",
+      "Type_Produktionstid_Levende_vægt": "Rugeæg (hønniker, HPR), gulvdrift, produktionstid 119 dage",
+      "Norm_foderoptagelse_kg": 6.06
+    },
+    {
+      "Kategori": "Hønniker/Konsum",
+      "Type_Produktionstid_Levende_vægt": "Konsum, bure, produktionstid 119 dage",
+      "Norm_foderoptagelse_kg": 5.76
+    }
+  ]
+}

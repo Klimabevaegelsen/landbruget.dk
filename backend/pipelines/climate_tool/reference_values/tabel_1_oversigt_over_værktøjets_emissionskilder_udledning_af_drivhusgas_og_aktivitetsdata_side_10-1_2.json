@@ -1,0 +1,369 @@
+{
+  "table_name": "Tabel 1: Oversigt over værktøjets emissionskilder, udledning af drivhusgas og aktivitetsdata (Side 10-11)",
+  "data": [
+    {
+      "Emissionskilde": "FORDØJELSE",
+      "Drivhusgas": "CH4/CO2",
+      "Aktivitetsdata_Nummer": 1,
+      "Aktivitetsdata_Beskrivelse": "Antal dyr",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "FORDØJELSE",
+      "Drivhusgas": "CH4/CO2",
+      "Aktivitetsdata_Nummer": 2,
+      "Aktivitetsdata_Beskrivelse": "Type dyr",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "FORDØJELSE",
+      "Drivhusgas": "CH4/CO2",
+      "Aktivitetsdata_Nummer": 3,
+      "Aktivitetsdata_Beskrivelse": "Ydelsesniveau og Fodersammensætning",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING I STALD/LAGER",
+      "Drivhusgas": "CH4, N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 4,
+      "Aktivitetsdata_Beskrivelse": "Staldtype og teknologier",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING I STALD/LAGER",
+      "Drivhusgas": "CH4, N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 5,
+      "Aktivitetsdata_Beskrivelse": "Opholdstid af gylle i stald",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING I STALD/LAGER",
+      "Drivhusgas": "CH4, N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Mængde strøelse",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING I STALD/LAGER",
+      "Drivhusgas": "CH4, N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 7,
+      "Aktivitetsdata_Beskrivelse": "Gyllehåndtering",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING PÅ MARK",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Mængde N",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING PÅ MARK",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 9,
+      "Aktivitetsdata_Beskrivelse": "Gødningstype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "HUSDYRGØDNING PÅ MARK",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 10,
+      "Aktivitetsdata_Beskrivelse": "Afgræsning",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "HANDELSGØDNING PÅ MARK",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 11,
+      "Aktivitetsdata_Beskrivelse": "Mængde N",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "SLAM OG ANDEN ORGANISK GØDNING",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 12,
+      "Aktivitetsdata_Beskrivelse": "Mængde N",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "SLAM OG ANDEN ORGANISK GØDNING",
+      "Drivhusgas": "N2O, NH3, NOx",
+      "Aktivitetsdata_Nummer": 13,
+      "Aktivitetsdata_Beskrivelse": "Gødningstype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "AFGRØDERESTER",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 14,
+      "Aktivitetsdata_Beskrivelse": "Areal",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "AFGRØDERESTER",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 15,
+      "Aktivitetsdata_Beskrivelse": "Afgrødetype 1 og 2",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "AFGRØDERESTER",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 16,
+      "Aktivitetsdata_Beskrivelse": "Udbytte",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "AMMONIAK FRA VOKSENDE PLANTER",
+      "Drivhusgas": "N2O, NH3",
+      "Aktivitetsdata_Nummer": 17,
+      "Aktivitetsdata_Beskrivelse": "Afgrødetype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "AMMONIAK FRA VOKSENDE PLANTER",
+      "Drivhusgas": "N2O, NH3",
+      "Aktivitetsdata_Nummer": 18,
+      "Aktivitetsdata_Beskrivelse": "Arealfordeling",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "UDVASKNING",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 19,
+      "Aktivitetsdata_Beskrivelse": "Afgrødetype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "UDVASKNING",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 20,
+      "Aktivitetsdata_Beskrivelse": "Efterafgrøder",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "UDVASKNING",
+      "Drivhusgas": "N2O",
+      "Aktivitetsdata_Nummer": 21,
+      "Aktivitetsdata_Beskrivelse": "Jordtype (sand/ler)",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "ORGANOGENE JORDE",
+      "Drivhusgas": "N2O, CH4",
+      "Aktivitetsdata_Nummer": 22,
+      "Aktivitetsdata_Beskrivelse": "Areal",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "ORGANOGENE JORDE",
+      "Drivhusgas": "N2O, CH4",
+      "Aktivitetsdata_Nummer": 23,
+      "Aktivitetsdata_Beskrivelse": "Areal drænet",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ORGANOGENE JORDE",
+      "Drivhusgas": "N2O, CH4",
+      "Aktivitetsdata_Nummer": 24,
+      "Aktivitetsdata_Beskrivelse": "Areal i omdrift/afgrøde",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KALKNING",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 25,
+      "Aktivitetsdata_Beskrivelse": "Mængde af CaCO3",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 26,
+      "Aktivitetsdata_Beskrivelse": "Organogene jorde",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 27,
+      "Aktivitetsdata_Beskrivelse": "Efterafgrøder",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 28,
+      "Aktivitetsdata_Beskrivelse": "Afgrødetype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 29,
+      "Aktivitetsdata_Beskrivelse": "Andel græs/flerårige afgrøder",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 30,
+      "Aktivitetsdata_Beskrivelse": "Type af jordbehandling",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 31,
+      "Aktivitetsdata_Beskrivelse": "Halmnedmuldning",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 32,
+      "Aktivitetsdata_Beskrivelse": "Tildelt gødningstype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "KULSTOFBALANCEN",
+      "Drivhusgas": null,
+      "Aktivitetsdata_Nummer": 33,
+      "Aktivitetsdata_Beskrivelse": "Antal/ha træer/buske",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Foder - Fordøjelsen",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 3,
+      "Aktivitetsdata_Beskrivelse": "Fodermidler/foderration",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Foder - Fordøjelsen",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 3,
+      "Aktivitetsdata_Beskrivelse": "Mængde",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Gødning –udbringning mark",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Gødningstype",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Gødning –udbringning mark",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Mængde",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Gødning –udbringning mark",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Bioforgasning af gødning",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Gødning –udbringning mark",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Gødningstype der bioforgasses",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Gødning –udbringning mark",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Gødningsmængde der bioforgasses",
+      "Data_fra_gødningsregnskab": "X"
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Dyr – stald",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 1,
+      "Aktivitetsdata_Beskrivelse": "Indkøb af dyr til bedriften",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Strøelse - stald",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Indkøb af halm",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Strøelse - stald",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Indkøb af sand",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "IMPORT/EKSPORT TIL BEDRIFTEN: Strøelse - stald",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Indkøb af spåner",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: El/varme",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 34,
+      "Aktivitetsdata_Beskrivelse": "Forbrug af kWh",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Maskiner/traktorer",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 35,
+      "Aktivitetsdata_Beskrivelse": "Forbrug af diesel",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Andet",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 36,
+      "Aktivitetsdata_Beskrivelse": "Forbrug af naturgas",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Andet",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 37,
+      "Aktivitetsdata_Beskrivelse": "Brændselstyper",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Maskinarbejde",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 38,
+      "Aktivitetsdata_Beskrivelse": "Solgt maskinarbejde (kr.)",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Maskinarbejde",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 39,
+      "Aktivitetsdata_Beskrivelse": "Indkøbt maskinarbejde (kr.)",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Vedvarende energi",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 40,
+      "Aktivitetsdata_Beskrivelse": "Produktion af vedvarende energi",
+      "Data_fra_gødningsregnskab": null
+    },
+    {
+      "Emissionskilde": "ENERGIFORBRUG: Vedvarende energi",
+      "Drivhusgas": "CO2",
+      "Aktivitetsdata_Nummer": 41,
+      "Aktivitetsdata_Beskrivelse": "Forbrug af vedvarende energi (indkøbt)",
+      "Data_fra_gødningsregnskab": null
+    }
+  ]
+}

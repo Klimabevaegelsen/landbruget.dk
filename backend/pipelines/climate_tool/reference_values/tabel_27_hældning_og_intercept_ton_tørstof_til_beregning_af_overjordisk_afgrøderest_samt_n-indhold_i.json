@@ -1,0 +1,35 @@
+{
+  "table_name": "Tabel 27: Hældning og intercept (ton tørstof) til beregning af overjordisk afgrøderest samt N-indhold i overjordisk afgrøderest for udlægsafgrøder og efterafgrøder. (Side 89)",
+  "data": [
+    {
+      "Udlægsafgrøder_og_efterafgrøder": "Græs",
+      "Hældning": 0.3,
+      "Intercept_ton_tørstof": 0,
+      "N_indhold": 0.015
+    },
+    {
+      "Udlægsafgrøder_og_efterafgrøder": "Kløvergræs",
+      "Hældning": 0.3,
+      "Intercept_ton_tørstof": 0,
+      "N_indhold": 0.025
+    },
+    {
+      "Udlægsafgrøder_og_efterafgrøder": "Olieræddike",
+      "Hældning": 0.2,
+      "Intercept_ton_tørstof": 0,
+      "N_indhold": 0.006
+    },
+    {
+      "Udlægsafgrøder_og_efterafgrøder": "Gul sennep",
+      "Hældning": 0.2,
+      "Intercept_ton_tørstof": 0,
+      "N_indhold": 0.006
+    },
+    {
+      "Udlægsafgrøder_og_efterafgrøder": "Osv. (alle efterafgrøder)",
+      "Hældning": null,
+      "Intercept_ton_tørstof": null,
+      "N_indhold": null
+    }
+  ]
+}

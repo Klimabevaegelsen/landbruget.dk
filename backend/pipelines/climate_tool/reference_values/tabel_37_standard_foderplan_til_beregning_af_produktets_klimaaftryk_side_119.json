@@ -1,0 +1,29 @@
+{
+  "table_name": "Tabel 37: Standard foderplan til beregning af produktets klimaaftryk. (Side 119)",
+  "data": [
+    {
+      "Fodermidler": "Majsensilage",
+      "GW_g_CO2_eq_kg_TS": 263
+    },
+    {
+      "Fodermidler": "Kløvergræs-/græsensilage",
+      "GW_g_CO2_eq_kg_TS": 475
+    },
+    {
+      "Fodermidler": "Halm",
+      "GW_g_CO2_eq_kg_TS": 60
+    },
+    {
+      "Fodermidler": "Andet grovfoder (roer, helsæd mv)",
+      "GW_g_CO2_eq_kg_TS": 292
+    },
+    {
+      "Fodermidler": "Hestebønner/ærter",
+      "GW_g_CO2_eq_kg_TS": 551
+    },
+    {
+      "Fodermidler": "Korn",
+      "GW_g_CO2_eq_kg_TS": 540
+    }
+  ]
+}

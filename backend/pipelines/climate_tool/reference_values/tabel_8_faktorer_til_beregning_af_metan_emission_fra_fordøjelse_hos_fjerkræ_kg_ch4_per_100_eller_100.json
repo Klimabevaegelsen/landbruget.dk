@@ -1,0 +1,56 @@
+{
+  "table_name": "Tabel 8: Faktorer til beregning af metan emission fra fordøjelse hos fjerkræ. kg CH4 per 100 eller 1000 dyr. (Side 36-37)",
+  "data": [
+    {
+      "Fjerkrætype_Dage": "Høner",
+      "Antal_dyr": 100,
+      "CH4_EF": "1,061*"
+    },
+    {
+      "Fjerkrætype_Dage": "Hønniker rugeæg, 112 dage",
+      "Antal_dyr": 100,
+      "CH4_EF": 0.285
+    },
+    {
+      "Fjerkrætype_Dage": "Hønniker rugeæg, 119 dage",
+      "Antal_dyr": 100,
+      "CH4_EF": 0.303
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 30 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.011
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 32 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.012
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 35 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.013
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 40 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.015
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 45 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.017
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 56 dage",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.021
+    },
+    {
+      "Fjerkrætype_Dage": "Slagtekyllinger: 81 dage (økologiske)",
+      "Antal_dyr": 1000,
+      "CH4_EF": 0.075
+    }
+  ],
+  "footnote": "*Værdien 1,061 er angivet efter aftale med DCE (2020), da værdien på 0,021, som står i tabel 3D-5 i NIR 2020 side 817 er forkert. Den rigtige værdi er 1,061 jf. DCE. De øvrige tabelværdier er korrekte."
+}

@@ -1,0 +1,41 @@
+{
+  "table_name": "Tabel 2c: Beregning af standardfoderplan opdræt stor race 6 mdr. – kælvning (DMS_NorFor, 2020) (Side 22)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "kg_ts_std_plan": 1.2,
+      "pct_af_foderoptag": 15.58,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilage ( >20 % kløver)",
+      "kg_ts_std_plan": 3.8,
+      "pct_af_foderoptag": 49.35,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Halm",
+      "kg_ts_std_plan": 1.8,
+      "pct_af_foderoptag": 23.38,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Rapsprodukter",
+      "kg_ts_std_plan": 0.8,
+      "pct_af_foderoptag": 10.39,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "mineraler og vitaminer",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 1.3,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "sum",
+      "kg_ts_std_plan": 7.7,
+      "pct_af_foderoptag": 100,
+      "andel_indkøbt_pct": null
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "table_name": "Tabel 13: MCF for gylle og dybstrøelse samt reduktionen i MCF hvis der anvendes staldforsuring eller biogas. (Side 47)",
+  "data": [
+    {
+      "Type": "Gylle",
+      "MCF": 12.4,
+      "Reference": "Nielsen et al. 2020",
+      "Antal_dage_i_stalden": 182.5
+    },
+    {
+      "Type": "Staldforsuring",
+      "MCF": "-60%",
+      "Reference": "Olesen et al., 2018",
+      "Antal_dage_i_stalden": 182.5
+    },
+    {
+      "Type": "Biogas",
+      "MCF": "-40%",
+      "Reference": "Nielsen et al. 2020",
+      "Antal_dage_i_stalden": 182.5
+    },
+    {
+      "Type": "Dybstrøelse",
+      "MCF": 17,
+      "Reference": "IPCC, 2006",
+      "Antal_dage_i_stalden": 182.5
+    },
+    {
+      "Type": "Afgræsning",
+      "MCF": 1,
+      "Reference": "IPCC, 2006",
+      "Antal_dage_i_stalden": null
+    }
+  ]
+}

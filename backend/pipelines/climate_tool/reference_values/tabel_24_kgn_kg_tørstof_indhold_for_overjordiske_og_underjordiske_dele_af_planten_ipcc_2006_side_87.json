@@ -1,0 +1,135 @@
+{
+  "table_name": "Tabel 24: kgN/ kg tørstof indhold for overjordiske og underjordiske dele af planten (IPCC 2006). (Side 87)",
+  "data": [
+    {
+      "Crop_Type_Category": "Major crop types",
+      "N_overjordisk": null,
+      "N_underjordisk": null
+    },
+    {
+      "Crop_Type_Category": "Grains",
+      "N_overjordisk": 0.006,
+      "N_underjordisk": 0.009
+    },
+    {
+      "Crop_Type_Category": "Beans and pulses",
+      "N_overjordisk": 0.008,
+      "N_underjordisk": 0.008
+    },
+    {
+      "Crop_Type_Category": "Tubers",
+      "N_overjordisk": 0.019,
+      "N_underjordisk": 0.014
+    },
+    {
+      "Crop_Type_Category": "Root crops",
+      "N_overjordisk": 0.016,
+      "N_underjordisk": 0.014
+    },
+    {
+      "Crop_Type_Category": "N-fixing forages",
+      "N_overjordisk": 0.027,
+      "N_underjordisk": 0.022
+    },
+    {
+      "Crop_Type_Category": "Non N-fixing forages",
+      "N_overjordisk": 0.015,
+      "N_underjordisk": 0.012
+    },
+    {
+      "Crop_Type_Category": "Perennial grasses",
+      "N_overjordisk": 0.015,
+      "N_underjordisk": 0.012
+    },
+    {
+      "Crop_Type_Category": "Grass clover mixtures",
+      "N_overjordisk": 0.025,
+      "N_underjordisk": 0.016
+    },
+    {
+      "Crop_Type_Category": "Individual crops",
+      "N_overjordisk": null,
+      "N_underjordisk": null
+    },
+    {
+      "Crop_Type_Category": "Maize",
+      "N_overjordisk": 0.006,
+      "N_underjordisk": 0.007
+    },
+    {
+      "Crop_Type_Category": "Wheat",
+      "N_overjordisk": 0.006,
+      "N_underjordisk": 0.009
+    },
+    {
+      "Crop_Type_Category": "Winter wheat",
+      "N_overjordisk": 0.006,
+      "N_underjordisk": 0.009
+    },
+    {
+      "Crop_Type_Category": "Spring wheat",
+      "N_overjordisk": 0.006,
+      "N_underjordisk": 0.009
+    },
+    {
+      "Crop_Type_Category": "Rice",
+      "N_overjordisk": 0.007,
+      "N_underjordisk": null
+    },
+    {
+      "Crop_Type_Category": "Barley",
+      "N_overjordisk": 0.007,
+      "N_underjordisk": 0.014
+    },
+    {
+      "Crop_Type_Category": "Oats",
+      "N_overjordisk": 0.007,
+      "N_underjordisk": 0.008
+    },
+    {
+      "Crop_Type_Category": "Millet",
+      "N_overjordisk": 0.007,
+      "N_underjordisk": null
+    },
+    {
+      "Crop_Type_Category": "Sorghum",
+      "N_overjordisk": 0.007,
+      "N_underjordisk": 0.006
+    },
+    {
+      "Crop_Type_Category": "Rye",
+      "N_overjordisk": 0.005,
+      "N_underjordisk": 0.011
+    },
+    {
+      "Crop_Type_Category": "Soyabean",
+      "N_overjordisk": 0.008,
+      "N_underjordisk": 0.008
+    },
+    {
+      "Crop_Type_Category": "Dry bean",
+      "N_overjordisk": 0.01,
+      "N_underjordisk": 0.01
+    },
+    {
+      "Crop_Type_Category": "Potato",
+      "N_overjordisk": 0.019,
+      "N_underjordisk": 0.014
+    },
+    {
+      "Crop_Type_Category": "Peanut",
+      "N_overjordisk": 0.016,
+      "N_underjordisk": null
+    },
+    {
+      "Crop_Type_Category": "Alfalfa",
+      "N_overjordisk": 0.027,
+      "N_underjordisk": 0.019
+    },
+    {
+      "Crop_Type_Category": "Non legume hay",
+      "N_overjordisk": 0.015,
+      "N_underjordisk": 0.012
+    }
+  ]
+}

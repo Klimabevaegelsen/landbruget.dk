@@ -1,0 +1,30 @@
+{
+  "table_name": "Tabel 28: Faktor til beregning af underjordisk afgrøderest samt N-indhold i underjordisk afgrøderest for udlægsafgrøder og efterafgrøder. (Side 90)",
+  "data": [
+    {
+      "Afgrøde": "Græs",
+      "Faktor_Underjordisk_afgrøderest": 0.54,
+      "N_indhold": 0.012
+    },
+    {
+      "Afgrøde": "Kløvergræs",
+      "Faktor_Underjordisk_afgrøderest": 0.8,
+      "N_indhold": 0.016
+    },
+    {
+      "Afgrøde": "Olieræddike",
+      "Faktor_Underjordisk_afgrøderest": 0.16,
+      "N_indhold": 0.009
+    },
+    {
+      "Afgrøde": "Gul sennep",
+      "Faktor_Underjordisk_afgrøderest": 0.16,
+      "N_indhold": 0.009
+    },
+    {
+      "Afgrøde": "Osv. (alle efterafgrøder)",
+      "Faktor_Underjordisk_afgrøderest": null,
+      "N_indhold": null
+    }
+  ]
+}

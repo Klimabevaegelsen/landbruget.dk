@@ -1,0 +1,17 @@
+{
+  "table_name": "Beregning af udledning fra anden organisk gødning (Side 83)",
+  "data": [
+    {
+      "Type": "N2O (fra jord)",
+      "Formel": "Kg N x EFN2O x 44/28"
+    },
+    {
+      "Type": "N2O (fra NH3-N)",
+      "Formel": "Kg N x EFNH3-N x EFN2O x 44/28"
+    },
+    {
+      "Type": "N2O (fra NOx)",
+      "Formel": "(kg N * EFNOx /(46/14)) * EFN2O* 44/28"
+    }
+  ]
+}

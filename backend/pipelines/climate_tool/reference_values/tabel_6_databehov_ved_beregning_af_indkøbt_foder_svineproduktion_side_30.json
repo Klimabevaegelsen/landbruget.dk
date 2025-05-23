@@ -1,0 +1,40 @@
+{
+  "table_name": "Tabel 6: Databehov ved beregning af indkøbt foder (Svineproduktion, Side 30)",
+  "data": [
+    {
+      "Foder_type": "Sotilskudsfoder",
+      "Andel_pct": 20,
+      "Kg_CO2e_Foderenhed": 1.0
+    },
+    {
+      "Foder_type": "Smågrisetilskudsfoder",
+      "Andel_pct": 30,
+      "Kg_CO2e_Foderenhed": 1.9
+    },
+    {
+      "Foder_type": "Slagtesvinetilskudsfoder",
+      "Andel_pct": 25,
+      "Kg_CO2e_Foderenhed": 1.0
+    },
+    {
+      "Foder_type": "Korn",
+      "Andel_pct": 0,
+      "Kg_CO2e_Foderenhed": 0.34
+    },
+    {
+      "Foder_type": "Sofoder",
+      "Andel_pct": 50,
+      "Kg_CO2e_Foderenhed": 0.49
+    },
+    {
+      "Foder_type": "Smågrisefoder",
+      "Andel_pct": 50,
+      "Kg_CO2e_Foderenhed": 0.93
+    },
+    {
+      "Foder_type": "Slagtesvinefoder",
+      "Andel_pct": 50,
+      "Kg_CO2e_Foderenhed": 0.51
+    }
+  ]
+}
