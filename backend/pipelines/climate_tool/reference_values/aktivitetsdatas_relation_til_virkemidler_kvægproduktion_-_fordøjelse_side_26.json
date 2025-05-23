@@ -1,0 +1,20 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Kvægproduktion - Fordøjelse, Side 26)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 1,
+      "Aktivitetsdata_Beskrivelse": "Antal dyr",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 2,
+      "Aktivitetsdata_Beskrivelse": "Type dyr",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 3,
+      "Aktivitetsdata_Beskrivelse": "Ydelsesniveau og Fodersammensætning",
+      "Virkemiddel": "Optimeret foderkvalitet\nØget mængde af fedt i foderet"
+    }
+  ]
+}

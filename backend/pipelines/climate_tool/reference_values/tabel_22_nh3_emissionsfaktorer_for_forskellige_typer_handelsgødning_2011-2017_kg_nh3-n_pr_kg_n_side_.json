@@ -1,0 +1,118 @@
+{
+  "table_name": "Tabel 22: NH3 emissionsfaktorer for forskellige typer handelsgødning 2011-2017, kg NH3-N pr. kg N. (Side 80)",
+  "data": [
+    {
+      "Gødningstype": "Calcium- og bor calciumnitrat",
+      "2011": 0.01,
+      "2012_2013_2014": 0.11,
+      "2015_2016_2017": 0.05,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 0.2
+    },
+    {
+      "Gødningstype": "Ammoniumsulfat (svovlsur ammoniak)*",
+      "2011": 0.01,
+      "2012_2013_2014": 0.01,
+      "2015_2016_2017": 0.09,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 8.2
+    },
+    {
+      "Gødningstype": "Calcium ammonium nitrat",
+      "2011": 0.01,
+      "2012_2013_2014": 0.02,
+      "2015_2016_2017": 0.008,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 109.1
+    },
+    {
+      "Gødningstype": "Ammoniumnitrat",
+      "2011": 0.01,
+      "2012_2013_2014": 0.04,
+      "2015_2016_2017": 0.015,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 3.5
+    },
+    {
+      "Gødningstype": "Flydende ammoniak",
+      "2011": 0.02,
+      "2012_2013_2014": 0.01,
+      "2015_2016_2017": 0.019,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 6.0
+    },
+    {
+      "Gødningstype": "Urea*",
+      "2011": 0.13,
+      "2012_2013_2014": 0.24,
+      "2015_2016_2017": 0.155,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 1.0
+    },
+    {
+      "Gødningstype": "Andre kvælstofgødninger?*",
+      "2011": 0.06,
+      "2012_2013_2014": 0.04,
+      "2015_2016_2017": 0.01,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 37.9
+    },
+    {
+      "Gødningstype": "Magnesium gødninger",
+      "2011": 0.01,
+      "2012_2013_2014": 0.11,
+      "2015_2016_2017": 0.05,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 0
+    },
+    {
+      "Gødningstype": "NPK-gødninger",
+      "2011": 0.01,
+      "2012_2013_2014": 0.04,
+      "2015_2016_2017": 0.05,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 70.3
+    },
+    {
+      "Gødningstype": "Diammonfosfat",
+      "2011": 0.01,
+      "2012_2013_2014": 0.11,
+      "2015_2016_2017": 0.05,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 3.2
+    },
+    {
+      "Gødningstype": "Andre NP-gødninger",
+      "2011": 0.01,
+      "2012_2013_2014": 0.11,
+      "2015_2016_2017": 0.05,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 7.9
+    },
+    {
+      "Gødningstype": "NK-gødninger",
+      "2011": 0.01,
+      "2012_2013_2014": 0.04,
+      "2015_2016_2017": 0.015,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 1.5
+    },
+    {
+      "Gødningstype": "Andre gødninger",
+      "2011": null,
+      "2012_2013_2014": null,
+      "2015_2016_2017": 0.026,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 0
+    },
+    {
+      "Gødningstype": "Samlet forbrug",
+      "2011": null,
+      "2012_2013_2014": null,
+      "2015_2016_2017": null,
+      "2018": null,
+      "Forbrug_2017_Tons_N": 248.7
+    }
+  ],
+  "footnote": "*) Svovlsur ammoniak og amidholdige gødninger er fra 2020 underlagt regler, der skal begrænse ammoniakfordampningen."
+}

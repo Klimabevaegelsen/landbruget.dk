@@ -1,0 +1,17 @@
+{
+  "table_name": "Tabel 30: Emission af N2O fra nedbrydning af organisk stof på organogen jord, kg N2O-N pr. ha (Side 96)",
+  "data": [
+    {
+      "C_Content": ">12% C",
+      "Omdrift": 13,
+      "Permanent_græs_og_afvandet": 8.2,
+      "Udtaget_og_høj_vandstand": 1.6
+    },
+    {
+      "C_Content": "6-12% C",
+      "Omdrift": 6.5,
+      "Permanent_græs_og_afvandet": 4.1,
+      "Udtaget_og_høj_vandstand": 0.8
+    }
+  ]
+}

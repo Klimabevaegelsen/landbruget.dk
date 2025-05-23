@@ -1,0 +1,65 @@
+{
+  "table_name": "Tabel 17: Virkemidlernes effekt på NH3 og Metan (Side 66)",
+  "data": [
+    {
+      "Virkemiddel": "Luftrensning (100%)",
+      "NH3": "x",
+      "Metan": null
+    },
+    {
+      "Virkemiddel": "Luftrensning (20%)",
+      "NH3": "x",
+      "Metan": null
+    },
+    {
+      "Virkemiddel": "Gyllekøling, 10 kWh/m2",
+      "NH3": "x",
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Gyllekøling + luftrensning (100%)",
+      "NH3": "x",
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Gyllekøling + luftrensning (20%)",
+      "NH3": "x",
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Gylle til biogas",
+      "NH3": null,
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Gyllekøling + gylle til biogas",
+      "NH3": "x",
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Hyppig udslusning min en gang ugentlig",
+      "NH3": null,
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Hyppig udslusning + leveret til biogas",
+      "NH3": null,
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Gylleforsuring stald",
+      "NH3": "x",
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Udendørs gøde område",
+      "NH3": null,
+      "Metan": "x"
+    },
+    {
+      "Virkemiddel": "Skraberanlæg",
+      "NH3": null,
+      "Metan": "x"
+    }
+  ]
+}

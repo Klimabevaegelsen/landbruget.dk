@@ -1,0 +1,17 @@
+{
+  "table_name": "Tabel 31: Emission af CO2 fra nedbrydning af organisk stof på organogen jord, ton CO2 pr. ha (Side 96)",
+  "data": [
+    {
+      "C_Content": ">12% C",
+      "Omdrift": 42.17,
+      "Permanent_græs_og_afvandet": 30.8,
+      "Udtaget_og_høj_vandstand": 0
+    },
+    {
+      "C_Content": "6-12% C",
+      "Omdrift": 21.08,
+      "Permanent_græs_og_afvandet": 15.4,
+      "Udtaget_og_høj_vandstand": 0
+    }
+  ]
+}

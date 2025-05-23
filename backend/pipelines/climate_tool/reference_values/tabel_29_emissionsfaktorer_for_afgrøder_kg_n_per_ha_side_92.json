@@ -1,0 +1,17 @@
+{
+  "table_name": "Tabel 29: Emissionsfaktorer for afgrøder, kg N per ha (Side 92)",
+  "data": [
+    {
+      "Afgrødetype": "Alle afgrøder undt. græs",
+      "Kg_NH3_N_ha": 2
+    },
+    {
+      "Afgrødetype": "Kløvergræs i rotation",
+      "Kg_NH3_N_ha": 0.5
+    },
+    {
+      "Afgrødetype": "Permanent/vedvarende græs",
+      "Kg_NH3_N_ha": 0.5
+    }
+  ]
+}

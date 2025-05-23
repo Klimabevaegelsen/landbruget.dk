@@ -1,0 +1,33 @@
+{
+  "table_name": "Tabel 4: Standardværdierne for FE pr. dyretype (Svineproduktion - Fordøjelse, Side 27-28)",
+  "data": [
+    {
+      "Dyretype": "Konventionelle søer",
+      "FE_pr_dyr": "1492 pr. årsso"
+    },
+    {
+      "Dyretype": "Konventionelle smågrise",
+      "FE_pr_dyr": "1,87 FE pr. kg tilvækst"
+    },
+    {
+      "Dyretype": "Konventionelle slagtesvin",
+      "FE_pr_dyr": "2,77 FE pr. kg tilvækst"
+    },
+    {
+      "Dyretype": "Konventionelle FRATS slagtesvin",
+      "FE_pr_dyr": "2,56 FE pr. kg tilvækst"
+    },
+    {
+      "Dyretype": "Økologiske søer",
+      "FE_pr_dyr": "1843 FE pr. årsso"
+    },
+    {
+      "Dyretype": "Økologiske smågrise",
+      "FE_pr_dyr": "2,11 FE kg tilvækst"
+    },
+    {
+      "Dyretype": "Økologiske slagtegrise",
+      "FE_pr_dyr": "2,94 FE pr. kg tilvækst"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Markens emissioner - handelsgødning, Side 82)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 11,
+      "Aktivitetsdata_Beskrivelse": "Mængde N",
+      "Virkemiddel": "Reduceret N-tilførsel"
+    }
+  ]
+}

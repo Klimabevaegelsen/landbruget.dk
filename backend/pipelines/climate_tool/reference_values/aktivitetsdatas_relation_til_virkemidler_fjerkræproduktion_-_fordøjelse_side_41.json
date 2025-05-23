@@ -1,0 +1,20 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Fjerkræproduktion - Fordøjelse, Side 41)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 1,
+      "Aktivitetsdata_Beskrivelse": "Antal dyr",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 2,
+      "Aktivitetsdata_Beskrivelse": "Type dyr",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 3,
+      "Aktivitetsdata_Beskrivelse": "Fodersammensætning",
+      "Virkemiddel": "Optimeret foderudnyttelse"
+    }
+  ]
+}

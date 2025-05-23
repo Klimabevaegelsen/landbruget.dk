@@ -1,0 +1,122 @@
+{
+  "table_name": "Tabel 35b: Original tabel fra DCE, Inventory report (CO2 emission factors, 2018) (Side 109)",
+  "note": "This table is an image and has been transcribed. It's a complex table, and the transcription focuses on the main data points.",
+  "headers": [
+    "Fuel",
+    "Emission factor, kg per GJ",
+    "Reference type",
+    "IPCC fuel category"
+  ],
+  "data": [
+    {
+      "Fuel": "Coal",
+      "Emission factor, kg per GJ": "94.041",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Solid"
+    },
+    {
+      "Fuel": "Brown coal briquettes",
+      "Emission factor, kg per GJ": "97.5 1)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Solid"
+    },
+    {
+      "Fuel": "Other solid fossil fuels 1)",
+      "Emission factor, kg per GJ": "118 1)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Solid"
+    },
+    {
+      "Fuel": "Petroleum coke",
+      "Emission factor, kg per GJ": "93 1)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Solid"
+    },
+    {
+      "Fuel": "Gas oil",
+      "Emission factor, kg per GJ": "74.1",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Liquid"
+    },
+    {
+      "Fuel": "Crude oil",
+      "Emission factor, kg per GJ": "73.3",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Liquid"
+    },
+    {
+      "Fuel": "Refinery gas",
+      "Emission factor, kg per GJ": "60.1 1)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Liquid"
+    },
+    {
+      "Fuel": "Natural gas, offshore gas turbines",
+      "Emission factor, kg per GJ": "57.639",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Gas"
+    },
+    {
+      "Fuel": "Natural gas, other",
+      "Emission factor, kg per GJ": "63.3 5)6)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Gas"
+    },
+    {
+      "Fuel": "Waste",
+      "Emission factor, kg per GJ": "+42.5 2)3)4)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Biomass and Other fuels"
+    },
+    {
+      "Fuel": "Wood",
+      "Emission factor, kg per GJ": "112",
+      "Reference type": "IPCC (2006)",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Wood pellets",
+      "Emission factor, kg per GJ": "112",
+      "Reference type": "IPCC (2006)",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Straw",
+      "Emission factor, kg per GJ": "100",
+      "Reference type": "IPCC (2006)",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Bio oil",
+      "Emission factor, kg per GJ": "70.8",
+      "Reference type": "IPCC (2006)",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Biogas",
+      "Emission factor, kg per GJ": "84.1 5)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Landfill gas/gasification gas",
+      "Emission factor, kg per GJ": "142 5)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Biomass"
+    },
+    {
+      "Fuel": "Other biogas",
+      "Emission factor, kg per GJ": "84.1 5)",
+      "Reference type": "Country specific",
+      "IPCC fuel category": "Biomass"
+    }
+  ],
+  "footnotes": [
+    "1) Plant specific data from EU ETS incorporated for individual plants.",
+    "2) Emission factor for waste (42.5 kg CO2 per GJ waste). The emission factor is for the fossil share of the waste. The biomass share is reported as CO2 neutral.",
+    "3) Plant specific data from EU ETS incorporated for cement industry and sugar, lime and mineral wool production.",
+    "4) The emission factor for waste (42.5 kg CO2 per GJ waste). The emission factor is for the fossil share of the waste. The biomass share is reported as CO2 neutral. The emission factors have been aggregated to the IPCC default value of 44 kg CO2 per GJ fossil waste and Other fossil fuels in CRF. The corresponding EF for biomass is 0 kg CO2 per GJ biomass (not including plant specific data).",
+    "5) Includes N2O content of CO2 in the gas.",
+    "6) Anodic carbon. Not applied in Denmark in 2018."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "table_name": "Beregning for Malkekøer Jersey, konventionel (Side 15)",
+  "description": "x=ydelse, kg EKM",
+  "equations": [
+    {
+      "parameter": "Foderoptag, kg TS/ko/dag",
+      "equation": "y = 0,0006x + 13,307"
+    },
+    {
+      "parameter": "Fedtsyre, g/kg TS",
+      "equation": "y = 0,001x + 26,447"
+    },
+    {
+      "parameter": "NDF, g/kg TS",
+      "equation": "y = -0,0035x + 336,11"
+    }
+  ]
+}

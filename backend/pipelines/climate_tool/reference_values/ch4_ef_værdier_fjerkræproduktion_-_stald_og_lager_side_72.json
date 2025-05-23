@@ -1,0 +1,21 @@
+{
+  "table_name": "CH4 EF værdier (Fjerkræproduktion - Stald og lager, Side 72)",
+  "data": [
+    {
+      "Parameter": "MCF",
+      "Værdi": "1,50%"
+    },
+    {
+      "Parameter": "B0: Høns",
+      "Værdi": 0.39
+    },
+    {
+      "Parameter": "B0: Hønniker",
+      "Værdi": 0.39
+    },
+    {
+      "Parameter": "B0: Sl. Kyllinger",
+      "Værdi": 0.36
+    }
+  ]
+}

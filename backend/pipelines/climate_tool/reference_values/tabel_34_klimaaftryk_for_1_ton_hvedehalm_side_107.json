@@ -1,0 +1,40 @@
+{
+  "table_name": "Tabel 34: Klimaaftryk for 1 ton hvedehalm (Side 107)",
+  "data": [
+    {
+      "Aktivitet": "Snitning af halm (sparet)",
+      "Pr_ton_halm_85_ts": "0,5 l diesel",
+      "Klimaaftryk_pr_ton": "-1,6 kg CO2"
+    },
+    {
+      "Aktivitet": "Presning og hjemtransport",
+      "Pr_ton_halm_85_ts": "2,0 l diesel",
+      "Klimaaftryk_pr_ton": "6,4 kg CO2"
+    },
+    {
+      "Aktivitet": "Bortførsel af P",
+      "Pr_ton_halm_85_ts": "0,765 kg P",
+      "Klimaaftryk_pr_ton": "2,8 kg CO2e"
+    },
+    {
+      "Aktivitet": "Bortførsel af K",
+      "Pr_ton_halm_85_ts": "12,75 kg K",
+      "Klimaaftryk_pr_ton": "8,9 kg CO2e"
+    },
+    {
+      "Aktivitet": "Lattergas emission (undgået)",
+      "Pr_ton_halm_85_ts": "4,5 kg N",
+      "Klimaaftryk_pr_ton": "-21,1 kg CO2e"
+    },
+    {
+      "Aktivitet": "Kulstoflagring (reduceret)",
+      "Pr_ton_halm_85_ts": "382,5 kg C",
+      "Klimaaftryk_pr_ton": "136 kg CO2"
+    },
+    {
+      "Aktivitet": "Samlet",
+      "Pr_ton_halm_85_ts": null,
+      "Klimaaftryk_pr_ton": "131,4 kg CO2e"
+    }
+  ]
+}
