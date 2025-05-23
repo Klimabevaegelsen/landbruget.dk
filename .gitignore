@@ -41,3 +41,5 @@ devenv.yaml
 .envrc
 # For direnv integration
 .direnv/
+
+.env
