@@ -1,3 +1,18 @@
+"""
+Bronze layer data ingestion for Wetlands data.
+
+This module handles the extraction of wetlands data from a WFS service.
+It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+for further processing in the silver layer.
+
+The module contains:
+- WetlandsBronzeConfig: Configuration class for the data source
+- WetlandsBronze: Implementation class for fetching and processing data
+
+The data is fetched in parallel batches to optimize performance, with proper
+error handling and retry logic for robustness.
+"""
+
 import asyncio
 import ssl
 import xml.etree.ElementTree as ET
@@ -12,40 +27,40 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 
 
-class BNBOStatusBronzeConfig(BaseJobConfig):
+class WetlandsBronzeConfig(BaseJobConfig):
     """
-    Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source in the bronze layer.
+    Configuration for the Wetlands Bronze source.
 
-    This class defines all the configuration parameters needed for fetching BNBO status data
-    from the WFS service and storing it in the bronze layer of the data pipeline. It includes
-    parameters for the data source, connection settings, and processing options.
+    This class defines all configuration parameters needed for fetching wetlands
+    data from the Danish WFS (Web Feature Service). It includes endpoint URL, dataset name,
+    performance tuning parameters, and request configuration.
 
     Attributes:
-        name (str): Human-readable name for the data source.
-        dataset (str): Machine name for the dataset, used in storage paths.
-        type (str): Type of the data source, in this case "wfs" for Web Feature Service.
-        description (str): A brief description of the data source.
-        url (str): The endpoint URL for the WFS service.
-        frequency (str): How often the data should be updated.
-        bucket (str): Google Cloud Storage bucket name for storing the data.
-        batch_size (int): Number of features to fetch in a single request.
-        max_concurrent (int): Maximum number of concurrent requests.
-        request_timeout (int): Timeout for HTTP requests in seconds.
-        storage_batch_size (int): Batch size for storage operations.
-        request_timeout_config (aiohttp.ClientTimeout): Detailed timeout configuration for aiohttp.
-        headers (dict): HTTP headers to send with requests.
-        request_semaphore (Semaphore): Semaphore to limit concurrent requests.
+        name (str): Human-readable name of the data source
+        dataset (str): Name of the dataset in storage
+        type (str): Type of the data source (wfs)
+        description (str): Brief description of the data
+        url (str): URL for fetching wetlands data
+        frequency (str): How often the data is updated
+        bucket (str): GCS bucket name for raw data storage
+        batch_size (int): Number of records to fetch in each request
+        max_concurrent (int): Maximum number of concurrent requests
+        request_timeout (int): Timeout for requests in seconds
+        storage_batch_size (int): Batch size for storage operations
+        request_timeout_config (aiohttp.ClientTimeout): Request timeout configuration
+        headers (dict[str, str]): HTTP headers for WFS requests
+        request_semaphore (Semaphore): Semaphore to limit concurrent requests
     """
 
-    name: str = "Danish BNBO Status"
-    dataset: str = "bnbo_status"
+    name: str = "Danish Wetlands Map"
+    dataset: str = "wetlands"
     type: str = "wfs"
-    description: str = "Municipal status for well-near protection areas (BNBO)"
-    url: str = "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
-    frequency: str = "weekly"
+    description: str = "Wetland areas from Danish EPA"
+    url: str = "https://wfs2-miljoegis.mim.dk/natur/wfs"
+    frequency: str = "static"
     bucket: str = "landbrugsdata-raw-data"
 
-    batch_size: int = 100
+    batch_size: int = 10000
     max_concurrent: int = 3
     request_timeout: int = 300
     storage_batch_size: int = 5000
@@ -58,59 +73,52 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
+class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
     """
-    Bronze layer processor for BNBO status data.
+    Bronze layer processing for wetlands data.
 
-    This class is responsible for fetching BNBO (Boringsnære Beskyttelsesområder)
-    status data from a WFS service and storing it in the bronze layer of the data
-    pipeline. It handles HTTP requests, pagination, error handling, and data storage.
+    This class is responsible for fetching raw wetlands data from the WFS service.
+    It handles pagination, parallel fetching, and error handling, and stores the
+    raw data in Google Cloud Storage for further processing in the silver layer.
 
-    Attributes:
-        config (BNBOStatusBronzeConfig): Configuration object containing settings for the processor.
+    The class implements retry logic for resilience against transient failures and uses
+    semaphores to control the number of concurrent requests to avoid overwhelming the API.
+
+    Processing flow:
+    1. Fetch initial data chunk to determine total number of features
+    2. Fetch remaining data in parallel batches based on configuration
+    3. Save raw XML responses to Google Cloud Storage
     """
 
-    def __init__(self, config: BNBOStatusBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: WetlandsBronzeConfig, gcs_util: GCSUtil):
         """
-        Initialize the BNBOStatusBronze processor.
+        Initialize the WetlandsBronze source.
 
         Args:
-            config (BNBOStatusBronzeConfig): Configuration object for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
+            config (WetlandsBronzeConfig): Configuration for the data source
+            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
         """
         super().__init__(config, gcs_util)
 
     def _get_params(self, start_index: int = 0) -> dict:
         """
-        Get WFS request parameters for pagination.
+        Generate WFS request parameters.
 
-        Constructs a dictionary of query parameters to use when requesting data
-        from the WFS service. These parameters specify the dataset, pagination,
-        and spatial reference system.
+        This method creates a dictionary of parameters needed for a WFS GetFeature request,
+        including pagination information for fetching data in chunks.
 
         Args:
-            start_index (int, optional): The starting index for pagination. Defaults to 0.
+            start_index (int, optional): Starting index for the batch of features to fetch.
+                                        Defaults to 0.
 
         Returns:
-            dict: A dictionary of WFS request parameters.
-
-        Example:
-            >>> self._get_params(100)
-            {
-                'SERVICE': 'WFS',
-                'REQUEST': 'GetFeature',
-                'VERSION': '2.0.0',
-                'TYPENAMES': 'dai:status_bnbo',
-                'STARTINDEX': '100',
-                'COUNT': '100',
-                'SRSNAME': 'urn:ogc:def:crs:EPSG::25832'
-            }
+            dict: Dictionary of WFS request parameters
         """
         return {
             "SERVICE": "WFS",
             "REQUEST": "GetFeature",
             "VERSION": "2.0.0",
-            "TYPENAMES": "dai:status_bnbo",
+            "TYPENAMES": "natur:kulstof2022",
             "STARTINDEX": str(start_index),
             "COUNT": str(self.config.batch_size),
             "SRSNAME": "urn:ogc:def:crs:EPSG::25832",
@@ -123,26 +131,27 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
     )
     async def _fetch_chunck(self, session: aiohttp.ClientSession, start_index: int) -> dict:
         """
-        Fetch a chunk of data from the WFS service.
+        Fetch a chunk of features with retry logic.
 
-        Makes an HTTP request to the WFS service to retrieve a subset of features
-        starting from the specified index. This method uses retry logic to handle
-        transient connection issues.
+        This method retrieves a batch of features from the WFS service starting at the specified
+        index. It implements exponential backoff retry logic using the tenacity library to handle
+        transient failures. The method is designed to be used in parallel for efficient data
+        retrieval.
 
         Args:
-            session (aiohttp.ClientSession): The HTTP session to use for the request.
-            start_index (int): The starting index for pagination.
+            session (aiohttp.ClientSession): HTTP session for making requests
+            start_index (int): Starting index for the batch of features to fetch
 
         Returns:
-            dict: A dictionary containing the raw XML text, pagination information,
-                 and feature counts.
+            dict: Dictionary containing the text response, start index, total features count,
+                  and number of returned features
 
         Raises:
-            Exception: If the HTTP request fails or if the response cannot be parsed.
+            Exception: If the API request fails after all retry attempts or if XML parsing fails
 
         Note:
-            This method is decorated with retry logic to handle transient failures.
-            It will retry up to 5 times with exponential backoff between 4 and 10 seconds.
+            The method uses a semaphore to control the number of concurrent requests
+            to avoid overwhelming the service.
         """
         async with self.config.request_semaphore:
             self.log.debug(
@@ -176,24 +185,25 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
 
     async def _fetch_raw_data(self) -> Optional[list[str]]:
         """
-        Fetch all available BNBO status data from the WFS service.
+        Fetch all raw data from the WFS service.
 
-        This method sets up an HTTP session with the appropriate SSL context,
-        then fetches data in batches (chunks) until all available features have
-        been retrieved. It handles pagination and collects all raw XML responses.
+        This method orchestrates the data retrieval workflow:
+        1. Establishes an HTTP session with proper SSL and header configuration
+        2. Fetches the first chunk to determine total features available
+        3. Fetches remaining data in parallel chunks using _fetch_chunck method
+        4. Processes all responses and returns them as a list of XML strings
 
         Returns:
-            Optional[list[str]]: A list of XML strings, each containing a chunk of data,
-                               or None if the fetching process fails.
+            Optional[list[str]]: List of XML responses, or None if fetching fails
 
         Raises:
-            Exception: If there are errors during the data fetching process.
+            Exception: If there are issues with data fetching, parsing, or processing
 
         Note:
-            This method disables SSL certificate verification because some
-            government services might use self-signed certificates or have
-            certificate issues.
+            This method disables SSL certificate verification to avoid issues with
+            certain endpoint configurations. Use with trusted endpoints only.
         """
+
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -209,7 +219,8 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
                 returned_features = raw_data["returned_features"]
                 raw_features.append(raw_data["text"])
                 fetched_features_count = returned_features
-                self.log.info(f"Fetched {fetched_features_count} out of {total_features}")
+                self.log.info(f"Total features to fetch: {total_features:,}")
+                self.log.debug(f"Fetched {fetched_features_count} out of {total_features}")
 
                 # Create a list of tasks for all remaining chunks to fetch
                 tasks = []
@@ -244,22 +255,20 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
 
     async def run(self) -> None:
         """
-        Run the complete BNBO status bronze layer job.
+        Run the data source processing pipeline.
 
-        This is the main entry point that orchestrates the entire process:
-        1. Fetches raw data from the WFS service
-        2. Saves the raw data to Google Cloud Storage
+        This method orchestrates the entire data retrieval process:
+        1. Fetches all raw wetlands data from the WFS service
+        2. Saves the retrieved XML data to Google Cloud Storage
+        3. Logs the process stages and completion status
 
         Returns:
             None
 
-        Raises:
-            Exception: If there are issues at any step in the process.
-
         Note:
-            This method is typically called by the pipeline orchestrator.
+            This is the main entry point for the bronze layer processing of wetlands data.
         """
-        self.log.info("Running BNBO Status bronze job")
+        self.log.info("Running Wetlands bronze job")
         raw_data = await self._fetch_raw_data()
         if raw_data is None:
             self.log.error("Failed to fetch raw data")

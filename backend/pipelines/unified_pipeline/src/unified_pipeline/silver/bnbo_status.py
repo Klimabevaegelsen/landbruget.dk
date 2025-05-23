@@ -292,7 +292,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         """
         try:
             # Convert to WGS84 before processing
-            if df.crs.to_epsg() != 4326:
+            if df.crs and df.crs.to_epsg() != 4326:
                 df = df.to_crs("EPSG:4326")
 
             # Split into two categories
@@ -318,16 +318,16 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
 
             if action_required_dissolved is not None:
                 if action_required_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(action_required_dissolved.geoms))
-                    categories.extend(["Action Required"] * len(action_required_dissolved.geoms))
+                    dissolved_geometries.extend(list(action_required_dissolved.geoms))  # type: ignore
+                    categories.extend(["Action Required"] * len(action_required_dissolved.geoms))  # type: ignore
                 else:
                     dissolved_geometries.append(action_required_dissolved)
                     categories.append("Action Required")
 
             if completed_dissolved is not None:
                 if completed_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(completed_dissolved.geoms))
-                    categories.extend(["Completed"] * len(completed_dissolved.geoms))
+                    dissolved_geometries.extend(list(completed_dissolved.geoms))  # type: ignore
+                    categories.extend(["Completed"] * len(completed_dissolved.geoms))  # type: ignore
                 else:
                     dissolved_geometries.append(completed_dissolved)
                     categories.append("Completed")
