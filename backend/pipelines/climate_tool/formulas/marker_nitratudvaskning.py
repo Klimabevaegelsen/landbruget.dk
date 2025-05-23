@@ -6,7 +6,7 @@ Beregning af kg N2O fra nitratudvaskning
 # N2O_nitratudvaskning = T * 0.0075 * (44/28) * H
 
 # Hvor:
-# T: typetal for nitratudvaskning = Tabelværdi
+# T: typetal for nitratudvaskning = Tabelværdi (This is calculated using NLES5 and then the table value is used)
 # H: Antal ha på marken = fra MO eller brugerinput [ha]
 
 # Omregning til CO2e:
