@@ -33,11 +33,14 @@ class Source(Enum):
 
     Attributes:
         bnbo: BNBO (Boringsnære beskyttelsesområder) data source
+        agricultural_fields: Agricultural fields data source
+        wetlands: Wetlands data source
     """
 
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
+    wetlands = "wetlands"
 
 
 class Stage(Enum):

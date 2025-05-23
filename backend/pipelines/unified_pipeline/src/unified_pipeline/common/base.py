@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.timing import timed
 
 
 class BaseJobConfig(BaseModel):
@@ -87,6 +88,7 @@ class BaseSource(Generic[T], ABC):
         """
         pass
 
+    @timed(name="Saving raw data")
     def _save_raw_data(
         self, raw_data: list[str], dataset: str, source_name: str, bucket_name: str
     ) -> None:
@@ -180,6 +182,7 @@ class BaseSource(Generic[T], ABC):
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/{stage}/{dataset}/{current_date}.parquet")
 
+    @timed(name="Reading bronze data")
     def _read_bronze_data(self, dataset: str, bucket_name: str) -> Optional[pd.DataFrame]:
         """
         Read data from the bronze layer.
