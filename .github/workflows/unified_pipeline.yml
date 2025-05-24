@@ -19,7 +19,8 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-      GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
