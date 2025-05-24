@@ -68,8 +68,8 @@ python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
-log_with_timestamp "Installing Python packages (ijson, pyarrow, etc.)..."
-pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid
+log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
+pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
@@ -88,6 +88,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import uuid
 import zipfile
+import geopandas as gpd
+from shapely.geometry import shape
+from pyproj import Transformer, CRS
 from datetime import datetime
 from pathlib import Path
 from google.cloud import storage, secretmanager
@@ -109,7 +112,122 @@ class PropertyDataProcessor:
     
     def __init__(self):
         self.cpr_to_uuid_mapping = {}  # Cache for consistent UUID mapping
+        # Default assumption: Danish data is typically in EPSG:25832 (UTM Zone 32N)
+        # We'll convert to EPSG:4326 as required by README
+        self.source_crs = 'EPSG:25832'  # Danish UTM Zone 32N (common for Danish official data)
+        self.target_crs = 'EPSG:4326'   # WGS84 (required by README for Silver layer)
+        self.crs_transformer = None
+        self.crs_detection_done = False
         
+    def detect_and_setup_crs_transformer(self, sample_geometry):
+        """Detect CRS from sample geometry and setup transformer if needed."""
+        if self.crs_detection_done:
+            return
+            
+        # Try to detect CRS from coordinate ranges
+        if isinstance(sample_geometry, dict) and 'coordinates' in sample_geometry:
+            coords = sample_geometry['coordinates']
+            
+            # Flatten coordinates to check ranges
+            flat_coords = []
+            def flatten_coords(obj):
+                if isinstance(obj, list):
+                    for item in obj:
+                        if isinstance(item, (list, tuple)):
+                            flatten_coords(item)
+                        elif isinstance(item, (int, float)):
+                            flat_coords.append(item)
+            
+            flatten_coords(coords)
+            
+            if len(flat_coords) >= 2:
+                # Check x,y ranges to guess CRS
+                x_coords = flat_coords[::2]  # Every even index (x coordinates)
+                y_coords = flat_coords[1::2]  # Every odd index (y coordinates)
+                
+                if x_coords and y_coords:
+                    min_x, max_x = min(x_coords), max(x_coords)
+                    min_y, max_y = min(y_coords), max(y_coords)
+                    
+                    # Check if coordinates look like they're already in WGS84
+                    if (-180 <= min_x <= 180) and (-90 <= min_y <= 90) and (-180 <= max_x <= 180) and (-90 <= max_y <= 90):
+                        logger.info("Detected coordinates appear to be in WGS84 (EPSG:4326) - no transformation needed")
+                        self.source_crs = 'EPSG:4326'
+                    # Check if coordinates look like Danish UTM (typical ranges)
+                    elif (400000 <= min_x <= 900000) and (6000000 <= min_y <= 6500000):
+                        logger.info("Detected coordinates appear to be in Danish UTM Zone 32N (EPSG:25832)")
+                        self.source_crs = 'EPSG:25832'
+                    else:
+                        logger.warning(f"Uncertain CRS detection. X range: {min_x:.0f}-{max_x:.0f}, Y range: {min_y:.0f}-{max_y:.0f}")
+                        logger.warning(f"Assuming Danish UTM Zone 32N (EPSG:25832)")
+                        self.source_crs = 'EPSG:25832'
+        
+        # Setup transformer if conversion is needed
+        if self.source_crs != self.target_crs:
+            logger.info(f"Setting up CRS transformation: {self.source_crs} → {self.target_crs}")
+            self.crs_transformer = Transformer.from_crs(self.source_crs, self.target_crs, always_xy=True)
+        else:
+            logger.info("No CRS transformation needed - data already in EPSG:4326")
+            self.crs_transformer = None
+            
+        self.crs_detection_done = True
+        
+    def transform_geometry_to_4326(self, geometry):
+        """Transform geometry to EPSG:4326 if needed."""
+        if not geometry:
+            return geometry
+            
+        # Detect CRS on first geometry
+        if not self.crs_detection_done:
+            self.detect_and_setup_crs_transformer(geometry)
+            
+        # If no transformation needed, return as-is
+        if not self.crs_transformer:
+            return geometry
+            
+        try:
+            # Convert to shapely geometry if it's a dict
+            if isinstance(geometry, dict):
+                geom = shape(geometry)
+            else:
+                geom = geometry
+            
+            # Transform coordinates based on geometry type
+            if geom.geom_type == 'Point':
+                x, y = self.crs_transformer.transform(geom.x, geom.y)
+                return {'type': 'Point', 'coordinates': [x, y]}
+                
+            elif geom.geom_type == 'Polygon':
+                def transform_coord_list(coords):
+                    return [list(self.crs_transformer.transform(x, y)) for x, y in coords]
+                
+                exterior = transform_coord_list(geom.exterior.coords)
+                holes = [transform_coord_list(hole.coords) for hole in geom.interiors]
+                
+                if holes:
+                    return {'type': 'Polygon', 'coordinates': [exterior] + holes}
+                else:
+                    return {'type': 'Polygon', 'coordinates': [exterior]}
+                    
+            elif geom.geom_type == 'MultiPolygon':
+                transformed_coords = []
+                for polygon in geom.geoms:
+                    exterior = [list(self.crs_transformer.transform(x, y)) for x, y in polygon.exterior.coords]
+                    holes = [[list(self.crs_transformer.transform(x, y)) for x, y in hole.coords] for hole in polygon.interiors]
+                    if holes:
+                        transformed_coords.append([exterior] + holes)
+                    else:
+                        transformed_coords.append([exterior])
+                return {'type': 'MultiPolygon', 'coordinates': transformed_coords}
+                
+            else:
+                logger.warning(f"Unsupported geometry type for transformation: {geom.geom_type}")
+                return geometry
+                
+        except Exception as e:
+            logger.warning(f"Failed to transform geometry: {e}")
+            return geometry  # Return original if transformation fails
+    
     def generate_uuid_for_cpr(self, cpr_id):
         """Generate consistent UUID for CPR numbers."""
         if not cpr_id:
@@ -357,6 +475,24 @@ class PropertyDataProcessor:
                 if batch_file.exists():
                     batch_file.unlink()
             raise
+
+    def transform_feature(self, feature):
+        """Apply privacy transformations and CRS transformation to a GeoJSON feature."""
+        if not feature:
+            return feature
+        
+        # Create a copy to avoid modifying the original
+        transformed_feature = feature.copy()
+        
+        # Transform properties (privacy transformations)
+        if 'properties' in feature:
+            transformed_feature['properties'] = self.transform_person_data(feature['properties'])
+        
+        # Transform geometry to EPSG:4326 if needed (as required by README)
+        if 'geometry' in feature:
+            transformed_feature['geometry'] = self.transform_geometry_to_4326(feature['geometry'])
+        
+        return transformed_feature
 
 class SFTPToGCSTransferWithProcessing:
     def __init__(self):
