@@ -1,0 +1,46 @@
+# Unified Pipeline
+
+name: Unified Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # every Sunday at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  run-unified-pipeline:
+    name: Run Unified Pipeline Weekly
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        source: [cadastral] # add source in unified here
+      fail-fast: false
+    env:
+      ENVIRONMENT: production
+      DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+      DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Unified Pipeline for all sources
+        run: python -m unified_pipeline -e -s ${{ matrix.source }} -j all
