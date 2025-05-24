@@ -178,6 +178,23 @@ class PropertyDataProcessor:
         
         return transformed
     
+    def clean_empty_structures(self, obj):
+        """Recursively remove empty dictionaries/structures that cause Parquet serialization issues."""
+        if isinstance(obj, dict):
+            cleaned = {}
+            for key, value in obj.items():
+                cleaned_value = self.clean_empty_structures(value)
+                # Only keep non-empty values
+                if cleaned_value or cleaned_value == 0 or cleaned_value == False or cleaned_value == "":
+                    # Keep primitive values and non-empty containers
+                    if not isinstance(cleaned_value, (dict, list)) or cleaned_value:
+                        cleaned[key] = cleaned_value
+            return cleaned
+        elif isinstance(obj, list):
+            return [self.clean_empty_structures(item) for item in obj if item is not None]
+        else:
+            return obj
+    
     def process_json_to_parquet(self, json_file_path, output_parquet_path):
         """Stream process JSON file and convert to Parquet with transformations using batch processing."""
         logger.info(f"Processing {json_file_path} to {output_parquet_path}")
@@ -198,6 +215,9 @@ class PropertyDataProcessor:
                         if 'properties' in feature:
                             feature['properties'] = self.transform_person_data(feature['properties'])
                         
+                        # Clean empty structures that cause Parquet issues
+                        feature = self.clean_empty_structures(feature)
+                        
                         batch_records.append(feature)
                         feature_count += 1
                         
@@ -213,7 +233,9 @@ class PropertyDataProcessor:
                             logger.info(f"Writing batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
                             flush_logs()
                             
-                            table = pa.Table.from_pylist(batch_records)
+                            # Clean batch records before writing to prevent Parquet issues
+                            cleaned_records = [self.clean_empty_structures(record) for record in batch_records]
+                            table = pa.Table.from_pylist(cleaned_records)
                             pq.write_table(table, str(batch_file), compression='snappy')
                             batch_files.append(batch_file)
                             
@@ -234,7 +256,9 @@ class PropertyDataProcessor:
                 logger.info(f"Writing final batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
                 flush_logs()
                 
-                table = pa.Table.from_pylist(batch_records)
+                # Clean batch records before writing to prevent Parquet issues
+                cleaned_records = [self.clean_empty_structures(record) for record in batch_records]
+                table = pa.Table.from_pylist(cleaned_records)
                 pq.write_table(table, str(batch_file), compression='snappy')
                 batch_files.append(batch_file)
                 batch_records.clear()
