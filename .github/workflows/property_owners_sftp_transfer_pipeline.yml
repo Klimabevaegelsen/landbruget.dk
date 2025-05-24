@@ -8,8 +8,8 @@ on:
     # Allow manual triggering for testing
 
 jobs:
-  create-transfer-vm:
-    name: Create Property Owners SFTP Transfer VM
+  transfer-and-process:
+    name: Transfer and Process Property Owners Data
     runs-on: ubuntu-latest
     
     permissions:
@@ -29,46 +29,61 @@ jobs:
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
 
-    - name: Create SFTP Transfer VM
+    - name: Create SFTP Transfer and Processing VM
       run: |
         # Generate unique VM name with timestamp
-        VM_NAME="property-owners-sftp-$(date +%Y%m%d-%H%M%S)"
+        VM_NAME="property-owners-pipeline-$(date +%Y%m%d-%H%M%S)"
         PROJECT_ID="landbrugsdata-1"
         ZONE="europe-west1-b"
         
-        echo "Creating SFTP transfer VM: $VM_NAME"
+        echo "Creating optimized SFTP transfer and processing VM: $VM_NAME"
         
-        # Create the VM with startup script
+        # Create the VM with optimized specs and new startup script
         gcloud compute instances create $VM_NAME \
           --project=$PROJECT_ID \
           --zone=$ZONE \
-          --machine-type=e2-small \
+          --machine-type=e2-standard-4 \
           --network-interface=address=sftp-transfer-static-ip,network-tier=PREMIUM,subnet=default \
-          --boot-disk-size=30GB \
-          --boot-disk-type=pd-balanced \
+          --boot-disk-size=15GB \
+          --boot-disk-type=pd-ssd \
           --image-family=debian-12 \
           --image-project=debian-cloud \
           --scopes=https://www.googleapis.com/auth/cloud-platform \
           --metadata=enable-oslogin=true \
-          --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup.sh \
+          --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup-with-processing.sh \
           --preemptible \
           --no-restart-on-failure \
           --maintenance-policy=TERMINATE
         
         echo "✅ VM $VM_NAME created successfully"
         echo "The VM will automatically:"
-        echo "  1. Install dependencies"
-        echo "  2. Download latest file from SFTP server (property owners data)"
-        echo "  3. Upload to GCS bucket: landbrugsdata-raw-data/bronze/property_owners/"
-        echo "  4. Delete itself when complete"
+        echo "  1. Install dependencies (Python, ijson, pyarrow)"
+        echo "  2. Download latest ZIP from SFTP server"
+        echo "  3. Extract and process JSON with privacy transformations"
+        echo "  4. Upload processed Parquet to: gs://landbrugsdata-raw-data/silver/property_owners/"
+        echo "  5. Upload original ZIP backup to: gs://landbrugsdata-raw-data/bronze/property_owners/"
+        echo "  6. Delete itself when complete"
+        echo ""
+        echo "Expected processing time: 10-30 minutes (10-50x faster than previous approach)"
         
-        # Optional: Wait a few minutes and check if VM still exists (means it failed)
-        echo "Waiting 5 minutes to check transfer status..."
-        sleep 300
+        # Wait longer since processing now happens on the VM
+        echo "Waiting 30 minutes to check processing status..."
+        sleep 1800
         
         if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
-          echo "⚠️ VM $VM_NAME still exists after 5 minutes - transfer may have failed."
-          echo "If issues persist, check its serial port output in the Google Cloud Console (project: $PROJECT_ID, zone: $ZONE)."
+          echo "⚠️ VM $VM_NAME still exists after 30 minutes - processing may have failed or still running."
+          echo "Check serial port output in Google Cloud Console for details (project: $PROJECT_ID, zone: $ZONE)."
+          
+          # Give it another 15 minutes for large datasets
+          echo "Giving it another 15 minutes for large dataset processing..."
+          sleep 900
+          
+          if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
+            echo "❌ VM $VM_NAME still exists after 45 minutes - likely failed. Check logs."
+            exit 1
+          else
+            echo "✅ VM completed processing and self-deleted"
+          fi
         else
-          echo "✅ VM has been deleted - transfer likely completed successfully"
+          echo "✅ VM has been deleted - transfer and processing completed successfully"
         fi 
