@@ -33,11 +33,15 @@ class Source(Enum):
 
     Attributes:
         bnbo: BNBO (Boringsnære beskyttelsesområder) data source
+        agricultural_fields: Danish Agricultural Fields from ArcGIS API
+        cadastral: Danish Cadastral Properties from WFS
+        dagi: Danish Administrative Geographic Division from WFS
     """
 
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
+    dagi = "dagi"
 
 
 class Stage(Enum):

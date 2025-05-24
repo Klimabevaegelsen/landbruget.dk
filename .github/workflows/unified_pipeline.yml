@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        source: [cadastral] # add source in unified here
+        source: [cadastral, dagi] # add source in unified here
       fail-fast: false
     env:
       ENVIRONMENT: production

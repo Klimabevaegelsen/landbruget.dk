@@ -7,26 +7,32 @@ data pipeline application. It orchestrates different data processing stages
 """
 
 import asyncio
-from typing import Optional
 
 import click
-
-from unified_pipeline.common.base import BaseSource
-from unified_pipeline.model import cli
-from unified_pipeline.model.app_config import GCSConfig
-from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.util.log_util import Logger
 from dotenv import load_dotenv
 
+from unified_pipeline.bronze.agricultural_fields import (
+    AgriculturalFieldsBronze,
+    AgriculturalFieldsBronzeConfig,
+)
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
-from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
-from unified_pipeline.bronze.agricultural_fields import AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig
-from unified_pipeline.silver.agricultural_fields import AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig
 from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeConfig
+from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
+from unified_pipeline.model import cli
+from unified_pipeline.model.app_config import GCSConfig
+from unified_pipeline.silver.agricultural_fields import (
+    AgriculturalFieldsSilver,
+    AgriculturalFieldsSilverConfig,
+)
+from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
-
+from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
+from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
+
+
 def execute(cli_config: cli.CliConfig) -> None:
     """
     Main execution function for processing pipeline data.
@@ -70,6 +76,14 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (CadastralBronze, CadastralBronzeConfig),
                 (CadastralSilver, CadastralSilverConfig),
+            ],
+        },
+        cli.Source.dagi: {
+            cli.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
+            cli.Stage.silver: [(DAGISilver, DAGISilverConfig)],
+            cli.Stage.all: [
+                (DAGIBronze, DAGIBronzeConfig),
+                (DAGISilver, DAGISilverConfig),
             ],
         },
     }
