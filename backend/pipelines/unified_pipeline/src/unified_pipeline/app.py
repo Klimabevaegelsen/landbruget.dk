@@ -16,8 +16,17 @@ from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
+from dotenv import load_dotenv
+
+from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
+from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
+from unified_pipeline.bronze.agricultural_fields import AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig
+from unified_pipeline.silver.agricultural_fields import AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig
+from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeConfig
+from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
 
 
+load_dotenv()
 def execute(cli_config: cli.CliConfig) -> None:
     """
     Main execution function for processing pipeline data.
@@ -37,55 +46,44 @@ def execute(cli_config: cli.CliConfig) -> None:
 
     gcs_util = GCSUtil(GCSConfig())
 
-    source: Optional[BaseSource] = None
-    if cli_config.source == cli.Source.bnbo:
-        if cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all:
-            from unified_pipeline.bronze.bnbo_status import (
-                BNBOStatusBronze,
-                BNBOStatusBronzeConfig,
-            )
-
-            source = BNBOStatusBronze(
-                config=BNBOStatusBronzeConfig(),
-                gcs_util=gcs_util,
-            )
-        if cli_config.stage == cli.Stage.silver or cli_config.stage == cli.Stage.all:
-            from unified_pipeline.silver.bnbo_status import (
-                BNBOStatusSilver,
-                BNBOStatusSilverConfig,
-            )
-
-            source = BNBOStatusSilver(
-                config=BNBOStatusSilverConfig(),
-                gcs_util=gcs_util,
-            )
-    elif cli_config.source == cli.Source.agricultural_fields:
-        if cli_config.stage == cli.Stage.bronze or cli_config.stage == cli.Stage.all:
-            from unified_pipeline.bronze.agricultural_fields import (
-                AgriculturalFieldsBronze,
-                AgriculturalFieldsBronzeConfig,
-            )
-
-            source = AgriculturalFieldsBronze(
-                config=AgriculturalFieldsBronzeConfig(),
-                gcs_util=gcs_util,
-            )
-        if cli_config.stage == cli.Stage.silver or cli_config.stage == cli.Stage.all:
-            from unified_pipeline.silver.agricultural_fields import (
-                AgriculturalFieldsSilver,
-                AgriculturalFieldsSilverConfig,
-            )
-
-            source = AgriculturalFieldsSilver(
-                config=AgriculturalFieldsSilverConfig(),
-                gcs_util=gcs_util,
-            )
-    else:
+    # Define pipeline mapping for sources and stages
+    pipeline_map = {
+        cli.Source.bnbo: {
+            cli.Stage.bronze: [(BNBOStatusBronze, BNBOStatusBronzeConfig)],
+            cli.Stage.silver: [(BNBOStatusSilver, BNBOStatusSilverConfig)],
+            cli.Stage.all: [
+                (BNBOStatusBronze, BNBOStatusBronzeConfig),
+                (BNBOStatusSilver, BNBOStatusSilverConfig),
+            ],
+        },
+        cli.Source.agricultural_fields: {
+            cli.Stage.bronze: [(AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig)],
+            cli.Stage.silver: [(AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig)],
+            cli.Stage.all: [
+                (AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig),
+                (AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig),
+            ],
+        },
+        cli.Source.cadastral: {
+            cli.Stage.bronze: [(CadastralBronze, CadastralBronzeConfig)],
+            cli.Stage.silver: [(CadastralSilver, CadastralSilverConfig)],
+            cli.Stage.all: [
+                (CadastralBronze, CadastralBronzeConfig),
+                (CadastralSilver, CadastralSilverConfig),
+            ],
+        },
+    }
+    # Retrieve jobs for given source and stage
+    try:
+        jobs = pipeline_map[cli_config.source][cli_config.stage]
+    except KeyError:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
-
-    log.info(f"Running source {cli_config.source} in stage {cli_config.stage}.")
-    if source is not None:
-        asyncio.run(source.run())
+    # Execute each job sequentially
+    for job_cls, config_cls in jobs:
+        log.info(f"Running {job_cls.__name__} for stage {cli_config.stage}")
+        instance = job_cls(config=config_cls(), gcs_util=gcs_util)
+        asyncio.run(instance.run())
+        log.info(f"Finished {job_cls.__name__} for stage {cli_config.stage}")
     log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
 
 
@@ -139,4 +137,5 @@ def run_cli(
         source=cli.Source(source),
         stage=cli.Stage(stage),
     )
+    print(app_config)
     execute(app_config)

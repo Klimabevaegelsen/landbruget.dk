@@ -34,6 +34,8 @@ class BaseJobConfig(BaseModel):
         >>>     input_path: str
         >>>     output_bucket: str
     """
+    # Option to save data locally without uploading to GCS
+    save_local: bool = False
 
 
 T = TypeVar("T", bound=BaseJobConfig)
@@ -110,7 +112,6 @@ class BaseSource(Generic[T], ABC):
             The data is saved in the bronze layer, which contains raw, unprocessed data.
             The file is named with the current date in YYYY-MM-DD format.
         """
-        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
         df = pd.DataFrame(
             {
                 "payload": raw_data,
@@ -124,14 +125,21 @@ class BaseSource(Generic[T], ABC):
         os.makedirs(temp_dir, exist_ok=True)
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         temp_file = f"{temp_dir}/{current_date}.parquet"
-        working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
 
+        # Write raw data locally
         df.to_parquet(temp_file)
+        if self.config.save_local:
+            self.log.info(f"Saved raw data locally at {temp_file}")
+            return
+        # Upload to GCS
+        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
+        working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/bronze/{dataset}/{current_date}.parquet")
         return
+    
 
-    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str) -> None:
+    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage = 'silver') -> None:
         """
         Save processed data to Google Cloud Storage.
 
@@ -154,17 +162,23 @@ class BaseSource(Generic[T], ABC):
             return
 
         self.log.info(f"Saving processed data to GCS: records: {df.shape[0]:,}")
-        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
 
-        temp_dir = f"/tmp/silver/{dataset}"
+        temp_dir = f"/tmp/{stage}/{dataset}"
         os.makedirs(temp_dir, exist_ok=True)
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         temp_file = f"{temp_dir}/{current_date}.parquet"
-        working_blob = bucket.blob(f"silver/{dataset}/{current_date}.parquet")
 
+        # Write processed data locally
         df.to_parquet(temp_file)
+        if self.config.save_local:
+            self.log.info(f"Saved processed data locally at {temp_file}")
+            return
+    
+        # Upload to GCS
+        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
+        working_blob = bucket.blob(f"{stage}/{dataset}/{current_date}.parquet")
         working_blob.upload_from_filename(temp_file)
-        self.log.info(f"Uploaded to: gs://{bucket_name}/silver/{dataset}/{current_date}.parquet")
+        self.log.info(f"Uploaded to: gs://{bucket_name}/{stage}/{dataset}/{current_date}.parquet")
 
     def _read_bronze_data(self, dataset: str, bucket_name: str) -> Optional[pd.DataFrame]:
         """
@@ -187,25 +201,36 @@ class BaseSource(Generic[T], ABC):
         self.log.info("Reading data from bronze layer")
 
         # Get the GCS bucket
-        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
 
+
+
+        # Load the parquet file
+        temp_file = self._get_bronze_path(dataset, bucket_name)
+        if temp_file is None:
+            return None
+        raw_data = pd.read_parquet(temp_file)
+        self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
+
+        return raw_data
+    
+    def _get_bronze_path(self, dataset: str, bucket_name: str):
         # Define the path to the bronze data
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         bronze_path = f"bronze/{dataset}/{current_date}.parquet"
-        blob = bucket.blob(bronze_path)
 
-        if not blob.exists():
-            self.log.error(f"Bronze data not found at {bronze_path}")
-            return None
 
         # Download to temporary file
         temp_dir = f"/tmp/bronze/{dataset}"
         os.makedirs(temp_dir, exist_ok=True)
         temp_file = f"{temp_dir}/{current_date}.parquet"
+
+        if self.config.save_local:
+            return temp_file
+        
+        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
+        blob = bucket.blob(bronze_path)
+        if not blob.exists():
+            self.log.error(f"Bronze data not found at {bronze_path}")
+            return None
         blob.download_to_filename(temp_file)
-
-        # Load the parquet file
-        raw_data = pd.read_parquet(temp_file)
-        self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
-
-        return raw_data
+        return temp_file
