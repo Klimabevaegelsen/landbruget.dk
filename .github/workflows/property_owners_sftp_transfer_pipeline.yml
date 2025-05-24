@@ -42,9 +42,9 @@ jobs:
         gcloud compute instances create $VM_NAME \
           --project=$PROJECT_ID \
           --zone=$ZONE \
-          --machine-type=e2-standard-4 \
+          --machine-type=e2-standard-8 \
           --network-interface=address=sftp-transfer-static-ip,network-tier=PREMIUM,subnet=default \
-          --boot-disk-size=15GB \
+          --boot-disk-size=30GB \
           --boot-disk-type=pd-ssd \
           --image-family=debian-12 \
           --image-project=debian-cloud \
@@ -64,14 +64,15 @@ jobs:
         echo "  5. Upload original ZIP backup to: gs://landbrugsdata-raw-data/bronze/property_owners/"
         echo "  6. Delete itself when complete"
         echo ""
-        echo "Expected processing time: 10-30 minutes (10-50x faster than previous approach)"
+        echo "VM Specs: e2-standard-8 (8 cores, 32GB RAM, 30GB SSD)"
+        echo "Expected processing time: 10-30 minutes (optimized for large datasets)"
         
         # Wait longer since processing now happens on the VM
-        echo "Waiting 30 minutes to check processing status..."
-        sleep 1800
+        echo "Waiting 45 minutes to check processing status..."
+        sleep 2700
         
         if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
-          echo "⚠️ VM $VM_NAME still exists after 30 minutes - processing may have failed or still running."
+          echo "⚠️ VM $VM_NAME still exists after 45 minutes - processing may have failed or still running."
           echo "Check serial port output in Google Cloud Console for details (project: $PROJECT_ID, zone: $ZONE)."
           
           # Give it another 15 minutes for large datasets
@@ -79,7 +80,7 @@ jobs:
           sleep 900
           
           if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
-            echo "❌ VM $VM_NAME still exists after 45 minutes - likely failed. Check logs."
+            echo "❌ VM $VM_NAME still exists after 60 minutes - likely failed. Check logs."
             exit 1
           else
             echo "✅ VM completed processing and self-deleted"

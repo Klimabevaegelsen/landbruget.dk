@@ -5,21 +5,74 @@
 
 set -e
 
-# Log everything
-exec > >(tee /var/log/sftp-transfer.log) 2>&1
-echo "Starting SFTP to GCS transfer with processing at $(date)"
-sync
+# Enhanced logging function
+log_with_timestamp() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a /var/log/sftp-transfer.log
+    sync
+}
+
+# Error handling function
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    log_with_timestamp "ERROR: Script failed at line $line_number with exit code $exit_code"
+    log_with_timestamp "ERROR: Command that failed: ${BASH_COMMAND}"
+    sync
+    exit $exit_code
+}
+
+# Set error trap
+trap 'handle_error ${LINENO}' ERR
+
+# Log everything with timestamps
+exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done) 2>&1
+
+log_with_timestamp "Starting enhanced SFTP to GCS transfer with processing"
+
+# System resource check
+check_resources() {
+    log_with_timestamp "=== SYSTEM RESOURCE CHECK ==="
+    log_with_timestamp "Available disk space:"
+    df -h / | tee -a /var/log/sftp-transfer.log
+    log_with_timestamp "Available memory:"
+    free -h | tee -a /var/log/sftp-transfer.log
+    log_with_timestamp "CPU info:"
+    nproc | tee -a /var/log/sftp-transfer.log
+    log_with_timestamp "================================"
+    sync
+}
+
+check_resources
+
+# Ensure we have enough disk space (need ~25GB for processing)
+available_space=$(df / | awk 'NR==2{print $4}')
+required_space=25000000  # 25GB in KB
+if [ "$available_space" -lt "$required_space" ]; then
+    log_with_timestamp "ERROR: Insufficient disk space. Available: ${available_space}KB, Required: ${required_space}KB"
+    exit 1
+fi
+
+log_with_timestamp "✅ Sufficient disk space available"
 
 # Install required packages
+log_with_timestamp "Installing required packages..."
 apt-get update
 apt-get install -y python3-pip python3-venv git dnsutils iputils-ping unzip
 
+log_with_timestamp "✅ System packages installed"
+check_resources
+
 # Create virtual environment
+log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
+log_with_timestamp "Installing Python packages (ijson, pyarrow, etc.)..."
 pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid
+
+log_with_timestamp "✅ Python packages installed"
+check_resources
 
 # Create the enhanced transfer script with processing
 cat > /opt/transfer_script.py << 'EOF'
@@ -461,25 +514,61 @@ PROJECT_ID=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/c
 
 # Function to delete the VM
 delete_vm() {
-  echo "Attempting to delete VM: $VM_NAME in zone: $ZONE project: $PROJECT_ID"
+  log_with_timestamp "Attempting to delete VM: $VM_NAME in zone: $ZONE project: $PROJECT_ID"
   sync
   gcloud compute instances delete "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --quiet
-  echo "gcloud delete command executed for $VM_NAME."
+  log_with_timestamp "gcloud delete command executed for $VM_NAME."
   sync
 }
 
+# Function to validate success
+validate_success() {
+    log_with_timestamp "=== VALIDATING PROCESSING SUCCESS ==="
+    
+    # Check if silver directory was created
+    if gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/ >/dev/null 2>&1; then
+        log_with_timestamp "✅ Silver directory exists"
+        
+        # Check if parquet file was created in last hour
+        recent_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+        if [ "$recent_files" -gt 0 ]; then
+            log_with_timestamp "✅ Recent Parquet file found in silver directory"
+            return 0
+        else
+            log_with_timestamp "❌ No recent Parquet files found in silver directory"
+            return 1
+        fi
+    else
+        log_with_timestamp "❌ Silver property_owners directory does not exist"
+        return 1
+    fi
+}
+
 # Run the enhanced transfer script
-echo "Executing enhanced transfer script with processing..."
+log_with_timestamp "Executing enhanced transfer script with processing..."
 sync
-python3 /opt/transfer_script.py || (echo "Python script failed." && echo "ERROR: Processing failed." >&2)
 
-echo "SFTP to GCS transfer with processing finished at $(date)."
+if python3 /opt/transfer_script.py; then
+    log_with_timestamp "✅ Python script completed successfully"
+    
+    # Validate actual success
+    if validate_success; then
+        log_with_timestamp "✅ SUCCESS: Processing validated - files uploaded successfully"
+        log_with_timestamp "VM will self-delete in 2 minutes to allow log inspection."
+        sleep 120
+        delete_vm
+    else
+        log_with_timestamp "❌ FAILURE: Processing validation failed - no output files found"
+        log_with_timestamp "VM will NOT self-delete to allow debugging"
+        exit 1
+    fi
+else
+    log_with_timestamp "❌ Python script failed with exit code $?"
+    log_with_timestamp "VM will NOT self-delete to allow debugging"
+    exit 1
+fi
 
-# Self-delete VM after successful completion
-echo "VM will self-delete in 1 minute to allow log inspection."
-sleep 60
-delete_vm
-
+log_with_timestamp "SFTP to GCS transfer with processing finished at $(date)."
 sync
-echo "Script finished."
+log_with_timestamp "Script finished successfully."
 exit 0 
