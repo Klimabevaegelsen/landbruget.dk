@@ -1,0 +1,74 @@
+name: Weekly Property Owners SFTP to GCS Transfer Pipeline
+
+on:
+  schedule:
+    # Run every Monday at 2 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    # Allow manual triggering for testing
+
+jobs:
+  create-transfer-vm:
+    name: Create Property Owners SFTP Transfer VM
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Create SFTP Transfer VM
+      run: |
+        # Generate unique VM name with timestamp
+        VM_NAME="property-owners-sftp-$(date +%Y%m%d-%H%M%S)"
+        PROJECT_ID="landbrugsdata-1"
+        ZONE="europe-west1-b"
+        
+        echo "Creating SFTP transfer VM: $VM_NAME"
+        
+        # Create the VM with startup script
+        gcloud compute instances create $VM_NAME \
+          --project=$PROJECT_ID \
+          --zone=$ZONE \
+          --machine-type=e2-small \
+          --network-interface=address=sftp-transfer-static-ip,network-tier=PREMIUM,subnet=default \
+          --boot-disk-size=30GB \
+          --boot-disk-type=pd-balanced \
+          --image-family=debian-12 \
+          --image-project=debian-cloud \
+          --scopes=https://www.googleapis.com/auth/cloud-platform \
+          --metadata=enable-oslogin=true \
+          --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup.sh \
+          --preemptible \
+          --no-restart-on-failure \
+          --maintenance-policy=TERMINATE
+        
+        echo "✅ VM $VM_NAME created successfully"
+        echo "The VM will automatically:"
+        echo "  1. Install dependencies"
+        echo "  2. Download latest file from SFTP server (property owners data)"
+        echo "  3. Upload to GCS bucket: landbrugsdata-raw-data/bronze/property_owners/"
+        echo "  4. Delete itself when complete"
+        
+        # Optional: Wait a few minutes and check if VM still exists (means it failed)
+        echo "Waiting 5 minutes to check transfer status..."
+        sleep 300
+        
+        if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
+          echo "⚠️ VM $VM_NAME still exists after 5 minutes - transfer may have failed."
+          echo "If issues persist, check its serial port output in the Google Cloud Console (project: $PROJECT_ID, zone: $ZONE)."
+        else
+          echo "✅ VM has been deleted - transfer likely completed successfully"
+        fi 
