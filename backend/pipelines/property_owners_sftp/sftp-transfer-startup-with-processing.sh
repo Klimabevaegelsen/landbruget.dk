@@ -195,6 +195,64 @@ class PropertyDataProcessor:
         else:
             return obj
     
+    def normalize_schema(self, tables):
+        """Normalize all table schemas to have the same fields before concatenation."""
+        if not tables:
+            return tables
+            
+        logger.info("Normalizing schemas across batch tables...")
+        flush_logs()
+        
+        # Collect all unique field names and types from all schemas
+        all_schemas = [table.schema for table in tables]
+        unified_fields = {}
+        
+        for schema in all_schemas:
+            for field in schema:
+                field_name = field.name
+                field_type = field.type
+                if field_name in unified_fields:
+                    # Keep the more complex type if there's a conflict
+                    if str(field_type) != str(unified_fields[field_name]):
+                        logger.info(f"Schema conflict for {field_name}: {unified_fields[field_name]} vs {field_type}")
+                        # Keep the existing type for now
+                else:
+                    unified_fields[field_name] = field_type
+        
+        # Create unified schema
+        unified_schema = pa.schema([pa.field(name, field_type) for name, field_type in unified_fields.items()])
+        logger.info(f"Created unified schema with {len(unified_fields)} fields")
+        flush_logs()
+        
+        # Normalize each table to match unified schema
+        normalized_tables = []
+        for i, table in enumerate(tables):
+            logger.info(f"Normalizing table {i+1}/{len(tables)}")
+            flush_logs()
+            
+            # Create columns dict from existing table
+            columns_dict = {field.name: table.column(field.name) for field in table.schema}
+            
+            # Add missing columns with null values
+            for field_name, field_type in unified_fields.items():
+                if field_name not in columns_dict:
+                    # Create null array of appropriate length
+                    null_array = pa.nulls(len(table), field_type)
+                    columns_dict[field_name] = null_array
+                    logger.info(f"Added missing field '{field_name}' with nulls")
+            
+            # Create new table with unified schema column order
+            ordered_columns = [columns_dict[field.name] for field in unified_schema]
+            normalized_table = pa.table(ordered_columns, schema=unified_schema)
+            normalized_tables.append(normalized_table)
+            
+            # Clear memory
+            del columns_dict, table
+            
+        logger.info(f"Schema normalization complete for {len(normalized_tables)} tables")
+        flush_logs()
+        return normalized_tables
+
     def process_json_to_parquet(self, json_file_path, output_parquet_path):
         """Stream process JSON file and convert to Parquet with transformations using batch processing."""
         logger.info(f"Processing {json_file_path} to {output_parquet_path}")
@@ -209,95 +267,95 @@ class PropertyDataProcessor:
         try:
             with open(json_file_path, 'rb') as f:
                 # Stream parse the GeoJSON features
-                for feature in ijson.items(f, 'features.item'):
-                    try:
-                        # Apply privacy transformations
-                        if 'properties' in feature:
-                            feature['properties'] = self.transform_person_data(feature['properties'])
-                        
-                        # Clean empty structures that cause Parquet issues
-                        feature = self.clean_empty_structures(feature)
-                        
-                        batch_records.append(feature)
-                        feature_count += 1
-                        
-                        if feature_count % 50000 == 0:  # Log every 50K
-                            logger.info(f"Processed {feature_count:,} features...")
-                            flush_logs()
-                        
-                        # Write batch when it reaches batch_size
-                        if len(batch_records) >= batch_size:
-                            batch_num = len(batch_files) + 1
-                            batch_file = output_dir / f"batch_{batch_num:03d}.parquet"
-                            
-                            logger.info(f"Writing batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
-                            flush_logs()
-                            
-                            # Clean batch records before writing to prevent Parquet issues
-                            cleaned_records = [self.clean_empty_structures(record) for record in batch_records]
-                            table = pa.Table.from_pylist(cleaned_records)
-                            pq.write_table(table, str(batch_file), compression='snappy')
-                            batch_files.append(batch_file)
-                            
-                            # Clear memory
-                            batch_records.clear()
-                            logger.info(f"Batch {batch_num} written, memory cleared")
-                            flush_logs()
+                features = ijson.items(f, 'features.item')
+                
+                for feature in features:
+                    # Clean empty structures that cause Parquet issues
+                    cleaned_feature = self.clean_empty_structures(feature)
                     
-                    except Exception as e:
-                        logger.warning(f"Error processing feature {feature_count}: {e}")
-                        continue
+                    # Transform the feature
+                    transformed_record = self.transform_feature(cleaned_feature)
+                    batch_records.append(transformed_record)
+                    feature_count += 1
+                    
+                    # Log progress every 50K features
+                    if feature_count % 50000 == 0:
+                        logger.info(f"Processed {feature_count:,} features...")
+                        flush_logs()
+                    
+                    # Write batch when it reaches the batch size
+                    if len(batch_records) >= batch_size:
+                        batch_number = len(batch_files) + 1
+                        batch_file = output_dir / f"batch_{batch_number:03d}.parquet"
+                        
+                        logger.info(f"Writing batch {batch_number} ({len(batch_records):,} records) to {batch_file}")
+                        flush_logs()
+                        
+                        # Convert to PyArrow table and save
+                        table = pa.Table.from_pylist(batch_records)
+                        pq.write_table(table, batch_file)
+                        batch_files.append(batch_file)
+                        
+                        logger.info(f"Batch {batch_number} written, memory cleared")
+                        flush_logs()
+                        
+                        # Clear the batch to free memory
+                        batch_records = []
+                        del table
+                
+                # Write final batch if any records remain
+                if batch_records:
+                    batch_number = len(batch_files) + 1
+                    batch_file = output_dir / f"batch_{batch_number:03d}.parquet"
+                    
+                    logger.info(f"Writing final batch {batch_number} ({len(batch_records):,} records) to {batch_file}")
+                    flush_logs()
+                    
+                    table = pa.Table.from_pylist(batch_records)
+                    pq.write_table(table, batch_file)
+                    batch_files.append(batch_file)
+                    
+                    logger.info(f"Final batch {batch_number} written")
+                    flush_logs()
+                    
+                    del batch_records, table
             
-            # Write remaining records if any
-            if batch_records:
-                batch_num = len(batch_files) + 1
-                batch_file = output_dir / f"batch_{batch_num:03d}.parquet"
-                
-                logger.info(f"Writing final batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
-                flush_logs()
-                
-                # Clean batch records before writing to prevent Parquet issues
-                cleaned_records = [self.clean_empty_structures(record) for record in batch_records]
-                table = pa.Table.from_pylist(cleaned_records)
-                pq.write_table(table, str(batch_file), compression='snappy')
-                batch_files.append(batch_file)
-                batch_records.clear()
+            logger.info(f"JSON parsing complete. Total features: {feature_count:,}")
+            logger.info(f"Merging {len(batch_files)} batch files into {output_parquet_path}")
+            flush_logs()
             
-            # Merge all batch files into final output
-            if batch_files:
-                logger.info(f"Merging {len(batch_files)} batch files into {output_parquet_path}")
-                flush_logs()
-                
-                # Read all batch files and combine
-                all_tables = []
-                for batch_file in batch_files:
-                    table = pq.read_table(batch_file)
-                    all_tables.append(table)
-                
-                # Concatenate all tables
-                final_table = pa.concat_tables(all_tables)
-                pq.write_table(final_table, output_parquet_path, compression='snappy')
-                
-                # Clean up batch files
-                for batch_file in batch_files:
-                    batch_file.unlink()
-                    logger.debug(f"Removed batch file: {batch_file}")
-                
-                logger.info(f"Final Parquet file written: {output_parquet_path}")
-                flush_logs()
+            # Read all batch files
+            all_tables = []
+            for batch_file in batch_files:
+                table = pq.read_table(batch_file)
+                all_tables.append(table)
             
-            logger.info(f"Successfully processed {feature_count:,} features to {output_parquet_path}")
+            # Normalize schemas before concatenation
+            normalized_tables = self.normalize_schema(all_tables)
+            
+            # Concatenate all tables
+            final_table = pa.concat_tables(normalized_tables)
+            
+            # Write the final merged file
+            logger.info(f"Writing final merged file with {len(final_table)} records")
+            flush_logs()
+            
+            pq.write_table(final_table, output_parquet_path)
+            
+            # Clean up batch files
+            logger.info("Cleaning up batch files...")
+            for batch_file in batch_files:
+                batch_file.unlink()
+            
+            logger.info(f"Successfully created {output_parquet_path} with {len(final_table):,} records")
             flush_logs()
             
         except Exception as e:
-            # Clean up batch files on error
+            logger.error(f"Error processing JSON file: {e}")
+            # Clean up any partial batch files
             for batch_file in batch_files:
                 if batch_file.exists():
                     batch_file.unlink()
-            
-            logger.error(f"Error processing JSON file: {e}")
-            logger.error(traceback.format_exc())
-            flush_logs()
             raise
 
 class SFTPToGCSTransferWithProcessing:
