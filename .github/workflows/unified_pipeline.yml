@@ -20,7 +20,7 @@ jobs:
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      SAVE_LOCAL: false
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
