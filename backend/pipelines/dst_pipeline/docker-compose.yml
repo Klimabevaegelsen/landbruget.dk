@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  dst-pipeline:
+    build:
+      context: ../../
+      dockerfile: pipelines/dst_pipeline/Dockerfile
+    volumes:
+      - ./bronze:/app/bronze
+      - ./silver:/app/silver
+    environment:
+      - ENVIRONMENT=dev
+    command: python main.py --tables HST77 GARTN1 FRO HALM1 --log-level INFO 
