@@ -179,12 +179,15 @@ class PropertyDataProcessor:
         return transformed
     
     def process_json_to_parquet(self, json_file_path, output_parquet_path):
-        """Stream process JSON file and convert to Parquet with transformations."""
+        """Stream process JSON file and convert to Parquet with transformations using batch processing."""
         logger.info(f"Processing {json_file_path} to {output_parquet_path}")
         flush_logs()
         
-        all_records = []
+        batch_records = []
         feature_count = 0
+        batch_size = 500000  # Write every 500K features to avoid memory exhaustion
+        batch_files = []
+        output_dir = Path(output_parquet_path).parent
         
         try:
             with open(json_file_path, 'rb') as f:
@@ -195,30 +198,79 @@ class PropertyDataProcessor:
                         if 'properties' in feature:
                             feature['properties'] = self.transform_person_data(feature['properties'])
                         
-                        all_records.append(feature)
+                        batch_records.append(feature)
                         feature_count += 1
                         
                         if feature_count % 50000 == 0:  # Log every 50K
                             logger.info(f"Processed {feature_count:,} features...")
+                            flush_logs()
+                        
+                        # Write batch when it reaches batch_size
+                        if len(batch_records) >= batch_size:
+                            batch_num = len(batch_files) + 1
+                            batch_file = output_dir / f"batch_{batch_num:03d}.parquet"
+                            
+                            logger.info(f"Writing batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
+                            flush_logs()
+                            
+                            table = pa.Table.from_pylist(batch_records)
+                            pq.write_table(table, str(batch_file), compression='snappy')
+                            batch_files.append(batch_file)
+                            
+                            # Clear memory
+                            batch_records.clear()
+                            logger.info(f"Batch {batch_num} written, memory cleared")
                             flush_logs()
                     
                     except Exception as e:
                         logger.warning(f"Error processing feature {feature_count}: {e}")
                         continue
             
-            # Write all records at once - much more efficient
-            if all_records:
-                logger.info(f"Writing {len(all_records):,} records to Parquet...")
+            # Write remaining records if any
+            if batch_records:
+                batch_num = len(batch_files) + 1
+                batch_file = output_dir / f"batch_{batch_num:03d}.parquet"
+                
+                logger.info(f"Writing final batch {batch_num} ({len(batch_records):,} records) to {batch_file}")
                 flush_logs()
-                table = pa.Table.from_pylist(all_records)
-                pq.write_table(table, output_parquet_path, compression='snappy')
-                logger.info(f"Parquet file written: {output_parquet_path}")
+                
+                table = pa.Table.from_pylist(batch_records)
+                pq.write_table(table, str(batch_file), compression='snappy')
+                batch_files.append(batch_file)
+                batch_records.clear()
+            
+            # Merge all batch files into final output
+            if batch_files:
+                logger.info(f"Merging {len(batch_files)} batch files into {output_parquet_path}")
+                flush_logs()
+                
+                # Read all batch files and combine
+                all_tables = []
+                for batch_file in batch_files:
+                    table = pq.read_table(batch_file)
+                    all_tables.append(table)
+                
+                # Concatenate all tables
+                final_table = pa.concat_tables(all_tables)
+                pq.write_table(final_table, output_parquet_path, compression='snappy')
+                
+                # Clean up batch files
+                for batch_file in batch_files:
+                    batch_file.unlink()
+                    logger.debug(f"Removed batch file: {batch_file}")
+                
+                logger.info(f"Final Parquet file written: {output_parquet_path}")
                 flush_logs()
             
             logger.info(f"Successfully processed {feature_count:,} features to {output_parquet_path}")
             flush_logs()
             
         except Exception as e:
+            # Clean up batch files on error
+            for batch_file in batch_files:
+                if batch_file.exists():
+                    batch_file.unlink()
+            
             logger.error(f"Error processing JSON file: {e}")
             logger.error(traceback.format_exc())
             flush_logs()
