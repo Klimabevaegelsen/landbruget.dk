@@ -25,6 +25,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.timing import AsyncTimer
 
 
 class WetlandsBronzeConfig(BaseJobConfig):
@@ -153,7 +154,12 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
             The method uses a semaphore to control the number of concurrent requests
             to avoid overwhelming the service.
         """
-        async with self.config.request_semaphore:
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(
+                f"Fetching chunk starting at index {start_index} to {start_index + self.config.batch_size}"
+            ),
+        ):
             self.log.debug(
                 f"Trying to fetch data from {start_index} to {start_index + self.config.batch_size}"
             )
@@ -210,9 +216,10 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         raw_features = []
-        async with aiohttp.ClientSession(
-            headers=self.config.headers, connector=connector
-        ) as session:
+        async with (
+            aiohttp.ClientSession(headers=self.config.headers, connector=connector) as session,
+            AsyncTimer("Fetching raw data for Wetlands bronze job"),
+        ):
             try:
                 raw_data = await self._fetch_chunck(session, 0)
                 total_features = raw_data["total_features"]
@@ -268,11 +275,13 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
         Note:
             This is the main entry point for the bronze layer processing of wetlands data.
         """
-        self.log.info("Running Wetlands bronze job")
-        raw_data = await self._fetch_raw_data()
-        if raw_data is None:
-            self.log.error("Failed to fetch raw data")
-            return
-        self.log.info("Fetched raw data successfully")
-        self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
-        self.log.info("Saved raw data successfully")
+        async with AsyncTimer("Running Wetlands bronze job for"):
+            self.log.info("Running Wetlands bronze job")
+            raw_data = await self._fetch_raw_data()
+            if raw_data is None:
+                self.log.error("Failed to fetch raw data")
+                return
+            self.log.info("Fetched raw data successfully")
+            self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
+            self.log.info("Saved raw data successfully")
+            self.log.info("Wetlands bronze job completed successfully")

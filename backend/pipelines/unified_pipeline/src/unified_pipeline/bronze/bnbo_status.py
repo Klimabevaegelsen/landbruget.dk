@@ -10,6 +10,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.timing import AsyncTimer
 
 
 class BNBOStatusBronzeConfig(BaseJobConfig):
@@ -144,7 +145,12 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
             This method is decorated with retry logic to handle transient failures.
             It will retry up to 5 times with exponential backoff between 4 and 10 seconds.
         """
-        async with self.config.request_semaphore:
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(
+                f"Fetching chunk from {start_index} to {start_index + self.config.batch_size}"
+            ),
+        ):
             self.log.debug(
                 f"Trying to fetch data from {start_index} to {start_index + self.config.batch_size}"
             )
@@ -200,9 +206,10 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         raw_features = []
-        async with aiohttp.ClientSession(
-            headers=self.config.headers, connector=connector
-        ) as session:
+        async with (
+            aiohttp.ClientSession(headers=self.config.headers, connector=connector) as session,
+            AsyncTimer("Fetching raw data from WFS service for BNBO Status"),
+        ):
             try:
                 raw_data = await self._fetch_chunck(session, 0)
                 total_features = raw_data["total_features"]
@@ -259,11 +266,13 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
         Note:
             This method is typically called by the pipeline orchestrator.
         """
-        self.log.info("Running BNBO Status bronze job")
-        raw_data = await self._fetch_raw_data()
-        if raw_data is None:
-            self.log.error("Failed to fetch raw data")
-            return
-        self.log.info("Fetched raw data successfully")
-        self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
-        self.log.info("Saved raw data successfully")
+        async with AsyncTimer("Running BNBO Status bronze job for"):
+            self.log.info("Running BNBO Status bronze job")
+            raw_data = await self._fetch_raw_data()
+            if raw_data is None:
+                self.log.error("Failed to fetch raw data")
+                return
+            self.log.info("Fetched raw data successfully")
+            self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
+            self.log.info("Saved raw data successfully")
+            self.log.info("BNBO Status bronze job completed successfully")

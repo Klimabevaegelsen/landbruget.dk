@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import geopandas as gpd
 import pandas as pd
@@ -111,7 +111,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         value = value.strip()
         return value if value else None
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[Dict[str, Any]]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[dict[str, Any]]:
         """
         Parse GML geometry into WKT format and calculate area.
 
@@ -122,7 +122,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             geom_elem (ET.Element): The XML element containing GML geometry data.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the WKT representation
+            Optional[dict[str, Any]]: A dictionary containing the WKT representation
                                      and area (in hectares) of the geometry, or None
                                      if parsing fails.
 
@@ -166,7 +166,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error parsing geometry: {str(e)}")
             return None
 
-    def _parse_feature(self, feature: ET.Element) -> Optional[Dict[str, Any]]:
+    def _parse_feature(self, feature: ET.Element) -> Optional[dict[str, Any]]:
         """
         Parse a single XML feature into a dictionary of attributes.
 
@@ -178,7 +178,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             feature (ET.Element): The XML element containing feature data.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing feature attributes including
+            Optional[dict[str, Any]]: A dictionary containing feature attributes including
                                      geometry and area, or None if parsing fails.
 
         Raises:
