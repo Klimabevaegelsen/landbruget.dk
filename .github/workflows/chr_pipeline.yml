@@ -75,8 +75,9 @@ jobs:
         # Install system dependencies for building lxml and xmlsec from source
         sudo apt-get update
         sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
-        # Install dependencies with --no-binary for lxml to avoid libxml2 version mismatch
-        uv pip install --system --no-binary lxml -e .
+        # Build both lxml and xmlsec from source to ensure they use the same libxml2 version
+        # This avoids the libxml2 version mismatch issue between pre-built wheels
+        uv pip install --system --no-binary lxml,xmlsec -e .
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
