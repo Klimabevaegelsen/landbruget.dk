@@ -72,7 +72,11 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/chr_pipeline
-        uv pip install --system -e .
+        # Install system dependencies for building lxml and xmlsec from source
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+        # Install dependencies with --no-binary for lxml to avoid libxml2 version mismatch
+        uv pip install --system --no-binary lxml -e .
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
