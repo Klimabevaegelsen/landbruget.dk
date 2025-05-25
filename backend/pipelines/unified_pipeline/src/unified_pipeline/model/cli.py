@@ -41,6 +41,7 @@ class Source(Enum):
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
     wetlands = "wetlands"
+    water_projects = "water_projects"
 
 
 class Stage(Enum):

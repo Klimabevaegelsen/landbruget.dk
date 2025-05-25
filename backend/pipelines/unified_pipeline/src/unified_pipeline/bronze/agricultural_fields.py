@@ -126,17 +126,19 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
 
         try:
             self.log.info(f"Fetching total count from {url}")
-            async with session.get(url, params=params) as response:
-                async with AsyncTimer(f"Request total count from {url}"):
-                    if response.status == 200:
-                        data = await response.json()
-                        total = data.get("count", 0)
-                        return int(total)
-                    else:
-                        response_text = await response.text()
-                        raise Exception(
-                            f"Error getting count for {url}: {response.status} - {response_text}"
-                        )
+            async with (
+                session.get(url, params=params) as response,
+                AsyncTimer(f"Request total count from {url}"),
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    total = data.get("count", 0)
+                    return int(total)
+                else:
+                    response_text = await response.text()
+                    raise Exception(
+                        f"Error getting count for {url}: {response.status} - {response_text}"
+                    )
         except Exception as e:
             raise Exception(f"Error getting total count for {url}: {str(e)}")
 
@@ -178,21 +180,25 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
             "resultRecordCount": str(self.config.batch_size),
         }
 
-        async with self.config.request_semaphore:
-            async with AsyncTimer(f"Request chunk at index {start_index}"):
-                self.log.debug(f"Fetching from URL: {url} with params: {params}")
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return json.dumps(data)
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(
+                f"Request chunk at index {start_index} to {start_index + self.config.batch_size}"
+            ),
+        ):
+            self.log.debug(f"Fetching from URL: {url} with params: {params}")
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return json.dumps(data)
 
-                    response_text = await response.text()
-                    err_msg = (
-                        f"Error response {response.status} at index {start_index}. "
-                        f"Response: {response_text[:500]}..."
-                    )
-                    self.log.error(err_msg)
-                    raise Exception(err_msg)
+                response_text = await response.text()
+                err_msg = (
+                    f"Error response {response.status} at index {start_index}. "
+                    f"Response: {response_text[:500]}..."
+                )
+                self.log.error(err_msg)
+                raise Exception(err_msg)
 
     async def _process_data(self, url: str, dataset: str) -> None:
         """
@@ -224,25 +230,27 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
         ssl_context.verify_mode = ssl.CERT_NONE
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            timeout=self.config.timeout_config, connector=connector
-        ) as session:
-            async with AsyncTimer(f"Processing data for {dataset}"):
-                total_count = await self._get_total_count(session, url)
-                self.log.info(f"Total count: {total_count}")
+        async with (
+            aiohttp.ClientSession(
+                timeout=self.config.timeout_config, connector=connector
+            ) as session,
+            AsyncTimer(f"Processing data for {dataset}"),
+        ):
+            total_count = await self._get_total_count(session, url)
+            self.log.info(f"Total count: {total_count}")
 
-                if total_count == 0:
-                    self.log.warning("No data to process.")
-                    return
+            if total_count == 0:
+                self.log.warning("No data to process.")
+                return
 
-                tasks = []
-                for start_index in range(0, total_count, self.config.batch_size):
-                    tasks.append(self._fetch_chunk(session, url, start_index))
+            tasks = []
+            for start_index in range(0, total_count, self.config.batch_size):
+                tasks.append(self._fetch_chunk(session, url, start_index))
 
-                raw_data = await asyncio.gather(*tasks)
-                self.log.info(f"Saving data to GCS for {dataset}")
-                self._save_raw_data(raw_data, dataset, self.config.name, self.config.bucket)
-                self.log.info(f"Data processing completed for {dataset}")
+            raw_data = await asyncio.gather(*tasks)
+            self.log.info(f"Saving data to GCS for {dataset}")
+            self._save_raw_data(raw_data, dataset, self.config.name, self.config.bucket)
+            self.log.info(f"Data processing completed for {dataset}")
 
     async def run(self) -> None:
         """
@@ -267,5 +275,4 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
         async with AsyncTimer("Total run time"):
             await self._process_data(self.config.fields_url, self.config.fields_dataset)
             await self._process_data(self.config.blocks_url, self.config.blocks_dataset)
-
-            self.log.info("Run completed successfully.")
+            self.log.info("Agricultural Fields bronze job completed successfully")
