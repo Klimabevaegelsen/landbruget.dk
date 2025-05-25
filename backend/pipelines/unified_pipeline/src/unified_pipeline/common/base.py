@@ -89,9 +89,7 @@ class BaseSource(Generic[T], ABC):
         pass
 
     @timed(name="Saving raw data")
-    def _save_raw_data(
-        self, raw_data: list[str], dataset: str, source_name: str, bucket_name: str
-    ) -> None:
+    def _save_raw_data(self, df: pd.DataFrame, dataset: str, bucket_name: str) -> None:
         """
         Save raw data to Google Cloud Storage.
 
@@ -99,9 +97,8 @@ class BaseSource(Generic[T], ABC):
         saves it as a parquet file locally, then uploads it to Google Cloud Storage.
 
         Args:
-            raw_data (list[str]): A list of strings to save.
+            df (pd.DataFrame): The DataFrame containing the raw data to save.
             dataset (str): The name of the dataset, used to determine the save path.
-            source_name (str): The name of the source, used for logging and metadata.
             bucket_name (str): The name of the GCS bucket to save the data.
 
         Returns:
@@ -114,14 +111,7 @@ class BaseSource(Generic[T], ABC):
             The data is saved in the bronze layer, which contains raw, unprocessed data.
             The file is named with the current date in YYYY-MM-DD format.
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = source_name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
+        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
 
         temp_dir = f"/tmp/bronze/{dataset}"
         os.makedirs(temp_dir, exist_ok=True)
@@ -201,7 +191,7 @@ class BaseSource(Generic[T], ABC):
         Raises:
             Exception: If there are issues accessing or downloading the data.
         """
-        self.log.info("Reading data from bronze layer")
+        self.log.info(f"Reading data from bronze layer in bucket: {bucket_name}")
 
         # Get the GCS bucket
 
