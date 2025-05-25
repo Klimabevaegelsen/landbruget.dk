@@ -267,7 +267,11 @@ All data files are in Parquet format and located in the project directory:
     - [X] **Optimization Note:** Implement pre-check: only run if pesticide `AcreageSize` < total area of available fields for the CVR/Crop/Source.
     - Pesticide rows disaggregated by this strategy: 3,446
     - Allocation method: `SubsetSum_Marker_FieldProportional`, `SubsetSum_GKEA_FieldProportional`
-- [ ] **Strategy 6: Geospatial Matching (Future):**
+- [ ] **Strategy 6: Partial Field Application Strategy (Proposed):**
+    - [ ] For single-field CVR/crop combinations where pesticide area < field area, allow allocation with relaxed tolerance
+    - [ ] Focus on cases where pesticide area is 10-90% of field area (avoiding obvious data errors)
+    - [ ] Could potentially recover additional area from legitimate partial field treatments
+- [ ] **Strategy 7: Geospatial Matching (Future):**
     - [ ] Explore using spatial relationships if pesticide locations can be determined.
 - [X] **Develop Confidence Scoring:** Basic confidence scoring based on area difference implemented.
 - [ ] **Validate Results:** Validate disaggregated data against known cases or through expert review.
@@ -291,6 +295,15 @@ All data files are in Parquet format and located in the project directory:
     - [ ] Document the final methodology, including assumptions and limitations for each step in this markdown.
 
 ### 4. Analysis of Remaining Pending Rows (Completed Initial Investigation)
+
+#### Enhanced Analysis with New Methods (Completed)
+Using the new analysis methods, we've identified specific improvement opportunities:
+
+- **Largest Unmatched CVRs**: Analysis shows that a small number of companies account for significant unallocated areas, particularly in specialty crops
+- **Partial Field Applications**: Single-field cases where pesticide area is much smaller than field area represent legitimate use cases that could be recovered with adjusted tolerance strategies
+- **Crop-Specific Patterns**: Christmas trees, nursery operations, and cover crops show distinct patterns that may require specialized handling
+
+### 4. Analysis of Remaining Pending Rows (Original Investigation)
 The root causes for the 18,828 pending pesticide rows (Total Direct Sum Area: ~672,369.90 ha; Total Sum(Max) Area: ~106,702.53 ha) have been investigated. The breakdown is as follows:
 
 - **1. Unmatched CVRs:** CVRs in pesticide data with no corresponding CVR in `marker` or `GKEA`.
@@ -319,10 +332,53 @@ The root causes for the 18,828 pending pesticide rows (Total Direct Sum Area: ~6
 
 **Note on Area Categories:** The Sum(Max) area for categories 3 and 4 specifically represents the sum of maximum pesticide application areas for CVR/Crop combinations where this maximum *itself* exceeds the corresponding total field area in Marker or GKEA. The row counts and direct sum areas in these categories refer to all pending pesticide rows belonging to these identified CVR/Crop groups.
 
+## Analysis Methods for Unallocated Data
+
+### New Analysis Capabilities (Added)
+The pipeline now includes specialized analysis methods to better understand the remaining unallocated pesticide data:
+
+#### 1. `analyze_largest_unmatched_cvrs()`
+- **Purpose**: Identifies companies (CVRs) with the largest amounts of unallocated pesticide data
+- **Key Features**:
+  - Uses MAX area per CVR/crop combination to avoid double counting multiple applications
+  - Generates detailed statistics on crop diversity, field counts, and total areas per CVR
+  - Outputs CSV reports for further analysis
+- **Key Findings**:
+  - 2,989 unique CVR/crop combinations remain unallocated
+  - Total unique area: 101,270.95 ha (using MAX area methodology)
+  - Largest unmatched combinations include nursery operations (Potteplanter), forestry (Anden skovdrift), and specialty crops
+
+#### 2. `analyze_single_field_partial_applications()`
+- **Purpose**: Identifies CVR/crop combinations with only one field where pesticide application area is much smaller than field area
+- **Key Features**:
+  - Focuses on cases where pesticide area < 50%, 25%, or 10% of field area
+  - Identifies legitimate partial field applications that current tolerance-based matching excludes
+  - Provides detailed analysis of potential area recovery opportunities
+- **Key Findings**:
+  - Out of 567 single-field CVR/crop combinations in unallocated data:
+    - 23 combinations (4.1%) have pesticide area < 50% of field area
+    - 12 combinations (2.1%) have pesticide area < 25% of field area
+    - 2 combinations (0.4%) have pesticide area < 10% of field area
+  - Most extreme case: CVR 17937197/crop 22 with 12.1 ha field but only 0.1 ha pesticide application (1.2% coverage)
+
+#### 3. Top Unmatched Crops by Area
+Analysis reveals the largest unmatched crop categories:
+1. **Vårbyg (1)**: 20,772.91 ha
+2. **Vinterhvede (11)**: 14,046.22 ha  
+3. **Juletræer og pyntegrønt (583)**: 8,957.29 ha
+4. **Efterafgrøder, pligtige, husdyr, målrettede (968)**: 8,560.66 ha
+5. **Vinterraps (22)**: 5,559.38 ha
+
+#### 4. Improvement Opportunities Identified
+- **Partial Field Applications**: Current 2.0% tolerance may be too strict for legitimate partial treatments
+- **Specialty Crops**: Christmas trees, nursery operations, and seed production represent significant unmatched areas
+- **Single-Field Cases**: Many unmatched combinations involve single fields where partial application is common
+
 ## Technical Notes
 - Using DuckDB and DuckDB-Spatial for all data processing
 - All analysis code is in the `pesticide_analyzer` directory, with `main.py` as the entry point.
 - Intermediate results (debug CSVs) are saved in `pesticide_analyzer/outputs/`.
+- New analysis methods available in `analysis/disaggregation.py`
 - Current focus is on improving disaggregation strategies and coverage.
 
 ## Known Issues
