@@ -807,6 +807,459 @@ class PesticideDisaggregator:
 
         return processed_original_pesticide_row_ids
 
+    def disaggregate_by_partial_field_coverage(
+        self, pending_rows_table: str = "pending_pesticide_rows"
+    ) -> List[int]:
+        """
+        Strategy: Partial Field Coverage for single-field CVR/crop combinations.
+
+        Handles cases where:
+        1. CVR/Crop combination has exactly one field in marker dataset
+        2. Pesticide application area is significantly smaller than field area
+        3. We allocate to the single field but flag as "partial coverage" with spatial uncertainty
+
+        Args:
+            pending_rows_table: Name of the table containing pending pesticide rows
+
+        Returns:
+            List of processed original pesticide row IDs
+        """
+        logger.info("Running Partial Field Coverage disaggregation strategy...")
+
+        processed_ids = []
+
+        # Find single-field CVR/crop combinations where pesticide area < field area
+        query = f"""
+        WITH MarkerSingleFieldCVRCrop AS (
+            SELECT 
+                CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) as Crop_Str,
+                COUNT(*) as FieldCount,
+                m.id as FieldID,
+                m.IMK_areal as FieldArea,
+                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier
+            FROM marker m
+            WHERE m.CVR IS NOT NULL 
+              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
+              AND m.Afgkode IS NOT NULL 
+              AND m.IMK_areal > 0
+            GROUP BY 1, 2, 4, 5, 6
+            HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
+        ),
+        PendingForSingleFields AS (
+            SELECT 
+                p.OriginalPesticideRowID,
+                CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                p.AcreageSize,
+                p.CompanyName,
+                p.Name as CropName
+            FROM {pending_rows_table} p
+            WHERE p.CompanyRegistrationNumber IS NOT NULL 
+              AND p.Code IS NOT NULL
+              AND p.AcreageSize > 0
+        )
+        SELECT 
+            pf.OriginalPesticideRowID,
+            pf.CVR_Str,
+            pf.Crop_Str,
+            pf.AcreageSize,
+            pf.CompanyName,
+            pf.CropName,
+            sf.FieldID,
+            sf.FieldArea,
+            sf.FieldIdentifier,
+            (pf.AcreageSize / sf.FieldArea) * 100 as CoveragePercent
+        FROM MarkerSingleFieldCVRCrop sf
+        JOIN PendingForSingleFields pf 
+            ON sf.CVR_Str = pf.CVR_Str 
+            AND sf.Crop_Str = pf.Crop_Str
+        WHERE pf.AcreageSize < sf.FieldArea  -- Pesticide area smaller than field area
+        ORDER BY CoveragePercent ASC  -- Process smallest coverage first
+        """
+
+        candidates = self.db.execute_query(query)
+
+        if not candidates:
+            logger.info("Partial Field Coverage: No single-field candidates found.")
+            return processed_ids
+
+        logger.info(
+            f"Partial Field Coverage: Found {len(candidates)} single-field candidates to process."
+        )
+
+        for (
+            original_id,
+            cvr_str,
+            crop_str,
+            acreage_size,
+            company_name,
+            crop_name,
+            field_id,
+            field_area,
+            field_identifier,
+            coverage_percent,
+        ) in candidates:
+            # Create disaggregated entry with partial coverage flags
+            disaggregated_entry = {
+                "OriginalPesticideRowID": original_id,
+                "FieldID": f"marker_{field_identifier}",
+                "FieldSource": "marker",
+                "CVR": cvr_str,
+                "CropCode": crop_str,
+                "CropName": crop_name,
+                "CompanyName": company_name,
+                "FieldArea": float(field_area),
+                "AllocatedPesticideArea": float(
+                    acreage_size
+                ),  # Use actual pesticide area, not field area
+                "AllocationMethod": "Partial_Field_Coverage_SingleField",
+                "AreaDifference": float(field_area - acreage_size),
+                "AreaDifferencePercent": float(
+                    ((field_area - acreage_size) / acreage_size) * 100
+                ),
+                "Confidence": 0.8,  # High confidence in field assignment, but spatial uncertainty
+                "Notes": f"Partial field coverage: {coverage_percent:.1f}% of field area. Spatial location within field unknown.",
+            }
+
+            # Get original pesticide data for this row
+            original_data_query = f"""
+            SELECT * FROM {pending_rows_table} 
+            WHERE OriginalPesticideRowID = ?
+            """
+            original_data = self.db.execute_query(original_data_query, [original_id])[0]
+
+            # Insert into disaggregated table using the actual schema
+            insert_query = """
+            INSERT INTO disaggregated_pesticide_applications 
+            (DisaggregatedID, OriginalPesticideRowID, CompanyName, CompanyRegistrationNumber, 
+             StreetName, StreetBuildingIdentifier, FloorIdentifier, PostCodeIdentifier, City,
+             AcreageSize, AcreageUnit, Name, Code, PesticideName, PesticideRegistrationNumber, 
+             DosageQuantity, DosageUnit, NoPesticides, MatchedFieldID, MatchedDataset, 
+             AllocatedArea, AllocationMethod, MatchConfidence, DisaggregationDate)
+            VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            """
+
+            self.db.execute_query(
+                insert_query,
+                [
+                    original_id,  # OriginalPesticideRowID
+                    company_name,  # CompanyName
+                    cvr_str,  # CompanyRegistrationNumber
+                    original_data[4] if len(original_data) > 4 else None,  # StreetName
+                    original_data[5]
+                    if len(original_data) > 5
+                    else None,  # StreetBuildingIdentifier
+                    original_data[6]
+                    if len(original_data) > 6
+                    else None,  # FloorIdentifier
+                    original_data[7]
+                    if len(original_data) > 7
+                    else None,  # PostCodeIdentifier
+                    original_data[8] if len(original_data) > 8 else None,  # City
+                    acreage_size,  # AcreageSize
+                    original_data[10]
+                    if len(original_data) > 10
+                    else None,  # AcreageUnit
+                    crop_name,  # Name
+                    crop_str,  # Code
+                    original_data[13]
+                    if len(original_data) > 13
+                    else None,  # PesticideName
+                    original_data[14]
+                    if len(original_data) > 14
+                    else None,  # PesticideRegistrationNumber
+                    original_data[15]
+                    if len(original_data) > 15
+                    else None,  # DosageQuantity
+                    original_data[16]
+                    if len(original_data) > 16
+                    else None,  # DosageUnit
+                    original_data[17]
+                    if len(original_data) > 17
+                    else None,  # NoPesticides
+                    f"marker_{field_identifier}",  # MatchedFieldID
+                    "marker",  # MatchedDataset
+                    float(
+                        acreage_size
+                    ),  # AllocatedArea (use pesticide area, not field area)
+                    "Partial_Field_Coverage_SingleField",  # AllocationMethod
+                    0.8,  # MatchConfidence
+                ],
+            )
+
+            processed_ids.append(original_id)
+
+        logger.info(
+            f"Partial Field Coverage: Processed {len(processed_ids)} pesticide applications with partial field coverage."
+        )
+        return processed_ids
+
+    def disaggregate_by_adjacent_fields_single_cluster(
+        self, pending_rows_table: str = "pending_pesticide_rows"
+    ) -> List[int]:
+        """
+        Strategy: Adjacent Fields Single Cluster for multi-field CVR/crop combinations.
+
+        Handles cases where:
+        1. CVR/Crop combination has multiple fields in marker dataset
+        2. ALL fields form a single connected cluster (within 10m or touching)
+        3. Pesticide application area is smaller than total cluster area
+        4. We allocate proportionally to all fields in the cluster with high confidence
+
+        This strategy eliminates spatial ambiguity by only processing cases where
+        all fields form one connected cluster, ensuring we don't incorrectly
+        allocate pesticide to distant, untreated field groups.
+
+        Args:
+            pending_rows_table: Name of the table containing pending pesticide rows
+
+        Returns:
+            List of processed original pesticide row IDs
+        """
+        logger.info("Running Adjacent Fields Single Cluster disaggregation strategy...")
+
+        processed_ids = []
+        max_distance_m = 10.0
+
+        # Find CVR/crop combinations where ALL fields form a single connected cluster
+        query = f"""
+        WITH MarkerFieldsWithGeometry AS (
+            SELECT 
+                CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) as Crop_Str,
+                m.id as FieldID,
+                m.IMK_areal as FieldArea,
+                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier,
+                m.geometry as FieldGeometry
+            FROM marker m
+            WHERE m.CVR IS NOT NULL 
+              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
+              AND m.Afgkode IS NOT NULL 
+              AND m.IMK_areal > 0
+              AND m.geometry IS NOT NULL
+        ),
+        CVRCropFieldCounts AS (
+            SELECT 
+                CVR_Str,
+                Crop_Str,
+                COUNT(*) as FieldCount,
+                SUM(FieldArea) as TotalFieldArea
+            FROM MarkerFieldsWithGeometry
+            GROUP BY CVR_Str, Crop_Str
+            HAVING COUNT(*) > 1  -- Only multi-field combinations
+        ),
+        PendingForAnalysis AS (
+            SELECT 
+                p.OriginalPesticideRowID,
+                CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                p.AcreageSize,
+                p.CompanyName,
+                p.Name as CropName
+            FROM {pending_rows_table} p
+            WHERE p.CompanyRegistrationNumber IS NOT NULL 
+              AND p.Code IS NOT NULL
+              AND p.AcreageSize > 0
+        ),
+        -- Find all field pairs that are adjacent (within 10m or touching)
+        AdjacentPairs AS (
+            SELECT DISTINCT
+                f1.CVR_Str,
+                f1.Crop_Str,
+                f1.FieldID as Field1,
+                f2.FieldID as Field2
+            FROM MarkerFieldsWithGeometry f1
+            JOIN MarkerFieldsWithGeometry f2 
+                ON f1.CVR_Str = f2.CVR_Str 
+                AND f1.Crop_Str = f2.Crop_Str
+                AND f1.FieldID < f2.FieldID
+            JOIN CVRCropFieldCounts cc 
+                ON f1.CVR_Str = cc.CVR_Str 
+                AND f1.Crop_Str = cc.Crop_Str
+            JOIN PendingForAnalysis pfa
+                ON f1.CVR_Str = pfa.CVR_Str 
+                AND f1.Crop_Str = pfa.Crop_Str
+            WHERE ST_Distance(f1.FieldGeometry, f2.FieldGeometry) <= {max_distance_m}
+               OR ST_Touches(f1.FieldGeometry, f2.FieldGeometry)
+        ),
+        -- Count total fields and connected fields for each CVR/Crop
+        FieldConnectivity AS (
+            SELECT 
+                cc.CVR_Str,
+                cc.Crop_Str,
+                cc.FieldCount as TotalFields,
+                cc.TotalFieldArea,
+                COALESCE(COUNT(DISTINCT ap.Field1), 0) + COALESCE(COUNT(DISTINCT ap.Field2), 0) as ConnectedFields,
+                COALESCE(COUNT(*), 0) as AdjacentPairs
+            FROM CVRCropFieldCounts cc
+            LEFT JOIN AdjacentPairs ap 
+                ON cc.CVR_Str = ap.CVR_Str 
+                AND cc.Crop_Str = ap.Crop_Str
+            GROUP BY cc.CVR_Str, cc.Crop_Str, cc.FieldCount, cc.TotalFieldArea
+        ),
+        -- Identify cases where ALL fields are connected (single cluster)
+        SingleClusterCases AS (
+            SELECT 
+                fc.CVR_Str,
+                fc.Crop_Str,
+                fc.TotalFields,
+                fc.TotalFieldArea,
+                fc.ConnectedFields,
+                fc.AdjacentPairs,
+                pfa.OriginalPesticideRowID,
+                pfa.AcreageSize,
+                pfa.CompanyName,
+                pfa.CropName,
+                (pfa.AcreageSize / fc.TotalFieldArea) * 100 as CoveragePercent
+            FROM FieldConnectivity fc
+            JOIN PendingForAnalysis pfa 
+                ON fc.CVR_Str = pfa.CVR_Str 
+                AND fc.Crop_Str = pfa.Crop_Str
+            WHERE (fc.ConnectedFields = fc.TotalFields OR (fc.TotalFields = 2 AND fc.AdjacentPairs >= 1))
+              AND pfa.AcreageSize < fc.TotalFieldArea
+        )
+        SELECT 
+            scc.OriginalPesticideRowID,
+            scc.CVR_Str,
+            scc.Crop_Str,
+            scc.AcreageSize,
+            scc.CompanyName,
+            scc.CropName,
+            scc.TotalFields,
+            scc.TotalFieldArea,
+            scc.CoveragePercent
+        FROM SingleClusterCases scc
+        ORDER BY scc.TotalFields ASC, scc.CoveragePercent DESC  -- Process smaller clusters first
+        """
+
+        candidates = self.db.execute_query(query)
+
+        if not candidates:
+            logger.info(
+                "Adjacent Fields Single Cluster: No single-cluster candidates found."
+            )
+            return processed_ids
+
+        logger.info(
+            f"Adjacent Fields Single Cluster: Found {len(candidates)} single-cluster candidates to process."
+        )
+
+        # Process each candidate by allocating proportionally to all fields in the cluster
+        for (
+            original_id,
+            cvr_str,
+            crop_str,
+            acreage_size,
+            company_name,
+            crop_name,
+            total_fields,
+            total_field_area,
+            coverage_percent,
+        ) in candidates:
+            # Get all fields in this cluster
+            fields_query = """
+            SELECT 
+                m.id as FieldID,
+                m.IMK_areal as FieldArea,
+                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier
+            FROM marker m
+            WHERE CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) = ?
+              AND CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) = ?
+              AND m.CVR IS NOT NULL 
+              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
+              AND m.Afgkode IS NOT NULL 
+              AND m.IMK_areal > 0
+            ORDER BY m.IMK_areal DESC
+            """
+
+            fields = self.db.execute_query(fields_query, [cvr_str, crop_str])
+
+            if not fields:
+                logger.warning(f"No fields found for CVR {cvr_str}, Crop {crop_str}")
+                continue
+
+            # Get original pesticide data for this row
+            original_data_query = f"""
+            SELECT * FROM {pending_rows_table} 
+            WHERE OriginalPesticideRowID = ?
+            """
+            original_data = self.db.execute_query(original_data_query, [original_id])[0]
+
+            # Allocate pesticide proportionally to each field in the cluster
+            for field_id, field_area, field_identifier in fields:
+                # Calculate proportional allocation
+                field_proportion = float(field_area) / float(total_field_area)
+                allocated_area = float(acreage_size) * field_proportion
+
+                # Insert into disaggregated table
+                insert_query = """
+                INSERT INTO disaggregated_pesticide_applications 
+                (DisaggregatedID, OriginalPesticideRowID, CompanyName, CompanyRegistrationNumber, 
+                 StreetName, StreetBuildingIdentifier, FloorIdentifier, PostCodeIdentifier, City,
+                 AcreageSize, AcreageUnit, Name, Code, PesticideName, PesticideRegistrationNumber, 
+                 DosageQuantity, DosageUnit, NoPesticides, MatchedFieldID, MatchedDataset, 
+                 AllocatedArea, AllocationMethod, MatchConfidence, DisaggregationDate)
+                VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                """
+
+                self.db.execute_query(
+                    insert_query,
+                    [
+                        original_id,  # OriginalPesticideRowID
+                        company_name,  # CompanyName
+                        cvr_str,  # CompanyRegistrationNumber
+                        original_data[4]
+                        if len(original_data) > 4
+                        else None,  # StreetName
+                        original_data[5]
+                        if len(original_data) > 5
+                        else None,  # StreetBuildingIdentifier
+                        original_data[6]
+                        if len(original_data) > 6
+                        else None,  # FloorIdentifier
+                        original_data[7]
+                        if len(original_data) > 7
+                        else None,  # PostCodeIdentifier
+                        original_data[8] if len(original_data) > 8 else None,  # City
+                        allocated_area,  # AcreageSize (proportional allocation)
+                        original_data[10]
+                        if len(original_data) > 10
+                        else None,  # AcreageUnit
+                        crop_name,  # Name
+                        crop_str,  # Code
+                        original_data[13]
+                        if len(original_data) > 13
+                        else None,  # PesticideName
+                        original_data[14]
+                        if len(original_data) > 14
+                        else None,  # PesticideRegistrationNumber
+                        original_data[15]
+                        if len(original_data) > 15
+                        else None,  # DosageQuantity
+                        original_data[16]
+                        if len(original_data) > 16
+                        else None,  # DosageUnit
+                        original_data[17]
+                        if len(original_data) > 17
+                        else None,  # NoPesticides
+                        f"marker_{field_identifier}",  # MatchedFieldID
+                        "marker",  # MatchedDataset
+                        allocated_area,  # AllocatedArea
+                        f"Adjacent_Fields_Single_Cluster_Partial_{coverage_percent:.1f}pct",  # AllocationMethod with spatial uncertainty note
+                        0.9,  # MatchConfidence (high confidence due to single cluster)
+                    ],
+                )
+
+            processed_ids.append(original_id)
+
+        logger.info(
+            f"Adjacent Fields Single Cluster: Processed {len(processed_ids)} pesticide applications across single-cluster field groups."
+        )
+        return processed_ids
+
 
 # For brevity, the long SQL queries within the methods are referenced as "Original SQL".
-# They are identical to those in the original pesticide_analysis.py script (including the recent CVR fix for marker).

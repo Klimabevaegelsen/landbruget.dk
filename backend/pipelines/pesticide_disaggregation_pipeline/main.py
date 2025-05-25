@@ -196,6 +196,60 @@ def run_disaggregation_strategies(
     else:
         logger.info("No rows processed by Subset Sum Match strategy.")
 
+    # Strategy 5: Partial Field Coverage (Single Field)
+    logger.info("Running Partial Field Coverage (Single Field) strategy...")
+    partial_coverage_processed_ids = (
+        disaggregator.disaggregate_by_partial_field_coverage(
+            pending_rows_table="pending_pesticide_rows"
+        )
+    )
+    if partial_coverage_processed_ids:
+        ids_tuple = tuple(partial_coverage_processed_ids)
+        if ids_tuple:
+            if len(ids_tuple) == 1:
+                db_manager.execute_query(
+                    f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID = {ids_tuple[0]}"
+                )
+            else:
+                db_manager.execute_query(
+                    f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
+                )
+        current_pending_count = db_manager.execute_query(
+            "SELECT COUNT(*) FROM pending_pesticide_rows"
+        )[0][0]
+        logger.info(
+            f"After Partial Field Coverage, {len(partial_coverage_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
+        )
+    else:
+        logger.info("No rows processed by Partial Field Coverage strategy.")
+
+    # Strategy 6: Adjacent Fields Single Cluster
+    logger.info("Running Adjacent Fields Single Cluster strategy...")
+    adjacent_cluster_processed_ids = (
+        disaggregator.disaggregate_by_adjacent_fields_single_cluster(
+            pending_rows_table="pending_pesticide_rows"
+        )
+    )
+    if adjacent_cluster_processed_ids:
+        ids_tuple = tuple(adjacent_cluster_processed_ids)
+        if ids_tuple:
+            if len(ids_tuple) == 1:
+                db_manager.execute_query(
+                    f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID = {ids_tuple[0]}"
+                )
+            else:
+                db_manager.execute_query(
+                    f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
+                )
+        current_pending_count = db_manager.execute_query(
+            "SELECT COUNT(*) FROM pending_pesticide_rows"
+        )[0][0]
+        logger.info(
+            f"After Adjacent Fields Single Cluster, {len(adjacent_cluster_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
+        )
+    else:
+        logger.info("No rows processed by Adjacent Fields Single Cluster strategy.")
+
     # Add more strategies here if needed
 
 
