@@ -5,6 +5,7 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
+import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -62,7 +63,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
     def __init__(self, config: WaterProjectsBronzeConfig, gcs_util: GCSUtil):
         super().__init__(config, gcs_util)
 
-    def _get_params(self, layer, start_index=0):
+    def _get_params(self, layer: str, start_index: int = 0) -> dict[str, str]:
         return {
             "SERVICE": "WFS",
             "REQUEST": "GetFeature",
@@ -84,7 +85,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
         async with (
             self.config.request_semaphore,
             AsyncTimer(
-                f"Fetching chunk for layer {layer} starting at index {start_index} to {start_index + self.config.batch_size}"
+                f"Fetching chunk for layer {layer} starting at index {start_index} "
+                f"to {start_index + self.config.batch_size}"
             ),
         ):
             params = self._get_params(layer, start_index)
@@ -152,7 +154,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
                 async with session.get(fetch_url, params=params) as response:
                     if response.status != 200:
                         response_err = await response.text()
-                        err_msg = f"Failed to fetch ArcGIS data. Status: {response.status}, Error: {response_err[:500]}"
+                        err_msg = f"Failed to fetch ArcGIS data. Status: {response.status}, "
+                        f"Error: {response_err[:500]}"
                         self.log.error(err_msg)
                         raise Exception(err_msg)
 
@@ -165,8 +168,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
                     except UnicodeDecodeError:
                         # Handle decoding errors by using 'replace' strategy
                         self.log.warning(
-                            f"Unicode decode error when reading response text for ArcGIS layer {layer}. "
-                            f"Using 'replace' strategy."
+                            f"Unicode decode error when reading response text "
+                            f"for ArcGIS layer {layer}. Using 'replace' strategy."
                         )
                         response_text = await response.text(errors="replace")
 
@@ -213,7 +216,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
             self.log.info(f"Fetched all {fetched_features_count} out of {total_features} features")
             return raw_features
 
-    async def _fetch_raw_data(self) -> Optional[list[str]]:
+    async def _fetch_raw_data(self) -> Optional[list[tuple[str, str]]]:
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -237,7 +240,10 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
                         self.log.warning(f"No data fetched for layer: {layer}")
                         continue
                     self.log.info(f"Fetched {len(raw_data)} features for layer: {layer}")
-                    raw_features.extend(raw_data)
+                    raw_data_with_metadata = [
+                        (layer, data) for data in raw_data
+                    ]  # Add layer as metadata
+                    raw_features.extend(raw_data_with_metadata)
                 except Exception as e:
                     self.log.error(f"Error occured while fetching chunk: {e}")
                     raise e
@@ -247,6 +253,28 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
         self.log.info(f"Total raw features fetched: {len(raw_features)}")
         return raw_features
 
+    def create_dataframe(self, raw_data: list[tuple[str, str]]) -> pd.DataFrame:
+        """
+        Create a DataFrame from the raw data.
+        This method takes a list of tuples and converts it into a pandas DataFrame.
+
+        Args:
+            raw_data (list[tuple[str, str]]): List of tuples containing layer and feature data.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the raw data with metadata.
+        """
+        df = pd.DataFrame(
+            {
+                "payload": [data[1] for data in raw_data],
+                "layer": [data[0] for data in raw_data],
+            }
+        )
+        df["source"] = self.config.name
+        df["created_at"] = pd.Timestamp.now()
+        df["updated_at"] = pd.Timestamp.now()
+        return df
+
     async def run(self) -> None:
         async with AsyncTimer("Running Water Projects bronze job for"):
             self.log.info("Running Water Projects bronze job")
@@ -254,7 +282,11 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
             if raw_data is None:
                 self.log.error("Failed to fetch raw data")
                 return
+            if len(raw_data) == 0:
+                self.log.warning("No raw data fetched")
+                return
             self.log.info("Fetched raw data successfully")
-            self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
+            df = self.create_dataframe(raw_data)
+            self._save_raw_data(df, self.config.dataset, self.config.bucket)
             self.log.info("Saved raw data successfully")
             self.log.info("Water Projects bronze job completed successfully")
