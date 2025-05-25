@@ -8,6 +8,7 @@ from shapely import MultiPolygon, Polygon, difference, unary_union, wkt
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
+from unified_pipeline.util.timing import AsyncTimer
 
 
 class BNBOStatusSilverConfig(BaseJobConfig):
@@ -219,6 +220,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
             return None
 
+    @timed(name="Processing bronze data")
     def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         """
         Process XML data from the bronze layer into a GeoDataFrame.
@@ -271,6 +273,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         geometries = [wkt.loads(f["geometry"]) for f in features]
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
+    @timed(name="Creating dissolved GeoDataFrame")
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved GeoDataFrame by merging geometries by status category.
@@ -366,17 +369,18 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running BNBO status silver job")
-        raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-        if raw_data is None:
-            self.log.error("Failed to read raw data")
-            return
-        self.log.info("Read raw data successfully")
-        geo_df = self._process_xml_data(raw_data)
-        if geo_df is None:
-            self.log.error("Failed to process raw data")
-            return
-        self.log.info("Processed raw data successfully")
-        dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-        self._save_data(geo_df, self.config.dataset, self.config.bucket)
-        self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
-        self.log.info("Saved processed data successfully")
+        async with AsyncTimer("Running Water Projects silver job for")
+            raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
+            if raw_data is None:
+                self.log.error("Failed to read raw data")
+                return
+            self.log.info("Read raw data successfully")
+            geo_df = self._process_xml_data(raw_data)
+            if geo_df is None:
+                self.log.error("Failed to process raw data")
+                return
+            self.log.info("Processed raw data successfully")
+            dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
+            self._save_data(geo_df, self.config.dataset, self.config.bucket)
+            self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
+            self.log.info("Saved processed data successfully")

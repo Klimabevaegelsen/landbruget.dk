@@ -19,6 +19,7 @@ import ssl
 from asyncio import Semaphore
 
 import aiohttp
+import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -200,6 +201,27 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
+    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+        """
+        Create a DataFrame from the raw data.
+        This method takes a list of strings and converts it into a pandas DataFrame.
+
+        Args:
+            raw_data (list[str]): List of strings.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the raw data with metadata.
+        """
+        df = pd.DataFrame(
+            {
+                "payload": raw_data,
+            }
+        )
+        df["source"] = self.config.name
+        df["created_at"] = pd.Timestamp.now()
+        df["updated_at"] = pd.Timestamp.now()
+        return df
+
     async def _process_data(self, url: str, dataset: str) -> None:
         """
         Process data from the specified URL and save it to Google Cloud Storage.
@@ -248,8 +270,17 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
                 tasks.append(self._fetch_chunk(session, url, start_index))
 
             raw_data = await asyncio.gather(*tasks)
+            if raw_data is None:
+                self.log.error("Failed to fetch raw data")
+                return
+            if len(raw_data) == 0:
+                self.log.warning("No raw data fetched")
+                return
+            self.log.info("Fetched raw data successfully")
+
+            df = self.create_dataframe(raw_data)
             self.log.info(f"Saving data to GCS for {dataset}")
-            self._save_raw_data(raw_data, dataset, self.config.name, self.config.bucket)
+            self._save_raw_data(df, dataset, self.config.bucket)
             self.log.info(f"Data processing completed for {dataset}")
 
     async def run(self) -> None:

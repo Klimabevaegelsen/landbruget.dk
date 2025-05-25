@@ -20,6 +20,7 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
+import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -157,7 +158,8 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
         async with (
             self.config.request_semaphore,
             AsyncTimer(
-                f"Fetching chunk starting at index {start_index} to {start_index + self.config.batch_size}"
+                f"Fetching chunk starting at index {start_index} "
+                f"to {start_index + self.config.batch_size}"
             ),
         ):
             self.log.debug(
@@ -260,6 +262,27 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
                 self.log.error(f"Error occured while fetching chunk: {e}")
                 raise e
 
+    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+        """
+        Create a DataFrame from the raw data.
+        This method takes a list of strings and converts it into a pandas DataFrame.
+
+        Args:
+            raw_data (list[str]): List of strings.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the raw data with metadata.
+        """
+        df = pd.DataFrame(
+            {
+                "payload": raw_data,
+            }
+        )
+        df["source"] = self.config.name
+        df["created_at"] = pd.Timestamp.now()
+        df["updated_at"] = pd.Timestamp.now()
+        return df
+
     async def run(self) -> None:
         """
         Run the data source processing pipeline.
@@ -281,7 +304,11 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig]):
             if raw_data is None:
                 self.log.error("Failed to fetch raw data")
                 return
+            if len(raw_data) == 0:
+                self.log.warning("No raw data fetched")
+                return
             self.log.info("Fetched raw data successfully")
-            self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
+            df = self.create_dataframe(raw_data)
+            self._save_raw_data(df, self.config.dataset, self.config.bucket)
             self.log.info("Saved raw data successfully")
             self.log.info("Wetlands bronze job completed successfully")

@@ -74,12 +74,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         Initialize the WetlandsSilver processor.
 
         Args:
-            config (WetlandsSilverConfig): Configuration object containing settings for the processor.
+            config (WetlandsSilverConfig): Configuration object containing settings 
+                                            for the processor.
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
         super().__init__(config, gcs_util)
 
-    def analyze_geometry(self, geom):
+    def analyze_geometry(self, geom: Polygon) -> dict[str, Any]:
         """
         Analyze a geometry and extract key metrics.
 
@@ -116,7 +117,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             "vertices": len(vertices),
         }
 
-    def log_geometry_statistics(self, gdf):
+    def log_geometry_statistics(self, gdf: gpd.GeoDataFrame) -> None:
         """
         Analyze and log statistics about the geometries in a GeoDataFrame.
 
@@ -132,7 +133,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         """
         stats = []
         for geom in gdf.geometry:
-            stats.append(self.analyze_geometry(geom))
+            stats.append(self.analyze_geometry(geom)) # type: ignore
 
         # Convert to DataFrame for easy analysis
         stats_df = pd.DataFrame(stats)
@@ -150,7 +151,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         self.log.info(f"Average vertices per feature: {stats_df['vertices'].mean():.1f}")
         self.log.info(f"Total area covered: {stats_df['area'].sum() / 1_000_000:.2f} km²")
 
-    def _parse_geometry(self, geom_elem):
+    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[Polygon]:
         """
         Parse a GML geometry element into a Shapely polygon.
 
@@ -167,8 +168,12 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             None: Exceptions are caught and logged
         """
         try:
-            coords = geom_elem.find(".//gml:posList", self.config.namespaces).text.split()
-            coords = [(float(coords[i]), float(coords[i + 1])) for i in range(0, len(coords), 2)]
+            pos_list = geom_elem.find(".//gml:posList", self.config.namespaces)
+            if pos_list is None or pos_list.text is None:
+                self.log.error("Missing posList in geometry element")
+                return None
+            coords_str = pos_list.text.split()
+            coords = [(float(coords_str[i]), float(coords_str[i + 1])) for i in range(0, len(coords_str), 2)]
             poly = Polygon(coords)
 
             # Ensure the polygon is valid
@@ -214,15 +219,19 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             None: Exceptions are caught and logged
         """
         try:
-            geom = self._parse_geometry(feature.find(".//gml:Polygon", self.config.namespaces))
+            polygon = feature.find(".//gml:Polygon", self.config.namespaces)
+            if polygon is None:
+                self.log.error("Missing Polygon in feature")
+                return None
+            geom = self._parse_geometry(polygon)
             if not geom:
                 return None
 
-            gridcode = self._get_attribute(feature, "natur:gridcode")
-            if gridcode is None:
+            gridcode_str = self._get_attribute(feature, "natur:gridcode")
+            if gridcode_str is None:
                 self.log.error("Missing gridcode in feature")
                 return None
-            gridcode = int(gridcode)
+            gridcode = int(gridcode_str)
 
             toerv_pct = self._get_attribute(feature, "natur:toerv_pct")
             if toerv_pct is None:
@@ -295,7 +304,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
 
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
-    @timed(name="Dissolving geometries")
+    @timed(name="Creating dissolved GeoDataFrame")
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved (merged) version of the wetlands dataset.
@@ -324,10 +333,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             spatial_index = df.sindex
 
             # Function to check if two polygons share an edge
-            def shares_edge(geom1, geom2):
+            def shares_edge(geom1: Polygon, geom2: Polygon) -> bool:
                 intersection = geom1.intersection(geom2)
-                return (
-                    intersection.geom_type == "LineString" and intersection.length >= 10
+                return bool(
+                    (intersection.geom_type == "LineString") and (intersection.length >= 10)
                 )  # At least one grid cell length
 
             # Find and merge adjacent polygons
