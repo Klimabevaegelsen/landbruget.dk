@@ -162,6 +162,9 @@ def test_parse_geometry_valid(silver_source: WetlandsSilver) -> None:
     root = ET.fromstring(xml_str)
     geom_elem = root.find(".//gml:Polygon", silver_source.config.namespaces)
 
+    if geom_elem is None:
+        raise ValueError("Geometry element not found in XML")
+    
     result = silver_source._parse_geometry(geom_elem)
 
     assert result is not None
@@ -184,6 +187,9 @@ def test_parse_geometry_invalid(silver_source: WetlandsSilver) -> None:
     root = ET.fromstring(xml_str)
     geom_elem = root.find(".//gml:Polygon", silver_source.config.namespaces)
 
+    if geom_elem is None:
+        raise ValueError("Geometry element not found in XML")
+    
     result = silver_source._parse_geometry(geom_elem)
 
     assert result is None

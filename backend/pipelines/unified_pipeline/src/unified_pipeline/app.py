@@ -27,8 +27,7 @@ from unified_pipeline.silver.agricultural_fields import (
 )
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
-
-# from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
+from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
@@ -89,10 +88,10 @@ def execute(cli_config: cli.CliConfig) -> None:
         },
         cli.Source.water_projects: {
             cli.Stage.bronze: [(WaterProjectsBronze, WaterProjectsBronzeConfig)],
-            # cli.Stage.silver: [(WaterProjectsSilver, WaterProjectsSilverConfig)],
+            cli.Stage.silver: [(WaterProjectsSilver, WaterProjectsSilverConfig)],
             cli.Stage.all: [
                 (WaterProjectsBronze, WaterProjectsBronzeConfig),
-                # (WaterProjectsSilver, WaterProjectsSilverConfig),
+                (WaterProjectsSilver, WaterProjectsSilverConfig),
             ],
         },
     }
