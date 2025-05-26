@@ -177,6 +177,7 @@ export interface IteratedSection {
     titleField: string;
   };
   sections: {
+    _key: string;
     title: string;
     layout: string;
     content: PageBuilderItem[];
