@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Map, { Layer, Source, MapLayerMouseEvent } from "react-map-gl/maplibre";
+import Map, {
+  Layer,
+  Source,
+  MapLayerMouseEvent,
+  NavigationControl,
+} from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
@@ -122,7 +127,9 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
         interactiveLayerIds={layers.map((_, index) => `layer-${index}`)}
         onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
+        scrollZoom={false}
       >
+        <NavigationControl position="top-right" />
         {layers.map((layer, index) => {
           const style = getLayerStyle(layer.style, index);
 
