@@ -5,7 +5,7 @@ export function BlockInfoCard({ infoCard }: { infoCard: InfoCard }) {
 
   return (
     <div className="bg-primary-foreground rounded-lg p-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-x-auto">
         {items.map((item, index) => (
           <div
             key={`${infoCard._key}-${index}`}
