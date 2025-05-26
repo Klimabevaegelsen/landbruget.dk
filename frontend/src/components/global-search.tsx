@@ -190,7 +190,13 @@ function SearchOverlay({
         </div>
         <div className="bg-white rounded-b-lg min-h-[200px] max-h-[400px] overflow-auto">
           {searchResults.map((result) => (
-            <SearchResultCard key={result.id} result={result} />
+            <SearchResultCard
+              key={result.id}
+              result={result}
+              onClick={() => {
+                onClose();
+              }}
+            />
           ))}
         </div>
       </div>
@@ -198,9 +204,20 @@ function SearchOverlay({
   );
 }
 
-function SearchResultCard({ result }: { result: SearchResult }) {
+function SearchResultCard({
+  result,
+  onClick,
+}: {
+  result: SearchResult;
+  onClick: () => void;
+}) {
   return (
-    <Link href={`/virksomhed/${result.id}`}>
+    <Link
+      href={`/virksomhed/${result.id}`}
+      onClick={() => {
+        onClick();
+      }}
+    >
       <div className="flex  gap-2 items-center justify-between hover:bg-gray-100 p-4 group">
         <div className="flex gap-2 items-center">
           <Image
