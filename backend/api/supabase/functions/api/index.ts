@@ -949,9 +949,10 @@ function formatValue(value: any, format: any): string {
 }
 // Define type for iterated section results
 type IteratedSectionResult = {
-    title: string;
-    layout: string;
-    content: ComponentResult[];
+  _key: string;
+  title: string;
+  layout: string;
+  content: ComponentResult[];
 }
 // --- Recursive Component Processor ---
 async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
@@ -1031,6 +1032,7 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
             sectionContent.push(processedItem);
           } // End template component loop
           iteratedSections.push({
+            _key: `${_key}-item-${iteratedSections.length}`,
             title: iterationConfig?.titleField ? item[iterationConfig.titleField] : `Item ${iteratedSections.length + 1}`,
             layout: iterationConfig?.layout || 'default',
             content: sectionContent
