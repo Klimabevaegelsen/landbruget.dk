@@ -47,6 +47,18 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
     name: item.title,
     href: `#${item._key}`,
     current: index === 0,
+    id: item._key,
+    subItems:
+      item._type === "iteratedSection"
+        ? item.sections.map((section, index) => {
+            return {
+              name: section.title,
+              href: `#${section._key}`,
+              current: index === 0,
+              id: section._key + index,
+            };
+          })
+        : undefined,
   }));
 
   return (
