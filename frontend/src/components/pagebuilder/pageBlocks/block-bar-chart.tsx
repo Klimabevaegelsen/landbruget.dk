@@ -119,7 +119,10 @@ export function BlockBarChart({
 
   return (
     <div>
-      <div style={{ width: "100%", height: 400 }} className="mt-4">
+      <div
+        style={{ width: "100%", height: 400, minHeight: 400, minWidth: 100 }}
+        className="mt-4"
+      >
         <ResponsiveContainer>
           <RechartsBarChart
             data={transformedData}
