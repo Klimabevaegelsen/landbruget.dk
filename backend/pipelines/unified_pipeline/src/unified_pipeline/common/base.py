@@ -88,7 +88,7 @@ class BaseSource(Generic[T], ABC):
         """
         pass
 
-    @timed(name="Saving raw data")
+    @timed(name="Saving raw data")  # type: ignore
     def _save_raw_data(self, df: pd.DataFrame, dataset: str, bucket_name: str) -> None:
         """
         Save raw data to Google Cloud Storage.
@@ -130,8 +130,8 @@ class BaseSource(Generic[T], ABC):
         self.log.info(f"Uploaded to: gs://{bucket_name}/bronze/{dataset}/{current_date}.parquet")
         return
     
-
-    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage = 'silver') -> None:
+    @timed(name="Saving processed data")  # type: ignore
+    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage: str = 'silver') -> None:
         """
         Save processed data to Google Cloud Storage.
 
@@ -172,7 +172,7 @@ class BaseSource(Generic[T], ABC):
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/{stage}/{dataset}/{current_date}.parquet")
 
-    @timed(name="Reading bronze data")
+    @timed(name="Reading bronze data")  # type: ignore
     def _read_bronze_data(self, dataset: str, bucket_name: str) -> Optional[pd.DataFrame]:
         """
         Read data from the bronze layer.
@@ -192,11 +192,6 @@ class BaseSource(Generic[T], ABC):
             Exception: If there are issues accessing or downloading the data.
         """
         self.log.info(f"Reading data from bronze layer in bucket: {bucket_name}")
-
-        # Get the GCS bucket
-
-
-
         # Load the parquet file
         temp_file = self._get_bronze_path(dataset, bucket_name)
         if temp_file is None:
@@ -206,7 +201,7 @@ class BaseSource(Generic[T], ABC):
 
         return raw_data
     
-    def _get_bronze_path(self, dataset: str, bucket_name: str):
+    def _get_bronze_path(self, dataset: str, bucket_name: str) -> Optional[str]:
         # Define the path to the bronze data
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         bronze_path = f"bronze/{dataset}/{current_date}.parquet"

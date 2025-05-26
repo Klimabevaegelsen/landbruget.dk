@@ -128,6 +128,11 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
                 self.log.error(err_msg, exc_info=True)
                 raise Exception(err_msg)
 
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        stop=stop_after_attempt(5),
+    )
     async def _fetch_arcgis_data(
         self, session: aiohttp.ClientSession, layer: str, url: str
     ) -> list[str]:
@@ -279,11 +284,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
         async with AsyncTimer("Running Water Projects bronze job for"):
             self.log.info("Running Water Projects bronze job")
             raw_data = await self._fetch_raw_data()
-            if raw_data is None:
-                self.log.error("Failed to fetch raw data")
-                return
-            if len(raw_data) == 0:
-                self.log.warning("No raw data fetched")
+            if not raw_data:
+                self.log.error("No raw data fetched")
                 return
             self.log.info("Fetched raw data successfully")
             df = self.create_dataframe(raw_data)

@@ -8,7 +8,7 @@ from shapely import MultiPolygon, Polygon, difference, unary_union, wkt
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
-from unified_pipeline.util.timing import AsyncTimer
+from unified_pipeline.util.timing import AsyncTimer, timed
 
 
 class BNBOStatusSilverConfig(BaseJobConfig):
@@ -220,7 +220,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
             return None
 
-    @timed(name="Processing bronze data")
+    @timed(name="Processing bronze data")  # type: ignore
     def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         """
         Process XML data from the bronze layer into a GeoDataFrame.
@@ -273,7 +273,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         geometries = [wkt.loads(f["geometry"]) for f in features]
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
-    @timed(name="Creating dissolved GeoDataFrame")
+    @timed(name="Creating dissolved GeoDataFrame")  # type: ignore
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved GeoDataFrame by merging geometries by status category.
@@ -369,7 +369,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running BNBO status silver job")
-        async with AsyncTimer("Running Water Projects silver job for")
+        async with AsyncTimer("Running Water Projects silver job for"):
             raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
             if raw_data is None:
                 self.log.error("Failed to read raw data")

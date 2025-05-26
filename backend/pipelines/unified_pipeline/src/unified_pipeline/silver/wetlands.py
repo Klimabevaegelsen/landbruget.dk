@@ -74,7 +74,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         Initialize the WetlandsSilver processor.
 
         Args:
-            config (WetlandsSilverConfig): Configuration object containing settings 
+            config (WetlandsSilverConfig): Configuration object containing settings
                                             for the processor.
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
@@ -133,7 +133,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         """
         stats = []
         for geom in gdf.geometry:
-            stats.append(self.analyze_geometry(geom)) # type: ignore
+            stats.append(self.analyze_geometry(geom))  # type: ignore
 
         # Convert to DataFrame for easy analysis
         stats_df = pd.DataFrame(stats)
@@ -173,7 +173,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
                 self.log.error("Missing posList in geometry element")
                 return None
             coords_str = pos_list.text.split()
-            coords = [(float(coords_str[i]), float(coords_str[i + 1])) for i in range(0, len(coords_str), 2)]
+            coords = [
+                (float(coords_str[i]), float(coords_str[i + 1]))
+                for i in range(0, len(coords_str), 2)
+            ]
             poly = Polygon(coords)
 
             # Ensure the polygon is valid
@@ -251,7 +254,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             self.log.error(f"Error parsing feature: {str(e)}")
             return None
 
-    @timed(name="Processing XML data")
+    @timed(name="Processing XML data")  # type: ignore
     def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         """
         Process raw XML data into a GeoDataFrame.
@@ -304,7 +307,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
 
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
-    @timed(name="Creating dissolved GeoDataFrame")
+    @timed(name="Creating dissolved GeoDataFrame")  # type: ignore
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved (merged) version of the wetlands dataset.

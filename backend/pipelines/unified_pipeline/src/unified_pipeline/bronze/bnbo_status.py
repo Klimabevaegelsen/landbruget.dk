@@ -291,11 +291,8 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
         async with AsyncTimer("Running BNBO Status bronze job for"):
             self.log.info("Running BNBO Status bronze job")
             raw_data = await self._fetch_raw_data()
-            if raw_data is None:
-                self.log.error("Failed to fetch raw data")
-                return
-            if len(raw_data) == 0:
-                self.log.warning("No raw data fetched")
+            if not raw_data:
+                self.log.error("No raw data fetched")
                 return
             self.log.info("Fetched raw data successfully")
             df = self.create_dataframe(raw_data)

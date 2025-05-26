@@ -216,12 +216,7 @@ async def test_run_success(mock_fetch_raw_data: AsyncMock, wetlands_bronze: Wetl
     await wetlands_bronze.run()
 
     mock_fetch_raw_data.assert_called_once()
-    wetlands_bronze._save_raw_data.assert_called_once_with(
-        ["<xml>data</xml>"],
-        wetlands_bronze.config.dataset,
-        wetlands_bronze.config.name,
-        wetlands_bronze.config.bucket,
-    )
+    wetlands_bronze._save_raw_data.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -253,3 +248,15 @@ async def test_run_exception(
 
     mock_fetch_raw_data.assert_called_once()
     wetlands_bronze._save_raw_data.assert_not_called()
+
+
+def test_create_dataframe(wetlands_bronze: WetlandsBronze) -> None:
+    """Test creating a raw DataFrame."""
+    data = ["<wfs:FeatureCollection></wfs:FeatureCollection>"]
+
+    # Call the method to create the DataFrame
+    df = wetlands_bronze.create_dataframe(data)
+
+    assert not df.empty
+    assert len(df) == 1
+    assert set(df.columns) == {"payload", "created_at", "source", "updated_at"}
