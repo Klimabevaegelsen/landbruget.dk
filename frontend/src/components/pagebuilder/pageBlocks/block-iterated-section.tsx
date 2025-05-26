@@ -3,36 +3,46 @@
 import { useState } from "react";
 import { IteratedSection } from "@/services/supabase/types";
 import { PageBlock } from "../pagebuilder";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import { NavigationItem } from "../../layout/sidenav";
 import { BlockContainer } from "./block-container";
 import { cn, slugify } from "@/lib/utils";
 
+interface ExtendedNavigationItem extends NavigationItem {
+  current: boolean;
+}
+
 export function IteratedSectionMenu({
   iteratedSection,
   level,
+  activeSection,
+  onSectionChange,
 }: {
   iteratedSection: IteratedSection;
   level: number;
+  activeSection: string;
+  onSectionChange: (sectionId: string) => void;
 }) {
-  const navigationItems: NavigationItem[] = iteratedSection.sections.map(
-    (item, index) => ({
+  const navigationItems: ExtendedNavigationItem[] =
+    iteratedSection.sections.map((item, index) => ({
       name: item.title,
       href: `${slugify(item.title)}-${index}-${level}`,
-      current: index === 0,
+      current: `${slugify(item.title)}-${index}-${level}` === activeSection,
       id: `${slugify(item.title)}-${index}-${level}`,
-    })
-  );
+    }));
 
   return (
     <div className="flex gap-4">
       {navigationItems.map((item, index) => (
         <div
           key={`${item.name}-${index}-${level}`}
-          className="rounded-full border px-4 py-3 text-sm"
+          className={cn(
+            "rounded-full border px-4 py-3 text-sm",
+            item.current && "bg-gray-100"
+          )}
         >
           <div
             onClick={() => {
+              onSectionChange(item.id ?? item.href);
               const element = document.getElementById(item.id ?? item.href);
               element?.scrollIntoView({ behavior: "smooth" });
             }}
@@ -53,21 +63,9 @@ export function BlockIteratedSection({
   iteratedSection: IteratedSection;
   level?: number;
 }) {
-  const [expandedSections, setExpandedSections] = useState<
-    Record<string, boolean>
-  >(
-    iteratedSection.sections.reduce((acc, item) => {
-      acc[item.title] = true;
-      return acc;
-    }, {} as Record<string, boolean>)
+  const [activeSection, setActiveSection] = useState<string>(
+    `${slugify(iteratedSection.sections[0].title)}-0-${level}`
   );
-
-  const toggleSection = (title: string) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [title]: !prev[title],
-    }));
-  };
 
   return (
     <div className={cn("flex flex-col w-full gap-4 relative")}>
@@ -79,29 +77,24 @@ export function BlockIteratedSection({
           level === 2 && "top-[188px] z-10"
         )}
       >
-        <IteratedSectionMenu iteratedSection={iteratedSection} level={level} />
+        <IteratedSectionMenu
+          iteratedSection={iteratedSection}
+          level={level}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
       </div>
       <div className="flex flex-col gap-11">
-        {iteratedSection.sections.map((item, index) => (
-          <div
-            key={`${item.title}-${index}-${level}`}
-            id={`${slugify(item.title)}-${index}-${level}`}
-            className=""
-          >
-            <button
-              onClick={() => toggleSection(item.title)}
-              className="pb-6 py-4 flex items-center gap-4 group cursor-pointer"
+        {iteratedSection.sections.map((item, index) => {
+          const sectionId = `${slugify(item.title)}-${index}-${level}`;
+          const isActive = sectionId === activeSection;
+
+          return (
+            <div
+              key={sectionId}
+              id={sectionId}
+              className={cn(!isActive && "hidden")}
             >
-              <h3 className="text-lg font-semibold group-hover:underline">
-                {item.title}
-              </h3>
-              {expandedSections[item.title] ? (
-                <ChevronUpIcon className="h-5 w-5" />
-              ) : (
-                <ChevronDownIcon className="h-5 w-5" />
-              )}
-            </button>
-            {expandedSections[item.title] && (
               <div className="pb-6">
                 <div className="flex flex-col gap-11">
                   {item.content.map((item) => (
@@ -117,9 +110,9 @@ export function BlockIteratedSection({
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
