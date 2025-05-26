@@ -28,7 +28,8 @@
     "react-map-gl": "^8.0.4",
     "react-vertical-timeline-component": "^3.5.3",
     "recharts": "^2.15.3",
-    "tailwind-merge": "^3.2.0"
+    "tailwind-merge": "^3.2.0",
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

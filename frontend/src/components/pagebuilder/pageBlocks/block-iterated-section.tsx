@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IteratedSection } from "@/services/supabase/types";
 import { PageBlock } from "../pagebuilder";
 import { NavigationItem } from "../../layout/sidenav";
 import { BlockContainer } from "./block-container";
-import { cn, slugify } from "@/lib/utils";
+import { cn, slugify, scrollToElement } from "@/lib/utils";
+import { useHashStore } from "@/stores/hashStore";
 
 interface ExtendedNavigationItem extends NavigationItem {
   current: boolean;
@@ -23,28 +24,28 @@ export function IteratedSectionMenu({
   onSectionChange: (sectionId: string) => void;
 }) {
   const navigationItems: ExtendedNavigationItem[] =
-    iteratedSection.sections.map((item, index) => ({
+    iteratedSection.sections.map((item) => ({
       name: item.title,
-      href: `${slugify(item.title)}-${index}-${level}`,
-      current: `${slugify(item.title)}-${index}-${level}` === activeSection,
-      id: `${slugify(item.title)}-${index}-${level}`,
+      href: `${slugify(item._key)}`,
+      current: `${slugify(item._key)}` === activeSection,
+      id: `${slugify(item._key)}`,
     }));
 
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-4 overflow-x-auto">
       {navigationItems.map((item, index) => (
         <div
           key={`${item.name}-${index}-${level}`}
           className={cn(
             "rounded-full border px-4 py-3 text-sm",
-            item.current && "bg-gray-100"
+            item.current && "border-black"
           )}
         >
           <div
             onClick={() => {
               onSectionChange(item.id ?? item.href);
-              const element = document.getElementById(item.id ?? item.href);
-              element?.scrollIntoView({ behavior: "smooth" });
+              const offset = level === 0 ? 0 : 80;
+              scrollToElement(iteratedSection._key, offset);
             }}
             className="cursor-pointer"
           >
@@ -64,8 +65,25 @@ export function BlockIteratedSection({
   level?: number;
 }) {
   const [activeSection, setActiveSection] = useState<string>(
-    `${slugify(iteratedSection.sections[0].title)}-0-${level}`
+    `${slugify(iteratedSection.sections[0]._key)}`
   );
+
+  const { currentHash } = useHashStore();
+
+  useEffect(() => {
+    if (currentHash) {
+      // check if the current hash is a section in the iterated section, and if so, set the active section
+      const sectionId = currentHash.split("#")[1];
+      if (
+        iteratedSection.sections.some((section) => section._key === sectionId)
+      ) {
+        setActiveSection(sectionId);
+        setTimeout(() => {
+          scrollToElement(sectionId, 135);
+        }, 200);
+      }
+    }
+  }, [currentHash, iteratedSection, level]);
 
   return (
     <div className={cn("flex flex-col w-full gap-4 relative")}>
@@ -85,8 +103,8 @@ export function BlockIteratedSection({
         />
       </div>
       <div className="flex flex-col gap-11">
-        {iteratedSection.sections.map((item, index) => {
-          const sectionId = `${slugify(item.title)}-${index}-${level}`;
+        {iteratedSection.sections.map((item) => {
+          const sectionId = `${slugify(item._key)}`;
           const isActive = sectionId === activeSection;
 
           return (
@@ -101,7 +119,7 @@ export function BlockIteratedSection({
                     <div key={item._key} id={item._key}>
                       <BlockContainer
                         title={item.title}
-                        href={`#${item._key}-${index}-${level}`}
+                        href={`#${item._key}`}
                         secondaryTitle={item._type}
                       >
                         <PageBlock block={item} level={level + 1} />
