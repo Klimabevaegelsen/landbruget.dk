@@ -50,7 +50,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
         Initialize the WaterProjectsSilver processor.
 
         Args:
-            config (WaterProjectsSilverConfig): Configuration object containing settings 
+            config (WaterProjectsSilverConfig): Configuration object containing settings
                                                 for the processor.
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
@@ -179,8 +179,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
         try:
             namespace = feature.tag.split("}")[0].strip("{")
 
-            geom_elem = feature.find(f"{namespace}the_geom") or feature.find(
-                f"{namespace}wkb_geometry"
+            geom_elem = feature.find(f"{{{namespace}}}the_geom") or feature.find(
+                f"{{{namespace}}}wkb_geometry"
             )
             if geom_elem is None:
                 self.log.warning("No geometry found in feature")
@@ -197,7 +197,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
                 if not elem.tag.endswith(("the_geom", "wkb_geometry")):
                     key = elem.tag.split("}")[-1].lower()
                     if elem.text:
-                        value = self.clean_value(elem.text)
+                        value: Any = self.clean_value(elem.text)
                         if value is not None:
                             # Convert specific fields
                             try:
@@ -218,7 +218,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
             self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
             return None
 
-    @timed(name="Processing XML data")
+    @timed(name="Processing XML data")  # type: ignore
     def _process_xml_data(self, xml_data: str, layer: str) -> list[dict]:
         features = []
         # Parse the XML data
@@ -238,7 +238,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
                     features.append(parsed)
         return features
 
-    @timed(name="Processing JSON data")
+    @timed(name="Processing JSON data")  # type: ignore
     def _process_json_data(self, json_data: str, layer: str) -> list[dict]:
         features = []
         data = json.loads(json_data)
@@ -292,7 +292,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
 
         return features
 
-    @timed(name="Processing bronze data")
+    @timed(name="Processing bronze data")  # type: ignore
     def _process_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         if raw_data is None or raw_data.empty:
             self.log.warning("No raw data to process")
@@ -320,7 +320,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
         geometries = [wkt.loads(f["geometry"]) for f in features]
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
-    @timed(name="Creating dissolved GeoDataFrame")
+    @timed(name="Creating dissolved GeoDataFrame")  # type: ignore
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved GeoDataFrame by merging geometries by status category.

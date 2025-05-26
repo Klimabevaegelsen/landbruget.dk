@@ -270,11 +270,8 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
                 tasks.append(self._fetch_chunk(session, url, start_index))
 
             raw_data = await asyncio.gather(*tasks)
-            if raw_data is None:
-                self.log.error("Failed to fetch raw data")
-                return
-            if len(raw_data) == 0:
-                self.log.warning("No raw data fetched")
+            if not raw_data:
+                self.log.error("No raw data fetched")
                 return
             self.log.info("Fetched raw data successfully")
 
