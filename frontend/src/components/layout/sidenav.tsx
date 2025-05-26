@@ -114,7 +114,7 @@ function SidenavClient({
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{title}</h2>
+        <h2 className="text-xl md:text-2xl font-bold">{title}</h2>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2 hover:bg-gray-100 rounded-md transition-colors block md:hidden"

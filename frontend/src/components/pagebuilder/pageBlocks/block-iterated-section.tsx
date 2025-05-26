@@ -89,10 +89,12 @@ export function BlockIteratedSection({
     <div className={cn("flex flex-col w-full gap-4 relative")}>
       <div
         className={cn(
-          "w-full sticky top-0 z-10 bg-white py-2",
-          level === 0 && "top-16 z-30",
-          level === 1 && "top-[126px] z-20",
-          level === 2 && "top-[188px] z-10"
+          "w-full sticky bg-white py-2",
+          level === 0 && "top-[calc(var(--sticky-header-height,0px)+0px)] z-30",
+          level === 1 &&
+            "top-[calc(var(--sticky-header-height,0px)+62px)] z-20",
+          level === 2 &&
+            "top-[calc(var(--sticky-header-height,0px)+124px)] z-10"
         )}
       >
         <IteratedSectionMenu
