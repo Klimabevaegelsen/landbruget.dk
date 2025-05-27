@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, PropertyMock, call, patch
 import geopandas as gpd
 import pandas as pd
 import pytest
-from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
@@ -242,7 +241,7 @@ def sample_bronze_df() -> pd.DataFrame:
                     </test:Feature>
                 </wfs:member>
             </wfs:FeatureCollection>
-            """,
+            """,  # noqa: E501
                 json.dumps(
                     {
                         "features": [
@@ -692,7 +691,7 @@ def test_process_data_no_features_extracted(
 def test_process_data_processing_error(
     silver_source: WaterProjectsSilver, sample_bronze_df: pd.DataFrame
 ) -> None:
-    """Test _process_data when processing raises an exception for XML data but JSON data still processes."""
+    """Test _process_data when processing raises an exception for XML data but JSON data still processes."""  # noqa: E501
     with patch.object(silver_source, "_process_xml_data") as mock_process_xml:
         # Setup mock to raise exception for XML data only
         mock_process_xml.side_effect = Exception("Processing error")
@@ -1059,7 +1058,7 @@ def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSi
 def test_create_dissolved_df_invalid_single_polygon_with_interiors(
     silver_source: WaterProjectsSilver,
 ) -> None:
-    """Test creating a dissolved DataFrame with a single invalid polygon with interiors for detailed logging."""
+    """Test creating a dissolved DataFrame with a single invalid polygon with interiors for detailed logging."""  # noqa: E501
     # Create a mock polygon that fails validation
     invalid_polygon = Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
 
