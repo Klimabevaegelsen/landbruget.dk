@@ -7,9 +7,8 @@ and utility methods for saving and reading data.
 """
 
 import os
-import shutil
 from tempfile import TemporaryDirectory
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import geopandas as gpd
 import pandas as pd

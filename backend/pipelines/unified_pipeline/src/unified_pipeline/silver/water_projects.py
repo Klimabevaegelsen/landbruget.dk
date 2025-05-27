@@ -1,3 +1,19 @@
+"""
+Silver layer processing for Water Projects data.
+
+This module transforms raw data (from the bronze layer) into cleaner,
+more structured data for analytical purposes. It handles the extraction
+of GeoJSON features from API responses, converts them to GeoDataFrames,
+and applies transformations such as column renaming and geometry validation.
+
+The module consists of two main components:
+- WaterProjectsSilverConfig: Configuration for Silver processing
+- WaterProjectsSilver: Implementation of Silver processing logic
+
+The process reads in bronze layer data, transforms it into GeoDataFrames,
+validates geometries, and stores the processed data in GCS.
+"""
+
 import json
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -15,6 +31,23 @@ from unified_pipeline.util.timing import AsyncTimer, timed
 
 
 class WaterProjectsSilverConfig(BaseJobConfig):
+    """
+    Configuration for Water Projects silver layer processing.
+
+    This configuration defines parameters for transforming water projects data
+    from raw (bronze) to structured (silver) format, including dataset names,
+    storage parameters, and layer definitions.
+
+    Attributes:
+        dataset (str): Name of the water projects dataset
+        bucket (str): GCS bucket name for storing processed data
+        storage_batch_size (int): Batch size for storage operations
+        namespaces (dict[str, str]): XML namespaces used in the data
+        gml_ns (str): GML namespace string
+        layers (list[str]): List of layer names to process
+        service_types (dict[str, str]): Mapping of layer names to service types
+    """
+
     dataset: str = "water_projects"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
@@ -45,6 +78,23 @@ class WaterProjectsSilverConfig(BaseJobConfig):
 
 
 class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
+    """
+    Silver layer processing for Water Projects data.
+    This class transforms raw water projects data from the bronze layer into
+    structured GeoDataFrames, validates geometries, and saves the processed data
+    to Google Cloud Storage (GCS).
+    It handles both XML and JSON data formats, extracting features and converting
+    them into GeoDataFrames with appropriate geometries and attributes.
+
+    The processing includes:
+    1. Reading raw data from GCS
+    2. Extracting features from XML or JSON payloads
+    3. Parsing geometries and calculating areas
+    4. Standardizing attribute names and types
+    5. Dissolving geometries based on status categories
+    6. Saving processed data back to GCS
+    """
+
     def __init__(self, config: WaterProjectsSilverConfig, gcs_util: GCSUtil):
         """
         Initialize the WaterProjectsSilver processor.
@@ -294,6 +344,19 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
 
     @timed(name="Processing bronze data")  # type: ignore
     def _process_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
+        """
+        Process raw data from the bronze layer into a GeoDataFrame for the silver layer.
+        This method extracts features from the raw data, processes them into a list of dictionaries,
+        and converts them into a GeoDataFrame with geometries.
+
+        Args:
+            raw_data (pd.DataFrame): DataFrame containing raw data from the bronze layer.
+
+        Returns:
+            Optional[gpd.GeoDataFrame]: A GeoDataFrame containing processed features with
+                                        geometries or None if processing fails or no features
+                                        are extracted.
+        """
         if raw_data is None or raw_data.empty:
             self.log.warning("No raw data to process")
             return None

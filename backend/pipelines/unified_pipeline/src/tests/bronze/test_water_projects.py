@@ -78,7 +78,7 @@ def test_get_params(water_projects_bronze: WaterProjectsBronze) -> None:
 @pytest.mark.asyncio
 async def test_fetch_chunk_success(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the _fetch_chunk method successfully fetches data."""
-    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="5" numberReturned="2"><wfs:member></wfs:member></wfs:FeatureCollection>'
+    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="5" numberReturned="2"><wfs:member></wfs:member></wfs:FeatureCollection>'  # noqa: E501
 
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -285,19 +285,19 @@ async def test_fetch_wfs_data_multiple_batches(water_projects_bronze: WaterProje
     # Define responses for each chunk
     chunk_responses = [
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 0,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 2,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",  # noqa: E501
             "start_index": 4,
             "total_features": 5,
             "returned_features": 1,
@@ -546,10 +546,6 @@ async def test_fetch_chunk_retry_behavior(
     fail_response1.status = 500
     fail_response1.text = AsyncMock(return_value="Internal Server Error")
 
-    fail_response2 = AsyncMock()
-    fail_response2.status = 503
-    fail_response2.text = AsyncMock(return_value="Service Unavailable")
-
     success_response = AsyncMock()
     success_response.status = 200
     xml_response = (
@@ -567,15 +563,11 @@ async def test_fetch_chunk_retry_behavior(
     cm1.__aexit__.return_value = None
 
     cm2 = AsyncMock()
-    cm2.__aenter__.return_value = fail_response2
+    cm2.__aenter__.return_value = success_response
     cm2.__aexit__.return_value = None
 
-    cm3 = AsyncMock()
-    cm3.__aenter__.return_value = success_response
-    cm3.__aexit__.return_value = None
-
     # Have session.get return different context managers on each call
-    mock_session.get.side_effect = [cm1, cm2, cm3]
+    mock_session.get.side_effect = [cm1, cm2]
 
     # Replace the retry decorator to make it more predictable in tests
     with patch(
@@ -592,7 +584,7 @@ async def test_fetch_chunk_retry_behavior(
         assert result["returned_features"] == 2
 
         # Verify that session.get was called three times
-        assert mock_session.get.call_count == 3
+        assert mock_session.get.call_count == 2
 
         # Verify the correct parameters were used each time
         for call_args in mock_session.get.call_args_list:

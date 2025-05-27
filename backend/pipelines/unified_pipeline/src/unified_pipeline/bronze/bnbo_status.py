@@ -1,3 +1,18 @@
+"""
+Bronze layer data ingestion for BNBO status data.
+
+This module handles the extraction of BNBO status data from the WFS service.
+It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+for further processing in the silver layer.
+
+The module contains:
+- BNBOStatusBronzeConfig: Configuration class for the data source
+- BNBOStatusBronze: Implementation class for fetching and processing data
+
+The data is fetched in parallel batches to optimize performance, with proper
+error handling and retry logic for robustness.
+"""
+
 import asyncio
 import ssl
 import xml.etree.ElementTree as ET

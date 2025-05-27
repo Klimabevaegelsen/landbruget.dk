@@ -1,3 +1,19 @@
+"""
+Silver layer processing for BNBO Status data.
+
+This module transforms raw data (from the bronze layer) into cleaner,
+more structured data for analytical purposes. It handles the extraction
+of GeoJSON features from API responses, converts them to GeoDataFrames,
+and applies transformations such as column renaming and geometry validation.
+
+The module consists of two main components:
+- BNBOStatusSilverConfig: Configuration for Silver processing
+- BNBOStatusSilver: Implementation of Silver processing logic
+
+The process reads in bronze layer data, transforms it into GeoDataFrames,
+validates geometries, and stores the processed data in GCS.
+"""
+
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
@@ -51,8 +67,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
     the data pipeline architecture. The class handles XML processing, geometry
     operations, and data storage in GCS.
 
-    Attributes:
-        config (BNBOStatusSilverConfig): Configuration object containing settings for the processor.
+    The processing includes:
+    1. Reading raw XML data from the bronze layer.
+    2. Parsing XML features and extracting geometries.
+    3. Converting geometries to WKT format and calculating areas.
+    4. Creating a GeoDataFrame with the processed features.
+    5. Dissolving geometries based on status categories.
+    6. Saving the processed data back to GCS.
     """
 
     def __init__(self, config: BNBOStatusSilverConfig, gcs_util: GCSUtil):
