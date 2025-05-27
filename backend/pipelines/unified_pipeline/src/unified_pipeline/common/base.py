@@ -124,7 +124,6 @@ class BaseSource(Generic[T], ABC):
             self.log.info(f"Saved raw data locally at {temp_file}")
             return
         # Upload to GCS
-        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
         working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/bronze/{dataset}/{current_date}.parquet")
