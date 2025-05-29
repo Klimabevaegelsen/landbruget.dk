@@ -9,6 +9,7 @@ authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]
 dependencies = [
+    "aiohttp>=3.10.0",
     "click>=8.1.8",
     "cryptography>=44.0.3",
     "gcsfs>=2025.3.2",
