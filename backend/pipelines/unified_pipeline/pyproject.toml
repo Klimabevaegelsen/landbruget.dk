@@ -9,6 +9,7 @@ authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]
 dependencies = [
+    "aiohttp>=3.10.0",
     "click>=8.1.8",
     "cryptography>=44.0.3",
     "gcsfs>=2025.3.2",
@@ -24,6 +25,9 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "simple-singleton>=2.0.0",
     "tenacity>=9.1.2",
+    "tqdm>=4.66.2",
+    "xmltodict>=0.13.0",
+    "zeep>=4.3.1",
 ]
 
 [build-system]
@@ -61,6 +65,16 @@ no_implicit_optional = true
 strict_optional = true
 warn_redundant_casts = true
 follow_untyped_imports = true
+
+# Add explicit package configuration to resolve duplicate module issue
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "backend.pipelines.*"
+ignore_errors = true
+
 
 [tool.ruff]
 line-length = 100

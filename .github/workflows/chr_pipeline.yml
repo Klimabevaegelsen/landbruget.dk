@@ -1,6 +1,8 @@
 name: CHR Pipeline
 
 on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
   workflow_dispatch:
     inputs:
       step:
@@ -72,7 +74,12 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/chr_pipeline
-        uv pip install --system -e .
+        # Install system dependencies for building lxml and xmlsec from source
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+        # Build both lxml and xmlsec from source to ensure they use the same libxml2 version
+        # This avoids the libxml2 version mismatch issue between pre-built wheels
+        uv pip install --system --no-binary lxml --no-binary xmlsec -e .
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
@@ -110,8 +117,13 @@ jobs:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        CMD="python -m main --steps ${{ inputs.step }} --log-level ${{ inputs.log_level }}"
-        if [[ "${{ inputs.show_progress }}" == "true" ]]; then
+        # Set defaults for scheduled runs (when inputs are not available)
+        STEP="${{ inputs.step || 'all' }}"
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
         fi
         if [[ -n "${{ inputs.max_herds }}" ]]; then
@@ -139,5 +151,6 @@ jobs:
     - name: Handle pipeline failure
       if: failure()
       run: |
-        echo "Pipeline step '${{ inputs.step }}' failed. Please check the logs above for details."
+        STEP="${{ inputs.step || 'all' }}"
+        echo "Pipeline step '$STEP' failed. Please check the logs above for details."
         exit 1
