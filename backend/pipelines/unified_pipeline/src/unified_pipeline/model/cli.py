@@ -37,6 +37,8 @@ class Source(Enum):
         cadastral: Danish Cadastral Properties from WFS
         soil_types: Danish Soil Types from Environmental Portal WFS
         dagi: Danish Administrative Geographic Division from WFS
+        wetlands: Wetlands data source
+        water_projects: Water projects data source
     """
 
     bnbo = "bnbo"
@@ -44,6 +46,8 @@ class Source(Enum):
     cadastral = "cadastral"
     soil_types = "soil_types"
     dagi = "dagi"
+    wetlands = "wetlands"
+    water_projects = "water_projects"
 
 
 class Stage(Enum):
