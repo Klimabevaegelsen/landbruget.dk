@@ -17,6 +17,7 @@ from unified_pipeline.bronze.agricultural_fields import (
 )
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
 from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeConfig
+from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
@@ -26,6 +27,7 @@ from unified_pipeline.silver.agricultural_fields import (
 )
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
+from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
@@ -84,6 +86,14 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (SoilTypesBronze, SoilTypesBronzeConfig),
                 (SoilTypesSilver, SoilTypesSilverConfig),
+            ],
+        },
+        cli.Source.dagi: {
+            cli.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
+            cli.Stage.silver: [(DAGISilver, DAGISilverConfig)],
+            cli.Stage.all: [
+                (DAGIBronze, DAGIBronzeConfig),
+                (DAGISilver, DAGISilverConfig),
             ],
         },
     }
