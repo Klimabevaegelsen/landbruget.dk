@@ -32,7 +32,9 @@
 
 @layer utilities {
   .animate-typing {
-    animation: typing 2s steps(20, end), blink 0.75s step-end infinite;
+    animation:
+      typing 2s steps(20, end),
+      blink 0.75s step-end infinite;
   }
   .animate-morph {
     animation: morphShape 5s ease-in-out infinite;
@@ -128,6 +130,6 @@
   }
 
   .skeleton-item {
-    @apply bg-gray-200 rounded-md;
+    @apply rounded-md bg-gray-200;
   }
 }

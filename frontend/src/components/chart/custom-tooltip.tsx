@@ -1,8 +1,5 @@
 import { TooltipProps } from "recharts";
-import {
-  NameType,
-  ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
+import { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 export default function CustomTooltip({
   active,
@@ -14,7 +11,7 @@ export default function CustomTooltip({
   }
 
   return (
-    <div className="p-4 bg-white rounded-lg shadow-md border border-gray-200">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-md">
       <p className="text-base font-semibold">{label}</p>
       {payload.map((entry, index) => (
         <p
@@ -22,7 +19,7 @@ export default function CustomTooltip({
           style={{
             color: entry.color,
           }}
-          className="text-sm font-medium mt-1"
+          className="mt-1 text-sm font-medium"
         >
           {`${entry.name}: ${entry.value?.toLocaleString("da-DK")}`}
         </p>

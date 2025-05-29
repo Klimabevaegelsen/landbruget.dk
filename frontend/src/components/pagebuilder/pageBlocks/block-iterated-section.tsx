@@ -23,23 +23,19 @@ export function IteratedSectionMenu({
   activeSection: string;
   onSectionChange: (sectionId: string) => void;
 }) {
-  const navigationItems: ExtendedNavigationItem[] =
-    iteratedSection.sections.map((item) => ({
-      name: item.title,
-      href: `${slugify(item._key)}`,
-      current: `${slugify(item._key)}` === activeSection,
-      id: `${slugify(item._key)}`,
-    }));
+  const navigationItems: ExtendedNavigationItem[] = iteratedSection.sections.map((item) => ({
+    name: item.title,
+    href: `${slugify(item._key)}`,
+    current: `${slugify(item._key)}` === activeSection,
+    id: `${slugify(item._key)}`,
+  }));
 
   return (
     <div className="flex gap-4 overflow-x-auto">
       {navigationItems.map((item, index) => (
         <div
           key={`${item.name}-${index}-${level}`}
-          className={cn(
-            "rounded-full border px-4 py-3 text-sm",
-            item.current && "border-black"
-          )}
+          className={cn("rounded-full border px-4 py-3 text-sm", item.current && "border-black")}
         >
           <div
             onClick={() => {
@@ -74,9 +70,7 @@ export function BlockIteratedSection({
     if (currentHash) {
       // check if the current hash is a section in the iterated section, and if so, set the active section
       const sectionId = currentHash.split("#")[1];
-      if (
-        iteratedSection.sections.some((section) => section._key === sectionId)
-      ) {
+      if (iteratedSection.sections.some((section) => section._key === sectionId)) {
         setActiveSection(sectionId);
         setTimeout(() => {
           scrollToElement(sectionId, 135);
@@ -86,15 +80,13 @@ export function BlockIteratedSection({
   }, [currentHash, iteratedSection, level]);
 
   return (
-    <div className={cn("flex flex-col w-full gap-4 relative")}>
+    <div className={cn("relative flex w-full flex-col gap-4")}>
       <div
         className={cn(
-          "w-full sticky bg-white py-2",
+          "sticky w-full bg-white py-2",
           level === 0 && "top-[calc(var(--sticky-header-height,0px)+0px)] z-30",
-          level === 1 &&
-            "top-[calc(var(--sticky-header-height,0px)+62px)] z-20",
-          level === 2 &&
-            "top-[calc(var(--sticky-header-height,0px)+124px)] z-10"
+          level === 1 && "top-[calc(var(--sticky-header-height,0px)+62px)] z-20",
+          level === 2 && "top-[calc(var(--sticky-header-height,0px)+124px)] z-10"
         )}
       >
         <IteratedSectionMenu
@@ -110,11 +102,7 @@ export function BlockIteratedSection({
           const isActive = sectionId === activeSection;
 
           return (
-            <div
-              key={sectionId}
-              id={sectionId}
-              className={cn(!isActive && "hidden")}
-            >
+            <div key={sectionId} id={sectionId} className={cn(!isActive && "hidden")}>
               <div className="pb-6">
                 <div className="flex flex-col gap-11">
                   {item.content.map((item) => (

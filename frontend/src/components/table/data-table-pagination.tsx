@@ -20,12 +20,8 @@ interface DataTablePaginationProps<TData> {
   table: Table<TData>;
 }
 
-export function DataTablePagination<TData>({
-  table,
-}: DataTablePaginationProps<TData>) {
-  const [pageSize, setPageSize] = useState(
-    table.getState().pagination.pageSize
-  );
+export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
+  const [pageSize, setPageSize] = useState(table.getState().pagination.pageSize);
   const [hide, setHide] = useState(false);
 
   useEffect(() => {
@@ -41,7 +37,7 @@ export function DataTablePagination<TData>({
 
   return (
     <div className="flex items-center justify-between p-2">
-      <div className="flex items-center justify-between  w-full space-x-6 lg:space-x-8">
+      <div className="flex w-full items-center justify-between space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
           <p className="text-sm font-medium">Rækker pr. side</p>
           <Select
@@ -64,8 +60,7 @@ export function DataTablePagination<TData>({
           </Select>
         </div>
         <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Side {table.getState().pagination.pageIndex + 1} af{" "}
-          {table.getPageCount()}
+          Side {table.getState().pagination.pageIndex + 1} af {table.getPageCount()}
         </div>
         <div className="flex items-center space-x-2">
           <Button

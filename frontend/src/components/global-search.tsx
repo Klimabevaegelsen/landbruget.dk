@@ -34,7 +34,7 @@ export function GlobalSearch({
   return (
     <div
       className={cn(
-        " relative overflow flex flex-col gap-y-4 items-center w-full ",
+        "overflow relative flex w-full flex-col items-center gap-y-4",
         className,
         parentOpen === false && "hidden"
       )}
@@ -52,7 +52,7 @@ export function GlobalSearch({
         endIcon={<MagnifyingGlassIcon className="size-6" />}
       />
       {searchSuggestions && (
-        <div className=" flex items-center justify-center gap-x-2">
+        <div className="flex items-center justify-center gap-x-2">
           {searchSuggestions.map((suggestion) => (
             <Button
               key={suggestion}
@@ -138,10 +138,7 @@ function SearchOverlay({
   const overlayRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (
-        overlayRef.current &&
-        !overlayRef.current.contains(e.target as Node)
-      ) {
+      if (overlayRef.current && !overlayRef.current.contains(e.target as Node)) {
         onClose();
       }
     }
@@ -155,12 +152,12 @@ function SearchOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.1 }}
-      className="absolute  left-0 top-0 right-0 bottom-0 z-50  flex flex-col items-center justify-start"
+      className="absolute top-0 right-0 bottom-0 left-0 z-50 flex flex-col items-center justify-start"
       ref={overlayRef}
     >
       <div
         className={cn(
-          "w-full  h-auto shadow-lg  rounded-lg",
+          "h-auto w-full rounded-lg shadow-lg",
           !borderless && "border border-gray-100"
         )}
       >
@@ -170,25 +167,24 @@ function SearchOverlay({
           placeholder="Søg efter CVR, firmanavn eller person"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-12 rounded-b-none rounded-t-lg border-none focus:ring-0 focus-visible:ring-0"
+          className="h-12 rounded-t-lg rounded-b-none border-none focus:ring-0 focus-visible:ring-0"
           endIcon={<MagnifyingGlassIcon className="size-6" />}
         />
-        <div className="flex gap-2   bg-primary-foreground items-stretch overflow-x-auto">
+        <div className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto">
           {tabs.map((tab, i) => (
             <div
               key={tab}
               onClick={() => setActiveTab(i)}
               className={cn(
-                "flex-1 px-4 py-4 text-center text-xs cursor-pointer hover:font-semibold",
-                activeTab === i &&
-                  "border-b-2 border-b-primary font-bold hover:font-bold"
+                "flex-1 cursor-pointer px-4 py-4 text-center text-xs hover:font-semibold",
+                activeTab === i && "border-b-primary border-b-2 font-bold hover:font-bold"
               )}
             >
               {tab}
             </div>
           ))}
         </div>
-        <div className="bg-white rounded-b-lg min-h-[200px] max-h-[400px] overflow-auto">
+        <div className="max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg bg-white">
           {searchResults.map((result) => (
             <SearchResultCard
               key={result.id}
@@ -204,13 +200,7 @@ function SearchOverlay({
   );
 }
 
-function SearchResultCard({
-  result,
-  onClick,
-}: {
-  result: SearchResult;
-  onClick: () => void;
-}) {
+function SearchResultCard({ result, onClick }: { result: SearchResult; onClick: () => void }) {
   return (
     <Link
       href={`/virksomhed/${result.id}`}
@@ -218,26 +208,17 @@ function SearchResultCard({
         onClick();
       }}
     >
-      <div className="flex  gap-2 items-center justify-between hover:bg-gray-100 p-4 group">
-        <div className="flex gap-2 items-center">
-          <Image
-            src={"/farm-icon.png"}
-            alt={result.name}
-            width={25}
-            height={25}
-          />
+      <div className="group flex items-center justify-between gap-2 p-4 hover:bg-gray-100">
+        <div className="flex items-center gap-2">
+          <Image src={"/farm-icon.png"} alt={result.name} width={25} height={25} />
 
           <div className="flex-col text-left">
-            <div className="text-sm font-medium group-hover:underline">
-              {result.name}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {result.address}
-            </div>
+            <div className="text-sm font-medium group-hover:underline">{result.name}</div>
+            <div className="text-muted-foreground text-xs">{result.address}</div>
           </div>
         </div>
         <div className="flex-col">
-          <div className="text-xs text-muted-foreground">CVR: {result.cvr}</div>
+          <div className="text-muted-foreground text-xs">CVR: {result.cvr}</div>
         </div>
       </div>
     </Link>

@@ -1,12 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Map, {
-  Layer,
-  Source,
-  MapLayerMouseEvent,
-  NavigationControl,
-} from "react-map-gl/maplibre";
+import Map, { Layer, Source, MapLayerMouseEvent, NavigationControl } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
@@ -62,7 +57,7 @@ interface TooltipProps {
 function Tooltip({ x, y, properties, layerName }: TooltipProps) {
   return (
     <div
-      className="absolute p-4 bg-white rounded-lg shadow-md border border-gray-200 z-50"
+      className="absolute z-50 rounded-lg border border-gray-200 bg-white p-4 shadow-md"
       style={{
         left: x,
         top: y,
@@ -72,11 +67,9 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
     >
       <p className="text-base font-semibold">{layerName}</p>
       {Object.entries(properties).map(([key, value]) => (
-        <p key={key} className="text-sm font-medium mt-1">
+        <p key={key} className="mt-1 text-sm font-medium">
           <span className="font-medium">{key}:</span>{" "}
-          {typeof value === "number"
-            ? value.toLocaleString("da-DK")
-            : String(value)}
+          {typeof value === "number" ? value.toLocaleString("da-DK") : String(value)}
         </p>
       ))}
     </div>
@@ -115,7 +108,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
   );
 
   return (
-    <div className="rounded overflow-hidden relative">
+    <div className="relative overflow-hidden rounded">
       <Map
         initialViewState={{
           longitude: center[0],
@@ -169,19 +162,18 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
       {hoverInfo && <Tooltip {...hoverInfo} />}
 
       {/* Custom legends */}
-      <div className="flex flex-wrap gap-4 mt-2">
+      <div className="mt-2 flex flex-wrap gap-4">
         {layers.map((layer, index) => {
           const style = getLayerStyle(layer.style, index);
           return (
             <button
               key={`${layer.name}-${index}`}
-              className="flex items-center gap-2 rounded-md hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 rounded-md transition-colors hover:bg-gray-50"
             >
               <div
                 className="size-4 rounded-full"
                 style={{
-                  backgroundColor:
-                    style.fillColor || style.strokeColor || style.circleColor,
+                  backgroundColor: style.fillColor || style.strokeColor || style.circleColor,
                 }}
               />
               <span className="text-xs font-medium">{layer.name}</span>

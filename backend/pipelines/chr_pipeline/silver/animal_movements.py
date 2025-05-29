@@ -103,25 +103,16 @@ def create_animal_movements_table(
             # Replace ibis.sql('uuid()') with ibis.uuid()
             movement_id=ibis.uuid(),  # Generate UUID
             reporting_herd_number=ibis.coalesce(
-                movements.reporting_herd_number.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                movements.reporting_herd_number.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),  # FK
             movement_date=ibis.coalesce(
-                movements.movement_date.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.date),
+                movements.movement_date.cast(dt.string).strip().nullif("").cast(dt.date),
                 ibis.null().cast(dt.date),
             ),
             contact_type=movements.contact_type.cast(dt.string).strip().nullif(""),
             counterparty_chr_number=ibis.coalesce(
-                movements.counterparty_chr_number.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                movements.counterparty_chr_number.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             counterparty_herd_number=ibis.coalesce(
@@ -131,9 +122,7 @@ def create_animal_movements_table(
                 .cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
-            counterparty_business_type=movements.counterparty_business_type.cast(
-                dt.string
-            )
+            counterparty_business_type=movements.counterparty_business_type.cast(dt.string)
             .strip()
             .nullif(""),
         )
@@ -158,9 +147,7 @@ def create_animal_movements_table(
             return None
 
         logging.info(f"Saving animal_movements table with {rows} rows.")
-        saved_path = export.save_table(
-            output_path, movements_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, movements_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save animal_movements table - no path returned")
             return None

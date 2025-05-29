@@ -14,7 +14,7 @@ export default function Home() {
         <Hero />
       </Container>
       <Container className="">
-        <div className="flex flex-col  min-h-[500px] items-center justify-center ">
+        <div className="flex min-h-[500px] flex-col items-center justify-center">
           <p className="text-4xl">🚜</p>
           <h1 className="italic">Cool section to come </h1>
         </div>

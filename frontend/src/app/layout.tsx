@@ -19,9 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="da" className="bg-primary-foreground">
-      <body className={`${plusJakartaSans.variable} antialiased`}>
-        {children}
-      </body>
+      <body className={`${plusJakartaSans.variable} antialiased`}>{children}</body>
     </html>
   );
 }

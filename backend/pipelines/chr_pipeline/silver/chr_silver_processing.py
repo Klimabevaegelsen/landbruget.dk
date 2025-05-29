@@ -86,19 +86,11 @@ def process_chr_data(
     if in_memory_data:
         # Extract data from memory
         besaetning_list_data = in_memory_data.get("besaetning_list", {}).get("json", [])
-        besaetning_details_data = in_memory_data.get("besaetning_details", {}).get(
-            "json", []
-        )
+        besaetning_details_data = in_memory_data.get("besaetning_details", {}).get("json", [])
         diko_flytninger_data = in_memory_data.get("diko_flytninger", {}).get("json", [])
-        ejendom_oplysninger_data = in_memory_data.get("ejendom_oplysninger", {}).get(
-            "json", []
-        )
-        ejendom_vet_events_data = in_memory_data.get("ejendom_vet_events", {}).get(
-            "json", []
-        )
-        vetstat_antibiotics_data = in_memory_data.get("vetstat_antibiotics", {}).get(
-            "xml", []
-        )
+        ejendom_oplysninger_data = in_memory_data.get("ejendom_oplysninger", {}).get("json", [])
+        ejendom_vet_events_data = in_memory_data.get("ejendom_vet_events", {}).get("json", [])
+        vetstat_antibiotics_data = in_memory_data.get("vetstat_antibiotics", {}).get("xml", [])
 
         # Write VetStat XML to temp file if needed
         vetstat_antibiotics_xml_path = None
@@ -107,17 +99,12 @@ def process_chr_data(
             temp_xml_path_obj = silver_dir / "_temp_vetstat.xml"
             # DEBUG(Added): Define a path for the saved XML in case of issues
             saved_xml_path_obj = (
-                silver_dir
-                / f"_DEBUG_FAILED_vetstat_{export_timestamp or 'unknown'}.xml"
+                silver_dir / f"_DEBUG_FAILED_vetstat_{export_timestamp or 'unknown'}.xml"
             )
             try:
                 with open(temp_xml_path_obj, "w") as f:
                     # Add separator compatible with VetStat XML parser's expectations
-                    f.write(
-                        "\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(
-                            vetstat_antibiotics_data
-                        )
-                    )
+                    f.write("\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(vetstat_antibiotics_data))
                 vetstat_antibiotics_xml_path = (
                     temp_xml_path_obj  # Assign path only if successfully written
                 )
@@ -163,15 +150,11 @@ def process_chr_data(
 
     # --- 1. Pre-process VetStat XML to JSONL ---
     vetstat_loaded = False
-    temp_xml_created_in_silver = (
-        load_from_memory and vetstat_antibiotics_xml_path is not None
-    )
+    temp_xml_created_in_silver = load_from_memory and vetstat_antibiotics_xml_path is not None
     try:
         if vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists():
             try:
-                run_xml_parser(
-                    vetstat_antibiotics_xml_path, vetstat_antibiotics_jsonl_path
-                )
+                run_xml_parser(vetstat_antibiotics_xml_path, vetstat_antibiotics_jsonl_path)
                 if (
                     vetstat_antibiotics_jsonl_path.exists()
                     and vetstat_antibiotics_jsonl_path.stat().st_size > 0
@@ -206,8 +189,7 @@ def process_chr_data(
                 )
                 # DEBUG(Added): Save the failed XML file if parsing failed/was empty
                 if (
-                    vetstat_antibiotics_xml_path
-                    and vetstat_antibiotics_xml_path.exists()
+                    vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists()
                 ):  # Check again as path might be None
                     try:
                         vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
@@ -263,9 +245,7 @@ def process_chr_data(
         con.con.sql("LOAD json;")
         logging.info("DuckDB extensions httpfs, spatial, json loaded.")
     except Exception as e:
-        logging.error(
-            f"Failed to initialize DuckDB or load extensions: {e}", exc_info=True
-        )
+        logging.error(f"Failed to initialize DuckDB or load extensions: {e}", exc_info=True)
         sys.exit(1)
 
     # --- 3. Load Bronze Data into Ibis Tables ---
@@ -300,9 +280,7 @@ def process_chr_data(
         def date_serializer(obj):
             if isinstance(obj, date):  # Correctly handle date objects
                 return obj.isoformat()
-            raise TypeError(
-                f"Object of type {obj.__class__.__name__} is not JSON serializable"
-            )
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
         # Reset load status for each table
         successfully_loaded = False
@@ -312,9 +290,7 @@ def process_chr_data(
             logging.info(f"Attempting to load '{table_name}' from in-memory buffer...")
             data = in_memory_data.get(source_info["mem_key"], {}).get("json", [])
             if data and isinstance(data, list):
-                logging.info(
-                    f"Found {len(data)} records in memory for {source_info['mem_key']}"
-                )
+                logging.info(f"Found {len(data)} records in memory for {source_info['mem_key']}")
                 # Convert list of dicts to Pandas DataFrame for robust handling - REMOVED THIS STEP
                 # Instead, write to temp JSONL and use read_json
                 temp_jsonl_path = None
@@ -342,9 +318,7 @@ def process_chr_data(
                             json_string = json.dumps(
                                 record, default=str
                             )  # Serialize to string first
-                            temp_file.write(
-                                json_string + "\n"
-                            )  # Write string + newline
+                            temp_file.write(json_string + "\n")  # Write string + newline
                         except TypeError as e_json:
                             logging.warning(
                                 f"Skipping record due to JSON serialization error for table '{table_name}': {e_json}. Record sample: {str(record)[:200]}..."
@@ -366,9 +340,7 @@ def process_chr_data(
                     con.con.sql(
                         f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', maximum_object_size={max_obj_size_bytes});"
                     )
-                    raw_tables[table_name] = con.table(
-                        table_name
-                    )  # Get Ibis table reference
+                    raw_tables[table_name] = con.table(table_name)  # Get Ibis table reference
 
                     successfully_loaded = True
                     source_desc = f"in-memory buffer via temp JSONL ({temp_jsonl_path.name}) for '{source_info['mem_key']}'"
@@ -376,9 +348,7 @@ def process_chr_data(
                         f"Successfully loaded {source_desc} into table '{table_name}' using read_json_auto."
                     )
                     schema = raw_tables[table_name].schema()
-                    logging.info(
-                        f"Schema for {table_name} (from read_json_auto): {schema}"
-                    )
+                    logging.info(f"Schema for {table_name} (from read_json_auto): {schema}")
 
                 except Exception as e_mem_jsonl:
                     logging.error(
@@ -395,9 +365,7 @@ def process_chr_data(
                     if temp_jsonl_path and temp_jsonl_path.exists():
                         try:
                             temp_jsonl_path.unlink()
-                            logging.info(
-                                f"Removed temporary JSONL file: {temp_jsonl_path.name}"
-                            )
+                            logging.info(f"Removed temporary JSONL file: {temp_jsonl_path.name}")
                         except OSError as e_del:
                             logging.warning(
                                 f"Could not delete temporary JSONL file {temp_jsonl_path.name}: {e_del}"
@@ -411,9 +379,7 @@ def process_chr_data(
 
         # --- Attempt 2: Load from File using Ibis (Fallback) --- #
         if not successfully_loaded and load_from_files_fallback:
-            logging.info(
-                f"Attempting to load '{table_name}' from file (fallback mode)..."
-            )
+            logging.info(f"Attempting to load '{table_name}' from file (fallback mode)...")
             timestamped_bronze_dir = bronze_dir / export_timestamp
             path = timestamped_bronze_dir / source_info["file_key"]
 
@@ -425,9 +391,7 @@ def process_chr_data(
                     f"Loading {source_desc} into table '{table_name}' using ibis.read_json..."
                 )
                 try:
-                    con.con.sql(
-                        f"DROP TABLE IF EXISTS {table_name};"
-                    )  # Ensure clean slate
+                    con.con.sql(f"DROP TABLE IF EXISTS {table_name};")  # Ensure clean slate
                     # Use newline_delimited format and auto_detect
                     raw_tables[table_name] = con.read_json(
                         input_source, format="newline_delimited", auto_detect=True
@@ -466,9 +430,7 @@ def process_chr_data(
                 )
 
         if not successfully_loaded:
-            logging.error(
-                f"Failed to load table '{table_name}' from all available sources."
-            )
+            logging.error(f"Failed to load table '{table_name}' from all available sources.")
 
     # Handle VetStat separately (reading from the pre-processed JSONL file in silver)
     # Construct path within the silver directory
@@ -496,22 +458,16 @@ def process_chr_data(
 
     # --- Check if essential tables were loaded ---
     if "bes_details" not in raw_tables:
-        logging.error(
-            "Essential table 'bes_details' could not be loaded. Aborting processing."
-        )
+        logging.error("Essential table 'bes_details' could not be loaded. Aborting processing.")
         sys.exit(1)
     if "ejendom_oplys" not in raw_tables:
-        logging.error(
-            "Essential table 'ejendom_oplys' could not be loaded. Aborting processing."
-        )
+        logging.error("Essential table 'ejendom_oplys' could not be loaded. Aborting processing.")
         sys.exit(1)
 
     # --- DEBUG(Added): Directly print DESCRIBE output for bes_details ---
     if "bes_details" in raw_tables:
         logging.info("DEBUG(Added): Attempting to print DESCRIBE bes_details output...")
-        print(
-            "\\n--- DEBUG: DESCRIBE bes_details TABLE ---", flush=True
-        )  # Add marker and flush
+        print("\\n--- DEBUG: DESCRIBE bes_details TABLE ---", flush=True)  # Add marker and flush
         try:
             con.con.sql("DESCRIBE bes_details;").show()
             print(
@@ -527,18 +483,14 @@ def process_chr_data(
                 flush=True,
             )
     else:
-        logging.warning(
-            "DEBUG(Added): 'bes_details' table not found in raw_tables for DESCRIBE."
-        )
+        logging.warning("DEBUG(Added): 'bes_details' table not found in raw_tables for DESCRIBE.")
         print("--- DEBUG: bes_details TABLE NOT FOUND ---\\n", flush=True)
     # --- END DEBUG ---
 
     # --- START DEBUG (Added): Describe unnested BesStr structure ---
     # Add comment for easy removal later
     if "bes_details" in raw_tables:
-        logging.info(
-            "DEBUG(Added): Attempting to describe unnested BesStr structure..."
-        )
+        logging.info("DEBUG(Added): Attempting to describe unnested BesStr structure...")
         print("\\n--- DEBUG: DESCRIBE UNNESTED BesStr STRUCT ---", flush=True)
         try:
             # Query to get the structure of the items within the BesStr list
@@ -580,9 +532,7 @@ def process_chr_data(
                 table_name="age_groups",
             )
         else:
-            logging.warning(
-                "Could not create age_groups lookup: 'vetstat' table missing."
-            )
+            logging.warning("Could not create age_groups lookup: 'vetstat' table missing.")
     except Exception as e:
         logging.error(f"Failed age_groups lookup creation: {e}")
 
@@ -673,15 +623,11 @@ def process_chr_data(
                 )
 
             elif step == "silver_property_vet_events":
-                property_vet_events_table = (
-                    property_vet_events.create_property_vet_events_table(
-                        con,
-                        context.get(
-                            "ejendom_vet_table"
-                        ),  # Reverted to original context get
-                        context.get("lookup_tables", {}),
-                        silver_dir,
-                    )
+                property_vet_events_table = property_vet_events.create_property_vet_events_table(
+                    con,
+                    context.get("ejendom_vet_table"),  # Reverted to original context get
+                    context.get("lookup_tables", {}),
+                    silver_dir,
                 )
 
             elif step == "silver_antibiotic_usage":
@@ -716,21 +662,15 @@ if __name__ == "__main__":
         logging.info("Determining input bronze directory...")
         # Use config constants
         if config.BRONZE_DATE_FOLDER_OVERRIDE:
-            input_bronze_dir = (
-                config.BRONZE_BASE_DIR / config.BRONZE_DATE_FOLDER_OVERRIDE
-            )
+            input_bronze_dir = config.BRONZE_BASE_DIR / config.BRONZE_DATE_FOLDER_OVERRIDE
             if not input_bronze_dir.is_dir():
                 raise FileNotFoundError(
                     f"Specified bronze directory does not exist: {input_bronze_dir}"
                 )
-            logging.info(
-                f"Using specified bronze data directory: {input_bronze_dir.name}"
-            )
+            logging.info(f"Using specified bronze data directory: {input_bronze_dir.name}")
         else:
             # Need to pass the base dir explicitly now
-            input_bronze_dir = get_latest_bronze_dir(
-                config.BRONZE_BASE_DIR
-            )  # This call logs info
+            input_bronze_dir = get_latest_bronze_dir(config.BRONZE_BASE_DIR)  # This call logs info
         logging.info(f"Determined input bronze directory: {input_bronze_dir}")
     except FileNotFoundError as e:
         logging.error(f"Error determining bronze data directory: {e}")
@@ -750,9 +690,7 @@ if __name__ == "__main__":
         )  # process_chr_data needs to be defined above
         logging.info("Finished process_chr_data function.")
     except Exception as e:
-        logging.critical(
-            f"An unhandled error occurred during data processing: {e}", exc_info=True
-        )
+        logging.critical(f"An unhandled error occurred during data processing: {e}", exc_info=True)
         sys.exit(1)
 
     logging.info("--- Script execution finished ---")

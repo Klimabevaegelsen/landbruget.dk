@@ -3,7 +3,7 @@ interface FieldErrorType {
 }
 
 const FieldError = ({ message }: FieldErrorType) => {
-  return <div className={"text-xs text-highlight"}>{message}</div>;
+  return <div className={"text-highlight text-xs"}>{message}</div>;
 };
 
 export default FieldError;

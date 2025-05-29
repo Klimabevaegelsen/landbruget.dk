@@ -1,36 +1,38 @@
-
-from pydantic import ConfigDict
 import logging
+import os
 
 import geopandas as gpd
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
-from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries
 from dotenv import load_dotenv
-import os
+from pydantic import ConfigDict
+
+from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries
+from unified_pipeline.util.gcs_util import GCSUtil
 
 logger = logging.getLogger(__name__)
 
+
 class CadastralSilverConfig(BaseJobConfig):
     """Configuration for the Cadastral Silver source."""
+
     name: str = "Danish Cadastral"
     dataset: str = "cadastral"
     type: str = "wfs"
     description: str = "Cadastral parcels from WFS"
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET")
-    
+
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
-    
+
+
 class CadastralSilver(BaseSource[CadastralSilverConfig]):
     """Cadastral Silver source."""
-    
+
     def __init__(self, config: CadastralSilverConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
-        
+
     def _validate_and_transform(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
         Validate and transform the GeoDataFrame.
@@ -70,5 +72,5 @@ class CadastralSilver(BaseSource[CadastralSilverConfig]):
         processed_data = self._validate_and_transform(gdf)
         self.log.info(processed_data)
         self._save_data(processed_data, self.config.dataset, self.config.bucket)
-        
+
         self.log.info("Cadastral silver job completed successfully")

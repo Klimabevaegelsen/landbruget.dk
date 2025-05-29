@@ -87,9 +87,7 @@ export function BlockBarChart({
         const valueLengths = Object.entries(dataPoint)
           .filter(([key]) => key !== "category")
           .map(([, value]) =>
-            typeof value === "number"
-              ? value.toLocaleString("da-DK").length
-              : String(value).length
+            typeof value === "number" ? value.toLocaleString("da-DK").length : String(value).length
           );
         return Math.max(max, categoryLength, ...valueLengths);
       } else {
@@ -97,9 +95,7 @@ export function BlockBarChart({
         const valueLengths = Object.entries(dataPoint)
           .filter(([key]) => key !== "name")
           .map(([, value]) =>
-            typeof value === "number"
-              ? value.toLocaleString("da-DK").length
-              : String(value).length
+            typeof value === "number" ? value.toLocaleString("da-DK").length : String(value).length
           );
         return Math.max(max, ...valueLengths);
       }
@@ -119,10 +115,7 @@ export function BlockBarChart({
 
   return (
     <div>
-      <div
-        style={{ width: "100%", height: 400, minHeight: 400, minWidth: 100 }}
-        className="mt-4"
-      >
+      <div style={{ width: "100%", height: 400, minHeight: 400, minWidth: 100 }} className="mt-4">
         <ResponsiveContainer>
           <RechartsBarChart
             data={transformedData}
@@ -140,12 +133,7 @@ export function BlockBarChart({
               <XAxis dataKey="name" {...xAxisDefaultProps} />
             )}
             {isHorizontal ? (
-              <YAxis
-                dataKey="category"
-                type="category"
-                {...yAxisDefaultProps}
-                width={yWidth}
-              />
+              <YAxis dataKey="category" type="category" {...yAxisDefaultProps} width={yWidth} />
             ) : (
               <YAxis
                 tickFormatter={(tick) => {
@@ -162,9 +150,7 @@ export function BlockBarChart({
                 key={s.name}
                 dataKey={s.name}
                 fill={barColors[index % barColors.length]}
-                stackId={
-                  chart._type === "stackedBarChart" ? "stack" : undefined
-                }
+                stackId={chart._type === "stackedBarChart" ? "stack" : undefined}
               />
             ))}
           </RechartsBarChart>

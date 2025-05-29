@@ -114,10 +114,10 @@ function SidenavClient({
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl md:text-2xl font-bold">{title}</h2>
+        <h2 className="text-xl font-bold md:text-2xl">{title}</h2>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 hover:bg-gray-100 rounded-md transition-colors block md:hidden"
+          className="block rounded-md p-2 transition-colors hover:bg-gray-100 md:hidden"
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (
@@ -148,20 +148,15 @@ function SidenavClient({
                   <div
                     className={cn(
                       isCurrent
-                        ? "text-black font-bold"
+                        ? "font-bold text-black"
                         : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                      "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                      "group flex cursor-pointer gap-x-3 p-4 pl-0"
                     )}
                     onClick={() => {
                       handleClick(item);
                     }}
                   >
-                    <div
-                      className={cn(
-                        "pl-3",
-                        isCurrent && "border-l-2 border-primary"
-                      )}
-                    >
+                    <div className={cn("pl-3", isCurrent && "border-primary border-l-2")}>
                       {!isCollapsed && item.name}
                     </div>
                   </div>
@@ -176,19 +171,16 @@ function SidenavClient({
                             <div
                               className={cn(
                                 isSubCurrent
-                                  ? "text-black font-bold"
+                                  ? "font-bold text-black"
                                   : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                                "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                                "group flex cursor-pointer gap-x-3 p-4 pl-0"
                               )}
                               onClick={() => {
                                 handleClick(subItem, true);
                               }}
                             >
                               <div
-                                className={cn(
-                                  "pl-6",
-                                  isSubCurrent && "border-l-2 border-primary"
-                                )}
+                                className={cn("pl-6", isSubCurrent && "border-primary border-l-2")}
                               >
                                 {!isCollapsed && subItem.name}
                               </div>

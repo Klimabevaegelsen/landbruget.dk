@@ -7,4 +7,4 @@
   "useTabs": false,
   "endOfLine": "lf",
   "plugins": ["prettier-plugin-tailwindcss"]
-} 
+}

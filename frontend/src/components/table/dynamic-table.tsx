@@ -64,16 +64,11 @@ export function DynamicDataTable<TData, TValue>({
             placeholder="Filtrering"
             value={globalFilter ?? ""}
             onChange={(e) => table.setGlobalFilter(String(e.target.value))}
-            className="max-w-sm "
+            className="max-w-sm"
           />
         </div>
       )}
-      <div
-        className={cn(
-          "border rounded border-slate-300 ",
-          rowCount > 10 && "min-h-[575px]"
-        )}
-      >
+      <div className={cn("rounded border border-slate-300", rowCount > 10 && "min-h-[575px]")}>
         <Table>
           <TableHeader className="">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -83,10 +78,7 @@ export function DynamicDataTable<TData, TValue>({
                     <TableHead key={header.id}>
                       {header.isPlaceholder
                         ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
+                        : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
                   );
                 })}
@@ -96,27 +88,17 @@ export function DynamicDataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row, index) => (
-                <TableRow
-                  index={index}
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
+                <TableRow index={index} key={row.id} data-state={row.getIsSelected() && "selected"}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className="h-24 text-center">
                   No results.
                 </TableCell>
               </TableRow>

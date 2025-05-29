@@ -13,13 +13,7 @@ export function Container({
 }) {
   return (
     <div className={cn(className, "px-6 lg:px-8")}>
-      <div
-        className={cn(
-          "mx-auto max-w-4xl lg:max-w-7xl",
-          section && "py-14",
-          subclassName
-        )}
-      >
+      <div className={cn("mx-auto max-w-4xl lg:max-w-7xl", section && "py-14", subclassName)}>
         {children}
       </div>
     </div>

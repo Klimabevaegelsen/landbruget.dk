@@ -1,10 +1,7 @@
 "use client";
 
 import { Timeline } from "@/services/supabase/types";
-import {
-  VerticalTimeline,
-  VerticalTimelineElement,
-} from "react-vertical-timeline-component";
+import { VerticalTimeline, VerticalTimelineElement } from "react-vertical-timeline-component";
 import "react-vertical-timeline-component/style.min.css";
 import { format } from "date-fns";
 import { da } from "date-fns/locale";
@@ -43,13 +40,14 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     if (!timeline.config?.filterColumns?.length) {
       return {};
     }
-    const types = Array.from(
-      new Set(validEvents.map((event) => event.event_type))
+    const types = Array.from(new Set(validEvents.map((event) => event.event_type)));
+    return types.reduce(
+      (acc, type, index) => {
+        acc[type] = VizColors[index % VizColors.length];
+        return acc;
+      },
+      {} as Record<string, string>
     );
-    return types.reduce((acc, type, index) => {
-      acc[type] = VizColors[index % VizColors.length];
-      return acc;
-    }, {} as Record<string, string>);
   }, [timeline.events, timeline.config?.filterColumns]);
 
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => {
@@ -71,9 +69,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     const validEvents = timeline.events.filter(isValidEvent);
     // If no filterColumns, return all valid events
     if (!timeline.config?.filterColumns?.length) {
-      return validEvents.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      return validEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     return validEvents
       .filter((event) => selectedTypes.has(event.event_type))
@@ -104,25 +100,20 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-4">
+    <div className="mx-auto w-full max-w-6xl py-4">
       {/* Filter buttons - only show if we have filterColumns */}
       {timeline.config?.filterColumns?.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-8">
+        <div className="mb-8 flex flex-wrap gap-2">
           {Object.entries(eventTypes).map(([type, color]) => (
             <Button
               size="sm"
               key={type}
               onClick={() => toggleEventType(type)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors
-                ${
-                  selectedTypes.has(type)
-                    ? "text-white"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                selectedTypes.has(type) ? "text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
               style={{
-                backgroundColor: selectedTypes.has(type)
-                  ? color
-                  : "transparent",
+                backgroundColor: selectedTypes.has(type) ? color : "transparent",
                 border: `1px solid ${color}`,
               }}
             >
@@ -166,7 +157,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                 <div className="text-sm font-semibold" style={{ color }}>
                   {event.event_type}
                 </div>
-                <div className="text-gray-700 p-0">{event.description}</div>
+                <div className="p-0 text-gray-700">{event.description}</div>
                 {/* <span className="text-sm text-gray-500">
                   {format(new Date(event.date), "d. MMMM yyyy", { locale: da })}
                 </span> */}

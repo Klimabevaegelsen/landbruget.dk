@@ -11,10 +11,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import {
-  ComboChart as ComboChartType,
-  ChartData,
-} from "@/services/supabase/types";
+import { ComboChart as ComboChartType, ChartData } from "@/services/supabase/types";
 import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
@@ -47,9 +44,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
       const valueLengths = Object.entries(dataPoint)
         .filter(([key]) => key !== "name")
         .map(([, value]) =>
-          typeof value === "number"
-            ? value.toLocaleString("da-DK").length
-            : String(value).length
+          typeof value === "number" ? value.toLocaleString("da-DK").length : String(value).length
         );
       return Math.max(max, ...valueLengths);
     }, 0);
@@ -68,8 +63,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
 
   // Get the colors for each axis
   const leftAxisColor = barSeries.length > 0 ? VizColors[0] : undefined;
-  const rightAxisColor =
-    lineSeries.length > 0 ? VizColors[barSeries.length] : undefined;
+  const rightAxisColor = lineSeries.length > 0 ? VizColors[barSeries.length] : undefined;
 
   return (
     <div>
@@ -120,14 +114,10 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
                 key={s.name}
                 type="monotone"
                 dataKey={s.name}
-                stroke={
-                  VizColors[(barSeries.length + index) % VizColors.length]
-                }
+                stroke={VizColors[(barSeries.length + index) % VizColors.length]}
                 yAxisId="right"
                 dot={{
-                  fill: VizColors[
-                    (barSeries.length + index) % VizColors.length
-                  ],
+                  fill: VizColors[(barSeries.length + index) % VizColors.length],
                 }}
               />
             ))}

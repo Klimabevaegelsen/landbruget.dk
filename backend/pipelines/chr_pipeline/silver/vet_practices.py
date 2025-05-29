@@ -43,17 +43,12 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
         postal_code=vet_practices.postal_code.cast(dt.string)
         .strip()
         .nullif(""),  # Already string from CAST
-        postal_district=vet_practices.postal_district.cast(dt.string)
-        .strip()
-        .nullif(""),
+        postal_district=vet_practices.postal_district.cast(dt.string).strip().nullif(""),
         phone=vet_practices.phone.cast(dt.string).strip().nullif(""),
         mobile=vet_practices.mobile.cast(dt.string).strip().nullif(""),
         email=vet_practices.email.cast(dt.string).strip().nullif(""),
         practice_number=ibis.coalesce(
-            vet_practices.practice_number.cast(dt.string)
-            .strip()
-            .nullif("")
-            .cast(dt.int64),
+            vet_practices.practice_number.cast(dt.string).strip().nullif("").cast(dt.int64),
             ibis.null().cast(dt.int64),
         ),  # Cast to int64
         city=vet_practices.city.cast(dt.string).strip().nullif(""),
@@ -79,15 +74,11 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
     output_path = silver_dir / "vet_practices.parquet"
     rows = vet_practices_final.count().execute()
     if rows == 0:
-        logging.warning(
-            "Vet practices table is empty after processing. Not saving file."
-        )
+        logging.warning("Vet practices table is empty after processing. Not saving file.")
         return None
 
     logging.info(f"Saving vet_practices table with {rows} rows.")
-    saved_path = export.save_table(
-        output_path, vet_practices_final.execute(), is_geo=False
-    )
+    saved_path = export.save_table(output_path, vet_practices_final.execute(), is_geo=False)
     if saved_path is None:
         logging.error("Failed to save vet_practices table - no path returned")
         return None

@@ -35,6 +35,7 @@ class BaseJobConfig(BaseModel):
         >>>     input_path: str
         >>>     output_bucket: str
     """
+
     # Option to save data locally without uploading to GCS
     save_local: bool = False
 
@@ -128,9 +129,11 @@ class BaseSource(Generic[T], ABC):
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/bronze/{dataset}/{current_date}.parquet")
         return
-    
+
     @timed(name="Saving processed data")  # type: ignore
-    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage: str = 'silver') -> None:
+    def _save_data(
+        self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage: str = "silver"
+    ) -> None:
         """
         Save processed data to Google Cloud Storage.
 
@@ -164,7 +167,7 @@ class BaseSource(Generic[T], ABC):
         if self.config.save_local:
             self.log.info(f"Saved processed data locally at {temp_file}")
             return
-    
+
         # Upload to GCS
         bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
         working_blob = bucket.blob(f"{stage}/{dataset}/{current_date}.parquet")
@@ -199,12 +202,11 @@ class BaseSource(Generic[T], ABC):
         self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
 
         return raw_data
-    
+
     def _get_bronze_path(self, dataset: str, bucket_name: str) -> Optional[str]:
         # Define the path to the bronze data
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         bronze_path = f"bronze/{dataset}/{current_date}.parquet"
-
 
         # Download to temporary file
         temp_dir = f"/tmp/bronze/{dataset}"
@@ -213,7 +215,7 @@ class BaseSource(Generic[T], ABC):
 
         if self.config.save_local:
             return temp_file
-        
+
         bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
         blob = bucket.blob(bronze_path)
         if not blob.exists():

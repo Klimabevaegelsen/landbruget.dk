@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  Disclosure,
-  DisclosureButton,
-  DisclosurePanel,
-} from "@headlessui/react";
+import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import { Bars3Icon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/layout/templates/logo";
@@ -23,12 +19,12 @@ const links = [
 
 function DesktopNav() {
   return (
-    <nav className="relative hidden lg:flex items-center gap-4">
+    <nav className="relative hidden items-center gap-4 lg:flex">
       {links.map(({ href, label }) => (
         <div key={href} className="relative flex">
           <Link
             href={href}
-            className="flex items-center px-4 py-3 font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%] text-sm hover:underline"
+            className="flex items-center px-4 py-3 text-sm font-medium text-gray-950 bg-blend-multiply hover:underline data-hover:bg-black/[2.5%]"
           >
             {label}
           </Link>
@@ -70,7 +66,7 @@ function MobileNav() {
       <Link href="/?section=help" className="text-sm">
         <Button>Hjælp til</Button>
       </Link>
-      <div className="flex flex-col gap-6 py-4 ml-2">
+      <div className="ml-2 flex flex-col gap-6 py-4">
         {links.map(({ href, label }, linkIndex) => (
           <motion.div
             initial={{ opacity: 0, rotateX: -90 }}
@@ -102,7 +98,7 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
       {banner && <div className="relative flex items-center">{banner}</div>}
       <Container className="relative">
         <Disclosure as="header" className={cn(!banner && "pt-12 sm:pt-10")}>
-          <div className="relative flex justify-between gap-8 lg:px-10 py-2">
+          <div className="relative flex justify-between gap-8 py-2 lg:px-10">
             <MobileNavButton />
             <div className="relative flex gap-6">
               <div className="my-auto w-[180px]">
@@ -120,7 +116,7 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
         </Disclosure>
         <div
           className={cn(
-            "absolute py-2 px-6 top-0 left-0 right-0 bottom-0 z-50",
+            "absolute top-0 right-0 bottom-0 left-0 z-50 px-6 py-2",
             !searchOpen && "hidden"
           )}
         >

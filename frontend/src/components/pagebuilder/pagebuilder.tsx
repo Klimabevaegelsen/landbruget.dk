@@ -11,13 +11,7 @@ import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 import { BlockMapChart } from "./pageBlocks/block-map-chart";
 import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
 
-export function PageBlock({
-  block,
-  level = 0,
-}: {
-  block: PageBuilderItem;
-  level?: number;
-}) {
+export function PageBlock({ block, level = 0 }: { block: PageBuilderItem; level?: number }) {
   switch (block._type) {
     case "kpiGroup":
       return <BlockKpiGroup kpiGroup={block} />;
@@ -62,11 +56,11 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
   }));
 
   return (
-    <div className="flex flex-col md:flex-row w-full gap-10 md:gap-30 relative">
-      <div className="w-full md:w-4/12 md:sticky md:top-4 md:max-h-screen md:overflow-y-auto border-b md:border-b-0 md:border-none">
+    <div className="relative flex w-full flex-col gap-10 md:flex-row md:gap-30">
+      <div className="w-full border-b md:sticky md:top-4 md:max-h-screen md:w-4/12 md:overflow-y-auto md:border-b-0 md:border-none">
         <Sidenav navigation={navigationItems} title="Indholdsfortegnelse" />
       </div>
-      <div className="w-full md:w-8/12 flex flex-col gap-11">
+      <div className="flex w-full flex-col gap-11 md:w-8/12">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
             <BlockContainer

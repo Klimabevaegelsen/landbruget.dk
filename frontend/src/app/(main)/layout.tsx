@@ -1,11 +1,7 @@
 import { NavBanner } from "@/components/layout/templates/nav-banner";
 import { Navbar } from "@/components/layout/templates/navbar";
 import { Footer } from "@/components/layout/templates/footer";
-export default function MainLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative bg-white">
       <Navbar banner={<NavBanner />} />

@@ -28,9 +28,7 @@ class GCSStorage:
             _ = storage
             return True
         except (ImportError, NameError):
-            logging.warning(
-                "Google Cloud Storage library not available. Using local storage only."
-            )
+            logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
     def upload_file(self, local_path, gcs_path=None):
@@ -94,9 +92,7 @@ class BronzePipeline:
             )
             logging.info(f"GCS storage initialized with bucket: {self.gcs_bucket}")
 
-    async def fetch_data_with_playwright(
-        self, filters_to_apply=None
-    ) -> list[tuple[str, bytes]]:
+    async def fetch_data_with_playwright(self, filters_to_apply=None) -> list[tuple[str, bytes]]:
         """Fetches data using Playwright automation. Returns list of (filter_name, csv_bytes)."""
         if filters_to_apply is None:
             filters_to_apply = [
@@ -135,9 +131,7 @@ class BronzePipeline:
                     state="visible",
                     timeout=30000,
                 )
-                powerbi_frame = page.frame_locator(
-                    'iframe[title="Power BI Report Viewer"]'
-                )
+                powerbi_frame = page.frame_locator('iframe[title="Power BI Report Viewer"]')
                 await page.wait_for_timeout(5000)
                 await powerbi_frame.locator(
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container[2]/transform/div/div[2]/div/div/visual-modern/div/div'
@@ -157,17 +151,15 @@ class BronzePipeline:
                     search_term = filter_info["search_term"]
                     while True:
                         try:
-                            await powerbi_frame.locator(filter_selector_xpath).click(
-                                timeout=10000
-                            )
+                            await powerbi_frame.locator(filter_selector_xpath).click(timeout=10000)
                             await asyncio.sleep(0.2)
                             await page.keyboard.press("ControlOrMeta+A")
                             await asyncio.sleep(0.2)
                             await page.keyboard.press("Backspace")
                             await page.keyboard.type(search_term, delay=100)
-                            await powerbi_frame.locator(
-                                "span:text-is('%s')" % filter_name
-                            ).click(timeout=5000)
+                            await powerbi_frame.locator("span:text-is('%s')" % filter_name).click(
+                                timeout=5000
+                            )
                             break
                         except Exception as e:
                             logging.error(
@@ -183,14 +175,12 @@ class BronzePipeline:
                         await powerbi_frame.locator(hover_target_xpath).hover()
                         await powerbi_frame.locator(options_button_xpath).click()
                         try:
-                            await powerbi_frame.locator('//*[@id="0"]').click(
-                                timeout=3000
-                            )
+                            await powerbi_frame.locator('//*[@id="0"]').click(timeout=3000)
                         except:
                             try:
-                                await powerbi_frame.locator(
-                                    "span:text-is('Export data')"
-                                ).click(timeout=3000)
+                                await powerbi_frame.locator("span:text-is('Export data')").click(
+                                    timeout=3000
+                                )
                             except:
                                 await powerbi_frame.locator(
                                     "span:text-matches('Export', 'i')"
@@ -244,9 +234,7 @@ class BronzePipeline:
                         await page.wait_for_timeout(5000)
 
                     except Exception as e:
-                        logging.error(
-                            "[Playwright] Export failed for '%s': %s", filter_name, e
-                        )
+                        logging.error("[Playwright] Export failed for '%s': %s", filter_name, e)
                         continue
 
             finally:
@@ -254,26 +242,20 @@ class BronzePipeline:
 
         return results
 
-    def save_raw_data(
-        self, data: bytes, filter_name: str = None
-    ) -> tuple[Path | None, str | None]:
+    def save_raw_data(self, data: bytes, filter_name: str = None) -> tuple[Path | None, str | None]:
         """Saves raw data to a timestamped directory in the bronze layer."""
         timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         storage_dir = self.bronze_data_dir / timestamp_str
         try:
             storage_dir.mkdir(parents=True, exist_ok=True)
             if filter_name:
-                safe_filter_name = (
-                    filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
-                )
+                safe_filter_name = filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
                 data_file_path = storage_dir / ("data_%s.csv" % safe_filter_name)
             else:
                 data_file_path = storage_dir / "data.csv"
             with open(data_file_path, "wb") as f:
                 f.write(data)
-            logging.info(
-                "[%s] Raw data saved to: %s", self.pipeline_name, data_file_path
-            )
+            logging.info("[%s] Raw data saved to: %s", self.pipeline_name, data_file_path)
             return data_file_path, timestamp_str
         except OSError as e:
             logging.error(
@@ -284,9 +266,7 @@ class BronzePipeline:
             )
             return None, None
 
-    def create_metadata_file(
-        self, fetch_timestamp_dir_name: str, data_file_path: Path
-    ) -> None:
+    def create_metadata_file(self, fetch_timestamp_dir_name: str, data_file_path: Path) -> None:
         """Appends a metadata entry to metadata.json for the fetched data."""
         metadata_file_path = data_file_path.parent / "metadata.json"
 
@@ -319,9 +299,7 @@ class BronzePipeline:
 
         metadata = {
             "source_url": self.source_url,
-            "fetch_timestamp_utc_iso": datetime.datetime.now(
-                datetime.timezone.utc
-            ).isoformat(),
+            "fetch_timestamp_utc_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "fetch_timestamp_dirname": fetch_timestamp_dir_name,
             "description": description,
             "pipeline_name": self.pipeline_name,
@@ -331,9 +309,7 @@ class BronzePipeline:
             else "unknown",
             "data_filename": data_file_path.name,
             # Fix: always use relative path from pipeline_root_dir, not /data
-            "relative_data_file_path": str(
-                data_file_path.relative_to(self.pipeline_root_dir)
-            ),
+            "relative_data_file_path": str(data_file_path.relative_to(self.pipeline_root_dir)),
             "record_count": record_count,
         }
 
@@ -377,9 +353,7 @@ class BronzePipeline:
 
     async def run(self) -> None:
         """Executes the bronze layer pipeline steps using Playwright only."""
-        logging.info(
-            "Starting bronze layer processing for pipeline: %s", self.pipeline_name
-        )
+        logging.info("Starting bronze layer processing for pipeline: %s", self.pipeline_name)
         filters = [
             {"name": "Anlægsarbejde", "search_term": "Anlægs"},
             {"name": "Landbrug, skovbrug og fiskeri", "search_term": "Landbrug"},
@@ -391,9 +365,7 @@ class BronzePipeline:
         )
         if results:
             for i, (name, data_sample) in enumerate(results):
-                logging.info(
-                    f"Result {i}: filter_name='{name}', data_len={len(data_sample)}"
-                )
+                logging.info(f"Result {i}: filter_name='{name}', data_len={len(data_sample)}")
         if not results:
             logging.error("No data fetched for any filter. Exiting bronze run.")
             raise RuntimeError("Bronze pipeline: No data fetched by Playwright.")
@@ -411,9 +383,7 @@ class BronzePipeline:
             try:
                 df = pd.read_csv(BytesIO(csv_bytes), encoding="utf-8")
                 dfs.append(df)
-                safe_filter_name = (
-                    filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
-                )
+                safe_filter_name = filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
                 temp_csv_path = temp_dir / f"data_{safe_filter_name}.csv"
                 with open(temp_csv_path, "wb") as f:
                     f.write(csv_bytes)
@@ -426,9 +396,7 @@ class BronzePipeline:
 
         if not dfs:
             logging.error("No valid CSVs to merge. Exiting bronze run.")
-            raise RuntimeError(
-                "Bronze pipeline: No valid CSVs to merge after fetching."
-            )
+            raise RuntimeError("Bronze pipeline: No valid CSVs to merge after fetching.")
 
         merged_df = pd.concat(dfs, ignore_index=True)
 
@@ -438,9 +406,7 @@ class BronzePipeline:
 
         merged_file_path = storage_dir / "data_merged.csv"
         merged_df.to_csv(merged_file_path, index=False, encoding="utf-8")
-        logging.info(
-            "[%s] Merged data saved to: %s", self.pipeline_name, merged_file_path
-        )
+        logging.info("[%s] Merged data saved to: %s", self.pipeline_name, merged_file_path)
 
         # Create metadata
         self.create_metadata_file(timestamp_str, merged_file_path)
@@ -449,9 +415,7 @@ class BronzePipeline:
         if self.gcs:
             upload_success = self.gcs.upload_file(local_path=str(merged_file_path))
             if not upload_success:
-                raise RuntimeError(
-                    f"Bronze pipeline: Failed to upload {merged_file_path} to GCS."
-                )
+                raise RuntimeError(f"Bronze pipeline: Failed to upload {merged_file_path} to GCS.")
 
         # Delete the temp directory and all its contents
         import shutil
@@ -483,9 +447,7 @@ def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
     )
     try:
         asyncio.run(pipeline.run())
-        logging.info(
-            f"Bronze pipeline ({pipeline_name}) completed successfully through main."
-        )
+        logging.info(f"Bronze pipeline ({pipeline_name}) completed successfully through main.")
     except RuntimeError as e:
         logging.error(f"Bronze pipeline ({pipeline_name}) failed: {e}")
         raise
