@@ -44,11 +44,12 @@ jobs:
           uv run ruff format . --diff
         continue-on-error: true  # Don't fail CI on formatting
 
-      # Temporarily disabled linting to simplify development
-      # - name: Run lint
-      #   run: |
-      #     cd backend/pipelines/${{ matrix.pipeline }}
-      #     uv run ruff check .
+      # Basic linting with simple rules
+      - name: Run basic lint check
+        run: |
+          cd backend/pipelines/${{ matrix.pipeline }}
+          uv run ruff check . --select F,E9,W6
+        continue-on-error: true  # Don't fail CI on basic linting
 
       - name: Run type checking
         run: |
@@ -61,6 +62,27 @@ jobs:
           cd backend/pipelines/${{ matrix.pipeline }}
           uv run pytest .
         continue-on-error: true  # Don't fail CI if no tests exist yet
+
+  pre-commit-check:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit on backend
+        run: |
+          cd backend
+          pre-commit run --all-files
+        continue-on-error: true  # Don't fail CI, just provide feedback
 
   frontend-quality-checks:
     name: Frontend Code Quality

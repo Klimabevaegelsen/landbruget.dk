@@ -1,0 +1,18 @@
+[lint]
+# Select basic, non-controversial rules
+select = [
+    "F",   # Pyflakes (undefined names, unused imports)
+    "E9",  # Syntax errors
+    "W6",  # PEP 8 warnings that are clearly wrong
+]
+
+# Ignore rules that are too strict for legacy code
+ignore = [
+    "E501",  # Line too long (let formatter handle this)
+]
+
+[format]
+# Use Black-compatible formatting
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto" 
