@@ -36,12 +36,14 @@ class Source(Enum):
         agricultural_fields: Danish Agricultural Fields from ArcGIS API
         cadastral: Danish Cadastral Properties from WFS
         dagi: Danish Administrative Geographic Division from WFS
+        jordbrugsanalyser: Danish Jordbrugsanalyser Markers from WFS
     """
 
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
     dagi = "dagi"
+    jordbrugsanalyser = "jordbrugsanalyser"
 
 
 class Stage(Enum):
