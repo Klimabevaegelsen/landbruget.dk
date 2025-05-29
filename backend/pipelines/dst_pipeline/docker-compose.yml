@@ -10,4 +10,4 @@ services:
       - ./silver:/app/silver
     environment:
       - ENVIRONMENT=dev
-    command: python main.py --tables HST77 GARTN1 FRO HALM1 --log-level INFO 
+    command: python main.py 

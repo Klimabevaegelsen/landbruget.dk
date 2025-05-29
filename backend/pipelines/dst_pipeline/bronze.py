@@ -46,7 +46,7 @@ def setup_logging(level: str) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description="Fetch data from Danmarks Statistik API"
+        description="Fetch data from Danmarks Statistik API and store in bronze layer"
     )
     parser.add_argument("--table-id", required=True, help="Table ID to fetch")
     parser.add_argument(
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
-        help="Logging level",
+        help="Logging level (default: INFO)",
     )
     parser.add_argument(
         "--variables", nargs="*", help="Specific variables to fetch (optional)"

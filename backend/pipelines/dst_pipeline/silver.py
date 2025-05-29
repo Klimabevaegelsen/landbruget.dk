@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
-        help="Logging level",
+        help="Logging level (default: INFO)",
     )
     parser.add_argument(
         "--tables",

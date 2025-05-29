@@ -49,7 +49,6 @@ Examples:
   python main.py --tables HST77 GARTN1         # Process specific tables
   python main.py --bronze-only                 # Run only bronze layer  
   python main.py --silver-only                 # Run only silver layer
-  python main.py --log-level DEBUG             # Enable debug logging
         """,
     )
 
@@ -95,7 +94,7 @@ Examples:
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
-        help="Logging level",
+        help="Logging level (default: INFO)",
     )
 
     return parser.parse_args()
