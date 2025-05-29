@@ -423,7 +423,7 @@ def test_create_dissolved_df_mixed_statuses(
     # Basic assertions
     assert result_gdf is not None
     assert not result_gdf.empty
-    assert result_gdf.crs.to_epsg() == 4326
+    assert result_gdf.crs.to_epsg() == 4326  # type: ignore
 
     # Get filtered dataframes for each category
     action_required_gdf = result_gdf[result_gdf["status_category"] == "Action Required"]
@@ -458,7 +458,7 @@ def test_create_dissolved_df_action_required_only(
     # Basic assertions
     assert result_gdf is not None
     assert not result_gdf.empty
-    assert result_gdf.crs.to_epsg() == 4326
+    assert result_gdf.crs.to_epsg() == 4326  # type: ignore
 
     # Check that we get one dissolved polygon for Action Required and none for Completed
     assert len(result_gdf[result_gdf["status_category"] == "Completed"]) == 0
@@ -488,7 +488,7 @@ def test_create_dissolved_df_completed_only(
     # Basic assertions
     assert result_gdf is not None
     assert not result_gdf.empty
-    assert result_gdf.crs.to_epsg() == 4326  # Should be transformed
+    assert result_gdf.crs.to_epsg() == 4326  # type: ignore # Should be transformed
 
     # Check that we get one dissolved polygon for Completed and none for Action Required
     assert len(result_gdf[result_gdf["status_category"] == "Action Required"]) == 0
@@ -536,7 +536,7 @@ def test_create_dissolved_df_validate_transform_call(
     mock_validate_transform.assert_called_once()
     called_gdf = mock_validate_transform.call_args[0][0]
     assert isinstance(called_gdf, gpd.GeoDataFrame)
-    assert called_gdf.crs.to_epsg() == 4326
+    assert called_gdf.crs.to_epsg() == 4326  # type: ignore
     assert "status_category" in called_gdf.columns
     assert called_gdf["status_category"].iloc[0] == "Action Required"
 
