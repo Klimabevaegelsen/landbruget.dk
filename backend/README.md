@@ -11,6 +11,44 @@ We use a [medallion architecture](https://www.databricks.com/glossary/medallion-
 
 Bronze and Silver layer processes may run in the same pipeline. Gold layer processes will run in separate pipelines.
 
+## Local Testing with `act`
+
+Before pushing code changes that involve GitHub Actions workflows, you can test them locally using [`act`](https://github.com/nektos/act):
+
+### Installation
+```bash
+# macOS
+brew install act
+
+# Linux/WSL
+curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+```
+
+### Testing Workflows Locally
+```bash
+# List available workflows
+act -l
+
+# Test a specific pipeline workflow (dry run)
+act workflow_dispatch -W .github/workflows/drive_pipeline.yml -n
+
+# Test with secrets (create .secrets file first)
+echo "GOOGLE_SERVICE_ACCOUNT_KEY=test_key" > .secrets
+act workflow_dispatch -W .github/workflows/drive_pipeline.yml --secret-file .secrets
+
+# Test specific job
+act workflow_dispatch -W .github/workflows/drive_pipeline.yml -j deploy -n
+```
+
+### Configuration
+Create `.actrc` in your project root for consistent settings:
+```bash
+--container-architecture linux/amd64
+--artifact-server-path /tmp/artifacts
+```
+
+**Security Note**: Only test workflows locally with your own test credentials. Never commit real production secrets to `.secrets` files.
+
 ## Overall
 - Consider whether we should fetch and store the data or whether we can provide a link in the frontend or fetch the data at runtime.
 - Do not share identifiers and credentials in commits.
