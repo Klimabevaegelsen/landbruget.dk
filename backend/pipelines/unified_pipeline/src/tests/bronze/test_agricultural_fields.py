@@ -235,3 +235,16 @@ async def test_run_with_exception(agricultural_fields_bronze: AgriculturalFields
     # Act & Assert
     with pytest.raises(Exception, match="Processing failed"):
         await agricultural_fields_bronze.run()
+
+
+def test_create_raw_dataframe(agricultural_fields_bronze: AgriculturalFieldsBronze) -> None:
+    """Test creating a raw DataFrame."""
+    data = [
+        "{'id': 1, 'name': 'Field1', 'geometry': 'Polygon'}",
+        "{'id': 2, 'name': 'Field2', 'geometry': 'Polygon'}",
+    ]  # noqa: E501
+    df = agricultural_fields_bronze.create_dataframe(data)
+
+    assert not df.empty
+    assert len(df) == 2
+    assert set(df.columns) == {"payload", "created_at", "source", "updated_at"}

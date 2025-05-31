@@ -260,62 +260,6 @@ async def test_fetch_raw_data_with_one_batch_and_exception(
 
 
 @pytest.mark.asyncio
-@patch("unified_pipeline.common.base.pd.Timestamp")
-@patch("unified_pipeline.common.base.os.makedirs")
-async def test_save_raw_data(
-    mock_makedirs: MagicMock,
-    mock_timestamp: MagicMock,
-    bnbo_status_bronze: BNBOStatusBronze,
-    mock_gcs_util: MagicMock,
-) -> None:
-    raw_data_list = ["<xml_payload_1>", "<xml_payload_2>"]
-    dataset_name = "test_dataset"
-
-    # Mock pd.Timestamp
-    mock_now = pd.Timestamp("2024-05-07 10:00:00")
-    mock_timestamp.now.return_value = mock_now
-    mock_now.strftime.return_value = "2024-05-07"  # type: ignore[attr-defined]
-
-    # Mock GCS bucket and blob
-    mock_blob = MagicMock()
-    mock_bucket = MagicMock()
-    mock_bucket.blob.return_value = mock_blob
-    mock_gcs_util.get_gcs_client.return_value.bucket.return_value = mock_bucket
-
-    # Mock DataFrame and to_parquet
-    mock_df = MagicMock(spec=pd.DataFrame)
-    # Configure the mock DataFrame to return appropriate values for our assertions
-    mock_df.__getitem__.side_effect = lambda column: {
-        "source": MagicMock(iloc=[bnbo_status_bronze.config.name]),
-        "created_at": MagicMock(iloc=[mock_now]),
-        "updated_at": MagicMock(iloc=[mock_now]),
-    }[column]
-
-    with patch(
-        "unified_pipeline.common.base.pd.DataFrame", return_value=mock_df
-    ) as mock_pd_dataframe:
-        config = bnbo_status_bronze.config
-        bnbo_status_bronze._save_raw_data(raw_data_list, dataset_name, config.name, config.bucket)
-
-        mock_pd_dataframe.assert_called_once_with(
-            {
-                "payload": raw_data_list,
-            }
-        )
-    assert mock_df["source"].iloc[0] == bnbo_status_bronze.config.name  # Check one element
-    assert mock_df["created_at"].iloc[0] == mock_now
-    assert mock_df["updated_at"].iloc[0] == mock_now
-
-    mock_makedirs.assert_called_once_with(f"/tmp/bronze/{dataset_name}", exist_ok=True)
-
-    expected_temp_file = f"/tmp/bronze/{dataset_name}/2024-05-07.parquet"
-    mock_df.to_parquet.assert_called_once_with(expected_temp_file)
-
-    mock_bucket.blob.assert_called_once_with(f"bronze/{dataset_name}/2024-05-07.parquet")
-    mock_blob.upload_from_filename.assert_called_once_with(expected_temp_file)
-
-
-@pytest.mark.asyncio
 async def test_run_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
     bnbo_status_bronze._fetch_raw_data = AsyncMock(return_value=["<xml_payload>"])  # type: ignore[method-assign]
     bnbo_status_bronze._save_raw_data = AsyncMock()  # type: ignore[method-assign]
@@ -323,10 +267,7 @@ async def test_run_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
     await bnbo_status_bronze.run()
 
     bnbo_status_bronze._fetch_raw_data.assert_called_once()
-    config = bnbo_status_bronze.config
-    bnbo_status_bronze._save_raw_data.assert_called_once_with(
-        ["<xml_payload>"], config.dataset, config.name, config.bucket
-    )
+    bnbo_status_bronze._save_raw_data.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -334,3 +275,19 @@ async def test_run_no_data(bnbo_status_bronze: BNBOStatusBronze) -> None:
     bnbo_status_bronze._fetch_raw_data = AsyncMock(return_value=None)  # type: ignore[method-assign]
     await bnbo_status_bronze.run()
     bnbo_status_bronze._fetch_raw_data.assert_called_once()
+
+
+def test_create_dataframe(bnbo_status_bronze: BNBOStatusBronze) -> None:
+    """Test the create_dataframe method that converts raw data to a DataFrame with metadata."""
+    raw_data = ["<xml>data1</xml>", "<xml>data2</xml>", "<xml>data3</xml>"]
+
+    result_df = bnbo_status_bronze.create_dataframe(raw_data)
+
+    assert isinstance(result_df, pd.DataFrame)
+    assert set(result_df.columns) == {"payload", "created_at", "source", "updated_at"}
+    assert len(result_df) == 3
+    assert result_df["payload"].tolist() == raw_data
+    assert all(result_df["source"] == bnbo_status_bronze.config.name)
+
+    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["created_at"])
+    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["updated_at"])

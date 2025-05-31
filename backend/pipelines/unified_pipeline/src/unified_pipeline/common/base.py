@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.timing import timed
 
 
 class BaseJobConfig(BaseModel):
@@ -87,9 +88,8 @@ class BaseSource(Generic[T], ABC):
         """
         pass
 
-    def _save_raw_data(
-        self, raw_data: list[str], dataset: str, source_name: str, bucket_name: str
-    ) -> None:
+    @timed(name="Saving raw data")  # type: ignore
+    def _save_raw_data(self, df: pd.DataFrame, dataset: str, bucket_name: str) -> None:
         """
         Save raw data to Google Cloud Storage.
 
@@ -97,9 +97,8 @@ class BaseSource(Generic[T], ABC):
         saves it as a parquet file locally, then uploads it to Google Cloud Storage.
 
         Args:
-            raw_data (list[str]): A list of strings to save.
+            df (pd.DataFrame): The DataFrame containing the raw data to save.
             dataset (str): The name of the dataset, used to determine the save path.
-            source_name (str): The name of the source, used for logging and metadata.
             bucket_name (str): The name of the GCS bucket to save the data.
 
         Returns:
@@ -112,14 +111,7 @@ class BaseSource(Generic[T], ABC):
             The data is saved in the bronze layer, which contains raw, unprocessed data.
             The file is named with the current date in YYYY-MM-DD format.
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = source_name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
+        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
 
         temp_dir = f"/tmp/bronze/{dataset}"
         os.makedirs(temp_dir, exist_ok=True)
@@ -132,14 +124,13 @@ class BaseSource(Generic[T], ABC):
             self.log.info(f"Saved raw data locally at {temp_file}")
             return
         # Upload to GCS
-        bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
         working_blob = bucket.blob(f"bronze/{dataset}/{current_date}.parquet")
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/bronze/{dataset}/{current_date}.parquet")
         return
     
-
-    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage = 'silver') -> None:
+    @timed(name="Saving processed data")  # type: ignore
+    def _save_data(self, df: gpd.GeoDataFrame, dataset: str, bucket_name: str, stage: str = 'silver') -> None:
         """
         Save processed data to Google Cloud Storage.
 
@@ -180,6 +171,7 @@ class BaseSource(Generic[T], ABC):
         working_blob.upload_from_filename(temp_file)
         self.log.info(f"Uploaded to: gs://{bucket_name}/{stage}/{dataset}/{current_date}.parquet")
 
+    @timed(name="Reading bronze data")  # type: ignore
     def _read_bronze_data(self, dataset: str, bucket_name: str) -> Optional[pd.DataFrame]:
         """
         Read data from the bronze layer.
@@ -198,12 +190,7 @@ class BaseSource(Generic[T], ABC):
         Raises:
             Exception: If there are issues accessing or downloading the data.
         """
-        self.log.info("Reading data from bronze layer")
-
-        # Get the GCS bucket
-
-
-
+        self.log.info(f"Reading data from bronze layer in bucket: {bucket_name}")
         # Load the parquet file
         temp_file = self._get_bronze_path(dataset, bucket_name)
         if temp_file is None:
@@ -213,7 +200,7 @@ class BaseSource(Generic[T], ABC):
 
         return raw_data
     
-    def _get_bronze_path(self, dataset: str, bucket_name: str):
+    def _get_bronze_path(self, dataset: str, bucket_name: str) -> Optional[str]:
         # Define the path to the bronze data
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
         bronze_path = f"bronze/{dataset}/{current_date}.parquet"
