@@ -1,0 +1,213 @@
+name: Danish Statistics API Pipeline
+
+on:
+  schedule:
+    # Run weekly on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      tables:
+        description: 'Tables to process (space-separated)'
+        required: false
+        type: string
+        default: 'HST77 GARTN1 FRO HALM1'
+      execution_mode:
+        description: 'Execution mode'
+        type: choice
+        required: false
+        options:
+          - docker
+          - python
+        default: 'docker'
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: false
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'INFO'
+      environment:
+        description: 'Environment to use'
+        type: choice
+        required: false
+        options:
+          - prod
+          - dev
+        default: 'prod'
+      layer:
+        description: 'Pipeline layer to run'
+        type: choice
+        required: false
+        options:
+          - all
+          - bronze-only
+          - silver-only
+        default: 'all'
+
+jobs:
+  run-dst-pipeline:
+    name: Run DST API Pipeline
+    runs-on: ubuntu-latest
+
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python (for Python mode)
+      if: inputs.execution_mode == 'python'
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv (for Python mode)
+      if: inputs.execution_mode == 'python'
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies (for Python mode)
+      if: inputs.execution_mode == 'python'
+      run: |
+        cd backend/pipelines/dst_pipeline
+        uv pip install --system -e .
+
+    - name: Authenticate to Google Cloud (Production only)
+      id: auth
+      if: inputs.environment == 'prod'
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK (Production only)
+      if: inputs.environment == 'prod'
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Create data directories
+      run: |
+        mkdir -p data/bronze/dst
+        mkdir -p data/silver/dst
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/dst_pipeline
+        
+        # Create .env file
+        echo "ENVIRONMENT=${{ inputs.environment || 'prod' }}" > .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        
+        # Add GCS settings for production
+        if [ "${{ inputs.environment }}" == "prod" ]; then
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        else
+          # For dev environment, use local directories
+          echo "LOCAL_STORAGE_DIR=$(pwd)/../../../data/bronze/dst" >> .env
+        fi
+
+    - name: Run Pipeline (Docker mode)
+      if: inputs.execution_mode == 'docker'
+      working-directory: backend/pipelines/dst_pipeline
+      run: |
+        # Update docker-compose for GitHub Actions environment
+        sed -i 's|./bronze:/app/bronze|../../../data/bronze:/app/bronze|g' docker-compose.yml
+        sed -i 's|./silver:/app/silver|../../../data/silver:/app/silver|g' docker-compose.yml
+        
+        # Build command arguments
+        TABLES="${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        LOG_LEVEL="${{ inputs.log_level || 'INFO' }}"
+        
+        # Add layer-specific arguments
+        LAYER_ARGS=""
+        if [ "${{ inputs.layer }}" == "bronze-only" ]; then
+          LAYER_ARGS="--bronze-only"
+        elif [ "${{ inputs.layer }}" == "silver-only" ]; then
+          LAYER_ARGS="--silver-only"
+        fi
+        
+        # Update docker-compose command
+        sed -i "s|command: python main.py.*|command: python main.py --tables $TABLES --log-level $LOG_LEVEL $LAYER_ARGS|g" docker-compose.yml
+        
+        echo "Running Docker pipeline with tables: $TABLES"
+        docker-compose up --build
+
+    - name: Run Pipeline (Python mode)
+      if: inputs.execution_mode == 'python'
+      working-directory: backend/pipelines/dst_pipeline
+      run: |
+        # Build base command
+        TABLES="${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        LOG_LEVEL="${{ inputs.log_level || 'INFO' }}"
+        
+        CMD="python main.py --tables $TABLES --log-level $LOG_LEVEL"
+        
+        # Add layer-specific arguments
+        if [ "${{ inputs.layer }}" == "bronze-only" ]; then
+          CMD="$CMD --bronze-only"
+        elif [ "${{ inputs.layer }}" == "silver-only" ]; then
+          CMD="$CMD --silver-only"
+        fi
+        
+        # Set directory paths for dev environment
+        if [ "${{ inputs.environment }}" == "dev" ]; then
+          CMD="$CMD --bronze-dir ../../../data/bronze/dst --silver-dir ../../../data/silver/dst"
+        fi
+        
+        echo "Running command: $CMD"
+        $CMD
+
+    - name: Verify output
+      run: |
+        echo "=== Bronze layer output ==="
+        if [ -d "data/bronze/dst" ]; then
+          find data/bronze/dst -type f -name "*.json" | head -10
+          echo "Bronze files count: $(find data/bronze/dst -type f -name "*.json" | wc -l)"
+        else
+          echo "No bronze output directory found"
+        fi
+        
+        echo ""
+        echo "=== Silver layer output ==="
+        if [ -d "data/silver/dst" ]; then
+          find data/silver/dst -type f -name "*.parquet" | head -10
+          echo "Silver files count: $(find data/silver/dst -type f -name "*.parquet" | wc -l)"
+        else
+          echo "No silver output directory found"
+        fi
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "DST Pipeline failed. Please check the logs above for details."
+        echo "Tables requested: ${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        echo "Execution mode: ${{ inputs.execution_mode || 'docker' }}"
+        echo "Environment: ${{ inputs.environment || 'prod' }}"
+        exit 1
+
+    - name: Upload artifacts (Development only)
+      uses: actions/upload-artifact@v4
+      if: inputs.environment == 'dev' && always()  # Upload even if the pipeline fails
+      with:
+        name: dst-pipeline-output-${{ github.run_number }}
+        path: |
+          data/bronze/dst
+          data/silver/dst
+        retention-days: 7
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "DST API Pipeline completed successfully on $(date)"
+        echo "Tables processed: ${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        echo "Execution mode: ${{ inputs.execution_mode || 'docker' }}"
+        echo "Environment: ${{ inputs.environment || 'prod' }}" 
