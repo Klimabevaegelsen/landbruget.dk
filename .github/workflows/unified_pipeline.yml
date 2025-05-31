@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        source: [cadastral, soil_types, dagi] # add source in unified here
+        source: [cadastral, dagi, jordbrugsanalyser, soil_types] 
       fail-fast: false
     env:
       ENVIRONMENT: production
