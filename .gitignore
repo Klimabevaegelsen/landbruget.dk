@@ -134,4 +134,9 @@ devenv.yaml
 # For direnv integration
 .direnv/
 
+# Local testing secrets (for act and other local testing)
+.secrets
+.secrets.*
+*.secrets
+
 .env
