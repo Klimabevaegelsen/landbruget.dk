@@ -18,6 +18,16 @@ on:
           - ejendom
           - vetstat
         default: 'all'
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
+        type: string
+        required: false
+        default: ''
+      end_date:
+        description: 'End date (YYYY-MM-DD)'
+        type: string
+        required: false
+        default: ''
       test_mode:
         description: 'Run in test mode'
         type: boolean
@@ -125,6 +135,12 @@ jobs:
         CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
         if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
         fi
         if [[ -n "${{ inputs.max_herds }}" ]]; then
           CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
