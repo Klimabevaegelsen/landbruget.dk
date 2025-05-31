@@ -334,11 +334,13 @@ A pipeline fetching data from public Google Drive should:
 
 ## Testing
 
+### Unit and Integration Tests
 1. Create test fixtures or use sample data.
 2. Test data fetching logic for different scenarios (e.g., date ranges, connection issues).
 3. Test data processing/transformation logic, **preferably using `ibis` expressions and `duckdb`** for validation against expected outcomes.
 4. Verify output format (ideally Parquet) and metadata correctness.
 5. Check error handling mechanisms.
+
 Example:
 ```python
 def test_fetch_data():
@@ -346,6 +348,55 @@ def test_fetch_data():
     assert result is not None
     assert "records" in result
 ```
+
+### Local Pipeline Testing
+Test your pipeline locally before deployment:
+
+```bash
+# Test with Docker Compose
+docker-compose up --build
+
+# Test the main script directly
+python main.py --help
+python main.py --source-type api --dry-run
+```
+
+### GitHub Actions Workflow Testing with `act`
+
+Before pushing workflow changes, test them locally using [`act`](https://github.com/nektos/act):
+
+```bash
+# Install act (if not already installed)
+brew install act  # macOS
+# or curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+# List available workflows
+act -l
+
+# Test your pipeline workflow (dry run)
+act workflow_dispatch -W .github/workflows/your_pipeline.yml -n
+
+# Test with test secrets
+echo "API_KEY=test_key" > .secrets.test
+act workflow_dispatch -W .github/workflows/your_pipeline.yml --secret-file .secrets.test
+
+# Test specific workflow inputs
+act workflow_dispatch -W .github/workflows/drive_pipeline.yml \
+  --input drive_folder_id="test-folder-id" \
+  --input environment="test" \
+  -n
+```
+
+**Benefits of local testing with `act`:**
+- Catch workflow syntax errors before pushing
+- Validate job dependencies and conditionals
+- Test environment variable handling
+- Verify workflow logic without using GitHub Actions minutes
+
+**Limitations:**
+- Some GitHub-specific features may not work exactly the same
+- Certain actions may behave differently in containers
+- Always do a final test in the actual GitHub Actions environment
 
 ## Deployment
 
