@@ -12,7 +12,7 @@ dependencies = [
     "zeep~=4.3.1",
     "certifi~=2024.12.14",
     "google-cloud-secret-manager~=2.22.1",
-    "lxml>=4.6.5",
+    "lxml==5.2.1",
     "xmlsec==1.3.14",
     "google-cloud-storage~=2.19.0",
     "python-dotenv~=1.0.1",
@@ -38,3 +38,6 @@ only-packages = true
 artifacts = ["*.py"]
 
 [tool.uv]
+# Using binary wheels for both lxml and xmlsec as they are now compatible
+# See: https://github.com/xmlsec/python-xmlsec/issues/316
+# xmlsec 1.3.14+ provides statically linked wheels compatible with lxml
