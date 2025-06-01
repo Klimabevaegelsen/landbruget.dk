@@ -15,6 +15,7 @@ on:
           - herds
           - herd_details
           - diko
+          - animal_movements
           - ejendom
           - vetstat
         default: 'all'
@@ -84,12 +85,10 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/chr_pipeline
-        # Install system dependencies for building lxml and xmlsec from source
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
-        # Build both lxml and xmlsec from source to ensure they use the same libxml2 version
-        # This avoids the libxml2 version mismatch issue between pre-built wheels
-        uv pip install --system --no-binary lxml --no-binary xmlsec -e .
+        # Use compatible binary wheels for lxml==5.2.1 and xmlsec==1.3.14
+        # These versions are compatible and resolve the version mismatch issue
+        # See: https://github.com/xmlsec/python-xmlsec/issues/316
+        uv pip install --system -e .
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
@@ -132,15 +131,27 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
+        # Set default 10-year date range specifically for animal_movements step
+        if [[ ("$STEP" == "animal_movements" || "$STEP" == "all") && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
+          # Calculate 10-year range: from 10 years ago to today
+          START_DATE=$(date -d "10 years ago" +%Y-01-01)
+          END_DATE=$(date +%Y-%m-%d)
+          echo "Auto-setting 10-year date range for animal_movements: $START_DATE to $END_DATE"
+        fi
+        
         CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
         if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
         fi
         if [[ -n "${{ inputs.start_date }}" ]]; then
           CMD="$CMD --start-date ${{ inputs.start_date }}"
+        elif [[ -n "$START_DATE" ]]; then
+          CMD="$CMD --start-date $START_DATE"
         fi
         if [[ -n "${{ inputs.end_date }}" ]]; then
           CMD="$CMD --end-date ${{ inputs.end_date }}"
+        elif [[ -n "$END_DATE" ]]; then
+          CMD="$CMD --end-date $END_DATE"
         fi
         if [[ -n "${{ inputs.max_herds }}" ]]; then
           CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
