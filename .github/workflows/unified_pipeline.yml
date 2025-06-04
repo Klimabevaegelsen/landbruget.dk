@@ -6,21 +6,28 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # every Sunday at midnight UTC
   workflow_dispatch:
-
+    # Allow manual triggering
+    inputs:
+      source:
+        description: 'Source to run the pipeline for'
+        required: true
+        default: 'cadastral'
+        type: choice
+        options:
+          - cadastral
+          - spf_su
+          - agricultural_fields
+          - bnbo
 jobs:
   run-unified-pipeline:
     name: Run Unified Pipeline Weekly
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        source: [cadastral, dagi, jordbrugsanalyser, soil_types] 
-      fail-fast: false
     env:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-
+      SAVE_LOCAL: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -43,4 +50,4 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Unified Pipeline for all sources
-        run: python -m unified_pipeline -s ${{ matrix.source }} -j all
+        run: python -m unified_pipeline -s ${{ inputs.source }} -j all

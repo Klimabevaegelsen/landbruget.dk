@@ -44,6 +44,10 @@ from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfi
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
+
+from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
+from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
+
 load_dotenv()
 
 
@@ -91,6 +95,14 @@ def execute(cli_config: cli.CliConfig) -> None:
                 (CadastralBronze, CadastralBronzeConfig),
                 (CadastralSilver, CadastralSilverConfig),
             ],
+        },
+        cli.Source.spf_su: {
+            cli.Stage.bronze: [(SpfSuBronze, SpfSuBronzeConfig)],
+            cli.Stage.silver: [(SpfSuSilver, SpfSuSilverConfig)],
+            cli.Stage.all: [
+                (SpfSuBronze, SpfSuBronzeConfig),
+                (SpfSuSilver, SpfSuSilverConfig),
+            ]
         },
         cli.Source.soil_types: {
             cli.Stage.bronze: [(SoilTypesBronze, SoilTypesBronzeConfig)],
