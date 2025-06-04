@@ -45,6 +45,7 @@ class Source(Enum):
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
+    spf_su = "spf_su"
     soil_types = "soil_types"
     dagi = "dagi"
     jordbrugsanalyser = "jordbrugsanalyser"

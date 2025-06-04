@@ -101,7 +101,7 @@ class GCSUtil(metaclass=Singleton):
         """
         try:
             # Attempt to use Application Default Credentials (ADC)
-            return storage.Client()
+            return storage.Client(project="landbrugsdata-1")
         except exceptions.DefaultCredentialsError as e:
             self.log.error(f"Unable to obtain credentials using ADC. Error: {e}")
             return None
