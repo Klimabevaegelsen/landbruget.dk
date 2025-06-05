@@ -46,12 +46,33 @@ class DriveStorageManager:
             else:
                 file_bytes = data
 
+            logger.debug(f"DriveStorageManager.save_file called with path: {path}")
+            logger.debug(f"Storage type: {type(self.storage)}")
+
             # For local storage, we need to handle the file writing ourselves
             if isinstance(self.storage, LocalStorage):
                 full_path = Path(self.storage.base_dir) / path
+                logger.debug(f"Local storage base_dir: {self.storage.base_dir}")
+                logger.debug(f"Full path constructed: {full_path}")
+                logger.debug(f"Full path absolute: {full_path.absolute()}")
+
+                # Create parent directories
                 full_path.parent.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Created parent directories for: {full_path.parent}")
+
+                # Write the file
+                logger.debug(f"Writing {len(file_bytes)} bytes to: {full_path}")
                 with open(full_path, "wb") as f:
                     f.write(file_bytes)
+
+                # Immediate verification
+                if full_path.exists():
+                    written_size = full_path.stat().st_size
+                    logger.debug(f"File written successfully: {written_size} bytes")
+                else:
+                    logger.error(
+                        f"CRITICAL: File write failed - file does not exist at: {full_path}"
+                    )
             else:
                 # For GCS, we can use the blob upload
                 blob = self.storage.bucket.blob(str(path))

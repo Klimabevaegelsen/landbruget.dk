@@ -96,12 +96,26 @@ class BronzeStorageManager:
             # Create folder structure
             folder_path = os.path.dirname(source_path) if source_path else ""
             target_dir = self.create_folder_structure(run_dir, folder_path)
+            logger.debug(f"Created target directory: {target_dir}")
 
             # Create file path
             file_path = target_dir / filename
+            logger.debug(f"Target file path: {file_path}")
+            logger.debug(f"Target file path absolute: {file_path.absolute()}")
 
             # Save the file
+            logger.debug(f"Calling storage_manager.save_file with path: {file_path}")
             self.storage_manager.save_file(content, file_path)
+
+            # Immediate verification after save
+            logger.debug(f"Verifying file exists immediately after save: {file_path.exists()}")
+            if file_path.exists():
+                actual_size = file_path.stat().st_size
+                logger.debug(
+                    f"File saved successfully with size: {actual_size} bytes (expected: {len(content)})"
+                )
+            else:
+                logger.error(f"IMMEDIATE VERIFICATION FAILED: File does not exist at {file_path}")
 
             logger.info(f"Saved file to {file_path}")
             return file_path
