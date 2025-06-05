@@ -107,15 +107,16 @@ class BronzeStorageManager:
             logger.info(f"Calling storage_manager.save_file with path: {file_path}")
             self.storage_manager.save_file(content, file_path)
 
-            # Immediate verification after save
-            logger.info(f"Verifying file exists immediately after save: {file_path.exists()}")
-            if file_path.exists():
-                actual_size = file_path.stat().st_size
-                logger.info(
-                    f"File saved successfully with size: {actual_size} bytes (expected: {len(content)})"
-                )
+            # Immediate verification after save - FIX: Use storage manager instead of local path check
+            logger.info("Verifying file exists via storage manager...")
+            file_exists = self.storage_manager.file_exists(file_path)
+            logger.info(f"Storage manager file_exists result: {file_exists}")
+            if file_exists:
+                logger.info("File saved successfully to storage backend")
             else:
-                logger.error(f"IMMEDIATE VERIFICATION FAILED: File does not exist at {file_path}")
+                logger.error(
+                    f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
+                )
 
             logger.info(f"Saved file to {file_path}")
             return file_path
