@@ -50,8 +50,44 @@ def calculate_file_checksum(file_path: str | Path, algorithm: str = "sha256") ->
     return hash_func.hexdigest()
 
 
+def calculate_content_checksum(content: bytes, algorithm: str = "sha256") -> str:
+    """Calculate a checksum for file content.
+
+    Args:
+        content: File content as bytes
+        algorithm: Hash algorithm to use (default: sha256)
+
+    Returns:
+        Checksum string
+
+    Raises:
+        ValueError: If the algorithm is not supported
+        TypeError: If content is not bytes
+    """
+    if not isinstance(content, bytes):
+        raise TypeError(f"Content must be bytes, got {type(content)}")
+
+    if algorithm.lower() == "sha256":
+        hash_func = hashlib.sha256()
+    elif algorithm.lower() == "md5":
+        hash_func = hashlib.md5()
+    elif algorithm.lower() == "sha1":
+        hash_func = hashlib.sha1()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    # For content that's already in memory, we can hash it directly
+    # But still process in chunks for consistency and memory efficiency with large files
+    chunk_size = 4096
+    for i in range(0, len(content), chunk_size):
+        chunk = content[i : i + chunk_size]
+        hash_func.update(chunk)
+
+    return hash_func.hexdigest()
+
+
 def get_mime_type(file_path: str | Path) -> str:
-    """Get the MIME type of a file.
+    """Get the MIME type of a file based on its extension.
 
     Args:
         file_path: Path to the file
@@ -59,39 +95,20 @@ def get_mime_type(file_path: str | Path) -> str:
     Returns:
         MIME type string
     """
-    file_path = Path(file_path)
-    mime_type, _ = mimetypes.guess_type(file_path)
-    
-    # If mimetypes.guess_type() couldn't determine the type, use a default
-    if mime_type is None:
-        # Use extension to make a best guess
-        extension = file_path.suffix.lower()
-        if extension == ".pdf":
-            mime_type = "application/pdf"
-        elif extension in (".xlsx", ".xls"):
-            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        else:
-            mime_type = "application/octet-stream"
-    
-    return mime_type
+    mime_type, _ = mimetypes.guess_type(str(file_path))
+    return mime_type or "application/octet-stream"
 
 
-def is_supported_file_type(file_path: str | Path, supported_types: set[str] | None = None) -> bool:
-    """Check if a file is of a supported type.
+def is_supported_file_type(file_path: str | Path, supported_types: set[str]) -> bool:
+    """Check if a file type is supported.
 
     Args:
         file_path: Path to the file
-        supported_types: Set of supported file extensions (without the dot)
-                        Default is PDF and Excel files
+        supported_types: Set of supported file extensions (without dots)
 
     Returns:
-        True if the file is of a supported type, False otherwise
+        True if the file type is supported, False otherwise
     """
-    if supported_types is None:
-        # Default supported types: PDF and Excel files
-        supported_types = {"pdf", "xlsx", "xls"}
-    
     file_path = Path(file_path)
     extension = file_path.suffix.lower().lstrip(".")
-    
-    return extension in supported_types 
+    return extension in supported_types
