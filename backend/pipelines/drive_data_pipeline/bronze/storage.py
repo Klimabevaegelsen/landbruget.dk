@@ -96,24 +96,16 @@ class BronzeStorageManager:
             # Create folder structure
             folder_path = os.path.dirname(source_path) if source_path else ""
             target_dir = self.create_folder_structure(run_dir, folder_path)
-            logger.info(f"Created target directory: {target_dir}")
 
             # Create file path
             file_path = target_dir / filename
-            logger.info(f"Target file path: {file_path}")
-            logger.info(f"Target file path absolute: {file_path.absolute()}")
 
             # Save the file
-            logger.info(f"Calling storage_manager.save_file with path: {file_path}")
             self.storage_manager.save_file(content, file_path)
 
             # Immediate verification after save - FIX: Use storage manager instead of local path check
-            logger.info("Verifying file exists via storage manager...")
             file_exists = self.storage_manager.file_exists(file_path)
-            logger.info(f"Storage manager file_exists result: {file_exists}")
-            if file_exists:
-                logger.info("File saved successfully to storage backend")
-            else:
+            if not file_exists:
                 logger.error(
                     f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
                 )
