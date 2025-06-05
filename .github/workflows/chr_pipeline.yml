@@ -131,12 +131,12 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        # Set default 10-year date range specifically for animal_movements step
+        # Set default 3-year date range specifically for animal_movements step
         if [[ ("$STEP" == "animal_movements" || "$STEP" == "all") && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
-          # Calculate 10-year range: from 10 years ago to today
-          START_DATE=$(date -d "10 years ago" +%Y-01-01)
+          # Calculate 3-year range: from 3 years ago to today
+          START_DATE=$(date -d "3 years ago" +%Y-01-01)
           END_DATE=$(date +%Y-%m-%d)
-          echo "Auto-setting 10-year date range for animal_movements: $START_DATE to $END_DATE"
+          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
         fi
         
         CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"

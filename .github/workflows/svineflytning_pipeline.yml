@@ -105,9 +105,9 @@ jobs:
           # For manual triggers, use provided dates
           CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
         else
-          # For scheduled runs, use 5-year range
+          # For scheduled runs, use 3-year range
           END_DATE=$(date +%Y-%m-%d)
-          START_DATE=$(date -d "$END_DATE -5 years" +%Y-%m-%d)
+          START_DATE=$(date -d "$END_DATE -3 years" +%Y-%m-%d)
           CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
         fi
         
