@@ -187,10 +187,27 @@ class BronzeProcessor:
                 filename=file.name,
             )
             logger.debug(f"Saved file to path: {target_path}")
+            logger.debug(f"Target path type: {type(target_path)}")
+            logger.debug(f"Target path absolute: {target_path.absolute()}")
+            logger.debug(f"Working directory: {Path.cwd()}")
 
-            # Verify file was saved correctly
-            if not target_path.exists():
+            # Verify file was saved correctly - EXTENSIVE DEBUGGING
+            logger.debug(f"Checking if file exists at: {target_path}")
+            exists_check = target_path.exists()
+            logger.debug(f"File exists result: {exists_check}")
+
+            if not exists_check:
+                # Additional debugging to understand path issues
                 logger.error(f"File was not saved correctly: {target_path} does not exist")
+                logger.debug(f"Parent directory exists: {target_path.parent.exists()}")
+                logger.debug(
+                    f"Parent directory contents: {list(target_path.parent.iterdir()) if target_path.parent.exists() else 'Directory does not exist'}"
+                )
+                logger.debug(f"Current working directory: {Path.cwd()}")
+                logger.debug(f"Target path parts: {target_path.parts}")
+                logger.debug(
+                    f"Target path relative to cwd: {target_path.relative_to(Path.cwd()) if target_path.is_absolute() else 'Not absolute'}"
+                )
                 return False
 
             saved_size = target_path.stat().st_size
@@ -198,6 +215,8 @@ class BronzeProcessor:
                 logger.warning(
                     f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
                 )
+            else:
+                logger.debug(f"File size verified: {saved_size} bytes")
 
             # Generate and save metadata - FIXED: Pass content for checksum calculation
             file_metadata = self.metadata_manager.generate_metadata(
