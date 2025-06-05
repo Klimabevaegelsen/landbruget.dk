@@ -191,32 +191,39 @@ class BronzeProcessor:
             logger.info(f"Target path absolute: {target_path.absolute()}")
             logger.info(f"Working directory: {Path.cwd()}")
 
-            # Verify file was saved correctly - EXTENSIVE DEBUGGING
-            logger.info(f"Checking if file exists at: {target_path}")
-            exists_check = target_path.exists()
-            logger.info(f"File exists result: {exists_check}")
+            # Verify file was saved correctly - FIX: Use storage manager for verification
+            logger.info("Checking if file exists via bronze storage manager...")
+            exists_check = self.bronze_storage.storage_manager.file_exists(target_path)
+            logger.info(f"Storage manager file exists result: {exists_check}")
 
             if not exists_check:
                 # Additional debugging to understand path issues
-                logger.error(f"File was not saved correctly: {target_path} does not exist")
-                logger.info(f"Parent directory exists: {target_path.parent.exists()}")
-                logger.info(
-                    f"Parent directory contents: {list(target_path.parent.iterdir()) if target_path.parent.exists() else 'Directory does not exist'}"
+                logger.error(
+                    f"File was not saved correctly: {target_path} does not exist in storage backend"
                 )
-                logger.info(f"Current working directory: {Path.cwd()}")
-                logger.info(f"Target path parts: {target_path.parts}")
                 logger.info(
-                    f"Target path relative to cwd: {target_path.relative_to(Path.cwd()) if target_path.is_absolute() else 'Not absolute'}"
+                    f"Storage backend type: {type(self.bronze_storage.storage_manager.storage)}"
                 )
+                logger.info(f"Target path: {target_path}")
                 return False
 
-            saved_size = target_path.stat().st_size
-            if saved_size != len(file_content):
-                logger.warning(
-                    f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
-                )
+            # For local storage, we can also verify file size
+            if hasattr(self.bronze_storage.storage_manager.storage, "base_dir"):
+                # Local storage - can check size
+                try:
+                    if target_path.exists():
+                        saved_size = target_path.stat().st_size
+                        if saved_size != len(file_content):
+                            logger.warning(
+                                f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
+                            )
+                        else:
+                            logger.info(f"File size verified: {saved_size} bytes")
+                except Exception as e:
+                    logger.warning(f"Could not verify file size locally: {e}")
             else:
-                logger.info(f"File size verified: {saved_size} bytes")
+                # GCS storage - just confirm successful save
+                logger.info("File saved to GCS backend successfully")
 
             # Generate and save metadata - FIXED: Pass content for checksum calculation
             file_metadata = self.metadata_manager.generate_metadata(
