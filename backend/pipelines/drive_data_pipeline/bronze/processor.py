@@ -186,25 +186,14 @@ class BronzeProcessor:
                 source_path=folder_path,
                 filename=file.name,
             )
-            logger.info(f"Saved file to path: {target_path}")
-            logger.info(f"Target path type: {type(target_path)}")
-            logger.info(f"Target path absolute: {target_path.absolute()}")
-            logger.info(f"Working directory: {Path.cwd()}")
 
             # Verify file was saved correctly - FIX: Use storage manager for verification
-            logger.info("Checking if file exists via bronze storage manager...")
             exists_check = self.bronze_storage.storage_manager.file_exists(target_path)
-            logger.info(f"Storage manager file exists result: {exists_check}")
 
             if not exists_check:
-                # Additional debugging to understand path issues
                 logger.error(
                     f"File was not saved correctly: {target_path} does not exist in storage backend"
                 )
-                logger.info(
-                    f"Storage backend type: {type(self.bronze_storage.storage_manager.storage)}"
-                )
-                logger.info(f"Target path: {target_path}")
                 return False
 
             # For local storage, we can also verify file size
@@ -217,13 +206,8 @@ class BronzeProcessor:
                             logger.warning(
                                 f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
                             )
-                        else:
-                            logger.info(f"File size verified: {saved_size} bytes")
                 except Exception as e:
                     logger.warning(f"Could not verify file size locally: {e}")
-            else:
-                # GCS storage - just confirm successful save
-                logger.info("File saved to GCS backend successfully")
 
             # Generate and save metadata - FIXED: Pass content for checksum calculation
             file_metadata = self.metadata_manager.generate_metadata(
