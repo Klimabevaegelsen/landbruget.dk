@@ -231,7 +231,7 @@ def main() -> int:
         # Process the Google Drive folder (Bronze layer)
         bronze_run_path = None
         if not args.silver_only:
-            # First list files to get count for progress tracking
+            # List files once and reuse the result
             if not args.quiet:
                 print("Listing files in Google Drive folder...")
 
@@ -239,7 +239,7 @@ def main() -> int:
                 folder_id=settings.google_drive_folder_id, recursive=True
             )
 
-            # Extract all files recursively from the folder structure
+            # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
             def collect_files(folder):
@@ -252,9 +252,9 @@ def main() -> int:
             # Initialize progress tracking
             progress.start_bronze_operation(len(all_files))
 
-            # Process bronze layer
+            # Process bronze layer - OPTIMIZED: Pass the already-fetched drive_folder
             bronze_processor.process_drive_folder(
-                folder_id=settings.google_drive_folder_id,
+                drive_folder=drive_folder,  # Use the already-fetched folder
                 specific_subfolders=subfolders,
                 supported_file_types=file_types,
             )
