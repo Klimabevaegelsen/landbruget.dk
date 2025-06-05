@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Unified pipeline for fetching and processing data."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" } 
+license = { text = "MIT" }
 authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]

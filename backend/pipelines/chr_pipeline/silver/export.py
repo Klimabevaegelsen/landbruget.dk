@@ -66,19 +66,13 @@ def _convert_uuid_columns(df: pd.DataFrame) -> pd.DataFrame:
         if df[col].dtype == "object":  # Check if column might contain UUIDs
             # Get first non-null value
             first_value = df[col].dropna().iloc[0] if not df[col].isna().all() else None
-            if first_value is not None and hasattr(
-                first_value, "hex"
-            ):  # UUID objects have hex attribute
+            if first_value is not None and hasattr(first_value, "hex"):  # UUID objects have hex attribute
                 # Convert UUIDs to hex strings
-                df[col] = df[col].apply(
-                    lambda x: x.hex if x is not None and hasattr(x, "hex") else x
-                )
+                df[col] = df[col].apply(lambda x: x.hex if x is not None and hasattr(x, "hex") else x)
     return df
 
 
-def _save_to_gcs(
-    filepath: Path, df: pd.DataFrame, is_geo: bool = False
-) -> Optional[Path]:
+def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save DataFrame to GCS."""
     if not USE_GCS or not GCS_BUCKET:
         logging.warning("GCS not configured, cannot save to GCS")
@@ -99,18 +93,14 @@ def _save_to_gcs(
                 df.to_parquet(temp_path, index=False, engine="pyarrow")
 
             # Define GCS path with timestamp
-            gcs_path = (
-                f"gs://{GCS_BUCKET}/silver/chr/{EXPORT_TIMESTAMP}/{filepath.name}"
-            )
+            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{EXPORT_TIMESTAMP}/{filepath.name}"
 
             try:
                 # Upload to GCS using gcsfs
                 with open(temp_path, "rb") as local_file:
                     with gcs_fs.open(gcs_path, "wb") as gcs_file:
                         gcs_file.write(local_file.read())
-                logging.info(
-                    f"Successfully uploaded {filepath.name} to GCS at {gcs_path}"
-                )
+                logging.info(f"Successfully uploaded {filepath.name} to GCS at {gcs_path}")
                 return filepath
             except Exception as gcs_err:
                 logging.error(f"Failed to upload to GCS: {gcs_err}")
@@ -121,9 +111,7 @@ def _save_to_gcs(
         return None
 
 
-def _save_locally(
-    filepath: Path, df: pd.DataFrame, is_geo: bool = False
-) -> Optional[Path]:
+def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save DataFrame locally."""
     try:
         # Convert UUIDs to strings
@@ -150,9 +138,7 @@ def _save_locally(
         return None
 
 
-def save_table(
-    filepath: Path, df: pd.DataFrame, is_geo: bool = False
-) -> Optional[Path]:
+def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
     """Save a DataFrame to parquet, first attempting GCS then falling back to local storage."""
     try:
         # Try saving to GCS first

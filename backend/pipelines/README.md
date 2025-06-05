@@ -21,7 +21,7 @@ backend/pipelines
 ....
 ├── common/
     ├── logger_utils.py
-    ├── argparser_utils.py 
+    ├── argparser_utils.py
     ├── storage.py      # Google Cloud Storage utils
     ├── config.py
 ├── pyproject.toml
@@ -43,7 +43,7 @@ pipeline_name/
 └── silver/             # Silver layer output directory
     └── ...             # Processed data code and files
 └── handler/             # Google cloud function handler for the pipeline (optional)
-    └── ...  
+    └── ...
 ```
 
 ## Getting Started
@@ -71,11 +71,11 @@ pipeline_name/
   # API/Service Credentials
   API_USERNAME=your_username
   API_PASSWORD=your_password
-  
+
   # Storage Configuration
   OUTPUT_BUCKET=your-gcs-bucket
   ENVIRONMENT=dev
-  
+
   # Source-specific Configuration
   SOURCE_URL=https://api.example.com
   FTP_HOST=ftp.example.com
@@ -167,24 +167,24 @@ def fetch_data(config: DataSourceConfig) -> Union[Dict, Any]:
     elif config.source_type == "file":
         return fetch_from_drive(config)
     # ... handle other source types
-    
+
 def save_raw_data(data: Any, output_dir: Path) -> None:
     """Save raw data with metadata, preserving original format"""
     # Save data in its original format (JSON, CSV, XML, etc.)
     # Add metadata including source information
-    # **IMPORTANT**: Absolutely NO transformations should happen here. 
+    # **IMPORTANT**: Absolutely NO transformations should happen here.
     # The data saved must be identical to what was fetched.
     pass
 
 def main() -> None:
     args = parse_args()
     setup_logging(args.log_level)
-    
+
     # Create timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(f"data/bronze/{timestamp}")
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         config = DataSourceConfig(args)
         data = fetch_data(config)
@@ -222,7 +222,7 @@ if __name__ == "__main__":
       file_id = config.file_id
       download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
       output_path = Path(f"temp_{datetime.now().timestamp()}")
-      
+
       try:
           # Download file in chunks
           with requests.get(download_url, stream=True) as r:
@@ -283,7 +283,7 @@ if __name__ == "__main__":
       data_path = path / "data.json"
       with data_path.open("w") as f:
           json.dump(data, f)
-      
+
       # Save metadata
       metadata = {
           "timestamp": datetime.now().isoformat(),
@@ -400,7 +400,7 @@ act workflow_dispatch -W .github/workflows/drive_pipeline.yml \
 
 ## Deployment
 
-**The target runtime environment for these pipelines is GitHub Actions.** Workflows defined in `.github/workflows/` will build the Docker image and execute the pipeline script (`main.py`) directly within a runner environment. 
+**The target runtime environment for these pipelines is GitHub Actions.** Workflows defined in `.github/workflows/` will build the Docker image and execute the pipeline script (`main.py`) directly within a runner environment.
 
 The typical development and deployment flow is:
 
@@ -453,4 +453,4 @@ Remember to follow the general guidelines in the main backend README.md regardin
 - Security considerations
 - PII handling
 - Performance optimization
-- Source-appropriate error handling 
+- Source-appropriate error handling

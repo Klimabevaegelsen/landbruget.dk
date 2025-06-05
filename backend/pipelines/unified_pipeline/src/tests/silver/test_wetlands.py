@@ -9,7 +9,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import Polygon
-
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -51,8 +50,8 @@ def silver_source(config: WetlandsSilverConfig, mock_gcs_util: MagicMock) -> Wet
 def sample_xml() -> str:
     """Return a sample XML string for testing."""
     return """
-    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" 
-                          xmlns:natur="http://wfs2-miljoegis.mim.dk/natur" 
+    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
+                          xmlns:natur="http://wfs2-miljoegis.mim.dk/natur"
                           xmlns:gml="http://www.opengis.net/gml/3.2">
         <natur:kulstof2022 gml:id="id1">
             <natur:gridcode>1</natur:gridcode>

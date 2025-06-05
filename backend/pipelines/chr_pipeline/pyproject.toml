@@ -2,9 +2,9 @@
 name = "chr-pipeline"
 version = "0.1.0"
 description = "Bronze layer pipeline for fetching CHR data."
-readme = "README.md" 
-requires-python = ">=3.11" 
-license = { text = "MIT" } 
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
 authors = [
     { name = "Your Name", email = "your@email.com" },
 ]
@@ -20,7 +20,7 @@ dependencies = [
     "tqdm~=4.66.2",
     "pandas>=2.2.0",
     "geopandas>=0.14.0",
-    "pyarrow>=16.1.0",  
+    "pyarrow>=16.1.0",
     'ibis-framework[duckdb,geospatial]>=10.5.0',
     "gcsfs>=2024.2.0"
 ]
@@ -30,8 +30,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = [".", "bronze", "silver"] 
-include = ["README.md", "*.py"] 
+packages = [".", "bronze", "silver"]
+include = ["README.md", "*.py"]
 
 [tool.hatch.build]
 only-packages = true

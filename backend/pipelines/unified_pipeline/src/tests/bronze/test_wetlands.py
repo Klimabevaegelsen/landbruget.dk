@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from tenacity import stop_after_attempt
-
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -48,9 +47,9 @@ def mock_response() -> MagicMock:
     mock_resp.status = 200
     mock_resp.text = AsyncMock(
         return_value="""
-        <wfs:FeatureCollection 
-            xmlns:wfs="http://www.opengis.net/wfs/2.0" 
-            numberMatched="2000" 
+        <wfs:FeatureCollection
+            xmlns:wfs="http://www.opengis.net/wfs/2.0"
+            numberMatched="2000"
             numberReturned="1000">
             <member>Feature 1</member>
             <member>Feature 2</member>

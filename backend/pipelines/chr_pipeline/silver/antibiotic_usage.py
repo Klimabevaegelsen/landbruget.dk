@@ -22,9 +22,7 @@ def create_antibiotic_usage_table(
     """Creates the antibiotic_usage table from parsed VetStat data."""
     logging.info("Starting creation of antibiotic_usage table.")
     if vetstat_raw is None:
-        logging.warning(
-            "Cannot create antibiotic_usage: vetstat_raw table missing. Creating empty table with schema."
-        )
+        logging.warning("Cannot create antibiotic_usage: vetstat_raw table missing. Creating empty table with schema.")
         # Create an empty antibiotic_usage table with the correct schema
         empty_data = {
             "entity_id": [],
@@ -49,9 +47,7 @@ def create_antibiotic_usage_table(
         output_path = silver_dir / "antibiotic_usage.parquet"
         saved_path = export.save_table(output_path, empty_df, is_geo=False)
         if saved_path is None:
-            logging.error(
-                "Failed to save empty antibiotic_usage table - no path returned"
-            )
+            logging.error("Failed to save empty antibiotic_usage table - no path returned")
             return None
         logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
@@ -85,9 +81,7 @@ def create_antibiotic_usage_table(
         output_path = silver_dir / "antibiotic_usage.parquet"
         saved_path = export.save_table(output_path, empty_df, is_geo=False)
         if saved_path is None:
-            logging.error(
-                "Failed to save empty antibiotic_usage table - no path returned"
-            )
+            logging.error("Failed to save empty antibiotic_usage table - no path returned")
             return None
         logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
@@ -129,9 +123,7 @@ def create_antibiotic_usage_table(
         for target in usage_cols.values():
             if target not in usage_base.columns:
                 usage_base = usage_base.mutate(**{target: ibis.null()})
-                logging.warning(
-                    f"Column for '{target}' missing in source vetstat data, adding as null."
-                )
+                logging.warning(f"Column for '{target}' missing in source vetstat data, adding as null.")
 
         # == START: Load entities table (REMOVED) ==
         # entities_table = None
@@ -154,14 +146,9 @@ def create_antibiotic_usage_table(
         usage_cleaned = usage_base.mutate(
             # Replace ibis.sql('uuid()') with ibis.uuid()
             usage_id=ibis.uuid(),
-            cvr_number=usage_base.cvr_number_raw.cast(dt.string)
-            .strip()
-            .nullif(""),  # Keep as string FK for now
+            cvr_number=usage_base.cvr_number_raw.cast(dt.string).strip().nullif(""),  # Keep as string FK for now
             chr_number=ibis.coalesce(
-                usage_base.chr_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                usage_base.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),  # FK
             year=ibis.coalesce(
@@ -173,76 +160,44 @@ def create_antibiotic_usage_table(
                 ibis.null().cast(dt.int32),
             ),
             species_code=ibis.coalesce(
-                usage_base.species_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                usage_base.species_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),  # FK
             age_group_code=ibis.coalesce(
-                usage_base.age_group_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                usage_base.age_group_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),  # FK
             avg_usage_rolling_9m=ibis.coalesce(
-                usage_base.avg_usage_rolling_9m_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.avg_usage_rolling_9m_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),
             avg_usage_rolling_12m=ibis.coalesce(
-                usage_base.avg_usage_rolling_12m_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.avg_usage_rolling_12m_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),
             animal_days=ibis.coalesce(
-                usage_base.animal_days_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.animal_days_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),  # Or decimal
             animal_doses=ibis.coalesce(
-                usage_base.animal_doses_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.animal_doses_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),  # Or decimal
             add_per_100_dyr_per_dag=ibis.coalesce(
-                usage_base.add_per_100_dyr_per_dag_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.add_per_100_dyr_per_dag_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),
             limit_value=ibis.coalesce(
-                usage_base.limit_value_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.float64),
+                usage_base.limit_value_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
                 ibis.null().cast(dt.float64),
             ),
             municipality_code=ibis.coalesce(
-                usage_base.municipality_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                usage_base.municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
-            municipality_name=usage_base.municipality_name_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            municipality_name=usage_base.municipality_name_raw.cast(dt.string).strip().nullif(""),
             region_code=ibis.coalesce(
-                usage_base.region_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                usage_base.region_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
             region_name=usage_base.region_name_raw.cast(dt.string).strip().nullif(""),
@@ -250,17 +205,11 @@ def create_antibiotic_usage_table(
 
         # Join with lookups (optional, as with vet_events)
         if "species" in lookup_tables and lookup_tables["species"] is not None:
-            usage_cleaned = usage_cleaned.left_join(
-                lookup_tables["species"], ["species_code"]
-            )
+            usage_cleaned = usage_cleaned.left_join(lookup_tables["species"], ["species_code"])
         if "age_groups" in lookup_tables and lookup_tables["age_groups"] is not None:
             # Rename the column before joining
-            usage_cleaned = usage_cleaned.mutate(
-                age_groups_code=usage_cleaned.age_group_code
-            )
-            usage_cleaned = usage_cleaned.left_join(
-                lookup_tables["age_groups"], ["age_groups_code"]
-            )
+            usage_cleaned = usage_cleaned.mutate(age_groups_code=usage_cleaned.age_group_code)
+            usage_cleaned = usage_cleaned.left_join(lookup_tables["age_groups"], ["age_groups_code"])
             # Drop the temporary column after join if needed
             usage_cleaned = usage_cleaned.drop("age_groups_code")
 
@@ -320,9 +269,7 @@ def create_antibiotic_usage_table(
                 # Removed entity_id specific type inference
                 # Add more type inference if needed
                 final_select_cols[col] = ibis.null().cast(col_type).name(col)
-                logging.warning(
-                    f"Column '{col}' missing after processing/joins, adding as null."
-                )
+                logging.warning(f"Column '{col}' missing after processing/joins, adding as null.")
 
         usage_final = usage_cleaned.select(**final_select_cols)
 

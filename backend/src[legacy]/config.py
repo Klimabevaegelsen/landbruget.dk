@@ -8,11 +8,11 @@ SOURCES = {
             "blocks": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/2/query",
             "fields_2023": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query",
             "blocks_2023": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/7/query",
-            "blocks_2024": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query"
+            "blocks_2024": "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query",
         },
         "frequency": "weekly",
         "enabled": True,
-        "bucket": "landbrugsdata-raw-data"
+        "bucket": "landbrugsdata-raw-data",
     },
     "wetlands": {
         "name": "Danish Wetlands Map",
@@ -23,7 +23,7 @@ SOURCES = {
         "frequency": "static",
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
-        "create_dissolved": True
+        "create_dissolved": True,
     },
     "cadastral": {
         "name": "Danish Cadastral Properties",
@@ -32,7 +32,7 @@ SOURCES = {
         "url": "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS",
         "frequency": "weekly",
         "enabled": True,
-        "bucket": "landbrugsdata-raw-data"
+        "bucket": "landbrugsdata-raw-data",
     },
     "water_projects": {
         "name": "Danish Water Projects",
@@ -46,7 +46,7 @@ SOURCES = {
         "create_combined": True,
         "combined_timeout": 3600,
         "bucket": "landbrugsdata-raw-data",
-        "create_dissolved": True
+        "create_dissolved": True,
     },
     "crops": {
         "name": "Danish Agricultural Crop Codes",
@@ -54,7 +54,7 @@ SOURCES = {
         "description": "Reference data for crop codes and compensation categories",
         "frequency": "static",
         "enabled": True,
-        "bucket": "landbrugsdata-raw-data"
+        "bucket": "landbrugsdata-raw-data",
     },
     "property_owners": {
         "name": "Danish Property Owners",
@@ -63,7 +63,7 @@ SOURCES = {
         "type": "sftp",
         "bucket": "landbrugsdata-raw-data",
         "raw_folder": "raw",
-        "processed_folder": "processed"
+        "processed_folder": "processed",
     },
     "chr_data": {
         "name": "Danish CHR Data",
@@ -76,8 +76,8 @@ SOURCES = {
             "stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?WSDL",
             "besaetning": "https://ws.fvst.dk/service/CHR_besaetningWS?wsdl",
             "ejendom": "https://ws.fvst.dk/service/CHR_ejendomWS?wsdl",
-            "ejer": "https://ws.fvst.dk/service/CHR_ejerWS?wsdl"
-        }
+            "ejer": "https://ws.fvst.dk/service/CHR_ejerWS?wsdl",
+        },
     },
     "bnbo_status": {
         "name": "Danish BNBO Status",
@@ -88,7 +88,7 @@ SOURCES = {
         "frequency": "weekly",
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
-        "create_dissolved": True
+        "create_dissolved": True,
     },
     "antibiotics": {
         "name": "Danish VetStat Data",
@@ -97,7 +97,7 @@ SOURCES = {
         "frequency": "monthly",
         "enabled": True,
         "bucket": "landbrugsdata-raw-data",
-        "url": "https://vetstat.fvst.dk/vetstat/services/external/CHRWS"
+        "url": "https://vetstat.fvst.dk/vetstat/services/external/CHRWS",
     },
     "slaugther_premiums": {
         "name": "Danish Slaughter Premiums",
@@ -105,6 +105,6 @@ SOURCES = {
         "description": "Slaughter premiums from Danish Agriculture & Food Council",
         "frequency": "static",
         "enabled": True,
-        "bucket": "landbrugsdata-raw-data"
-    }
+        "bucket": "landbrugsdata-raw-data",
+    },
 }

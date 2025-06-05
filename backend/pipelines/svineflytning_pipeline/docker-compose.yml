@@ -16,4 +16,4 @@ services:
       --end-date 2024-03-31
       --log-level INFO
       --progress
-      --environment prod" 
+      --environment prod"
