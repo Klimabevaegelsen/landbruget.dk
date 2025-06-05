@@ -49,70 +49,36 @@ def create_properties_table(
             chr_number=t.Response.EjendomsOplysninger.ChrNummer.try_cast(dt.int64),
             address=t.Response.EjendomsOplysninger.Ejendom.Adresse.try_cast(dt.string),
             city_name=t.Response.EjendomsOplysninger.Ejendom.ByNavn.try_cast(dt.string),
-            postal_code=t.Response.EjendomsOplysninger.Ejendom.PostNummer.try_cast(
-                dt.int32
-            ),
-            postal_district=t.Response.EjendomsOplysninger.Ejendom.PostDistrikt.try_cast(
-                dt.string
-            ),
-            municipality_code=t.Response.EjendomsOplysninger.Ejendom.KommuneNummer.try_cast(
-                dt.int32
-            ),
-            municipality_name=t.Response.EjendomsOplysninger.Ejendom.KommuneNavn.try_cast(
-                dt.string
-            ),
-            food_region_number=t.Response.EjendomsOplysninger.FVST.FoedevareRegionsNummer.try_cast(
-                dt.int32
-            ),
-            food_region_name=t.Response.EjendomsOplysninger.FVST.FoedevareRegionsNavn.try_cast(
-                dt.string
-            ),
-            vet_dept_name=t.Response.EjendomsOplysninger.FVST.VeterinaerAfdelingsNavn.try_cast(
-                dt.string
-            ),
-            vet_section_name=t.Response.EjendomsOplysninger.FVST.VeterinaerSektionsNavn.try_cast(
-                dt.string
-            ),
-            geo_coord_x_source=t.Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatX.try_cast(
-                dt.float64
-            ),
-            geo_coord_y_source=t.Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatY.try_cast(
-                dt.float64
-            ),
-            date_created_str=t.Response.EjendomsOplysninger.Ejendom.DatoOpret.try_cast(
-                dt.string
-            ),
-            date_updated_str=t.Response.EjendomsOplysninger.Ejendom.DatoOpdatering.try_cast(
-                dt.string
-            ),
+            postal_code=t.Response.EjendomsOplysninger.Ejendom.PostNummer.try_cast(dt.int32),
+            postal_district=t.Response.EjendomsOplysninger.Ejendom.PostDistrikt.try_cast(dt.string),
+            municipality_code=t.Response.EjendomsOplysninger.Ejendom.KommuneNummer.try_cast(dt.int32),
+            municipality_name=t.Response.EjendomsOplysninger.Ejendom.KommuneNavn.try_cast(dt.string),
+            food_region_number=t.Response.EjendomsOplysninger.FVST.FoedevareRegionsNummer.try_cast(dt.int32),
+            food_region_name=t.Response.EjendomsOplysninger.FVST.FoedevareRegionsNavn.try_cast(dt.string),
+            vet_dept_name=t.Response.EjendomsOplysninger.FVST.VeterinaerAfdelingsNavn.try_cast(dt.string),
+            vet_section_name=t.Response.EjendomsOplysninger.FVST.VeterinaerSektionsNavn.try_cast(dt.string),
+            geo_coord_x_source=t.Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatX.try_cast(dt.float64),
+            geo_coord_y_source=t.Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatY.try_cast(dt.float64),
+            date_created_str=t.Response.EjendomsOplysninger.Ejendom.DatoOpret.try_cast(dt.string),
+            date_updated_str=t.Response.EjendomsOplysninger.Ejendom.DatoOpdatering.try_cast(dt.string),
         ).distinct()
 
         # Filter after selection
-        properties_intermediate = properties_selected.filter(
-            properties_selected.chr_number.notnull()
-        )
+        properties_intermediate = properties_selected.filter(properties_selected.chr_number.notnull())
 
         # --- STEP 2: Deduplication in Ibis ---
         properties_deduped = properties_intermediate
 
-        logging.info(
-            "Ibis expression defined for properties table (excluding owner/user)."
-        )
+        logging.info("Ibis expression defined for properties table (excluding owner/user).")
 
         # --- STEP 3: Execute intermediate result ---
-        logging.info(
-            "Executing intermediate Ibis expression to Pandas for geometry and date conversion..."
-        )
+        logging.info("Executing intermediate Ibis expression to Pandas for geometry and date conversion...")
         try:
             df_intermediate = properties_deduped.execute()
             if df_intermediate.empty:
-                logging.warning(
-                    "Intermediate DataFrame for properties is empty after Ibis processing."
-                )
+                logging.warning("Intermediate DataFrame for properties is empty after Ibis processing.")
                 return None
-            logging.info(
-                f"Intermediate DataFrame shape for properties: {df_intermediate.shape}"
-            )
+            logging.info(f"Intermediate DataFrame shape for properties: {df_intermediate.shape}")
         except Exception as e:
             logging.error(
                 f"Failed to execute intermediate Ibis expression for properties: {e}",
@@ -133,9 +99,7 @@ def create_properties_table(
         ]
         for col in str_cols_to_sanitize:
             if col in df_intermediate.columns:
-                df_intermediate[col] = (
-                    df_intermediate[col].astype(str).str.strip().replace("", pd.NA)
-                )
+                df_intermediate[col] = df_intermediate[col].astype(str).str.strip().replace("", pd.NA)
 
         # Convert date strings to date objects
         date_cols = {
@@ -144,9 +108,7 @@ def create_properties_table(
         }
         for str_col, final_col in date_cols.items():
             if str_col in df_intermediate.columns:
-                df_intermediate[final_col] = pd.to_datetime(
-                    df_intermediate[str_col], errors="coerce"
-                ).dt.date
+                df_intermediate[final_col] = pd.to_datetime(df_intermediate[str_col], errors="coerce").dt.date
                 df_intermediate = df_intermediate.drop(columns=[str_col])
 
         logging.info(f"Properties count after Pandas cleaning: {len(df_intermediate)}")
@@ -155,8 +117,7 @@ def create_properties_table(
         logging.info("Creating geometry for properties...")
 
         df_filtered = df_intermediate[
-            df_intermediate["geo_coord_x_source"].notna()
-            & df_intermediate["geo_coord_y_source"].notna()
+            df_intermediate["geo_coord_x_source"].notna() & df_intermediate["geo_coord_y_source"].notna()
         ].copy()
 
         if df_filtered.empty:
@@ -175,14 +136,10 @@ def create_properties_table(
             # Add CRS source column AFTER filtering and GDF creation
             gdf["geo_crs_source"] = config.SOURCE_CRS
 
-            logging.info(
-                f"Created initial GeoDataFrame for properties. Shape: {gdf.shape}"
-            )
+            logging.info(f"Created initial GeoDataFrame for properties. Shape: {gdf.shape}")
 
             # --- STEP 6: Transform CRS ---
-            logging.info(
-                f"Transforming properties geometry to target CRS: {config.TARGET_CRS}..."
-            )
+            logging.info(f"Transforming properties geometry to target CRS: {config.TARGET_CRS}...")
             gdf = gdf.to_crs(config.TARGET_CRS)
             logging.info(f"Transformed properties GeoDataFrame. Shape: {gdf.shape}")
 
@@ -220,9 +177,7 @@ def create_properties_table(
         # Ensure all desired columns exist before selection/reindexing
         # Adjust final_cols_order if 'geometry' is the standard name now
         if "geometry" in gdf.columns and "geo_geometry" not in gdf.columns:
-            final_cols_order = [
-                col if col != "geo_geometry" else "geometry" for col in final_cols_order
-            ]
+            final_cols_order = [col if col != "geo_geometry" else "geometry" for col in final_cols_order]
 
         available_cols = gdf.columns
         cols_to_select = [col for col in final_cols_order if col in available_cols]
@@ -232,15 +187,11 @@ def create_properties_table(
 
         output_path = silver_dir / "properties.geoparquet"
         try:
-            logging.info(
-                f"Saving final properties GeoDataFrame... Output path: {output_path}"
-            )
+            logging.info(f"Saving final properties GeoDataFrame... Output path: {output_path}")
             logging.info("GeoDataFrame info before save:")
             logging.info(f"Shape: {gdf_final.shape}")
             logging.info(f"CRS: {gdf_final.crs}")
-            logging.info(
-                f"Memory usage: {gdf_final.memory_usage(deep=True).sum() / 1024**2:.2f} MB"
-            )
+            logging.info(f"Memory usage: {gdf_final.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
             logging.info(f"Columns: {gdf_final.columns.tolist()}")
 
             # Verify geometry column
@@ -248,9 +199,7 @@ def create_properties_table(
                 raise ValueError("GeoDataFrame is missing the 'geometry' column")
             if not all(gdf_final.geometry.is_valid):
                 invalid_geoms = gdf_final[~gdf_final.geometry.is_valid]
-                logging.warning(
-                    f"Found {len(invalid_geoms)} invalid geometries. Attempting to fix..."
-                )
+                logging.warning(f"Found {len(invalid_geoms)} invalid geometries. Attempting to fix...")
                 gdf_final.geometry = gdf_final.geometry.buffer(0)  # Simple fix attempt
 
             saved_path = export.save_table(output_path, gdf_final, is_geo=True)
@@ -261,9 +210,7 @@ def create_properties_table(
             return None  # Successfully saved, no need to return a table
 
         except Exception as e:
-            logging.error(
-                f"Failed during properties GeoParquet save: {e}", exc_info=True
-            )
+            logging.error(f"Failed during properties GeoParquet save: {e}", exc_info=True)
             return None
 
     except Exception as e:
@@ -276,9 +223,7 @@ def create_property_owners_table(
 ) -> Optional[ibis.Table]:
     """Creates the property_owners table including attributes from ejendom details."""
     if ejendom_oplys_raw is None:
-        logging.warning(
-            "Skipping property_owners table creation: ejendom_oplys_raw is None."
-        )
+        logging.warning("Skipping property_owners table creation: ejendom_oplys_raw is None.")
         return None
 
     logging.info("Starting creation of property_owners table with attributes.")
@@ -324,53 +269,27 @@ def create_property_owners_table(
         # Clean and cast columns
         prop_owners = prop_owners.mutate(
             chr_number=ibis.coalesce(
-                prop_owners.chr_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                prop_owners.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             owner_cvr=prop_owners.owner_cvr_raw.cast(dt.string).strip().nullif(""),
             owner_cpr=prop_owners.owner_cpr_raw.cast(dt.string).strip().nullif(""),
             owner_name=prop_owners.owner_name_raw.cast(dt.string).strip().nullif(""),
-            owner_address=prop_owners.owner_address_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            owner_postal_code=prop_owners.owner_postal_code_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            owner_postal_district=prop_owners.owner_postal_district_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_address=prop_owners.owner_address_raw.cast(dt.string).strip().nullif(""),
+            owner_postal_code=prop_owners.owner_postal_code_raw.cast(dt.string).strip().nullif(""),
+            owner_postal_district=prop_owners.owner_postal_district_raw.cast(dt.string).strip().nullif(""),
             owner_city=prop_owners.owner_city_raw.cast(dt.string).strip().nullif(""),
             owner_municipality_code=ibis.coalesce(
-                prop_owners.owner_municipality_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                prop_owners.owner_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
-            owner_municipality_name=prop_owners.owner_municipality_name_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            owner_country=prop_owners.owner_country_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_municipality_name=prop_owners.owner_municipality_name_raw.cast(dt.string).strip().nullif(""),
+            owner_country=prop_owners.owner_country_raw.cast(dt.string).strip().nullif(""),
             owner_phone=prop_owners.owner_phone_raw.cast(dt.string).strip().nullif(""),
-            owner_mobile=prop_owners.owner_mobile_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_mobile=prop_owners.owner_mobile_raw.cast(dt.string).strip().nullif(""),
             owner_email=prop_owners.owner_email_raw.cast(dt.string).strip().nullif(""),
-            owner_address_protection=prop_owners.owner_address_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            owner_advertising_protection=prop_owners.owner_advertising_protection_raw.cast(
-                dt.string
-            )
+            owner_address_protection=prop_owners.owner_address_protection_raw.cast(dt.string).strip().nullif(""),
+            owner_advertising_protection=prop_owners.owner_advertising_protection_raw.cast(dt.string)
             .strip()
             .nullif(""),
         )
@@ -397,23 +316,17 @@ def create_property_owners_table(
             "owner_address_protection",
             "owner_advertising_protection",
         ]
-        prop_owners_final = prop_owners.select(
-            *[col for col in final_cols if col in prop_owners.columns]
-        )
+        prop_owners_final = prop_owners.select(*[col for col in final_cols if col in prop_owners.columns])
 
         # Save to parquet
         output_path = silver_dir / "property_owners.parquet"
         rows = prop_owners_final.count().execute()
         if rows == 0:
-            logging.warning(
-                "Property owners table is empty after processing. Not saving file."
-            )
+            logging.warning("Property owners table is empty after processing. Not saving file.")
             return None
 
         logging.info(f"Saving property_owners table with attributes ({rows} rows).")
-        saved_path = export.save_table(
-            output_path, prop_owners_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, prop_owners_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save property_owners table - no path returned")
             return None
@@ -431,9 +344,7 @@ def create_property_users_table(
 ) -> Optional[ibis.Table]:
     """Creates the property_users table including attributes from ejendom details."""
     if ejendom_oplys_raw is None:
-        logging.warning(
-            "Skipping property_users table creation: ejendom_oplys_raw is None."
-        )
+        logging.warning("Skipping property_users table creation: ejendom_oplys_raw is None.")
         return None
 
     logging.info("Starting creation of property_users table with attributes.")
@@ -479,47 +390,27 @@ def create_property_users_table(
         # Clean and cast columns
         prop_users = prop_users.mutate(
             chr_number=ibis.coalesce(
-                prop_users.chr_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                prop_users.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             user_cvr=prop_users.user_cvr_raw.cast(dt.string).strip().nullif(""),
             user_cpr=prop_users.user_cpr_raw.cast(dt.string).strip().nullif(""),
             user_name=prop_users.user_name_raw.cast(dt.string).strip().nullif(""),
             user_address=prop_users.user_address_raw.cast(dt.string).strip().nullif(""),
-            user_postal_code=prop_users.user_postal_code_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            user_postal_district=prop_users.user_postal_district_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            user_postal_code=prop_users.user_postal_code_raw.cast(dt.string).strip().nullif(""),
+            user_postal_district=prop_users.user_postal_district_raw.cast(dt.string).strip().nullif(""),
             user_city=prop_users.user_city_raw.cast(dt.string).strip().nullif(""),
             user_municipality_code=ibis.coalesce(
-                prop_users.user_municipality_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                prop_users.user_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
-            user_municipality_name=prop_users.user_municipality_name_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            user_municipality_name=prop_users.user_municipality_name_raw.cast(dt.string).strip().nullif(""),
             user_country=prop_users.user_country_raw.cast(dt.string).strip().nullif(""),
             user_phone=prop_users.user_phone_raw.cast(dt.string).strip().nullif(""),
             user_mobile=prop_users.user_mobile_raw.cast(dt.string).strip().nullif(""),
             user_email=prop_users.user_email_raw.cast(dt.string).strip().nullif(""),
-            user_address_protection=prop_users.user_address_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            user_advertising_protection=prop_users.user_advertising_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
+            user_address_protection=prop_users.user_address_protection_raw.cast(dt.string).strip().nullif(""),
+            user_advertising_protection=prop_users.user_advertising_protection_raw.cast(dt.string).strip().nullif(""),
         )
 
         # Filter out rows with null identifiers after cleaning
@@ -544,23 +435,17 @@ def create_property_users_table(
             "user_address_protection",
             "user_advertising_protection",
         ]
-        prop_users_final = prop_users.select(
-            *[col for col in final_cols if col in prop_users.columns]
-        )
+        prop_users_final = prop_users.select(*[col for col in final_cols if col in prop_users.columns])
 
         # Save to parquet
         output_path = silver_dir / "property_users.parquet"
         rows = prop_users_final.count().execute()
         if rows == 0:
-            logging.warning(
-                "Property users table is empty after processing. Not saving file."
-            )
+            logging.warning("Property users table is empty after processing. Not saving file.")
             return None
 
         logging.info(f"Saving property_users table with attributes ({rows} rows).")
-        saved_path = export.save_table(
-            output_path, prop_users_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, prop_users_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save property_users table - no path returned")
             return None

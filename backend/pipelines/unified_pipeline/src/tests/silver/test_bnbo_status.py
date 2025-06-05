@@ -5,7 +5,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import Polygon
-
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 

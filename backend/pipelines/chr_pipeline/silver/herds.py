@@ -74,9 +74,7 @@ def create_herds_table(
                 ibis.null().cast(dt.int32),
             ),
             usage_type_name=herds.usage_type_name.cast(dt.string).strip().nullif(""),
-            business_type_name=herds.business_type_name.cast(dt.string)
-            .strip()
-            .nullif(""),
+            business_type_name=herds.business_type_name.cast(dt.string).strip().nullif(""),
             turnover_code=ibis.coalesce(
                 herds.turnover_code.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
@@ -89,9 +87,7 @@ def create_herds_table(
                 herds.date_ceased.cast(dt.string).strip().nullif("").cast(dt.date),
                 ibis.null().cast(dt.date),
             ),
-            is_organic=(
-                herds.is_organic.cast(dt.string).strip().nullif("").lower() == "ja"
-            ),
+            is_organic=(herds.is_organic.cast(dt.string).strip().nullif("").lower() == "ja"),
             date_created=ibis.coalesce(
                 herds.date_created.cast(dt.string).strip().nullif("").cast(dt.date),
                 ibis.null().cast(dt.date),
@@ -197,54 +193,28 @@ def create_herd_owners_table(
         # Clean and cast columns
         herd_owners = herd_owners.mutate(
             herd_number=ibis.coalesce(
-                herd_owners.herd_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                herd_owners.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             # owner_identifier removed
             owner_cvr=herd_owners.owner_cvr_raw.cast(dt.string).strip().nullif(""),
             owner_cpr=herd_owners.owner_cpr_raw.cast(dt.string).strip().nullif(""),
             owner_name=herd_owners.owner_name_raw.cast(dt.string).strip().nullif(""),
-            owner_address=herd_owners.owner_address_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            owner_postal_code=herd_owners.owner_postal_code_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            owner_postal_district=herd_owners.owner_postal_district_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_address=herd_owners.owner_address_raw.cast(dt.string).strip().nullif(""),
+            owner_postal_code=herd_owners.owner_postal_code_raw.cast(dt.string).strip().nullif(""),
+            owner_postal_district=herd_owners.owner_postal_district_raw.cast(dt.string).strip().nullif(""),
             owner_city=herd_owners.owner_city_raw.cast(dt.string).strip().nullif(""),
             owner_municipality_code=ibis.coalesce(
-                herd_owners.owner_municipality_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                herd_owners.owner_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
-            owner_municipality_name=herd_owners.owner_municipality_name_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            owner_country=herd_owners.owner_country_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_municipality_name=herd_owners.owner_municipality_name_raw.cast(dt.string).strip().nullif(""),
+            owner_country=herd_owners.owner_country_raw.cast(dt.string).strip().nullif(""),
             owner_phone=herd_owners.owner_phone_raw.cast(dt.string).strip().nullif(""),
-            owner_mobile=herd_owners.owner_mobile_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            owner_mobile=herd_owners.owner_mobile_raw.cast(dt.string).strip().nullif(""),
             owner_email=herd_owners.owner_email_raw.cast(dt.string).strip().nullif(""),
-            owner_address_protection=herd_owners.owner_address_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            owner_advertising_protection=herd_owners.owner_advertising_protection_raw.cast(
-                dt.string
-            )
+            owner_address_protection=herd_owners.owner_address_protection_raw.cast(dt.string).strip().nullif(""),
+            owner_advertising_protection=herd_owners.owner_advertising_protection_raw.cast(dt.string)
             .strip()
             .nullif(""),
         )
@@ -280,15 +250,11 @@ def create_herd_owners_table(
         output_path = silver_dir / "herd_owners.parquet"
         rows = herd_owners_final.count().execute()
         if rows == 0:
-            logging.warning(
-                "Herd owners table is empty after processing. Not saving file."
-            )
+            logging.warning("Herd owners table is empty after processing. Not saving file.")
             return None
 
         logging.info(f"Saving herd_owners table with attributes ({rows} rows).")
-        saved_path = export.save_table(
-            output_path, herd_owners_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, herd_owners_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_owners table - no path returned")
             return None
@@ -297,9 +263,7 @@ def create_herd_owners_table(
         return herd_owners_final
 
     except Exception as e:
-        logging.error(
-            f"Failed to create herd_owners table with attributes: {e}", exc_info=True
-        )
+        logging.error(f"Failed to create herd_owners table with attributes: {e}", exc_info=True)
         return None
 
 
@@ -356,10 +320,7 @@ def create_herd_users_table(
         # Clean and cast columns
         herd_users = herd_users.mutate(
             herd_number=ibis.coalesce(
-                herd_users.herd_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                herd_users.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             # user_identifier removed
@@ -367,37 +328,20 @@ def create_herd_users_table(
             user_cpr=herd_users.user_cpr_raw.cast(dt.string).strip().nullif(""),
             user_name=herd_users.user_name_raw.cast(dt.string).strip().nullif(""),
             user_address=herd_users.user_address_raw.cast(dt.string).strip().nullif(""),
-            user_postal_code=herd_users.user_postal_code_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            user_postal_district=herd_users.user_postal_district_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            user_postal_code=herd_users.user_postal_code_raw.cast(dt.string).strip().nullif(""),
+            user_postal_district=herd_users.user_postal_district_raw.cast(dt.string).strip().nullif(""),
             user_city=herd_users.user_city_raw.cast(dt.string).strip().nullif(""),
             user_municipality_code=ibis.coalesce(
-                herd_users.user_municipality_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                herd_users.user_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
-            user_municipality_name=herd_users.user_municipality_name_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
+            user_municipality_name=herd_users.user_municipality_name_raw.cast(dt.string).strip().nullif(""),
             user_country=herd_users.user_country_raw.cast(dt.string).strip().nullif(""),
             user_phone=herd_users.user_phone_raw.cast(dt.string).strip().nullif(""),
             user_mobile=herd_users.user_mobile_raw.cast(dt.string).strip().nullif(""),
             user_email=herd_users.user_email_raw.cast(dt.string).strip().nullif(""),
-            user_address_protection=herd_users.user_address_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
-            user_advertising_protection=herd_users.user_advertising_protection_raw.cast(
-                dt.string
-            )
-            .strip()
-            .nullif(""),
+            user_address_protection=herd_users.user_address_protection_raw.cast(dt.string).strip().nullif(""),
+            user_advertising_protection=herd_users.user_advertising_protection_raw.cast(dt.string).strip().nullif(""),
         )
 
         # Filter out rows with null herd_number or (now removed) user_identifier after cleaning
@@ -423,23 +367,17 @@ def create_herd_users_table(
             "user_address_protection",
             "user_advertising_protection",
         ]
-        herd_users_final = herd_users.select(
-            *[col for col in final_cols if col in herd_users.columns]
-        )
+        herd_users_final = herd_users.select(*[col for col in final_cols if col in herd_users.columns])
 
         # Save to parquet
         output_path = silver_dir / "herd_users.parquet"
         rows = herd_users_final.count().execute()
         if rows == 0:
-            logging.warning(
-                "Herd users table is empty after processing. Not saving file."
-            )
+            logging.warning("Herd users table is empty after processing. Not saving file.")
             return None
 
         logging.info(f"Saving herd_users table with attributes ({rows} rows).")
-        saved_path = export.save_table(
-            output_path, herd_users_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, herd_users_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_users table - no path returned")
             return None
@@ -448,9 +386,7 @@ def create_herd_users_table(
         return herd_users_final
 
     except Exception as e:
-        logging.error(
-            f"Failed to create herd_users table with attributes: {e}", exc_info=True
-        )
+        logging.error(f"Failed to create herd_users table with attributes: {e}", exc_info=True)
         return None
 
 
@@ -478,7 +414,7 @@ def create_herd_sizes_table(
                 FROM bes_details -- Assumes bes_details_raw is registered as 'bes_details'
             ),
             unnested_sizes AS (
-                SELECT 
+                SELECT
                     r.Besaetning.BesaetningsNummer AS herd_number_raw,
                     r.Besaetning.ChrNummer AS chr_number_raw,
                     r.Besaetning.DyreArtKode AS species_code_raw,
@@ -504,24 +440,15 @@ def create_herd_sizes_table(
         herd_sizes = herd_sizes.mutate(
             size_id=ibis.uuid(),
             herd_number=ibis.coalesce(
-                herd_sizes.herd_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                herd_sizes.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             chr_number=ibis.coalesce(
-                herd_sizes.chr_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                herd_sizes.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
             species_code=ibis.coalesce(
-                herd_sizes.species_code_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                herd_sizes.species_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
             species_name=herd_sizes.species_name_raw.cast(dt.string).strip().nullif(""),
@@ -531,10 +458,7 @@ def create_herd_sizes_table(
                 ibis.null().cast(dt.int32),
             ),
             size_update_date=ibis.coalesce(
-                herd_sizes.size_update_date_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.date),
+                herd_sizes.size_update_date_raw.cast(dt.string).strip().nullif("").cast(dt.date),
                 ibis.null().cast(dt.date),
             ),
         )
@@ -559,15 +483,11 @@ def create_herd_sizes_table(
         output_path = silver_dir / "herd_sizes.parquet"
         rows = herd_sizes_final.count().execute()
         if rows == 0:
-            logging.warning(
-                "Herd sizes table is empty after processing. Not saving file."
-            )
+            logging.warning("Herd sizes table is empty after processing. Not saving file.")
             return None
 
         logging.info(f"Saving herd_sizes table with {rows} rows.")
-        saved_path = export.save_table(
-            output_path, herd_sizes_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, herd_sizes_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_sizes table - no path returned")
             return None

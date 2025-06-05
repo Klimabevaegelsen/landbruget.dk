@@ -18,9 +18,7 @@ def parse_args():
     Returns:
         argparse.Namespace: Parsed arguments
     """
-    parser = argparse.ArgumentParser(
-        description="Run the Arbejdstilsynet Inspections pipeline"
-    )
+    parser = argparse.ArgumentParser(description="Run the Arbejdstilsynet Inspections pipeline")
 
     # Calculate default start_date (6 months ago)
 
@@ -46,12 +44,8 @@ def parse_args():
         help="Logging level (DEBUG, INFO, WARNING, ERROR)",
     )
 
-    parser.add_argument(
-        "--gcs-bucket", type=str, help="Google Cloud Storage bucket for export"
-    )
-    parser.add_argument(
-        "--stage", type=str, choices=["all", "bronze", "silver"], default="all"
-    )
+    parser.add_argument("--gcs-bucket", type=str, help="Google Cloud Storage bucket for export")
+    parser.add_argument("--stage", type=str, choices=["all", "bronze", "silver"], default="all")
 
     return parser.parse_args()
 
@@ -74,9 +68,7 @@ if __name__ == "__main__":
     if not actual_gcs_bucket:
         actual_gcs_bucket = os.getenv("GCS_BUCKET")
         if actual_gcs_bucket:
-            logger.info(
-                f"Using GCS_BUCKET from environment variable: {actual_gcs_bucket}"
-            )
+            logger.info(f"Using GCS_BUCKET from environment variable: {actual_gcs_bucket}")
         else:
             logger.warning(
                 "GCS_BUCKET not provided via --gcs-bucket argument or GCS_BUCKET environment variable. GCS uploads will be skipped."
@@ -104,9 +96,7 @@ if __name__ == "__main__":
     if args.stage in ["all", "silver"]:
         if not bronze_success and args.stage == "all":
             logger.warning("Skipping Silver Layer because Bronze Layer failed.")
-            silver_success = (
-                False  # Ensure silver is also marked as failed if bronze did
-            )
+            silver_success = False  # Ensure silver is also marked as failed if bronze did
         else:
             try:
                 # Run Silver Layer
@@ -118,15 +108,11 @@ if __name__ == "__main__":
                     log_level=args.log_level,
                 )
                 print("[main.py] Silver Layer complete.")
-            except (
-                RuntimeError
-            ) as e:  # Catching the specific exception from silver.transform.main
+            except RuntimeError as e:  # Catching the specific exception from silver.transform.main
                 logger.error(f"Silver Layer failed: {e}", exc_info=True)
                 silver_success = False
             except Exception as e:  # Catch any other unexpected errors from silver
-                logger.error(
-                    f"Silver Layer failed with an unexpected error: {e}", exc_info=True
-                )
+                logger.error(f"Silver Layer failed with an unexpected error: {e}", exc_info=True)
                 silver_success = False
     else:
         logger.info("Skipping Silver Layer due to --stage setting.")

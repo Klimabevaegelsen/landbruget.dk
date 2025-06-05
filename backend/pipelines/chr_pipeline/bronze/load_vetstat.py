@@ -1,64 +1,62 @@
 """Module for loading VetStat antibiotics data - Bronze Layer."""
 
-import os
-import logging
-import json
-import uuid
 import base64
 import hashlib
+import logging
+import os
 import secrets
-import requests
+import uuid
 from datetime import date, datetime, timedelta
-from typing import Dict, Any, List, Tuple, Optional
-from dotenv import load_dotenv
+from typing import Any, List, Optional, Tuple
 
-from google.cloud import secretmanager
-from lxml import etree
+import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
+from dotenv import load_dotenv
+from lxml import etree
 
 # Import the exporter function
 from .export import save_raw_data
 
 # Set up logging
-logger = logging.getLogger('backend.pipelines.chr_pipeline.bronze.load_vetstat')
+logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 
 # Load environment variables
 load_dotenv()
 
 # Get Google Cloud Project ID from environment variable
-GOOGLE_CLOUD_PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT')
+GOOGLE_CLOUD_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 if not GOOGLE_CLOUD_PROJECT_ID:
     logger.warning("GOOGLE_CLOUD_PROJECT environment variable is not set")
 
 # Secret Manager Secret IDs
-FVM_USERNAME_SECRET_ID = 'fvm_username'
-FVM_PASSWORD_SECRET_ID = 'fvm_password'
-VETSTAT_CERTIFICATE_SECRET_ID = 'vetstat-certificate'
-VETSTAT_CERTIFICATE_PASSWORD_SECRET_ID = 'vetstat-certificate-password'
+FVM_USERNAME_SECRET_ID = "fvm_username"
+FVM_PASSWORD_SECRET_ID = "fvm_password"
+VETSTAT_CERTIFICATE_SECRET_ID = "vetstat-certificate"
+VETSTAT_CERTIFICATE_PASSWORD_SECRET_ID = "vetstat-certificate-password"
 
 # API Endpoints
 VETSTAT_ENDPOINT = "https://vetstat.fvst.dk/vetstat/services/external/CHRWS"
 SOAP_ACTION = "http://vetstat.fvst.dk/chr/hentAntibiotikaforbrug"
 
 # Default Client ID
-DEFAULT_CLIENT_ID = 'LandbrugsData'
+DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # XML Namespaces
 NAMESPACES = {
-    'soapenv': 'http://schemas.xmlsoap.org/soap/envelope/',
-    'wsse': 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd',
-    'wsu': 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd',
-    'ds': 'http://www.w3.org/2000/09/xmldsig#',
-    'ec': 'http://www.w3.org/2001/10/xml-exc-c14n#',
-    'eks': 'http://vetstat.fvst.dk/ekstern',
-    'glr': 'http://www.logica.com/glrchr'
+    "soapenv": "http://schemas.xmlsoap.org/soap/envelope/",
+    "wsse": "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd",
+    "wsu": "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd",
+    "ds": "http://www.w3.org/2000/09/xmldsig#",
+    "ec": "http://www.w3.org/2001/10/xml-exc-c14n#",
+    "eks": "http://vetstat.fvst.dk/ekstern",
+    "glr": "http://www.logica.com/glrchr",
 }
 
 # --- Credential Handling ---
+
 
 def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
@@ -66,11 +64,11 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     load_dotenv()
 
     # Get required environment variables
-    username = os.getenv('FVM_USERNAME')
-    password = os.getenv('FVM_PASSWORD')
-    cert_base64 = os.getenv('VETSTAT_CERTIFICATE')
-    cert_path = os.getenv('VETSTAT_CERTIFICATE_PATH')
-    cert_password = os.getenv('VETSTAT_CERTIFICATE_PASSWORD')
+    username = os.getenv("FVM_USERNAME")
+    password = os.getenv("FVM_PASSWORD")
+    cert_base64 = os.getenv("VETSTAT_CERTIFICATE")
+    cert_path = os.getenv("VETSTAT_CERTIFICATE_PATH")
+    cert_password = os.getenv("VETSTAT_CERTIFICATE_PASSWORD")
 
     # Debug log the state of environment variables (masking sensitive data)
     logger.debug("Environment variable status:")
@@ -83,13 +81,13 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     # Check for missing variables
     missing_vars = []
     if not username:
-        missing_vars.append('FVM_USERNAME')
+        missing_vars.append("FVM_USERNAME")
     if not password:
-        missing_vars.append('FVM_PASSWORD')
+        missing_vars.append("FVM_PASSWORD")
     if not cert_base64 and not cert_path:
-        missing_vars.append('VETSTAT_CERTIFICATE or VETSTAT_CERTIFICATE_PATH')
+        missing_vars.append("VETSTAT_CERTIFICATE or VETSTAT_CERTIFICATE_PATH")
     if not cert_password:
-        missing_vars.append('VETSTAT_CERTIFICATE_PASSWORD')
+        missing_vars.append("VETSTAT_CERTIFICATE_PASSWORD")
 
     if missing_vars:
         error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
@@ -102,7 +100,7 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         # Try to get certificate data from base64 string first
         if cert_base64:
             try:
-                logger.debug(f"Using base64 certificate from VETSTAT_CERTIFICATE environment variable")
+                logger.debug("Using base64 certificate from VETSTAT_CERTIFICATE environment variable")
                 p12_data = base64.b64decode(cert_base64)
                 logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
             except Exception as decode_error:
@@ -113,7 +111,7 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         if not p12_data and cert_path:
             try:
                 logger.debug(f"Reading certificate from file: {cert_path}")
-                with open(cert_path, 'rb') as f:
+                with open(cert_path, "rb") as f:
                     p12_data = f.read()
                 logger.debug(f"Successfully read certificate file. Length: {len(p12_data)} bytes")
             except Exception as file_error:
@@ -125,10 +123,7 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
 
         # Load the certificate and private key from the data
         try:
-            private_key, certificate, _ = load_key_and_certificates(
-                p12_data,
-                cert_password.encode('utf-8')
-            )
+            private_key, certificate, _ = load_key_and_certificates(p12_data, cert_password.encode("utf-8"))
             logger.debug("Successfully loaded private key and certificate from PKCS12 data")
         except Exception as cert_error:
             logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
@@ -143,52 +138,53 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         logger.error(f"Failed to load VetStat certificate/key: {str(e)}")
         raise
 
+
 # --- XML Helper Functions (Adapted from fetch_chr_details.py) ---
+
 
 def compute_digest(element: etree._Element, inclusive_prefixes: List[str]) -> str:
     """Canonicalize (C14N) the element and compute its SHA-256 digest in Base64."""
     # Ensure the element is detached if necessary or use a copy
     try:
         c14n_bytes = etree.tostring(
-            element,
-            method="c14n",
-            exclusive=True,
-            inclusive_ns_prefixes=inclusive_prefixes,
-            with_comments=False
+            element, method="c14n", exclusive=True, inclusive_ns_prefixes=inclusive_prefixes, with_comments=False
         )
         sha256_hash = hashlib.sha256(c14n_bytes).digest()
         return base64.b64encode(sha256_hash).decode()
     except Exception as e:
         logger.error(f"Error during C14N or digest computation for element {element.tag}: {e}")
         # Log the problematic element for debugging
-        logger.debug(f"Problematic Element Tag: {element.tag}") # Simplified log message
+        logger.debug(f"Problematic Element Tag: {element.tag}")  # Simplified log message
         raise
+
 
 def get_element_prefixes(element_type: str) -> List[str]:
     """Get the appropriate namespace prefixes based on element type for C14N."""
     # These prefixes were likely determined by observing successful requests
     # or documentation for the VetStat WS-Security profile.
     prefix_mappings = {
-        'Body': ["ds", "ec", "eks", "glr", "wsse"], # Adjusted based on sample
-        'Timestamp': ["wsse", "ds", "ec", "eks", "glr", "soapenv"], # Adjusted
-        'UsernameToken': ["ds", "ec", "eks", "glr", "soapenv", "wsse"], # Adjusted
-        'BinarySecurityToken': [], # Typically no inclusive prefixes for the token itself
+        "Body": ["ds", "ec", "eks", "glr", "wsse"],  # Adjusted based on sample
+        "Timestamp": ["wsse", "ds", "ec", "eks", "glr", "soapenv"],  # Adjusted
+        "UsernameToken": ["ds", "ec", "eks", "glr", "soapenv", "wsse"],  # Adjusted
+        "BinarySecurityToken": [],  # Typically no inclusive prefixes for the token itself
         # The following might need adjustment based on the exact signature structure
-        'SecurityTokenReference': ["wsse", "ds", "ec", "eks", "glr", "soapenv"],
-        'Signature': ["ds", "ec", "eks", "glr", "soapenv", "wsse", "wsu"],
-        'SignedInfo': ["ds", "ec", "eks", "glr", "soapenv", "wsse", "wsu"],
+        "SecurityTokenReference": ["wsse", "ds", "ec", "eks", "glr", "soapenv"],
+        "Signature": ["ds", "ec", "eks", "glr", "soapenv", "wsse", "wsu"],
+        "SignedInfo": ["ds", "ec", "eks", "glr", "soapenv", "wsse", "wsu"],
     }
     # Defaulting to a common set if not specifically mapped
     return prefix_mappings.get(element_type, ["ds", "ec", "eks", "glr", "wsse"])
+
 
 def generate_uuid_id(prefix: str) -> str:
     """Generate a UUID-based ID with a specific prefix."""
     return f"{prefix}{uuid.uuid4().hex.upper()}"
 
+
 def update_security_elements(root: etree._Element, username: str, password: str, certificate: Any):
     """Update WS-Security elements: Timestamps, Nonce, Username, Password, BinarySecurityToken."""
     now_utc = datetime.utcnow()
-    expires_utc = now_utc + timedelta(hours=1) # Standard 1-hour expiry
+    expires_utc = now_utc + timedelta(hours=1)  # Standard 1-hour expiry
     created_str = now_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     expires_str = expires_utc.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
@@ -204,8 +200,10 @@ def update_security_elements(root: etree._Element, username: str, password: str,
     if username_token is not None:
         user_el = username_token.find("./wsse:Username", NAMESPACES)
         pass_el = username_token.find("./wsse:Password", NAMESPACES)
-        if user_el is not None: user_el.text = username
-        if pass_el is not None: pass_el.text = password
+        if user_el is not None:
+            user_el.text = username
+        if pass_el is not None:
+            pass_el.text = password
     else:
         logger.warning("UsernameToken element not found in template.")
 
@@ -220,11 +218,15 @@ def update_security_elements(root: etree._Element, username: str, password: str,
     # Need to update *both* wsu:Created and wsu:Expires within the Timestamp element
     ts_created_el = root.find(".//wsu:Timestamp/wsu:Created", NAMESPACES)
     ts_expires_el = root.find(".//wsu:Timestamp/wsu:Expires", NAMESPACES)
-    if ts_created_el is not None: ts_created_el.text = created_str
-    if ts_expires_el is not None: ts_expires_el.text = expires_str
+    if ts_created_el is not None:
+        ts_created_el.text = created_str
+    if ts_expires_el is not None:
+        ts_expires_el.text = expires_str
     # Also update the Created element within UsernameToken if it exists
     ut_created_el = root.find(".//wsse:UsernameToken/wsu:Created", NAMESPACES)
-    if ut_created_el is not None: ut_created_el.text = created_str
+    if ut_created_el is not None:
+        ut_created_el.text = created_str
+
 
 def update_references_and_digests(root: etree._Element):
     """Update all ds:Reference URIs and their corresponding ds:DigestValue."""
@@ -235,12 +237,12 @@ def update_references_and_digests(root: etree._Element):
 
     logger.info(f"Updating digests for {len(references)} references.")
     for ref in references:
-        uri = ref.get('URI')
-        if not uri or not uri.startswith('#'):
+        uri = ref.get("URI")
+        if not uri or not uri.startswith("#"):
             logger.warning(f"Skipping reference with invalid or missing URI: {uri}")
             continue
 
-        id_value = uri.lstrip('#')
+        id_value = uri.lstrip("#")
         # Search for the element by its wsu:Id or Id attribute
         referenced_element = root.xpath(f"//*[@wsu:Id='{id_value}' or @Id='{id_value}']", namespaces=NAMESPACES)
 
@@ -252,7 +254,7 @@ def update_references_and_digests(root: etree._Element):
             logger.debug(f"Calculating digest for URI {uri} ({element.tag}) using prefixes: {prefixes}")
             try:
                 new_digest = compute_digest(element, prefixes)
-                digest_value_el = ref.find('./ds:DigestValue', NAMESPACES)
+                digest_value_el = ref.find("./ds:DigestValue", NAMESPACES)
                 if digest_value_el is not None:
                     digest_value_el.text = new_digest
                     logger.debug(f"Updated DigestValue for {uri} to: {new_digest[:10]}...")
@@ -262,6 +264,7 @@ def update_references_and_digests(root: etree._Element):
                 logger.error(f"Failed to compute or set digest for URI {uri}: {e}")
         else:
             logger.warning(f"Referenced element not found for URI: {uri}")
+
 
 def sign_document(root: etree._Element, private_key: Any):
     """Calculate and insert the ds:SignatureValue based on the ds:SignedInfo."""
@@ -278,33 +281,33 @@ def sign_document(root: etree._Element, private_key: Any):
     logger.info("Canonicalizing SignedInfo and generating signature...")
     try:
         # Use the specific inclusive prefixes required for SignedInfo canonicalization
-        signed_info_prefixes = get_element_prefixes('SignedInfo')
+        signed_info_prefixes = get_element_prefixes("SignedInfo")
         signed_info_c14n = etree.tostring(
-            signed_info,
-            method="c14n",
-            exclusive=True,
-            inclusive_ns_prefixes=signed_info_prefixes,
-            with_comments=False
+            signed_info, method="c14n", exclusive=True, inclusive_ns_prefixes=signed_info_prefixes, with_comments=False
         )
 
         # VetStat uses RSA-SHA1 for the signature
         signature = private_key.sign(
             signed_info_c14n,
             padding.PKCS1v15(),
-            hashes.SHA1() # IMPORTANT: VetStat requires SHA1 for the signature itself
+            hashes.SHA1(),  # IMPORTANT: VetStat requires SHA1 for the signature itself
         )
 
         encoded_signature = base64.b64encode(signature).decode()
         signature_value_el.text = encoded_signature
         logger.info("Successfully generated and inserted signature")
 
-    except Exception as e:
+    except Exception:
         logger.error("Error during signing process")
         raise
 
+
 # --- SOAP Envelope Creation ---
 
-def create_soap_envelope_template(username: str, chr_number: int, periode_fra: str, periode_til: str, species_code: int) -> etree._Element:
+
+def create_soap_envelope_template(
+    username: str, chr_number: int, periode_fra: str, periode_til: str, species_code: int
+) -> etree._Element:
     """Create the basic structure of the SOAP envelope with placeholders and IDs."""
     # Generate dynamic IDs for security elements
     binary_token_id = generate_uuid_id("X509-")
@@ -408,18 +411,22 @@ def create_soap_envelope_template(username: str, chr_number: int, periode_fra: s
     try:
         # Remove insignificant whitespace during parsing to avoid issues with C14N
         parser = etree.XMLParser(remove_blank_text=True)
-        root = etree.fromstring(xml_template.encode('utf-8'), parser=parser)
+        root = etree.fromstring(xml_template.encode("utf-8"), parser=parser)
         return root
     except etree.XMLSyntaxError as e:
         logger.error(f"XML Syntax Error in template: {e}")
         logger.error(f"Template content:\n{xml_template}")
         raise
 
+
 # --- Main Loading Function ---
+
 
 def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
     """Fetch raw antibiotics data XML from VetStat for a given CHR, species, and period."""
-    logger.info(f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}")
+    logger.info(
+        f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}"
+    )
 
     try:
         # 1. Get Credentials (including cert/key)
@@ -442,20 +449,13 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
 
         # 6. Serialize the final XML
         # Use unicode encoding for direct use with requests, which handles byte encoding.
-        signed_xml_string = etree.tostring(root, pretty_print=False, encoding='unicode')
+        signed_xml_string = etree.tostring(root, pretty_print=False, encoding="unicode")
         logger.debug("Successfully prepared signed VetStat SOAP request.")
 
         # 7. Send Request via requests library
-        headers = {
-            "Content-Type": "text/xml;charset=UTF-8",
-            "SOAPAction": SOAP_ACTION
-        }
+        headers = {"Content-Type": "text/xml;charset=UTF-8", "SOAPAction": SOAP_ACTION}
         logger.debug(f"Sending request to {VETSTAT_ENDPOINT}")
-        response = requests.post(
-            VETSTAT_ENDPOINT,
-            data=signed_xml_string,
-            headers=headers
-        )
+        response = requests.post(VETSTAT_ENDPOINT, data=signed_xml_string, headers=headers)
 
         # 8. Handle Response
         if response.status_code == 200:
@@ -465,16 +465,13 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
             # Parse the XML response to extract the data
             try:
                 # Parse the XML response
-                root = etree.fromstring(raw_xml_response.encode('utf-8'))
+                root = etree.fromstring(raw_xml_response.encode("utf-8"))
 
                 # Define the namespaces used in the XML
-                ns = {
-                    'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
-                    'ns2': 'http://vetstat.fvst.dk/ekstern'
-                }
+                ns = {"soap": "http://schemas.xmlsoap.org/soap/envelope/", "ns2": "http://vetstat.fvst.dk/ekstern"}
 
                 # Extract the data from the XML
-                data_elements = root.xpath('//ns2:Data', namespaces=ns)
+                data_elements = root.xpath("//ns2:Data", namespaces=ns)
                 logger.info(f"Found {len(data_elements)} data elements in XML response for CHR {chr_number}")
 
                 if data_elements:
@@ -491,12 +488,12 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                                 item[tag] = child.text.strip()
 
                         # Make sure CHR number is included
-                        if 'CHRNummer' not in item and str(chr_number):
-                            item['CHRNummer'] = str(chr_number)
+                        if "CHRNummer" not in item and str(chr_number):
+                            item["CHRNummer"] = str(chr_number)
 
                         # Make sure species code is included
-                        if 'DyreArtKode' not in item and str(species_code):
-                            item['DyreArtKode'] = str(species_code)
+                        if "DyreArtKode" not in item and str(species_code):
+                            item["DyreArtKode"] = str(species_code)
 
                         # Only add items that have data
                         if item:
@@ -506,16 +503,16 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                     # Save both the raw XML and the parsed JSON
                     save_raw_data(
                         raw_response=raw_xml_response,
-                        data_type='vetstat_antibiotics',
-                        identifier=f"{chr_number}_{species_code}"
+                        data_type="vetstat_antibiotics",
+                        identifier=f"{chr_number}_{species_code}",
                     )
 
                     # Also save the parsed JSON data
                     for item in json_data:
                         save_raw_data(
                             raw_response=item,
-                            data_type='vetstat_antibiotics',
-                            identifier=f"{chr_number}_{species_code}"
+                            data_type="vetstat_antibiotics",
+                            identifier=f"{chr_number}_{species_code}",
                         )
 
                     logger.info(f"Parsed {len(json_data)} antibiotic usage records from XML response")
@@ -524,16 +521,16 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                     # Save just the raw XML
                     save_raw_data(
                         raw_response=raw_xml_response,
-                        data_type='vetstat_antibiotics',
-                        identifier=f"{chr_number}_{species_code}"
+                        data_type="vetstat_antibiotics",
+                        identifier=f"{chr_number}_{species_code}",
                     )
             except Exception as e:
                 logger.error(f"Failed to parse XML response for CHR {chr_number}: {e}")
                 # Save the raw XML response even if parsing fails
                 save_raw_data(
                     raw_response=raw_xml_response,
-                    data_type='vetstat_antibiotics',
-                    identifier=f"{chr_number}_{species_code}"
+                    data_type="vetstat_antibiotics",
+                    identifier=f"{chr_number}_{species_code}",
                 )
 
             return raw_xml_response
@@ -550,11 +547,12 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
         logger.error(f"Failed to execute VetStat request for CHR {chr_number}: {e}")
         return None
 
+
 # Remove all test functions and test execution code at the end
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Use CHR and Species identified previously
     TEST_CHR_NUMBER = 28400
-    TEST_SPECIES_CODE = 15 # Pigs
+    TEST_SPECIES_CODE = 15  # Pigs
 
     # Define a test period (e.g., first 3 months of 2023)
     TEST_PERIOD_FROM = date(2023, 1, 1)
@@ -562,10 +560,7 @@ if __name__ == '__main__':
 
     # Call the main loading function
     vetstat_response_xml = load_vetstat_antibiotics(
-        TEST_CHR_NUMBER,
-        TEST_SPECIES_CODE,
-        TEST_PERIOD_FROM,
-        TEST_PERIOD_TO
+        TEST_CHR_NUMBER, TEST_SPECIES_CODE, TEST_PERIOD_FROM, TEST_PERIOD_TO
     )
 
     if vetstat_response_xml:

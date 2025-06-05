@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 from tenacity import stop_after_attempt
-
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 

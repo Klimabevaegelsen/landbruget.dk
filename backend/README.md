@@ -1,4 +1,4 @@
-# Pipelines 
+# Pipelines
 This backend infrastructure powers our open-source data processing platform, designed to transform raw data into clean, harmonized, and analysis-ready datasets. We follow a structured medallion architecture to ensure data quality, maintainability, and ease of contribution. This documentation outlines our technical stack, coding standards, and pipeline architecture to help contributors understand our approach and contribute effectively.
 
 Programming language used in the backend is Python. SQL may be used to execute transform operations - in that case please ensure the python equivalent is logged (we recommend using [sql_to_ibis](https://github.com/zbrookle/sql_to_ibis) for that)
@@ -61,7 +61,7 @@ Create `.actrc` in your project root for consistent settings:
 - Each step module should have its own tests.
 
 
-## LLMs 
+## LLMs
 - If LLMs are used in your pipeline, your code should use [OpenRouter](https://openrouter.ai/) instead of querying the LLM APIs directly.
 - Please test output consistency.
 - Be mindful of costs and test different models to check if the cheapest models can be sufficient.
@@ -69,7 +69,7 @@ Create `.actrc` in your project root for consistent settings:
 
 ## Lint and Types
 We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff](https://github.com/astral-sh/ruff) to keep things nice and clean.
-  
+
 ## Bronze layer
 - The Bronze layer's purpose is to fetch and store the raw data.
 - Data should be captured raw and stored immediately - **crucially, NO transformation or cleaning should occur at this stage**. The goal is to preserve the data exactly as it arrived from the source.
@@ -92,11 +92,11 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 - In the future, a slice of the data (most probably a single municipality) should be saved separately, so contributers can help out on the Gold layer pipelines without having to have access to the raw data source or download the entire dataset.
 
 ### Naming conventions
-- In English 
+- In English
 - File names: lowercase and underscore, max 5 words.
 - Feature names: lowercase and underscore, max 5 words.
 - Geospatial field names should start with "geo_".
-- Common feature names: 
+- Common feature names:
 - CVR Number: cvr_number
 - Geometry fields: geometry
 - CHR Number: chr_number
@@ -137,5 +137,3 @@ We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff]
 
 # (WIP) APIs
 - We use Supabase
-
- 

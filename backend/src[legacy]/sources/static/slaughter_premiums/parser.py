@@ -1,42 +1,45 @@
-import pandas as pd
-from pathlib import Path
-from ....base import Source
 import os
 import re
+from pathlib import Path
+
+import pandas as pd
+
+from ....base import Source
+
 
 class SlaughterPremiums(Source):
     """Danish Slaughter Premiums Data parser"""
 
     # Using column names from the Excel file
     EXPECTED_COLUMNS = [
-        'PROD_AAR',
-        'CapNumber',
-        'CVR',
-        'Reklamebeskyttelse',
-        'Navn',
-        'ORDNING',
-        'AntalDyr',
-        'Beløb_DKK_x0020__x0028_SUMDKK_x0029_',
-        'PAYMENT_DATE'
+        "PROD_AAR",
+        "CapNumber",
+        "CVR",
+        "Reklamebeskyttelse",
+        "Navn",
+        "ORDNING",
+        "AntalDyr",
+        "Beløb_DKK_x0020__x0028_SUMDKK_x0029_",
+        "PAYMENT_DATE",
     ]
 
     # Rename columns to match other sources and make them more readable
     COLUMN_RENAMING = {
-        'PROD_AAR': 'production_year',
-        'CapNumber': 'cap_number',
-        'CVR': 'cvr_number',
-        'Reklamebeskyttelse': 'marketing_protection',
-        'Navn': 'name',
-        'ORDNING': 'scheme',
-        'AntalDyr': 'number_of_animals',
-        'Beløb_DKK_x0020__x0028_SUMDKK_x0029_': 'amount_dkk',
-        'PAYMENT_DATE': 'payment_date'
+        "PROD_AAR": "production_year",
+        "CapNumber": "cap_number",
+        "CVR": "cvr_number",
+        "Reklamebeskyttelse": "marketing_protection",
+        "Navn": "name",
+        "ORDNING": "scheme",
+        "AntalDyr": "number_of_animals",
+        "Beløb_DKK_x0020__x0028_SUMDKK_x0029_": "amount_dkk",
+        "PAYMENT_DATE": "payment_date",
     }
 
     def _extract_year_range(self, filename: str) -> tuple[str, str]:
         """Extract year range from the filename"""
         # Assuming the filename contains years in the format 'SLP_YYYY_YYYY'
-        match = re.search(r'SLP_(\d{4})_(\d{4})', filename)
+        match = re.search(r"SLP_(\d{4})_(\d{4})", filename)
         if match:
             return match.group(1), match.group(2)
         else:
@@ -47,12 +50,12 @@ class SlaughterPremiums(Source):
         current_dir = Path(__file__).parent
 
         dfs = []
-        for file in current_dir.glob('*.xlsx'):
+        for file in current_dir.glob("*.xlsx"):
             try:
-                df = pd.read_excel(file, sheet_name=0, engine='openpyxl')
-                df['source_file'] = file.name
+                df = pd.read_excel(file, sheet_name=0, engine="openpyxl")
+                df["source_file"] = file.name
                 start_year, end_year = self._extract_year_range(file.name)
-                df['year_range'] = f"{start_year}-{end_year}"
+                df["year_range"] = f"{start_year}-{end_year}"
                 dfs.append(df)
             except Exception as e:
                 print(f"Error reading {file}: {e}")
@@ -70,17 +73,16 @@ class SlaughterPremiums(Source):
             raise ValueError(f"Missing required columns: {missing_cols}")
 
         # Clean up CVR and CapNumber values (remove _x00 prefix)
-        for col in ['CVR', 'CapNumber']:
-            df[col] = df[col].str.replace(r'_x00\d+', '', regex=True)
+        for col in ["CVR", "CapNumber"]:
+            df[col] = df[col].str.replace(r"_x00\d+", "", regex=True)
 
         # Convert amount to numeric, removing any currency formatting
-        df['Beløb_DKK_x0020__x0028_SUMDKK_x0029_'] = pd.to_numeric(
-            df['Beløb_DKK_x0020__x0028_SUMDKK_x0029_'],
-            errors='coerce'
+        df["Beløb_DKK_x0020__x0028_SUMDKK_x0029_"] = pd.to_numeric(
+            df["Beløb_DKK_x0020__x0028_SUMDKK_x0029_"], errors="coerce"
         )
 
         # Convert dates to datetime
-        df['PAYMENT_DATE'] = pd.to_datetime(df['PAYMENT_DATE'])
+        df["PAYMENT_DATE"] = pd.to_datetime(df["PAYMENT_DATE"])
 
         # Rename columns
         df = df.rename(columns=self.COLUMN_RENAMING)
@@ -96,10 +98,10 @@ class SlaughterPremiums(Source):
 
         # Clean and standardize data
         df = self._clean_and_standardize(df)
-        df = df.fillna('')  # Replace NaN with empty string
+        df = df.fillna("")  # Replace NaN with empty string
 
         # Optional: Print debug info in test environment
-        if 'test_parser' in os.environ.get('ENVIRONMENT', ''):
+        if "test_parser" in os.environ.get("ENVIRONMENT", ""):
             print(f"\nFound {len(df)} slaughter premium entries")
             print("\nColumns:", df.columns.tolist())
             print("\nFirst few entries:")
@@ -116,7 +118,7 @@ class SlaughterPremiums(Source):
         df.to_parquet(temp_file)
 
         # Upload to storage
-        blob = self.bucket.blob(f'raw/slaughter_premiums/current.parquet')
+        blob = self.bucket.blob("raw/slaughter_premiums/current.parquet")
         blob.upload_from_filename(temp_file)
 
         # Cleanup

@@ -89,13 +89,13 @@ class SFTPToGCSTransfer:
             host = self.get_secret("datafordeler-sftp-host")
             username = self.get_secret("datafordeler-sftp-username")
             private_key_data = self.get_secret("ssh-brugerdatafordeleren")
-            
+
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
+
             import socket
             import time
-            
+
             def resolve_hostname_with_retry(hostname, max_attempts=5, delay=10):
                 logger.info(f"Starting DNS resolution for {hostname}.")
                 flush_logs()
@@ -103,12 +103,12 @@ class SFTPToGCSTransfer:
                     try:
                         logger.debug(f"DNS RESOLUTION ATTEMPT {attempt}/{max_attempts} for {hostname}")
                         flush_logs()
-                        
+
                         # Test system DNS tools first
                         try:
                             logger.debug("Testing with getent...")
                             flush_logs()
-                            result = subprocess.run(['getent', 'hosts', hostname], 
+                            result = subprocess.run(['getent', 'hosts', hostname],
                                                   capture_output=True, text=True, timeout=10)
                             if result.returncode == 0:
                                 logger.debug(f"getent result: {result.stdout.strip()}")
@@ -118,11 +118,11 @@ class SFTPToGCSTransfer:
                         except Exception as e:
                             logger.warning(f"getent test failed for {hostname}: {e}")
                             flush_logs()
-                        
+
                         try:
                             logger.debug("Testing with nslookup...")
                             flush_logs()
-                            result = subprocess.run(['nslookup', hostname], 
+                            result = subprocess.run(['nslookup', hostname],
                                                   capture_output=True, text=True, timeout=10)
                             if result.returncode == 0 and result.stdout:
                                 logger.debug(f"nslookup stdout for {hostname}: {result.stdout.strip()}")
@@ -132,7 +132,7 @@ class SFTPToGCSTransfer:
                         except Exception as e:
                             logger.warning(f"nslookup test failed for {hostname}: {e}")
                             flush_logs()
-                        
+
                         logger.debug(f"Attempting Python DNS resolution for {hostname}")
                         flush_logs()
                         try:
@@ -146,11 +146,11 @@ class SFTPToGCSTransfer:
                         except Exception as e:
                             logger.warning(f"getaddrinfo failed for {hostname}: {e}")
                             flush_logs()
-                        
+
                     except socket.gaierror as e:
                         logger.warning(f"DNS resolution attempt {attempt} for {hostname} failed with gaierror: {e}")
                         logger.warning(f"Error details: errno={getattr(e, 'errno', 'unknown')}")
-                        
+
                         if attempt < max_attempts:
                             logger.info(f"Waiting {delay} seconds before DNS retry for {hostname} (attempt {attempt+1}/{max_attempts})...")
                             flush_logs()
@@ -172,9 +172,9 @@ class SFTPToGCSTransfer:
                             logger.error(f"All DNS resolution attempts failed for {hostname}")
                             flush_logs()
                             raise
-            
+
             host_ip = resolve_hostname_with_retry(host)
-            
+
             try:
                 logger.info(f"Testing TCP connection to {host_ip}:22...")
                 flush_logs()
@@ -187,7 +187,7 @@ class SFTPToGCSTransfer:
                 logger.error(traceback.format_exc())
                 flush_logs()
                 raise
-            
+
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.key') as key_file:
                 key_file.write(private_key_data)
                 if not private_key_data.endswith('\n'):
@@ -203,7 +203,7 @@ class SFTPToGCSTransfer:
                     private_key = paramiko.RSAKey.from_private_key_file(key_file_path)
                     logger.debug("RSA key loaded successfully")
                     flush_logs()
-                    
+
                     logger.info(f"Attempting SSH connection to {host_ip} (user: {username})...")
                     flush_logs()
                     ssh.connect(
@@ -220,7 +220,7 @@ class SFTPToGCSTransfer:
                     else:
                         logger.info("SSH connection established successfully.")
                     flush_logs()
-                    
+
                     sftp = ssh.open_sftp()
                     # logger.info(f"SFTP session opened successfully. Server SFTP version: {sftp.protocol.version}")
                     logger.info("SFTP session opened successfully.") # Simplified logging
@@ -235,19 +235,19 @@ class SFTPToGCSTransfer:
                     logger.info(f"Deleting temporary key file: {key_file_path}")
                     flush_logs()
                     os.unlink(key_file_path)
-                    
+
         except Exception as e:
             logger.error(f"Failed to connect to SFTP: {e}")
             logger.error(traceback.format_exc())
             flush_logs()
             raise
-    
+
     def find_latest_file(self, sftp):
         logger.info("Finding latest .zip file on SFTP server...")
         flush_logs()
         latest_file = None
         latest_time = None
-        
+
         try:
             for entry in sftp.listdir_attr('.'): # Check current directory
                 logger.debug(f"SFTP entry: {entry.filename}, mtime: {entry.st_mtime}, longname: {entry.longname}")
@@ -258,12 +258,12 @@ class SFTPToGCSTransfer:
                         latest_time = entry.st_mtime
                         logger.debug(f"New latest candidate: {latest_file} (mtime: {latest_time})")
                         flush_logs()
-            
+
             if latest_file is None:
                 logger.error("No .zip files found on SFTP server in current directory.")
                 flush_logs()
                 raise FileNotFoundError("No .zip files found on SFTP server")
-                
+
             logger.info(f"Found latest file: {latest_file}")
             flush_logs()
             return latest_file
@@ -281,15 +281,15 @@ class SFTPToGCSTransfer:
             logger.info("Connecting to SFTP server for transfer...")
             flush_logs()
             sftp = self.get_sftp_client()
-            
+
             latest_file = self.find_latest_file(sftp)
-            
+
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             gcs_filename = f"bronze/property_owners/{timestamp}_{latest_file}"
-            
+
             bucket = self.storage_client.bucket(self.bucket_name)
             blob = bucket.blob(gcs_filename)
-            
+
             logger.info(f"Target GCS path: gs://{self.bucket_name}/{gcs_filename}")
             flush_logs()
 
@@ -377,7 +377,7 @@ def main_transfer_and_shutdown():
         #    delete_vm()
         # else:
         #    logger.error("Transfer failed, VM will NOT be deleted due to errors (or if deletion is disabled).")
-        
+
     logger.info("=== main_transfer_and_shutdown finished ===")
     flush_logs()
 
@@ -400,7 +400,7 @@ if __name__ == "__main__":
     #    logger.warning(f"ping failed with code {ping_result.returncode}") # Removed
     # subprocess.run(["echo", "--- getent test ---"], check=False) # Removed
     # subprocess.run(["getent", "hosts", "ftp2.datafordeler.dk"], check=False) # Removed
-    
+
     logger.info("Performing a quick Python socket test for DNS...")
     python_socket_test_command = '''import socket, time; \
 print(f"Pre-transfer DNS check at {time.time()}:"); \
@@ -412,7 +412,7 @@ try: \
 except Exception as e: \
     print(f"Pre-transfer DNS check FAILED: {e}")'''
     subprocess.run(["python3", "-c", python_socket_test_command], check=False)
-    
+
     # subprocess.run(["echo", "--- Python socket test ---"], check=False) # Combined above
     # Fixed f-string issue by constructing the command string carefully
     # python_socket_test_command = '''import socket, time; \
@@ -430,7 +430,7 @@ except Exception as e: \
 
     logger.info("Running SFTP to GCS transfer...")
     flush_logs()
-    
+
     main_transfer_and_shutdown()
     logger.info("Python script /opt/transfer_script.py finished.")
     flush_logs()
@@ -471,4 +471,4 @@ delete_vm
 # Final sync before potential shutdown (though shutdown is disabled)
 sync
 echo "Script finished."
-exit 0 
+exit 0

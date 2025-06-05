@@ -87,22 +87,16 @@ def run_bronze_stage(bronze_dir: Path) -> Optional[Path]:
                 success = storage.upload_file(excel_file_path)
 
                 # Upload the metadata file
-                metadata_path = os.path.join(
-                    os.path.dirname(excel_file_path), "metadata.json"
-                )
+                metadata_path = os.path.join(os.path.dirname(excel_file_path), "metadata.json")
                 if os.path.exists(metadata_path):
                     storage.upload_file(metadata_path)
 
                 if not success:
-                    logger.warning(
-                        "Failed to upload to GCS, but continuing with local file"
-                    )
+                    logger.warning("Failed to upload to GCS, but continuing with local file")
             else:
                 logger.warning("GCS_BUCKET not set, skipping GCS upload")
 
-        logger.info(
-            f"Bronze stage completed successfully. File saved to {excel_file_path}"
-        )
+        logger.info(f"Bronze stage completed successfully. File saved to {excel_file_path}")
         return Path(excel_file_path)
 
     except Exception as e:
@@ -165,14 +159,10 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Optional[Path]:
         silver_timestamp_dir = silver_dir / timestamp
         silver_timestamp_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
-            f"Processing bronze file {bronze_file} to silver directory {silver_timestamp_dir}"
-        )
+        logger.info(f"Processing bronze file {bronze_file} to silver directory {silver_timestamp_dir}")
 
         # Initialize and run the transformer
-        transformer = BMDTransformer(
-            input_file=bronze_file, output_dir=silver_timestamp_dir
-        )
+        transformer = BMDTransformer(input_file=bronze_file, output_dir=silver_timestamp_dir)
         parquet_file = transformer.transform()
 
         if not parquet_file or not parquet_file.exists():
@@ -189,9 +179,7 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Optional[Path]:
                 success = upload_to_gcs(parquet_file, bucket_name)
 
                 if not success:
-                    logger.warning(
-                        "Failed to upload silver data to GCS, but continuing with local file"
-                    )
+                    logger.warning("Failed to upload silver data to GCS, but continuing with local file")
             else:
                 logger.warning("GCS_BUCKET not set, skipping GCS upload")
 
@@ -261,9 +249,7 @@ def main():
         sys.exit(0)
     elif args.stage == "all" and bronze_file and not silver_file:
         # If only bronze succeeded but silver was attempted, return error
-        logger.error(
-            "Pipeline partially completed - bronze succeeded but silver failed"
-        )
+        logger.error("Pipeline partially completed - bronze succeeded but silver failed")
         sys.exit(1)
     else:
         sys.exit(1)
