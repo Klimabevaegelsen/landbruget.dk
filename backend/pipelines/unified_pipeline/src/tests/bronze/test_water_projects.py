@@ -7,7 +7,6 @@ import aiohttp
 import pandas as pd
 import pytest
 from tenacity import stop_after_attempt
-
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -647,9 +646,9 @@ async def test_fetch_wfs_data_with_realistic_xml(
     """Test the _fetch_wfs_data method with a more realistic XML response."""
     # Create a more realistic XML response
     realistic_xml = """<?xml version="1.0" encoding="UTF-8"?>
-    <wfs:FeatureCollection 
-        xmlns:xs="http://www.w3.org/2001/XMLSchema" 
-        xmlns:wfs="http://www.opengis.net/wfs/2.0" 
+    <wfs:FeatureCollection
+        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:wfs="http://www.opengis.net/wfs/2.0"
         xmlns:gml="http://www.opengis.net/gml/3.2"
         xmlns:N2000_projekter="https://geodata.fvm.dk/geoserver/N2000_projekter"
         numberMatched="5" numberReturned="2">
@@ -852,9 +851,9 @@ async def test_handling_unexpected_data_structures(
 
     # Test with malformed but technically valid XML
     malformed_xml = """<?xml version="1.0" encoding="UTF-8"?>
-    <wfs:FeatureCollection 
-        xmlns:wfs="http://www.opengis.net/wfs/2.0" 
-        numberMatched="invalid" 
+    <wfs:FeatureCollection
+        xmlns:wfs="http://www.opengis.net/wfs/2.0"
+        numberMatched="invalid"
         numberReturned="not-a-number"
         xmlns:N2000_projekter="https://geodata.fvm.dk/geoserver/N2000_projekter">
         <wfs:member>

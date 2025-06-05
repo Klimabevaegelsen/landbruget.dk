@@ -1,73 +1,63 @@
-import pandas as pd
-from pathlib import Path
-from ....base import Source
 import os
 import re
+from pathlib import Path
+
+import pandas as pd
+
+from ....base import Source
+
 
 class Pesticides(Source):
     """Danish Pesticide Data parser"""
 
     # Using only English column names
     EXPECTED_COLUMNS = [
-        'CompanyName',
-        'CompanyRegistrationNumber',
-        'StreetName',
-        'StreetBuildingIdentifier',
-        'FloorIdentifier',
-        'PostCodeIdentifier',
-        'City',
-        'AcreageSize',
-        'AcreageUnit',
-        'Name',
-        'Code',
-        'PesticideName',
-        'PesticideRegistrationNumber',
-        'DosageQuantity',
-        'DosageUnit',
-        'NoPesticides'
+        "CompanyName",
+        "CompanyRegistrationNumber",
+        "StreetName",
+        "StreetBuildingIdentifier",
+        "FloorIdentifier",
+        "PostCodeIdentifier",
+        "City",
+        "AcreageSize",
+        "AcreageUnit",
+        "Name",
+        "Code",
+        "PesticideName",
+        "PesticideRegistrationNumber",
+        "DosageQuantity",
+        "DosageUnit",
+        "NoPesticides",
     ]
 
     # Unit mappings based on README
-    ACREAGE_UNITS = {
-        1: 'm2',
-        2: 'hektar'
-    }
+    ACREAGE_UNITS = {1: "m2", 2: "hektar"}
 
-    DOSAGE_UNITS = {
-        1: 'Gram',
-        2: 'Kg',
-        3: 'Mililiter',
-        4: 'Liter',
-        5: 'Tablets'
-    }
+    DOSAGE_UNITS = {1: "Gram", 2: "Kg", 3: "Mililiter", 4: "Liter", 5: "Tablets"}
 
     # Rename columns to match other sources
-    COLUMN_RENAMING = {
-        'CompanyRegistrationNumber': 'cvr_number',
-        'Name': 'crop_type',
-        'Code': 'crop_code'
-    }
+    COLUMN_RENAMING = {"CompanyRegistrationNumber": "cvr_number", "Name": "crop_type", "Code": "crop_code"}
 
     SNAKE_NAMES = {
-        'CompanyName': 'company_name',
-        'StreetName': 'street_name',
-        'StreetBuildingIdentifier': 'street_building_identifier',
-        'FloorIdentifier': 'floor_identifier',
-        'PostCodeIdentifier': 'post_code_identifier',
-        'City': 'city',
-        'AcreageSize': 'acreage_size',
-        'AcreageUnit': 'acreage_unit',
-        'PesticideName': 'pesticide_name',
-        'PesticideRegistrationNumber': 'pesticide_registration_number',
-        'DosageQuantity': 'dosage_quantity',
-        'DosageUnit': 'dosage_unit',
-        'NoPesticides': 'no_pesticides'
+        "CompanyName": "company_name",
+        "StreetName": "street_name",
+        "StreetBuildingIdentifier": "street_building_identifier",
+        "FloorIdentifier": "floor_identifier",
+        "PostCodeIdentifier": "post_code_identifier",
+        "City": "city",
+        "AcreageSize": "acreage_size",
+        "AcreageUnit": "acreage_unit",
+        "PesticideName": "pesticide_name",
+        "PesticideRegistrationNumber": "pesticide_registration_number",
+        "DosageQuantity": "dosage_quantity",
+        "DosageUnit": "dosage_unit",
+        "NoPesticides": "no_pesticides",
     }
 
     def _extract_plan_year(self, filename: str) -> str:
         """Extract plan-year from the filename"""
         # Assuming the filename contains the plan-year in the format 'YYYY_YYYY'
-        match = re.search(r'(\d{4})_(\d{4})', filename)
+        match = re.search(r"(\d{4})_(\d{4})", filename)
         if match:
             return f"{match.group(1)}-{match.group(2)}"
         else:
@@ -78,11 +68,11 @@ class Pesticides(Source):
         current_dir = Path(__file__).parent
 
         dfs = []
-        for file in current_dir.glob('*.xlsx'):
+        for file in current_dir.glob("*.xlsx"):
             try:
-                df = pd.read_excel(file, sheet_name=0, engine='openpyxl')
-                df['source_file'] = file.name
-                df['plan_year'] = self._extract_plan_year(file.name)
+                df = pd.read_excel(file, sheet_name=0, engine="openpyxl")
+                df["source_file"] = file.name
+                df["plan_year"] = self._extract_plan_year(file.name)
                 dfs.append(df)
             except Exception as e:
                 print(f"Error reading {file}: {e}")
@@ -108,9 +98,9 @@ class Pesticides(Source):
         df = self._rename_columns(df)
 
         # Map unit codes to readable values
-        df['AcreageUnit'] = df['AcreageUnit'].map(self.ACREAGE_UNITS)
-        df['DosageUnit'] = df['DosageUnit'].map(self.DOSAGE_UNITS)
-        df['NoPesticides'] = df['NoPesticides'].map({'SAND': True, 'FALSK': False})
+        df["AcreageUnit"] = df["AcreageUnit"].map(self.ACREAGE_UNITS)
+        df["DosageUnit"] = df["DosageUnit"].map(self.DOSAGE_UNITS)
+        df["NoPesticides"] = df["NoPesticides"].map({"SAND": True, "FALSK": False})
 
         return df
 
@@ -123,10 +113,10 @@ class Pesticides(Source):
 
         # Clean data (map units, standardize values)
         df = self._clean_and_standardize(df)
-        df = df.fillna('')  # Replace NaN with empty string
+        df = df.fillna("")  # Replace NaN with empty string
 
         # Optional: Print debug info in test environment
-        if 'test_parser' in os.environ.get('ENVIRONMENT', ''):
+        if "test_parser" in os.environ.get("ENVIRONMENT", ""):
             print(f"\nFound {len(df)} pesticide entries")
             print("\nColumns:", df.columns.tolist())
             print("\nFirst few entries:")
@@ -143,7 +133,7 @@ class Pesticides(Source):
         df.to_parquet(temp_file)
 
         # Upload to storage
-        blob = self.bucket.blob(f'raw/pesticides/current.parquet')
+        blob = self.bucket.blob("raw/pesticides/current.parquet")
         blob.upload_from_filename(temp_file)
 
         # Cleanup

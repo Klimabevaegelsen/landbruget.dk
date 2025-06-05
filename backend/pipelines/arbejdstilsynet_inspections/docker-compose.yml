@@ -13,6 +13,3 @@ services:
       - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}
     working_dir: /app
     command: bash -c "/app/run.sh"
-
-
-

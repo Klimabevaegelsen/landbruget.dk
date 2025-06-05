@@ -4,37 +4,39 @@ Handles API communication and data retrieval from the Danish Meteorological Inst
 Saves raw data without any transformations.
 """
 
+import json
 import logging
 import os
-import json
 from datetime import datetime
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict
+
 import aiohttp
 from fastapi import HTTPException
-from pathlib import Path
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
 class DMIConfig:
     """Configuration for DMI API access"""
+
     def __init__(self):
-        self.api_key = os.getenv('DMI_GOV_CLOUD_API_KEY')
+        self.api_key = os.getenv("DMI_GOV_CLOUD_API_KEY")
         if not self.api_key:
             raise ValueError("DMI_GOV_CLOUD_API_KEY environment variable is required")
 
         self.base_url = "https://dmigw.govcloud.dk/v2/climateData"
-        self.max_retries = int(os.getenv('MAX_RETRIES', 3))
-        self.retry_delay = int(os.getenv('RETRY_DELAY', 5))
+        self.max_retries = int(os.getenv("MAX_RETRIES", 3))
+        self.retry_delay = int(os.getenv("RETRY_DELAY", 5))
+
 
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
+
     def __init__(self, config: DMIConfig):
         self.config = config
-        self.headers = {
-            "Accept": "application/geo+json",
-            "X-Gravitee-Api-Key": self.config.api_key
-        }
+        self.headers = {"Accept": "application/geo+json", "X-Gravitee-Api-Key": self.config.api_key}
 
     async def _make_request(self, endpoint: str, params: Dict[str, Any] = None) -> Dict:
         """Make an authenticated request to the DMI API with error handling"""
@@ -66,7 +68,7 @@ class DMIApiClient:
 
             # Save as JSON file
             output_path = output_dir / f"{filename}.json"
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             logger.info(f"Successfully saved raw data to {output_path}")
@@ -75,12 +77,14 @@ class DMIApiClient:
             logger.error(f"Error saving raw data to {output_dir}: {str(e)}")
             return False
 
-    async def fetch_grid_data(self, parameter_id: str, start_time: datetime, end_time: datetime, output_dir: Path = None) -> Dict:
+    async def fetch_grid_data(
+        self, parameter_id: str, start_time: datetime, end_time: datetime, output_dir: Path = None
+    ) -> Dict:
         """Fetch raw climate grid data and return as JSON"""
         params = {
             "parameterId": parameter_id,
             "limit": 1000,
-            "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
         }
 
         try:

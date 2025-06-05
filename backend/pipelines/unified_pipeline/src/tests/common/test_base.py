@@ -14,7 +14,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import Point
-
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 

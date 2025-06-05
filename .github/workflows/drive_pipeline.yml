@@ -1,0 +1,125 @@
+name: Google Drive Data Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      subfolders:
+        description: 'Specific subfolders to process (comma-separated)'
+        type: string
+        default: ''
+      file_types:
+        description: 'Specific file types to process (comma-separated, e.g., pdf,xlsx)'
+        type: string
+        default: ''
+      bronze_only:
+        description: 'Run only Bronze layer processing'
+        type: boolean
+        default: false
+      silver_only:
+        description: 'Run only Silver layer processing'
+        type: boolean
+        default: false
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - INFO
+          - DEBUG
+          - WARNING
+          - ERROR
+        default: 'INFO'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        # Install system dependencies required by the pipeline
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr poppler-utils
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+
+    - name: Run Google Drive Pipeline
+      working-directory: backend/pipelines/drive_data_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Build command based on inputs
+        CMD="python main.py"
+        
+        if [[ "${{ inputs.bronze_only }}" == "true" ]]; then
+          CMD="$CMD --bronze-only"
+        elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
+          CMD="$CMD --silver-only"
+        fi
+        
+        if [[ -n "${{ inputs.subfolders }}" ]]; then
+          CMD="$CMD --subfolders '${{ inputs.subfolders }}'"
+        fi
+        
+        if [[ -n "${{ inputs.file_types }}" ]]; then
+          CMD="$CMD --file-types '${{ inputs.file_types }}'"
+        fi
+        
+        if [[ -n "${{ inputs.log_level }}" ]]; then
+          CMD="$CMD --log-level ${{ inputs.log_level }}"
+        fi
+        
+        CMD="$CMD --verbose"
+        
+        echo "Running command: $CMD"
+        eval $CMD
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "Google Drive Pipeline failed. Please check the logs above for details."
+        exit 1 

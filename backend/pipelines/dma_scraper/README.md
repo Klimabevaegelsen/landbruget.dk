@@ -61,4 +61,3 @@ The script will:
 ## Scheduling
 
 This pipeline is scheduled monthly via GitHub Actions (see `.github/workflows/dma_pipeline.yml`).
-
