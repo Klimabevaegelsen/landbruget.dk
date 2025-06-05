@@ -1,10 +1,11 @@
-import os
 import asyncio
 import logging
+import os
 import signal
 import sys
-from src.sources.parsers import get_source_handler
+
 from src.config import SOURCES
+from src.sources.parsers import get_source_handler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,30 +13,33 @@ logger = logging.getLogger(__name__)
 # Global flag for graceful shutdown
 shutdown = asyncio.Event()
 
+
 def handle_shutdown(signum, frame):
     """Handle shutdown signals gracefully"""
     sig_name = signal.Signals(signum).name
     logger.info(f"Received {sig_name}. Starting graceful shutdown...")
     shutdown.set()
 
+
 # Register signal handlers
 signal.signal(signal.SIGTERM, handle_shutdown)
 signal.signal(signal.SIGINT, handle_shutdown)
 
+
 async def run_sync() -> bool:
     """Run the sync process based on environment variable"""
-    sync_type = os.getenv('SYNC_TYPE', 'all')
+    sync_type = os.getenv("SYNC_TYPE", "all")
     logger.info(f"Starting sync process for: {sync_type}")
-    
+
     try:
-        if sync_type == 'all':
+        if sync_type == "all":
             success = True
             for source_id, config in SOURCES.items():
                 if shutdown.is_set():
                     logger.info("Shutdown requested, stopping sync process")
                     return False
-                    
-                if config['enabled']:
+
+                if config["enabled"]:
                     source = get_source_handler(source_id, config)
                     if source:
                         try:
@@ -53,27 +57,28 @@ async def run_sync() -> bool:
             if sync_type not in SOURCES:
                 logger.error(f"Unknown sync type: {sync_type}")
                 return False
-                
+
             config = SOURCES[sync_type]
-            if not config['enabled']:
+            if not config["enabled"]:
                 logger.error(f"Sync type {sync_type} is disabled")
                 return False
-                
+
             source = get_source_handler(sync_type, config)
             if not source:
                 logger.error(f"No handler for sync type: {sync_type}")
                 return False
-                
+
             total_synced = await source.sync()
             if total_synced is not None:
                 logger.info(f"{sync_type} sync completed. Total records: {total_synced:,}")
                 return True
             logger.error(f"{sync_type} sync failed")
             return False
-        
+
     except Exception as e:
         logger.error(f"Error during sync: {str(e)}", exc_info=True)
         return False
+
 
 if __name__ == "__main__":
     try:

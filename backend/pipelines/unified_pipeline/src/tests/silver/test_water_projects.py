@@ -11,7 +11,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import MultiPolygon, Polygon
-
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -56,7 +55,7 @@ def silver_source(
 def sample_xml_root() -> ET.Element:
     """Return a sample XML root for testing."""
     xml_string = """
-    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" 
+    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
                          xmlns:gml="http://www.opengis.net/gml/3.2"
                          xmlns:test="http://test.namespace">
         <wfs:member>
@@ -92,7 +91,7 @@ def sample_xml_root() -> ET.Element:
 def sample_xml_string() -> str:
     """Return a sample XML string for testing."""
     return """
-    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" 
+    <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
                          xmlns:gml="http://www.opengis.net/gml/3.2"
                          xmlns:test="http://test.namespace">
         <wfs:member>
@@ -127,7 +126,7 @@ def sample_xml_string() -> str:
 def sample_feature_element() -> ET.Element:
     """Return a sample feature element for testing."""
     xml_string = """
-    <test:Feature xmlns:test="http://test.namespace" 
+    <test:Feature xmlns:test="http://test.namespace"
                 xmlns:gml="http://www.opengis.net/gml/3.2">
         <test:the_geom>
             <gml:MultiSurface>
@@ -158,7 +157,7 @@ def sample_feature_element() -> ET.Element:
 def sample_geom_element() -> ET.Element:
     """Return a sample geometry element for testing."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -213,7 +212,7 @@ def sample_bronze_df() -> pd.DataFrame:
             "layer": ["test_layer1", "test_layer2"],
             "payload": [
                 """
-            <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" 
+            <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
                                 xmlns:gml="http://www.opengis.net/gml/3.2"
                                 xmlns:test="http://test.namespace">
                 <wfs:member>
@@ -357,7 +356,7 @@ def test_parse_geometry_no_multisurface(silver_source: WaterProjectsSilver) -> N
 def test_parse_geometry_invalid_coordinates(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with invalid coordinates."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -382,7 +381,7 @@ def test_parse_geometry_invalid_coordinates(silver_source: WaterProjectsSilver) 
 def test_parse_geometry_insufficient_coordinates(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with insufficient coordinates."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -407,7 +406,7 @@ def test_parse_geometry_insufficient_coordinates(silver_source: WaterProjectsSil
 def test_parse_geometry_multiple_polygons(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with multiple polygons."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -493,7 +492,7 @@ def test_parse_feature_invalid_geometry(silver_source: WaterProjectsSilver) -> N
 def test_parse_feature_conversion_errors(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_feature with values that can't be converted."""
     xml_string = """
-    <test:Feature xmlns:test="http://test.namespace" 
+    <test:Feature xmlns:test="http://test.namespace"
                 xmlns:gml="http://www.opengis.net/gml/3.2">
         <test:the_geom>
             <gml:MultiSurface>
@@ -880,7 +879,7 @@ async def test_run_processing_failure(silver_source: WaterProjectsSilver) -> Non
 def test_parse_geometry_missing_poslist(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with missing posList element."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -903,7 +902,7 @@ def test_parse_geometry_missing_poslist(silver_source: WaterProjectsSilver) -> N
 def test_parse_geometry_empty_poslist(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with empty posList text."""
     xml_string = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                  xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>
@@ -1114,7 +1113,7 @@ def test_parse_geometry_no_polygon_correct(silver_source: WaterProjectsSilver) -
     # Create a MultiSurface element with a surfaceMember that doesn't have a Polygon
     # and another surfaceMember with a valid Polygon
     geom_xml = """
-    <test:the_geom xmlns:test="http://test.namespace" 
+    <test:the_geom xmlns:test="http://test.namespace"
                 xmlns:gml="http://www.opengis.net/gml/3.2">
         <gml:MultiSurface>
             <gml:surfaceMember>

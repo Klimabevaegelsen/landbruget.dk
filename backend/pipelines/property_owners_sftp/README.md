@@ -29,7 +29,7 @@ The pipeline applies comprehensive privacy protections:
 
 - **CPR Numbers → UUIDs**: Consistent mapping preserving relationships
 - **Remove Personal Addresses**: All residential address data removed
-- **Remove Birth Dates**: Potential CPR reconstruction data removed  
+- **Remove Birth Dates**: Potential CPR reconstruction data removed
 - **Remove Gender Field**: Additional demographic data removed
 - **Add Abroad Flag**: Derived from foreign address data (preserves residency patterns)
 - **Keep Names**: Business requirement (names preserved)
@@ -103,7 +103,7 @@ The pipeline includes comprehensive error handling:
 gs://landbrugsdata-raw-data/
 ├── bronze/property_owners/
 │   └── YYYYMMDD_HHMMSS_original.zip
-└── silver/property_owners/  
+└── silver/property_owners/
     └── YYYYMMDD_HHMMSS_property_owners_processed.parquet
 ```
 
@@ -121,7 +121,7 @@ gs://landbrugsdata-raw-data/
 1. **Schema Mismatch**: Different property types have varying fields
    - **Solution**: Automatic schema normalization with null padding
 
-2. **Memory Exhaustion**: Large features exceed memory limits  
+2. **Memory Exhaustion**: Large features exceed memory limits
    - **Solution**: 500K record batching with immediate cleanup
 
 3. **SFTP Timeout**: Network connectivity issues
@@ -158,4 +158,4 @@ This pipeline follows organizational standards where applicable:
 
 ## Contact
 
-For questions about this pipeline, contact the data engineering team. 
+For questions about this pipeline, contact the data engineering team.

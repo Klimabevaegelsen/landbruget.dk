@@ -7,7 +7,7 @@ DECLARE
     test_company_id uuid := '180d0a9f-7e56-499c-8cd7-7832aeae0e2d'; -- Existing "Komplet Testfarm ApS" company ID
 BEGIN
     -- Add a second production site for the test company
-    INSERT INTO public.production_sites (chr, company_id, site_name, address, postal_code, city, municipality, location_geom, main_species_id, capacity) 
+    INSERT INTO public.production_sites (chr, company_id, site_name, address, postal_code, city, municipality, location_geom, main_species_id, capacity)
     VALUES
     ('CHR00402', test_company_id, 'Kolding Kvægfarm', 'Skovvej 25', '6000', 'Kolding', 'Kolding', ST_GeomFromText('POINT(9.475 55.495)', 4326), 102, 300)
     ON CONFLICT (chr) DO NOTHING;
@@ -25,8 +25,8 @@ BEGIN
         ('CHR00401', 2022, 102, 'Kvæg', 'Malkekøer', 110),
         ('CHR00401', 2021, 102, 'Kvæg', 'Kalve', 70),
         ('CHR00401', 2021, 102, 'Kvæg', 'Malkekøer', 100),
-        
-        -- Fjerkræ for CHR00401  
+
+        -- Fjerkræ for CHR00401
         ('CHR00401', 2023, 103, 'Fjerkræ', 'Slagtekyllinger', 2500),
         ('CHR00401', 2023, 103, 'Fjerkræ', 'Høner', 800),
         ('CHR00401', 2022, 103, 'Fjerkræ', 'Slagtekyllinger', 2200),
@@ -50,7 +50,7 @@ BEGIN
         ('CHR00402', 2022, 102, 'Kvæg', 'Tyre', 4),
         ('CHR00402', 2021, 102, 'Kvæg', 'Kalve', 130),
         ('CHR00402', 2021, 102, 'Kvæg', 'Malkekøer', 180),
-        
+
         -- Svin for CHR00402 (secondary species)
         ('CHR00402', 2023, 101, 'Svin', 'Smågrise', 300),
         ('CHR00402', 2023, 101, 'Svin', 'Slagtesvin', 150),
@@ -87,4 +87,4 @@ BEGIN
     RAISE NOTICE 'CHR00401 (Vejle Svinefarm) now has: Pig, Kvæg, Fjerkræ';
     RAISE NOTICE 'CHR00402 (Kolding Kvægfarm) now has: Kvæg, Svin';
     RAISE NOTICE 'This creates 2 level 1 items (sites) with 2+ species each for proper testing.';
-END $$; 
+END $$;
