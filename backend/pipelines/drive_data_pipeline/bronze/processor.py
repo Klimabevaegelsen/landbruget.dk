@@ -54,14 +54,16 @@ class BronzeProcessor:
 
     def process_drive_folder(
         self,
-        folder_id: str,
+        folder_id: str = None,
+        drive_folder: DriveFolder = None,
         specific_subfolders: list[str] | None = None,
         supported_file_types: set[str] | None = None,
     ) -> int:
         """Process files from a Google Drive folder.
 
         Args:
-            folder_id: ID of the Google Drive folder to process
+            folder_id: ID of the Google Drive folder to process (deprecated, use drive_folder)
+            drive_folder: Already fetched DriveFolder object (preferred)
             specific_subfolders: List of specific subfolder names to process (optional)
             supported_file_types: Set of supported file extensions (optional)
 
@@ -72,24 +74,36 @@ class BronzeProcessor:
             Exception: If the processing fails
         """
         try:
-            set_context(folder_id=folder_id, run_timestamp=self.run_timestamp)
-            logger.info(f"Processing Google Drive folder: {folder_id}")
-
-            # Get folder contents
-            drive_folder = self.drive_fetcher.list_folder_contents(
-                folder_id=folder_id, recursive=True
-            )
+            # Support both old and new calling patterns for backward compatibility
+            if drive_folder is None and folder_id is not None:
+                logger.warning(
+                    "Using deprecated folder_id parameter. Consider passing drive_folder instead."
+                )
+                set_context(folder_id=folder_id, run_timestamp=self.run_timestamp)
+                logger.info(f"Processing Google Drive folder: {folder_id}")
+                # Get folder contents (this is the old inefficient way)
+                drive_folder = self.drive_fetcher.list_folder_contents(
+                    folder_id=folder_id, recursive=True
+                )
+            elif drive_folder is not None:
+                set_context(folder_id=drive_folder.id, run_timestamp=self.run_timestamp)
+                logger.info(f"Processing Google Drive folder: {drive_folder.id}")
+            else:
+                raise ValueError("Either folder_id or drive_folder must be provided")
 
             # Process the folder
             processed_count = self._process_folder(
                 drive_folder, specific_subfolders, supported_file_types
             )
 
-            logger.info(f"Successfully processed {processed_count} files from folder {folder_id}")
+            logger.info(
+                f"Successfully processed {processed_count} files from folder {drive_folder.id}"
+            )
             return processed_count
 
         except Exception as e:
-            logger.error(f"Failed to process folder {folder_id}: {str(e)}")
+            folder_ref = drive_folder.id if drive_folder else folder_id
+            logger.error(f"Failed to process folder {folder_ref}: {str(e)}")
             raise
 
     def _process_folder(
@@ -163,6 +177,7 @@ class BronzeProcessor:
 
             # Download the file
             file_content, metadata = self.drive_fetcher.download_file(file.id)
+            logger.debug(f"Downloaded {len(file_content)} bytes for file {file.name}")
 
             # Save the file
             target_path = self.bronze_storage.save_file(
@@ -171,10 +186,23 @@ class BronzeProcessor:
                 source_path=folder_path,
                 filename=file.name,
             )
+            logger.debug(f"Saved file to path: {target_path}")
 
-            # Generate and save metadata
+            # Verify file was saved correctly
+            if not target_path.exists():
+                logger.error(f"File was not saved correctly: {target_path} does not exist")
+                return False
+
+            saved_size = target_path.stat().st_size
+            if saved_size != len(file_content):
+                logger.warning(
+                    f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
+                )
+
+            # Generate and save metadata - FIXED: Pass content for checksum calculation
             file_metadata = self.metadata_manager.generate_metadata(
                 file_path=target_path,
+                file_content=file_content,  # Add content for more reliable checksum
                 file_id=file.id,
                 original_filename=file.name,
                 original_subfolder=folder_name,
@@ -183,6 +211,7 @@ class BronzeProcessor:
                 modified_time=file.modified_time,
                 drive_path=file.path,
             )
+            logger.debug(f"Generated metadata with checksum: {file_metadata.checksum[:8]}...")
 
             self.bronze_storage.save_metadata(
                 metadata=file_metadata.model_dump(),

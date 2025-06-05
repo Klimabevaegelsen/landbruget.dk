@@ -2,6 +2,7 @@
 
 from .error_handling import retry_with_exponential_backoff
 from .helpers import (
+    calculate_content_checksum,
     calculate_file_checksum,
     generate_timestamp,
     get_mime_type,
@@ -17,6 +18,7 @@ __all__ = [
     "get_storage_manager",
     "generate_timestamp",
     "calculate_file_checksum",
+    "calculate_content_checksum",
     "get_mime_type",
     "is_supported_file_type",
-] 
+]

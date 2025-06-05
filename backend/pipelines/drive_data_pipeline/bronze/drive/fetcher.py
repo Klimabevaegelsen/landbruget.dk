@@ -1,6 +1,7 @@
 """Google Drive file fetcher for Bronze layer."""
 
 import io
+import ssl
 from typing import Any
 
 from googleapiclient.discovery import Resource
@@ -177,10 +178,10 @@ class GoogleDriveFetcher:
         return mime_type in SUPPORTED_MIME_TYPES
 
     @retry_with_exponential_backoff(
-        max_attempts=3,
-        retry_exceptions=FileDownloadError,
+        max_attempts=5,
+        retry_exceptions=(FileDownloadError, ssl.SSLError, TimeoutError, ConnectionError),
         min_wait_seconds=2,
-        max_wait_seconds=30,
+        max_wait_seconds=120,
     )
     def download_file(self, file_id: str) -> tuple[bytes, dict[str, Any]]:
         """Download a file from Google Drive.
@@ -206,26 +207,47 @@ class GoogleDriveFetcher:
 
             # Use a BytesIO object to store the downloaded file
             file_content = io.BytesIO()
-            downloader = MediaIoBaseDownload(file_content, request, chunksize=1024 * 1024)
+            downloader = MediaIoBaseDownload(file_content, request, chunksize=2 * 1024 * 1024)
 
             # Download the file in chunks
             done = False
             progress = 0
+            chunk_count = 0
             while not done:
-                status, done = downloader.next_chunk()
-                if status:
-                    new_progress = int(status.progress() * 100)
-                    if new_progress - progress >= 20:  # Log every 20% progress
-                        progress = new_progress
-                        logger.debug(f"Download progress: {progress}%")
+                try:
+                    status, done = downloader.next_chunk()
+                    chunk_count += 1
+
+                    if status:
+                        new_progress = int(status.progress() * 100)
+                        if (
+                            new_progress - progress >= 10
+                        ):  # Log every 10% progress for better feedback
+                            progress = new_progress
+                            logger.debug(f"Download progress: {progress}% (chunk {chunk_count})")
+
+                except Exception as chunk_error:
+                    # Log chunk-specific errors but let retry mechanism handle them
+                    logger.warning(
+                        f"Error downloading chunk {chunk_count} for file {file_id}: {str(chunk_error)}"
+                    )
+                    raise
 
             # Get the file content
             file_content.seek(0)
             content = file_content.read()
 
-            logger.info(f"Downloaded file {file_id} ({len(content)} bytes)")
+            logger.info(f"Downloaded file {file_id} ({len(content)} bytes) in {chunk_count} chunks")
             return content, metadata
 
+        except ssl.SSLError as e:
+            error_msg = f"SSL error downloading file {file_id}: {str(e)}"
+            logger.error(error_msg)
+            raise FileDownloadError(error_msg) from e
+        except (TimeoutError, ConnectionError) as e:
+            error_msg = f"Connection error downloading file {file_id}: {str(e)}"
+            logger.error(error_msg)
+            raise FileDownloadError(error_msg) from e
         except Exception as e:
             error_msg = f"Failed to download file {file_id}: {str(e)}"
             logger.error(error_msg)
