@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import traceback
+from datetime import datetime
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -23,8 +24,11 @@ def fetch_text(soup, selector):
 
 
 class DMACompanyDetailScraper:
-    def __init__(self, data):
+    
+    def __init__(self, data, start_date = None, end_date = None):
         self.data = data
+        self.start_date = start_date
+        self.end_date = end_date
 
     async def scrape_details(self, session, url):
         try:
@@ -48,7 +52,16 @@ class DMACompanyDetailScraper:
                         value = dd.text.strip()
                         data[key] = value
 
-                return data
+            # Filter based on Tilsynsdato if dates are provided
+            if self.start_date and self.end_date and "Tilsynsdato" in data:
+                try:
+                    tilsynsdato = datetime.strptime(data["Tilsynsdato"], "%d-%m-%Y")
+                    if not (self.start_date <= tilsynsdato <= self.end_date):
+                        return {}
+                except ValueError:
+                    logger.warning(f"Could not parse Tilsynsdato: {data['Tilsynsdato']}")
+
+            return data
         except Exception as e:
             logger.error(f"Error scraping {url}: {str(e)}")
             logger.error(traceback.format_exc())

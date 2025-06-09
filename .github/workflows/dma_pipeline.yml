@@ -15,6 +15,14 @@ on:
         options:
           - development
           - production
+      start_date:
+        description: 'Start date for filtering Tilsynsdato (YYYY-MM-DD)'
+        required: false
+        type: string
+      end_date:
+        description: 'End date for filtering Tilsynsdato (YYYY-MM-DD)'
+        required: false
+        type: string
 
 jobs:
   run-dma-scraper:
@@ -77,8 +85,12 @@ jobs:
             echo "GCS_BUCKET=${{ secrets.GCS_BUCKET }}" >> .env
           fi
 
-          # Run the pipeline
-          python main.py
+          # Run the pipeline with optional date parameters
+          if [ -n "${{ github.event.inputs.start_date }}" ] && [ -n "${{ github.event.inputs.end_date }}" ]; then
+            python main.py --start-date "${{ github.event.inputs.start_date }}" --end-date "${{ github.event.inputs.end_date }}"
+          else
+            python main.py
+          fi
 
       - name: Upload artifacts (Development only)
         if: env.ENVIRONMENT == 'development'
