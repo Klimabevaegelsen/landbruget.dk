@@ -63,6 +63,16 @@ def parse_args():
         type=str,
         help="Timestamp directory for silver stage",
     )
+    parser.add_argument(
+        "--start-date",
+        type=str,
+        help="Start date for filtering Tilsynsdato (format: YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        help="End date for filtering Tilsynsdato (format: YYYY-MM-DD)",
+    )
     return parser.parse_args()
 
 
@@ -88,7 +98,16 @@ def bronze(timestamp: str):
         time.sleep(1)  # Add a delay to avoid overwhelming the server
         all_page_results.extend(page_results)
         page += 1
-    detail_scraper = DMACompanyDetailScraper(all_page_results)
+
+    # Convert date strings to datetime objects if provided
+    start_date = None
+    end_date = None
+    if args.start_date:
+        start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
+    if args.end_date:
+        end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
+
+    detail_scraper = DMACompanyDetailScraper(all_page_results, start_date=start_date, end_date=end_date)
     loop = asyncio.get_event_loop()
     detailed_data = loop.run_until_complete(detail_scraper.process_miljoeaktoer_for_company_file_path())
     # Merge base and detail dicts by 'miljoeaktoerUrl'
