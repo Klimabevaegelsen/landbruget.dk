@@ -1,3 +1,8 @@
+# Makefile for Unified Pipeline Operations
+# 
+# This makefile provides convenient commands for running the property-cadastral merge pipeline
+# and other unified pipeline operations.
+
 .ONE_SHELL:
 .DEFAULT_GOAL := help
 
@@ -17,7 +22,13 @@ DOCKERFILE = Dockerfile
 ##@ Commands
 .PHONY: help
 help:  ## Display this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <command> \033[36m\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@echo "Available targets:"
+	@echo "  install                    - Install dependencies"
+	@echo "  property-cadastral-merge   - Run property-cadastral merge pipeline"
+	@echo "  test-merge                 - Run merge pipeline tests"
+	@echo "  dry-run                    - Run merge pipeline in dry-run mode"
+	@echo "  clean                      - Clean temporary files and logs"
+	@echo "  help                       - Show this help"
 
 .PHONY: install
 install: ## Create the virtual environment and install packages
@@ -147,3 +158,101 @@ docker-compose-up:  ## Run docker compose up
 docker-compose-down:  ## Run docker compose down
 	@echo "🚀 Running docker-compose down";
 	@docker compose -f $(DOCKER_COMPOSE_FILE) down
+
+# Run property-cadastral merge pipeline
+property-cadastral-merge:
+	@echo "Running Property-Cadastral merge pipeline..."
+	cd src && python run_property_cadastral_merge.py
+
+# Run merge pipeline with custom configuration
+property-cadastral-merge-config:
+	@echo "Running Property-Cadastral merge pipeline with configuration..."
+	cd src && python run_property_cadastral_merge.py --config-file config/property_cadastral_merge_config.json
+
+# Run tests
+test-merge:
+	@echo "Running Property-Cadastral merge tests..."
+	cd src && python test_property_cadastral_merge.py
+
+# Run dry run (validation only)
+dry-run:
+	@echo "Running Property-Cadastral merge in dry-run mode..."
+	cd src && python run_property_cadastral_merge.py --dry-run
+
+# Advanced merge with custom parameters
+property-cadastral-merge-advanced:
+	@echo "Running advanced Property-Cadastral merge..."
+	cd src && python run_property_cadastral_merge.py \
+		--spatial-method intersects \
+		--buffer-distance 50.0 \
+		--min-overlap 0.2 \
+		--output-dataset property_cadastral_merged_advanced
+
+# Clean temporary files and logs
+clean:
+	@echo "Cleaning temporary files..."
+	rm -f src/*.log
+	rm -f src/property_cadastral_merge.log
+	rm -rf src/__pycache__
+	rm -rf src/unified_pipeline/__pycache__
+	find src -name "*.pyc" -delete
+	find src -name "__pycache__" -type d -exec rm -rf {} +
+
+# Development targets
+dev-setup:
+	@echo "Setting up development environment..."
+	pip install -e .
+	pip install pytest pytest-cov black isort mypy
+
+# Run formatters
+format:
+	@echo "Formatting code..."
+	black src/
+	isort src/
+
+# Run type checking
+typecheck:
+	@echo "Running type checking..."
+	mypy src/
+
+# Development test with coverage
+test-coverage:
+	@echo "Running tests with coverage..."
+	cd src && python -m pytest test_property_cadastral_merge.py --cov=unified_pipeline
+
+# Quick development cycle
+dev-cycle: format typecheck test-merge
+	@echo "Development cycle complete!"
+
+# Environment variables help
+env-help:
+	@echo "Required environment variables:"
+	@echo "  GCS_BUCKET                 - Google Cloud Storage bucket name"
+	@echo "  SAVE_LOCAL                 - Save data locally (optional, default: False)"
+	@echo ""
+	@echo "Optional environment variables:"
+	@echo "  DATAFORDELER_USERNAME      - Username for Datafordeler services"
+	@echo "  DATAFORDELER_PASSWORD      - Password for Datafordeler services"
+	@echo ""
+	@echo "Example:"
+	@echo "  export GCS_BUCKET=landbrugsdata-raw-data"
+	@echo "  export SAVE_LOCAL=false"
+
+# Show pipeline status
+status:
+	@echo "Checking pipeline status..."
+	@echo "Recent log files:"
+	@ls -la src/*.log 2>/dev/null || echo "No log files found"
+	@echo ""
+	@echo "Environment:"
+	@echo "  GCS_BUCKET: $${GCS_BUCKET:-Not set}"
+	@echo "  SAVE_LOCAL: $${SAVE_LOCAL:-Not set}"
+
+# Debug mode
+debug:
+	@echo "Running merge pipeline in debug mode..."
+	cd src && python -u run_property_cadastral_merge.py --dry-run 2>&1 | tee debug.log
+
+# Quick test for CI/CD
+ci-test: install test-merge
+	@echo "CI/CD test pipeline complete!"
