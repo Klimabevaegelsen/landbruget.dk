@@ -1,0 +1,47 @@
+# Data files - exclude all large datasets
+*.gpkg
+*.parquet
+*.geoparquet
+*.duckdb
+*.db
+*.sqlite
+
+# Test output directories
+test_output/
+output/
+logs/
+temp/
+cache/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log 

@@ -241,3 +241,31 @@ class GCSUtil(metaclass=Singleton):
         # Split the url by the first occurrence of /
         bucket_name, blob_name = url.split("/", 1)
         return bucket_name, blob_name
+
+    def list_files(self, bucket_name: str, prefix: str):
+        """
+        List files in a GCS bucket with a given prefix.
+
+        Args:
+            bucket_name (str): Name of the bucket
+            prefix (str): Prefix to filter files
+
+        Returns:
+            List of blob objects
+        """
+        bucket = self.get_bucket(bucket_name)
+        blobs = bucket.list_blobs(prefix=prefix)
+        return list(blobs)
+
+    def download_file(self, bucket_name: str, source_blob_name: str, destination_file_name: str):
+        """
+        Download a file from GCS to local filesystem.
+
+        Args:
+            bucket_name (str): Name of the bucket
+            source_blob_name (str): Name of the source blob
+            destination_file_name (str): Path to save the file locally
+        """
+        blob = self.get_blob(bucket_name, source_blob_name)
+        blob.download_to_filename(destination_file_name)
+        self.log.info(f"Downloaded {source_blob_name} to {destination_file_name}")
