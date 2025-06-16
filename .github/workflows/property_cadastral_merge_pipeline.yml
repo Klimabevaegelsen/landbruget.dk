@@ -1,0 +1,246 @@
+name: Property Cadastral Merge Pipeline
+
+on:
+  # Trigger when both upstream pipelines complete successfully
+  workflow_run:
+    workflows: 
+      - "Property Owners SFTP Transfer Pipeline"
+      - "Cadastral Data Pipeline"
+    types:
+      - completed
+    branches:
+      - main
+      - develop
+  
+  # Manual trigger for testing/debugging
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run even if upstream dependencies are not met'
+        required: false
+        default: false
+        type: boolean
+      spatial_method:
+        description: 'Spatial join method'
+        required: false
+        default: 'intersects'
+        type: choice
+        options:
+          - intersects
+          - within
+          - contains
+      buffer_distance:
+        description: 'Buffer distance in meters'
+        required: false
+        default: '10.0'
+        type: string
+      min_overlap:
+        description: 'Minimum overlap threshold'
+        required: false
+        default: '0.1'
+        type: string
+      dry_run:
+        description: 'Run in dry-run mode (validation only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PROJECT_ID: landbrugsdata-1
+  GCS_BUCKET: landbrugsdata-raw-data
+
+jobs:
+  check-dependencies:
+    name: Check Pipeline Dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      property_owners_status: ${{ steps.check.outputs.property_owners_status }}
+      cadastral_status: ${{ steps.check.outputs.cadastral_status }}
+    
+    steps:
+    - name: Check upstream pipeline status
+      id: check
+      run: |
+        echo "Checking upstream pipeline dependencies..."
+        
+        # Check if this is a manual force run
+        if [ "${{ github.event.inputs.force_run }}" = "true" ]; then
+          echo "Force run requested - skipping dependency checks"
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "property_owners_status=forced" >> $GITHUB_OUTPUT
+          echo "cadastral_status=forced" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # For workflow_run triggers, check the conclusion
+        if [ "${{ github.event_name }}" = "workflow_run" ]; then
+          if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            echo "Upstream workflow completed successfully: ${{ github.event.workflow_run.name }}"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "property_owners_status=success" >> $GITHUB_OUTPUT
+            echo "cadastral_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "Upstream workflow failed: ${{ github.event.workflow_run.name }}"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "property_owners_status=failed" >> $GITHUB_OUTPUT
+            echo "cadastral_status=failed" >> $GITHUB_OUTPUT
+          fi
+        else
+          # Manual trigger without force - check data availability
+          echo "Manual trigger - will validate data availability in merge step"
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "property_owners_status=manual" >> $GITHUB_OUTPUT
+          echo "cadastral_status=manual" >> $GITHUB_OUTPUT
+        fi
+
+  property-cadastral-merge:
+    name: Merge Property Owners with Cadastral Data
+    runs-on: ubuntu-latest
+    needs: check-dependencies
+    if: needs.check-dependencies.outputs.should_run == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install google-cloud-storage geopandas pandas pyarrow shapely pyproj python-dotenv pydantic
+
+    - name: Set environment variables
+      run: |
+        echo "GCS_BUCKET=${{ env.GCS_BUCKET }}" >> $GITHUB_ENV
+        echo "PROJECT_ID=${{ env.PROJECT_ID }}" >> $GITHUB_ENV
+        echo "SAVE_LOCAL=false" >> $GITHUB_ENV
+
+    - name: Run property-cadastral merge
+      working-directory: backend/pipelines/unified_pipeline/src
+      run: |
+        # Set parameters from inputs or defaults
+        SPATIAL_METHOD="${{ github.event.inputs.spatial_method || 'intersects' }}"
+        BUFFER_DISTANCE="${{ github.event.inputs.buffer_distance || '10.0' }}"
+        MIN_OVERLAP="${{ github.event.inputs.min_overlap || '0.1' }}"
+        DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        
+        echo "Configuration:"
+        echo "  Spatial method: ${SPATIAL_METHOD}"
+        echo "  Buffer distance: ${BUFFER_DISTANCE}m" 
+        echo "  Min overlap: ${MIN_OVERLAP}"
+        echo "  Dry run: ${DRY_RUN}"
+        echo "  Timestamp: ${TIMESTAMP}"
+        
+        # Build command arguments
+        CMD_ARGS=(
+          "--spatial-method" "${SPATIAL_METHOD}"
+          "--buffer-distance" "${BUFFER_DISTANCE}"
+          "--min-overlap" "${MIN_OVERLAP}"
+          "--output-dataset" "property_cadastral_merged_${TIMESTAMP}"
+        )
+        
+        # Add dry-run flag if specified
+        if [ "${DRY_RUN}" = "true" ]; then
+          CMD_ARGS+=("--dry-run")
+        fi
+        
+        # Run the merge pipeline
+        echo "Running: python run_property_cadastral_merge.py ${CMD_ARGS[*]}"
+        python run_property_cadastral_merge.py "${CMD_ARGS[@]}"
+
+    - name: Upload logs to GCS
+      if: always()
+      run: |
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        LOG_FILE="property_cadastral_merge.log"
+        
+        if [ -f "${LOG_FILE}" ]; then
+          if [ "${{ job.status }}" = "success" ]; then
+            gsutil cp "${LOG_FILE}" "gs://${GCS_BUCKET}/logs/property_cadastral_merge_${TIMESTAMP}.log"
+          else
+            gsutil cp "${LOG_FILE}" "gs://${GCS_BUCKET}/logs/property_cadastral_merge_ERROR_${TIMESTAMP}.log"
+          fi
+          echo "Logs uploaded to GCS"
+        else
+          echo "No log file found to upload"
+        fi
+
+    - name: Validate merge output
+      if: success() && github.event.inputs.dry_run != 'true'
+      run: |
+        echo "Validating merge pipeline output..."
+        
+        # Check if new merged data exists
+        LATEST_FILE=$(gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/" | sort | tail -1)
+        
+        if [ -n "${LATEST_FILE}" ]; then
+          echo "✅ Latest merged file: ${LATEST_FILE}"
+          
+          # Get file info
+          gsutil stat "${LATEST_FILE}"
+          
+          # Basic validation - file should be reasonably sized
+          FILE_SIZE=$(gsutil stat "${LATEST_FILE}" | grep "Content-Length" | awk '{print $2}')
+          if [ "${FILE_SIZE}" -gt 1000000 ]; then  # > 1MB
+            echo "✅ Output file size looks reasonable: ${FILE_SIZE} bytes"
+          else
+            echo "⚠️ Output file seems small: ${FILE_SIZE} bytes"
+          fi
+        else
+          echo "❌ No merged output files found"
+          exit 1
+        fi
+
+    - name: Update pipeline status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ Property-Cadastral merge pipeline completed successfully"
+          
+          # Could add notification here (Slack, email, etc.)
+          echo "Pipeline completed at: $(date)"
+          echo "Merged data available at: gs://${GCS_BUCKET}/silver/property_cadastral_merged/"
+          
+        else
+          echo "❌ Property-Cadastral merge pipeline failed"
+          
+          # Could add error notification here
+          echo "Pipeline failed at: $(date)"
+          echo "Check logs at: gs://${GCS_BUCKET}/logs/"
+        fi
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [check-dependencies, property-cadastral-merge]
+    if: always()
+    
+    steps:
+    - name: Send notification
+      run: |
+        echo "Property-Cadastral Merge Pipeline Summary:"
+        echo "  Dependencies check: ${{ needs.check-dependencies.result }}"
+        echo "  Merge processing: ${{ needs.property-cadastral-merge.result }}"
+        echo "  Overall status: ${{ job.status }}"
+        
+        # Here you could add integrations with Slack, Discord, email, etc.
+        # Example for Slack webhook:
+        # curl -X POST -H 'Content-type: application/json' \
+        #   --data '{"text":"Property-Cadastral merge: ${{ job.status }}"}' \
+        #   ${{ secrets.SLACK_WEBHOOK_URL }} 
