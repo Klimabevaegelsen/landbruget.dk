@@ -202,7 +202,6 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             cadastral_gdf,
             how="left",
             predicate=self.config.spatial_join_method,
-            suffix=("_property", "_cadastral"),
         )
 
         self.log.info(f"Spatial join completed. Result: {len(merged_gdf)} records")
@@ -264,21 +263,28 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
         """Clean and standardize the merged dataset."""
         self.log.info("Cleaning and standardizing merged dataset...")
 
-        # Drop duplicate columns and clean up
-        columns_to_drop = [
-            col
-            for col in gdf.columns
-            if col.endswith("_property") and col.replace("_property", "_cadastral") in gdf.columns
-        ]
-        gdf = gdf.drop(columns=columns_to_drop)
-
-        # Rename columns for clarity
+        # Handle duplicate columns from spatial join
+        # When sjoin finds duplicates, it adds _left and _right suffixes
         rename_mapping = {}
-        for col in gdf.columns:
-            if col.endswith("_cadastral"):
-                new_name = f"cadastral_{col.replace('_cadastral', '')}"
-                rename_mapping[col] = new_name
+        columns_to_drop = []
 
+        for col in gdf.columns:
+            if col.endswith("_left"):
+                # Keep the _left version (from property data) with original name
+                original_name = col.replace("_left", "")
+                if f"{original_name}_right" in gdf.columns:
+                    # Drop the _right version and rename _left to original
+                    columns_to_drop.append(f"{original_name}_right")
+                    rename_mapping[col] = original_name
+            elif col.endswith("_right"):
+                # This is cadastral data - prefix with cadastral_
+                if col.replace("_right", "_left") not in gdf.columns:
+                    # No corresponding _left, so this is unique to cadastral
+                    original_name = col.replace("_right", "")
+                    rename_mapping[col] = f"cadastral_{original_name}"
+
+        if columns_to_drop:
+            gdf = gdf.drop(columns=columns_to_drop)
         if rename_mapping:
             gdf = gdf.rename(columns=rename_mapping)
 
