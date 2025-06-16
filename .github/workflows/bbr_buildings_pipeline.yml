@@ -1,0 +1,168 @@
+name: BBR Buildings Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer:
+        description: 'Pipeline layer to run'
+        type: choice
+        required: true
+        options:
+          - bronze
+          - silver
+          - both
+        default: 'both'
+      source:
+        description: 'Data source for bronze layer'
+        type: choice
+        required: false
+        options:
+          - inspire_bbr
+          - geodanmark_wfs
+          - both
+        default: 'inspire_bbr'
+      sample_size:
+        description: 'Sample size for testing (0 for full dataset)'
+        type: number
+        default: 0
+      enhance_classification:
+        description: 'Enhance building classification with additional data'
+        type: boolean
+        default: false
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - INFO
+          - DEBUG
+          - WARNING
+          - ERROR
+        default: 'INFO'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/bbr_buildings
+        # Install system dependencies required by the pipeline
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      run: |
+        cd backend/pipelines/bbr_buildings
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        if [[ -n "$DATAFORDELER_USERNAME" ]]; then
+          echo "DATAFORDELER_USERNAME=$DATAFORDELER_USERNAME" >> .env
+        fi
+        if [[ -n "$DATAFORDELER_PASSWORD" ]]; then
+          echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
+        fi
+
+    - name: Run BBR Buildings Pipeline
+      working-directory: backend/pipelines/bbr_buildings
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Build command based on inputs
+        CMD="python main.py"
+        
+        # Add layer parameter
+        if [[ "${{ inputs.layer }}" == "bronze" ]]; then
+          CMD="$CMD --layer bronze"
+        elif [[ "${{ inputs.layer }}" == "silver" ]]; then
+          CMD="$CMD --layer silver"
+        else
+          # Run both layers sequentially
+          echo "Running bronze layer first..."
+          python main.py --layer bronze --source ${{ inputs.source }} --sample-size ${{ inputs.sample_size }} --log-level ${{ inputs.log_level }}
+          
+          echo "Running silver layer..."
+          CMD="$CMD --layer silver"
+        fi
+        
+        # Add source parameter for bronze layer
+        if [[ "${{ inputs.layer }}" == "bronze" || "${{ inputs.layer }}" == "both" ]]; then
+          CMD="$CMD --source ${{ inputs.source }}"
+        fi
+        
+        # Add sample size if specified
+        if [[ "${{ inputs.sample_size }}" != "0" ]]; then
+          CMD="$CMD --sample-size ${{ inputs.sample_size }}"
+        fi
+        
+        # Add enhancement flag
+        if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
+          CMD="$CMD --enhance-classification"
+        fi
+        
+        # Add log level
+        CMD="$CMD --log-level ${{ inputs.log_level }}"
+        
+        echo "Running command: $CMD"
+        eval $CMD
+
+    - name: Upload pipeline artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bbr-buildings-pipeline-output
+        path: |
+          backend/pipelines/bbr_buildings/output/
+          backend/pipelines/bbr_buildings/logs/
+        retention-days: 7
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "BBR Buildings Pipeline failed. Please check the logs above for details."
+        echo "Common issues:"
+        echo "- Missing Datafordeleren credentials for GeoDanmark WFS access"
+        echo "- Network connectivity issues with SDFE FTP server"
+        echo "- Insufficient disk space for large building datasets"
+        echo "- Memory issues when processing millions of building records"
+        exit 1 
