@@ -6,7 +6,6 @@ This script provides basic tests and validation for the merge functionality.
 """
 
 import asyncio
-import json
 import logging
 import sys
 from pathlib import Path
@@ -14,7 +13,7 @@ from unittest.mock import Mock
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,10 +31,11 @@ logger = logging.getLogger(__name__)
 def create_mock_property_data():
     """Create mock property owners data for testing."""
 
-    # Create sample property data with geometries
+    # Create sample property data with BFE numbers
     properties = [
         {
             "property_id": 1,
+            "bestemtFastEjendomBFENr": 100001,  # BFE number for direct join
             "ejendePerson": {
                 "Person": {
                     "id": "uuid-1",  # Privacy-transformed CPR
@@ -43,35 +43,41 @@ def create_mock_property_data():
                     "lives_abroad": False,
                 }
             },
-            "geometry": Point(12.5, 55.7),  # Copenhagen area
         },
         {
             "property_id": 2,
+            "bestemtFastEjendomBFENr": 100002,
             "ejendePerson": {
                 "Person": {"id": "uuid-2", "navn": "Test Owner 2", "lives_abroad": False}
             },
-            "geometry": Point(12.51, 55.71),
         },
         {
             "property_id": 3,
+            "bestemtFastEjendomBFENr": 100003,
             "ejendePerson": {
                 "Person": {"id": "uuid-3", "navn": "Test Owner 3", "lives_abroad": True}
             },
-            "geometry": Point(12.52, 55.72),
+        },
+        {
+            "property_id": 4,
+            "bestemtFastEjendomBFENr": 999999,  # BFE number without cadastral match
+            "ejendePerson": {
+                "Person": {"id": "uuid-4", "navn": "Test Owner 4", "lives_abroad": False}
+            },
         },
     ]
 
-    return gpd.GeoDataFrame(properties, crs="EPSG:4326")
+    return pd.DataFrame(properties)
 
 
 def create_mock_cadastral_data():
     """Create mock cadastral data for testing."""
 
-    # Create sample cadastral parcels
+    # Create sample cadastral parcels with matching BFE numbers
     parcels = [
         {
             "cadastral_id": 1,
-            "bfe_number": 1001,
+            "bfe_number": 100001,  # Matches property_id 1
             "registration_from": "2023-01-01",
             "authority": "Test Municipality",
             "agricultural_notation": "Agricultural land",
@@ -90,7 +96,7 @@ def create_mock_cadastral_data():
         },
         {
             "cadastral_id": 2,
-            "bfe_number": 1002,
+            "bfe_number": 100002,  # Matches property_id 2
             "registration_from": "2023-01-01",
             "authority": "Test Municipality",
             "agricultural_notation": "Residential",
@@ -109,7 +115,7 @@ def create_mock_cadastral_data():
         },
         {
             "cadastral_id": 3,
-            "bfe_number": 1003,
+            "bfe_number": 100003,  # Matches property_id 3
             "registration_from": "2023-01-01",
             "authority": "Test Municipality",
             "agricultural_notation": "Forest",
@@ -123,6 +129,25 @@ def create_mock_cadastral_data():
                     (12.521, 55.721),
                     (12.519, 55.721),
                     (12.519, 55.719),
+                ]
+            ),
+        },
+        {
+            "cadastral_id": 4,
+            "bfe_number": 100004,  # Cadastral parcel without property owner
+            "registration_from": "2023-01-01",
+            "authority": "Test Municipality",
+            "agricultural_notation": "Commercial",
+            "is_worker_housing": False,
+            "is_common_lot": False,
+            "has_owner_apartments": False,
+            "geometry": Polygon(
+                [
+                    (12.529, 55.729),
+                    (12.531, 55.729),
+                    (12.531, 55.731),
+                    (12.529, 55.731),
+                    (12.529, 55.729),
                 ]
             ),
         },
@@ -159,14 +184,9 @@ class MockGCSUtil:
         """Mock file download - create test data."""
 
         if "property_owners" in source_blob_name:
-            # Create mock property owners parquet
+            # Create mock property owners parquet (now DataFrame with BFE numbers)
             property_data = create_mock_property_data()
-            # Convert geometry to JSON string to simulate the SFTP pipeline output
-            property_data["geometry_json"] = property_data["geometry"].apply(
-                lambda geom: json.dumps(geom.__geo_interface__)
-            )
-            property_data = property_data.drop("geometry", axis=1)
-            pd.DataFrame(property_data).to_parquet(destination_file_name)
+            property_data.to_parquet(destination_file_name)
 
         elif "cadastral" in source_blob_name:
             # Create mock cadastral parquet
@@ -175,15 +195,15 @@ class MockGCSUtil:
 
 
 async def test_basic_merge():
-    """Test basic merge functionality."""
-    logger.info("Testing basic merge functionality...")
+    """Test basic BFE-based merge functionality."""
+    logger.info("Testing basic BFE-based merge functionality...")
 
     # Create test configuration
     config = PropertyCadastralMergeConfig(
         dataset="test_merge",
-        spatial_join_method="intersects",
-        buffer_distance_meters=100.0,  # Large buffer for testing
-        min_overlap_threshold=0.0,  # No filtering for testing
+        join_method="inner",
+        validate_bfe_numbers=True,
+        include_merge_metadata=True,
         bucket="test-bucket",
     )
 
@@ -194,27 +214,39 @@ async def test_basic_merge():
     merge_pipeline = PropertyCadastralMerge(config, mock_gcs)
 
     # Test loading property data
-    property_gdf = merge_pipeline._load_property_owners_data()
-    assert property_gdf is not None, "Failed to load property owners data"
-    assert len(property_gdf) == 3, f"Expected 3 properties, got {len(property_gdf)}"
-    logger.info(f"✅ Loaded {len(property_gdf)} property records")
+    property_df = merge_pipeline._load_property_owners_data()
+    assert property_df is not None, "Failed to load property owners data"
+    assert len(property_df) == 4, f"Expected 4 properties, got {len(property_df)}"
+    assert "bestemtFastEjendomBFENr" in property_df.columns, "Missing BFE number field"
+    logger.info(f"✅ Loaded {len(property_df)} property records")
 
     # Test loading cadastral data
     cadastral_gdf = merge_pipeline._load_cadastral_data()
     assert cadastral_gdf is not None, "Failed to load cadastral data"
-    assert len(cadastral_gdf) == 3, f"Expected 3 cadastral parcels, got {len(cadastral_gdf)}"
+    assert len(cadastral_gdf) == 4, f"Expected 4 cadastral parcels, got {len(cadastral_gdf)}"
+    assert "bfe_number" in cadastral_gdf.columns, "Missing BFE number field in cadastral data"
     logger.info(f"✅ Loaded {len(cadastral_gdf)} cadastral records")
 
-    # Test spatial merge
-    merged_gdf = merge_pipeline._perform_spatial_merge(property_gdf, cadastral_gdf)
-    assert merged_gdf is not None, "Spatial merge failed"
-    assert len(merged_gdf) >= len(property_gdf), (
-        "Merge result should have at least as many records as properties"
+    # Test BFE-based merge
+    merged_gdf = merge_pipeline._perform_bfe_merge(property_df, cadastral_gdf)
+    assert merged_gdf is not None, "BFE merge failed"
+    # With inner join, we should only get properties with matching cadastral parcels (3 out of 4)
+    assert len(merged_gdf) == 3, f"Expected 3 merged records, got {len(merged_gdf)}"
+    logger.info(f"✅ BFE merge completed: {len(merged_gdf)} records")
+
+    # Test merge quality validation
+    quality_stats = merge_pipeline._validate_bfe_merge_quality(
+        merged_gdf, property_df, cadastral_gdf
     )
-    logger.info(f"✅ Spatial merge completed: {len(merged_gdf)} records")
+    assert quality_stats is not None, "Quality validation failed"
+    assert quality_stats["total_properties"] == 4, "Incorrect property count in stats"
+    assert quality_stats["total_cadastral_parcels"] == 4, "Incorrect cadastral count in stats"
+    logger.info(
+        f"✅ Quality validation completed: {quality_stats['match_rate_percent']:.1f}% match rate"
+    )
 
     # Test data cleaning
-    cleaned_gdf = merge_pipeline._clean_and_standardize(merged_gdf)
+    cleaned_gdf = merge_pipeline._clean_and_standardize(merged_gdf, quality_stats)
     assert cleaned_gdf is not None, "Data cleaning failed"
     assert "merge_timestamp" in cleaned_gdf.columns, "Missing merge metadata"
     assert "has_cadastral_match" in cleaned_gdf.columns, "Missing match indicator"
@@ -225,29 +257,57 @@ async def test_basic_merge():
     match_rate = (matched_count / len(cleaned_gdf)) * 100
     logger.info(f"Match statistics: {matched_count}/{len(cleaned_gdf)} ({match_rate:.1f}%)")
 
+    # Verify BFE number matching worked correctly (inner join = all records should be matched)
+    assert matched_count == 3, f"Expected 3 matches, got {matched_count}"
+    assert matched_count == len(cleaned_gdf), "All records should be matched with inner join"
+
     return True
 
 
-def test_spatial_methods():
-    """Test different spatial join methods."""
-    logger.info("Testing spatial join methods...")
+def test_bfe_join_methods():
+    """Test different BFE join methods."""
+    logger.info("Testing BFE join methods...")
 
-    # Create test geometries with known relationships
-    property_geom = Point(12.5, 55.7)
+    # Create test data
+    property_data = create_mock_property_data()
+    cadastral_data = create_mock_cadastral_data()
 
-    # Cadastral parcel containing the property
-    containing_parcel = Polygon(
-        [(12.49, 55.69), (12.51, 55.69), (12.51, 55.71), (12.49, 55.71), (12.49, 55.69)]
+    # Test inner join - only matching records
+    inner_result = pd.merge(
+        property_data,
+        cadastral_data,
+        left_on="bestemtFastEjendomBFENr",
+        right_on="bfe_number",
+        how="inner",
     )
+    assert len(inner_result) == 3, f"Inner join should return 3 matches, got {len(inner_result)}"
 
-    # Test geometric relationships
-    assert property_geom.intersects(containing_parcel), (
-        "Property should intersect with containing parcel"
+    # Test left join - all properties
+    left_result = pd.merge(
+        property_data,
+        cadastral_data,
+        left_on="bestemtFastEjendomBFENr",
+        right_on="bfe_number",
+        how="left",
     )
-    assert property_geom.within(containing_parcel), "Property should be within containing parcel"
-    assert not containing_parcel.within(property_geom), "Parcel should not be within property point"
+    assert len(left_result) == 4, f"Left join should return 4 records, got {len(left_result)}"
 
-    logger.info("✅ Spatial relationship tests passed")
+    # Check that unmatched property has NaN for cadastral fields
+    unmatched = left_result[left_result["bfe_number"].isna()]
+    assert len(unmatched) == 1, f"Should have 1 unmatched property, got {len(unmatched)}"
+    assert unmatched.iloc[0]["bestemtFastEjendomBFENr"] == 999999, "Wrong unmatched BFE number"
+
+    # Test right join - all cadastral parcels
+    right_result = pd.merge(
+        property_data,
+        cadastral_data,
+        left_on="bestemtFastEjendomBFENr",
+        right_on="bfe_number",
+        how="right",
+    )
+    assert len(right_result) == 4, f"Right join should return 4 records, got {len(right_result)}"
+
+    logger.info("✅ BFE join method tests passed")
     return True
 
 
@@ -280,26 +340,27 @@ def test_configuration_validation():
     try:
         config = PropertyCadastralMergeConfig(
             dataset="test",
-            spatial_join_method="intersects",
-            buffer_distance_meters=10.0,
-            min_overlap_threshold=0.1,
+            join_method="left",
+            validate_bfe_numbers=True,
+            include_merge_metadata=True,
         )
         logger.info("✅ Valid configuration accepted")
     except Exception as e:
         logger.error(f"❌ Valid configuration rejected: {e}")
         return False
 
-    # Test invalid spatial method
-    try:
-        config = PropertyCadastralMergeConfig(
-            dataset="test",
-            spatial_join_method="invalid_method",  # This should fail
-            buffer_distance_meters=10.0,
-            min_overlap_threshold=0.1,
-        )
-        logger.warning("⚠️ Invalid spatial method was accepted (should validate)")
-    except Exception:
-        logger.info("✅ Invalid spatial method properly rejected")
+    # Test different join methods
+    for join_method in ["inner", "left", "right", "outer"]:
+        try:
+            config = PropertyCadastralMergeConfig(
+                dataset="test",
+                join_method=join_method,
+                validate_bfe_numbers=True,
+            )
+            logger.info(f"✅ Join method '{join_method}' accepted")
+        except Exception as e:
+            logger.error(f"❌ Join method '{join_method}' rejected: {e}")
+            return False
 
     return True
 
@@ -312,8 +373,8 @@ async def run_all_tests():
     tests = [
         ("Configuration Validation", test_configuration_validation),
         ("Privacy Preservation", test_privacy_preservation),
-        ("Spatial Methods", test_spatial_methods),
-        ("Basic Merge", test_basic_merge),
+        ("BFE Join Methods", test_bfe_join_methods),
+        ("Basic BFE Merge", test_basic_merge),
     ]
 
     results = {}
