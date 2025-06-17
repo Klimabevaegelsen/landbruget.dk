@@ -6,7 +6,7 @@ This script merges property owners data with cadastral parcels data using BFE nu
 It reads data from the silver layer and outputs the merged results.
 
 Usage:
-    python run_property_cadastral_merge.py [--config-file CONFIG_FILE]
+    python run_property_cadastral_merge.py [--output-dataset DATASET_NAME]
 
 Environment Variables:
     GCS_BUCKET: Google Cloud Storage bucket name
@@ -46,8 +46,6 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Merge property owners data with cadastral parcels"
     )
-
-    parser.add_argument("--config-file", type=str, help="Path to configuration file (JSON format)")
 
     parser.add_argument(
         "--join-method",
@@ -110,15 +108,6 @@ def create_config(args) -> PropertyCadastralMergeConfig:
         "property_owners_silver_path": args.property_owners_path,
         "cadastral_silver_path": args.cadastral_path,
     }
-
-    # Load config file if provided
-    if args.config_file:
-        import json
-
-        logger.info(f"Loading configuration from {args.config_file}")
-        with open(args.config_file, "r") as f:
-            file_config = json.load(f)
-            config_dict.update(file_config)
 
     return PropertyCadastralMergeConfig(**config_dict)
 
