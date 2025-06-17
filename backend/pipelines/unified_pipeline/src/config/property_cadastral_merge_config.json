@@ -1,29 +1,27 @@
 {
   "name": "Property Owners Cadastral Merge",
   "dataset": "property_cadastral_merged",
-  "description": "Merge property owners data with cadastral parcels using spatial joins",
+  "description": "Merge property owners data with cadastral parcels using BFE numbers",
   "frequency": "weekly",
   
   "property_owners_silver_path": "silver/property_owners/",
   "cadastral_silver_path": "silver/cadastral/",
   
-  "spatial_join_method": "intersects",
-  "buffer_distance_meters": 10.0,
-  "min_overlap_threshold": 0.1,
+  "join_method": "inner",
+  "validate_bfe_numbers": true,
+  "include_unmatched_properties": false,
+  "include_merge_metadata": true,
   
   "output_format": "parquet",
   "save_local": false,
   
   "merge_options": {
     "validate_geometries": true,
-    "handle_duplicates": "keep_first",
-    "include_unmatched_properties": true,
-    "include_merge_metadata": true
+    "handle_duplicates": "keep_first"
   },
   
   "quality_checks": {
-    "min_match_rate_threshold": 0.75,
-    "max_unmatched_properties_threshold": 0.25,
+    "min_match_rate_threshold": 0.85,
     "geometry_validation": true
   }
 } 
