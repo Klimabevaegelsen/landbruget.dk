@@ -26,12 +26,15 @@ def main():
     )
 
     parser.add_argument(
-        "--layer", choices=["bronze", "silver"], required=True, help="Pipeline layer to execute"
+        "--layer",
+        choices=["bronze", "silver", "both"],
+        required=True,
+        help="Pipeline layer to execute",
     )
 
     parser.add_argument(
         "--source",
-        choices=["inspire_bbr", "geodanmark_wfs"],
+        choices=["inspire_bbr", "geodanmark_wfs", "both"],
         help="Data source for bronze layer (required for bronze layer)",
     )
 
@@ -81,12 +84,28 @@ def main():
 
             run_silver_layer(args, settings, logger)
 
+        elif args.layer == "both":
+            if not args.source:
+                logger.error("--source is required for bronze layer")
+                sys.exit(1)
+
+            # Run bronze layer and get data in memory
+            logger.info(
+                "Running both layers - bronze will export and pass data to silver in memory"
+            )
+            bronze_data = run_bronze_layer(args, settings, logger, return_data=True)
+
+            # Run silver layer with in-memory data
+            run_silver_layer(args, settings, logger, bronze_data=bronze_data)
+
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
         sys.exit(1)
 
 
-def run_bronze_layer(args: argparse.Namespace, settings: Settings, logger: logging.Logger):
+def run_bronze_layer(
+    args: argparse.Namespace, settings: Settings, logger: logging.Logger, return_data: bool = False
+):
     """Execute bronze layer processing."""
     logger.info(f"Starting bronze layer for source: {args.source}")
 
@@ -95,16 +114,38 @@ def run_bronze_layer(args: argparse.Namespace, settings: Settings, logger: loggi
 
     if args.source == "inspire_bbr":
         fetcher = InspireBBRFetcher(settings, logger)
-        fetcher.fetch_data(output_dir, sample_size=args.sample_size)
+        result = fetcher.fetch_data(
+            output_dir, sample_size=args.sample_size, return_data=return_data
+        )
 
     elif args.source == "geodanmark_wfs":
         fetcher = GeoDanmarkWFSFetcher(settings, logger)
-        fetcher.fetch_samples(output_dir)
+        result = fetcher.fetch_samples(output_dir, return_data=return_data)
+
+    elif args.source == "both":
+        # Run both sources sequentially
+        logger.info("Running both data sources...")
+
+        # First run INSPIRE BBR
+        logger.info("Fetching INSPIRE BBR data...")
+        inspire_fetcher = InspireBBRFetcher(settings, logger)
+        inspire_fetcher.fetch_data(output_dir, sample_size=args.sample_size)
+
+        # Then run GeoDanmark WFS
+        logger.info("Fetching GeoDanmark WFS data...")
+        geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
+        geodanmark_fetcher.fetch_samples(output_dir)
 
     logger.info("Bronze layer processing completed successfully")
 
+    if return_data:
+        return result
+    return None
 
-def run_silver_layer(args: argparse.Namespace, settings: Settings, logger: logging.Logger):
+
+def run_silver_layer(
+    args: argparse.Namespace, settings: Settings, logger: logging.Logger, bronze_data=None
+):
     """Execute silver layer processing."""
     logger.info("Starting silver layer processing")
 
@@ -112,11 +153,22 @@ def run_silver_layer(args: argparse.Namespace, settings: Settings, logger: loggi
     output_dir.mkdir(parents=True, exist_ok=True)
 
     processor = BuildingProcessor(settings, logger)
-    processor.process_buildings(
-        input_dir=args.input_dir,
-        output_dir=output_dir,
-        enhance_classification=args.enhance_classification,
-    )
+
+    if bronze_data is not None:
+        # Use data directly from bronze layer (in-memory processing)
+        logger.info("Using bronze data from memory - skipping disk I/O")
+        processor.process_buildings_from_data(
+            bronze_data=bronze_data,
+            output_dir=output_dir,
+            enhance_classification=args.enhance_classification,
+        )
+    else:
+        # Traditional mode: read from disk
+        processor.process_buildings(
+            input_dir=args.input_dir,
+            output_dir=output_dir,
+            enhance_classification=args.enhance_classification,
+        )
 
     logger.info("Silver layer processing completed successfully")
 
