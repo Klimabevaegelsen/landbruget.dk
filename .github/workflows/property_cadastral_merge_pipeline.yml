@@ -143,9 +143,8 @@ jobs:
         echo "  Dry run: ${DRY_RUN}"
         echo "  Timestamp: ${TIMESTAMP}"
         
-        # Build command arguments - use config file approach
+        # Build command arguments
         CMD_ARGS=(
-          "--config-file" "config/property_cadastral_merge_config.json"
           "--output-dataset" "property_cadastral_merged_${TIMESTAMP}"
         )
         

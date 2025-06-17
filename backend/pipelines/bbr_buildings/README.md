@@ -6,10 +6,10 @@ This pipeline fetches and processes Danish building data from Bygnings- og Bolig
 
 ### Primary Source: DK_INSPIRE_BBR.gpkg
 - **Provider**: SDFE (Styrelsen for Dataforsyning og Infrastruktur)
-- **Format**: GeoPackage with building layer (5.56M records)
-- **Content**: Complete BBR building data with INSPIRE standardization
+- **Format**: GeoPackage with building and otherConstruction layers (5.56M+ records)
+- **Content**: Complete BBR building data with INSPIRE standardization, including agricultural structures
 - **Update Frequency**: Static file, manual updates available
-- **Size**: ~300GB total (building layer only needed)
+- **Size**: ~761MB total (both building and otherConstruction layers loaded)
 
 ### Supplementary Source: GeoDanmark WFS
 - **Provider**: Datafordeleren GeoDanmark Vector Service  
@@ -65,8 +65,9 @@ This pipeline fetches and processes Danish building data from Bygnings- og Bolig
 **Objective**: Fetch and store raw building data monthly
 
 **Data Sources**:
-1. **Primary**: DK_INSPIRE_BBR.gpkg building layer
-   - Download complete building layer (~300GB file, building layer only)
+1. **Primary**: DK_INSPIRE_BBR.gpkg building and otherConstruction layers
+   - Download complete dataset (~761MB file, both layers)
+   - Load both building and otherConstruction layers for comprehensive coverage
    - Store raw GeoPackage data without transformation
    - Extract metadata: file size, timestamp, source URL
 
@@ -84,7 +85,7 @@ This pipeline fetches and processes Danish building data from Bygnings- og Bolig
 **Objective**: Clean, harmonize, and filter building data
 
 **Processing Steps**:
-1. **Data Loading**: Load GeoPackage building layer using ibis-framework/duckdb
+1. **Data Loading**: Load both GeoPackage building and otherConstruction layers using ibis-framework/duckdb
 2. **Filtering**: Apply building usage type filters
 3. **Geospatial Processing**:
    - Validate geometries
