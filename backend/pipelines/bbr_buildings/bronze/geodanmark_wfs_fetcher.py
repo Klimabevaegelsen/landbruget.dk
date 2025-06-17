@@ -43,7 +43,7 @@ class GeoDanmarkWFSFetcher:
                 "No Datafordeleren credentials found - using unauthenticated access"
             )
 
-    def fetch_samples(self, output_dir: Path, max_features: int = 1000) -> None:
+    def fetch_samples(self, output_dir: Path, max_features: int = 1000, return_data: bool = False):
         """
         Fetch sample data from GeoDanmark WFS.
 
@@ -97,6 +97,21 @@ class GeoDanmarkWFSFetcher:
             self._save_metadata(run_dir, max_features)
 
             self.logger.info(f"Successfully fetched GeoDanmark WFS samples to {run_dir}")
+
+            # Optionally return data for in-memory processing
+            if return_data:
+                return {
+                    "samples": samples,
+                    "capabilities": capabilities,
+                    "output_dir": run_dir,
+                    "metadata": {
+                        "source": "geodanmark_wfs",
+                        "max_features": max_features,
+                        "feature_types": list(samples.keys()),
+                    },
+                }
+
+            return None
 
         except Exception as e:
             self.logger.error(f"Failed to fetch GeoDanmark WFS samples: {e}")
