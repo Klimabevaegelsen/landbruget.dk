@@ -88,6 +88,12 @@ class Settings(BaseModel):
         default=("publicServices",), description="INSPIRE public services current use values"
     )
 
+    # Other construction types to include
+    other_construction_current_use: tuple = Field(
+        default=("agriculture", "industrial", "publicServices", "transport"),
+        description="INSPIRE current use values for other constructions relevant to analysis",
+    )
+
     class Config:
         """Pydantic model configuration."""
 
