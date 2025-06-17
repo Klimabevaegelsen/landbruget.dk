@@ -2,7 +2,7 @@
 """
 Runner script for the Property-Cadastral merge pipeline.
 
-This script merges property owners data with cadastral parcels data using spatial joins.
+This script merges property owners data with cadastral parcels data using BFE number joins.
 It reads data from the silver layer and outputs the merged results.
 
 Usage:
@@ -50,25 +50,25 @@ def parse_args():
     parser.add_argument("--config-file", type=str, help="Path to configuration file (JSON format)")
 
     parser.add_argument(
-        "--spatial-method",
+        "--join-method",
         type=str,
-        choices=["intersects", "within", "contains"],
-        default="intersects",
-        help="Spatial join method (default: intersects)",
+        choices=["inner"],
+        default="inner",
+        help="BFE join method - only 'inner' is supported (default: inner)",
     )
 
     parser.add_argument(
-        "--buffer-distance",
-        type=float,
-        default=0.0,
-        help="Buffer distance in meters for spatial matching tolerance (default: 0.0)",
+        "--validate-bfe",
+        action="store_true",
+        default=True,
+        help="Validate BFE number format and consistency (default: True)",
     )
 
     parser.add_argument(
-        "--min-overlap",
-        type=float,
-        default=0.1,
-        help="Minimum overlap ratio for valid matches (default: 0.1)",
+        "--include-metadata",
+        action="store_true",
+        default=True,
+        help="Include merge metadata in output (default: True)",
     )
 
     parser.add_argument(
@@ -104,9 +104,9 @@ def create_config(args) -> PropertyCadastralMergeConfig:
 
     config_dict = {
         "dataset": args.output_dataset,
-        "spatial_join_method": args.spatial_method,
-        "buffer_distance_meters": args.buffer_distance,
-        "min_overlap_threshold": args.min_overlap,
+        "join_method": args.join_method,
+        "validate_bfe_numbers": args.validate_bfe,
+        "include_merge_metadata": args.include_metadata,
         "property_owners_silver_path": args.property_owners_path,
         "cadastral_silver_path": args.cadastral_path,
     }
@@ -137,9 +137,9 @@ async def main():
 
         logger.info("Configuration:")
         logger.info(f"  Dataset: {config.dataset}")
-        logger.info(f"  Spatial join method: {config.spatial_join_method}")
-        logger.info(f"  Buffer distance: {config.buffer_distance_meters}m")
-        logger.info(f"  Min overlap threshold: {config.min_overlap_threshold}")
+        logger.info(f"  BFE join method: {config.join_method}")
+        logger.info(f"  Validate BFE numbers: {config.validate_bfe_numbers}")
+        logger.info(f"  Include merge metadata: {config.include_merge_metadata}")
         logger.info(f"  Property owners path: {config.property_owners_silver_path}")
         logger.info(f"  Cadastral path: {config.cadastral_silver_path}")
         logger.info(f"  GCS bucket: {config.bucket}")
