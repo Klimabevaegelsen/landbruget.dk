@@ -203,11 +203,30 @@ class BuildingProcessor:
             # First make sure spatial extension is available
             self.conn.execute("LOAD spatial;")
 
-            # Read GPKG file using ST_Read function
+            # Read both layers from GPKG file and combine them
+            # First create buildings table
+            self.conn.execute(f"""
+                CREATE TABLE buildings_temp AS 
+                SELECT *, 'building' as layer_source FROM ST_Read('{gpkg_path}', layer='building')
+            """)
+
+            # Then create other constructions table
+            self.conn.execute(f"""
+                CREATE TABLE constructions_temp AS 
+                SELECT *, 'otherConstruction' as layer_source FROM ST_Read('{gpkg_path}', layer='otherConstruction')
+            """)
+
+            # Combine both tables
             self.conn.execute(f"""
                 CREATE TABLE {table_name} AS 
-                SELECT * FROM ST_Read('{gpkg_path}')
+                SELECT * FROM buildings_temp
+                UNION ALL
+                SELECT * FROM constructions_temp
             """)
+
+            # Clean up temporary tables
+            self.conn.execute("DROP TABLE buildings_temp")
+            self.conn.execute("DROP TABLE constructions_temp")
 
             # Get the table through Ibis
             buildings_table = self.ibis_conn.table(table_name)
@@ -242,9 +261,22 @@ class BuildingProcessor:
         self.logger.info("Using GeoPandas fallback to load GPKG")
 
         try:
-            # Read with GeoPandas
-            gdf = gpd.read_file(gpkg_path)
-            self.logger.info(f"Loaded {len(gdf):,} buildings with GeoPandas")
+            # Read both layers with GeoPandas and combine them
+            buildings_gdf = gpd.read_file(gpkg_path, layer="building")
+            self.logger.info(f"Loaded {len(buildings_gdf):,} buildings with GeoPandas")
+
+            constructions_gdf = gpd.read_file(gpkg_path, layer="otherConstruction")
+            self.logger.info(
+                f"Loaded {len(constructions_gdf):,} other constructions with GeoPandas"
+            )
+
+            # Add layer source columns
+            buildings_gdf["layer_source"] = "building"
+            constructions_gdf["layer_source"] = "otherConstruction"
+
+            # Combine both datasets
+            gdf = gpd.GeoDataFrame(pd.concat([buildings_gdf, constructions_gdf], ignore_index=True))
+            self.logger.info(f"Combined total: {len(gdf):,} records")
 
             # Convert to regular pandas DataFrame for DuckDB
             df = pd.DataFrame(gdf)
@@ -347,6 +379,7 @@ class BuildingProcessor:
                     self.settings.agricultural_current_use
                     + self.settings.residential_current_use
                     + self.settings.public_services_current_use
+                    + self.settings.other_construction_current_use
                 )
                 filter_conditions.append(buildings_table[current_use_col].isin(all_target_uses))
                 self.logger.info(
@@ -436,6 +469,8 @@ class BuildingProcessor:
                 "parcelId": "parcel_id",
                 "parcel_id": "parcel_id",
                 "PARCELID": "parcel_id",
+                # Layer source (added by our processing)
+                "layer_source": "layer_source",
             }
 
             # Get available columns

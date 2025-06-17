@@ -86,9 +86,30 @@ class InspireBBRFetcher:
                 self.logger.info("Loading data for in-memory processing")
                 try:
                     import geopandas as gpd
+                    import pandas as pd
 
-                    data = gpd.read_file(gpkg_path)
-                    self.logger.info(f"Loaded {len(data):,} records for in-memory processing")
+                    # Load both building and otherConstruction layers for comprehensive analysis
+                    self.logger.info("Loading 'building' layer from GPKG file")
+                    buildings_data = gpd.read_file(gpkg_path, layer="building")
+                    self.logger.info(f"Loaded {len(buildings_data):,} building records")
+
+                    self.logger.info("Loading 'otherConstruction' layer from GPKG file")
+                    constructions_data = gpd.read_file(gpkg_path, layer="otherConstruction")
+                    self.logger.info(
+                        f"Loaded {len(constructions_data):,} other construction records"
+                    )
+
+                    # Add a source column to distinguish between the two layers
+                    buildings_data["layer_source"] = "building"
+                    constructions_data["layer_source"] = "otherConstruction"
+
+                    # Combine both datasets
+                    data = gpd.GeoDataFrame(
+                        pd.concat([buildings_data, constructions_data], ignore_index=True)
+                    )
+                    self.logger.info(
+                        f"Combined total: {len(data):,} records for in-memory processing"
+                    )
                     return {
                         "data": data,
                         "gpkg_path": gpkg_path,
