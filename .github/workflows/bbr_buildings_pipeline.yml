@@ -109,25 +109,21 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Build command based on inputs
-        CMD="python main.py"
-        
-        # Add layer parameter
-        if [[ "${{ inputs.layer }}" == "bronze" ]]; then
-          CMD="$CMD --layer bronze"
-        elif [[ "${{ inputs.layer }}" == "silver" ]]; then
-          CMD="$CMD --layer silver"
-        else
-          # Run both layers sequentially
-          echo "Running bronze layer first..."
-          python main.py --layer bronze --source ${{ inputs.source }} --sample-size ${{ inputs.sample_size }} --log-level ${{ inputs.log_level }}
-          
-          echo "Running silver layer..."
-          CMD="$CMD --layer silver"
-        fi
+        CMD="python main.py --layer ${{ inputs.layer }}"
         
         # Add source parameter for bronze layer
         if [[ "${{ inputs.layer }}" == "bronze" || "${{ inputs.layer }}" == "both" ]]; then
           CMD="$CMD --source ${{ inputs.source }}"
+        fi
+        
+        # Add input-dir parameter for silver layer (only when running silver alone)
+        if [[ "${{ inputs.layer }}" == "silver" ]]; then
+          LATEST_BRONZE_DIR=$(find data/bronze -maxdepth 1 -type d -name "20*" | sort -r | head -n 1)
+          if [[ -z "$LATEST_BRONZE_DIR" ]]; then
+            echo "Error: No bronze layer output found. Please run bronze layer first."
+            exit 1
+          fi
+          CMD="$CMD --input-dir $LATEST_BRONZE_DIR"
         fi
         
         # Add sample size if specified
