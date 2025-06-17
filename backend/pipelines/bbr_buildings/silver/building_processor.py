@@ -37,6 +37,67 @@ class BuildingProcessor:
         # Get the underlying DuckDB connection from Ibis (optional, for manual SQL if needed)
         self.conn = self.ibis_conn.con
 
+    def process_buildings_from_data(
+        self, bronze_data: dict, output_dir: Path, enhance_classification: bool = False
+    ) -> None:
+        """
+        Process buildings data directly from bronze layer data (in-memory processing).
+
+        Args:
+            bronze_data: Data object returned from bronze layer
+            output_dir: Output directory for silver data
+            enhance_classification: Whether to enhance classification using WFS data
+        """
+        timestamp = datetime.now().strftime("%Y%m%d")
+        run_dir = output_dir / timestamp
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger.info(f"Starting in-memory building processing to {run_dir}")
+
+        try:
+            # Load building data from bronze_data object
+            buildings_table = self._load_building_data_from_object(bronze_data)
+
+            # Apply filters
+            filtered_buildings = self._filter_buildings(buildings_table)
+
+            # Standardize schema
+            standardized_buildings = self._standardize_schema(filtered_buildings)
+
+            # Enhance classification if requested
+            if enhance_classification:
+                enhanced_buildings = self._enhance_classification_from_data(
+                    standardized_buildings, bronze_data
+                )
+            else:
+                enhanced_buildings = standardized_buildings
+
+            # Validate and clean geometries
+            clean_buildings = self._validate_geometries(enhanced_buildings)
+
+            # Add derived fields
+            final_buildings = self._add_derived_fields(clean_buildings)
+
+            # Save to GeoParquet
+            output_path = run_dir / "buildings_filtered.parquet"
+            self._save_to_geoparquet(final_buildings, output_path)
+
+            # Generate summary statistics
+            self._generate_summary_stats(final_buildings, run_dir)
+
+            # Save processing metadata
+            self._save_processing_metadata_from_data(run_dir, bronze_data, enhance_classification)
+
+            self.logger.info(f"Successfully processed buildings to {output_path}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to process buildings: {e}")
+            raise
+        finally:
+            # Clean up connections
+            if hasattr(self, "conn"):
+                self.conn.close()
+
     def process_buildings(
         self, input_dir: Path, output_dir: Path, enhance_classification: bool = False
     ) -> None:
@@ -201,6 +262,50 @@ class BuildingProcessor:
 
         except Exception as e:
             self.logger.error(f"GeoPandas fallback also failed: {e}")
+            raise
+
+    def _load_building_data_from_object(self, bronze_data: dict) -> ibis.Table:
+        """
+        Load building data from bronze layer data object.
+
+        Args:
+            bronze_data: Data object from bronze layer
+
+        Returns:
+            Ibis table with building data
+        """
+        self.logger.info("Loading building data from bronze layer object")
+
+        try:
+            # Check if we have direct data
+            if "data" in bronze_data and bronze_data["data"] is not None:
+                gdf = bronze_data["data"]
+                self.logger.info(f"Using in-memory data with {len(gdf):,} records")
+
+                # Convert to regular pandas DataFrame for DuckDB
+                df = pd.DataFrame(gdf)
+
+                # Convert geometry to WKT for DuckDB
+                if "geometry" in df.columns:
+                    df["geometry_wkt"] = gdf.geometry.to_wkt()
+                    df = df.drop("geometry", axis=1)
+
+                # Register with DuckDB
+                table_name = "buildings_raw"
+                self.conn.register(table_name, df)
+
+                return self.ibis_conn.table(table_name)
+
+            # Fallback to reading from file path if data not in memory
+            elif "gpkg_path" in bronze_data:
+                self.logger.info("Bronze data object contains path, falling back to file loading")
+                return self._load_building_data(bronze_data["gpkg_path"])
+
+            else:
+                raise ValueError("Bronze data object doesn't contain 'data' or 'gpkg_path'")
+
+        except Exception as e:
+            self.logger.error(f"Failed to load building data from object: {e}")
             raise
 
     def _filter_buildings(self, buildings_table: ibis.Table) -> ibis.Table:
@@ -371,6 +476,38 @@ class BuildingProcessor:
         except Exception as e:
             self.logger.error(f"Failed to standardize schema: {e}")
             raise
+
+    def _enhance_classification_from_data(
+        self, buildings_table: ibis.Table, bronze_data: dict
+    ) -> ibis.Table:
+        """
+        Enhance building classification using bronze data object.
+
+        Args:
+            buildings_table: Input buildings table
+            bronze_data: Bronze data object that may contain WFS data
+
+        Returns:
+            Enhanced buildings table
+        """
+        self.logger.info("Enhancing building classification from bronze data")
+
+        try:
+            # Check if bronze data contains WFS samples
+            if "samples" in bronze_data and bronze_data["samples"]:
+                # Use WFS data from bronze layer
+                samples = bronze_data["samples"]
+                # Process WFS samples for enhanced classification
+                # For now, return the original table since this is complex
+                self.logger.warning("WFS enhancement from bronze data not yet implemented")
+                return buildings_table
+            else:
+                self.logger.info("No WFS data in bronze_data, skipping enhancement")
+                return buildings_table
+
+        except Exception as e:
+            self.logger.error(f"Failed to enhance classification from bronze data: {e}")
+            return buildings_table
 
     def _enhance_classification(self, buildings_table: ibis.Table, input_dir: Path) -> ibis.Table:
         """
@@ -610,6 +747,39 @@ class BuildingProcessor:
             "timestamp": datetime.now().isoformat(),
             "source_gpkg": str(gpkg_path),
             "enhance_classification": enhance_classification,
+            "settings": {
+                "agricultural_usage_codes": self.settings.agricultural_usage_codes,
+                "residential_usage_codes": self.settings.residential_usage_codes,
+                "educational_usage_codes": self.settings.educational_usage_codes,
+                "agricultural_current_use": self.settings.agricultural_current_use,
+                "residential_current_use": self.settings.residential_current_use,
+                "public_services_current_use": self.settings.public_services_current_use,
+            },
+            "pipeline_version": "1.0.0",
+        }
+
+        metadata_path = output_dir / "processing_metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        self.logger.info(f"Saved processing metadata to {metadata_path}")
+
+    def _save_processing_metadata_from_data(
+        self, output_dir: Path, bronze_data: dict, enhance_classification: bool
+    ) -> None:
+        """
+        Save processing metadata when using bronze data object.
+
+        Args:
+            output_dir: Output directory
+            bronze_data: Bronze data object
+            enhance_classification: Whether classification was enhanced
+        """
+        metadata = {
+            "timestamp": datetime.now().isoformat(),
+            "source": "bronze_data_object",
+            "enhance_classification": enhance_classification,
+            "bronze_metadata": bronze_data.get("metadata", {}),
             "settings": {
                 "agricultural_usage_codes": self.settings.agricultural_usage_codes,
                 "residential_usage_codes": self.settings.residential_usage_codes,
