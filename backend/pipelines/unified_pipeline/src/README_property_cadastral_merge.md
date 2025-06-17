@@ -4,42 +4,45 @@ This pipeline merges property ownership data from the Danish SFTP system with ca
 
 ## Overview
 
-**Purpose**: Link property ownership information with cadastral parcel geometries through spatial relationships.
+**Purpose**: Link property ownership information with cadastral parcel geometries through direct BFE number matching.
 
 **Input Sources**:
-- Property owners data (from SFTP pipeline) - contains privacy-transformed ownership information
-- Cadastral data (from WFS pipeline) - contains parcel geometries and administrative metadata
+- Property owners data (from SFTP pipeline) - contains privacy-transformed ownership information with BFE numbers
+- Cadastral data (from WFS pipeline) - contains parcel geometries and administrative metadata with BFE numbers
 
 **Output**: Unified parquet files with property ownership linked to cadastral parcels
 
 ## Data Flow
 
 ```
-Property Owners (Silver) + Cadastral (Silver) → Spatial Join → Merged Dataset (Silver)
+Property Owners (Silver) + Cadastral (Silver) → BFE Join → Merged Dataset (Silver)
 ```
 
 ## Key Features
 
-### 1. Spatial Joining
-- **Methods**: intersects, within, contains
-- **Buffer tolerance**: Configurable buffer distance for imprecise spatial matches
-- **Overlap threshold**: Minimum overlap ratio for valid matches
+### 1. BFE-Based Joining
+- **Direct matching**: Uses `bestemtFastEjendomBFENr` from property data and `bfe_number` from cadastral data
+- **High accuracy**: Exact identifier matches eliminate spatial approximation errors
+- **Performance**: Much faster than spatial joins for large datasets
+- **Join types**: inner, left, right, outer joins supported
 
 ### 2. Privacy Preservation
 - Maintains privacy transformations from property owners pipeline
 - CPR numbers remain as UUIDs
 - Personal address information stays removed
+- BFE numbers are preserved as they are property identifiers, not personal data
 
 ### 3. Data Quality
-- Geometry validation and transformation
-- Match rate reporting
-- Duplicate handling
-- Quality thresholds for validation
+- BFE number validation and consistency checks
+- Match rate reporting and quality statistics
+- Duplicate handling with configurable strategies
+- Comprehensive merge metadata
 
 ### 4. Flexible Configuration
-- Configurable spatial join methods
-- Adjustable quality thresholds
-- Optional local/GCS output
+- Configurable join methods (inner/left/right/outer)
+- Optional BFE number validation
+- Merge metadata inclusion controls
+- Quality threshold validation
 
 ## Configuration
 
@@ -47,20 +50,23 @@ Property Owners (Silver) + Cadastral (Silver) → Spatial Join → Merged Datase
 
 ```json
 {
-  "spatial_join_method": "intersects",
-  "buffer_distance_meters": 10.0,
-  "min_overlap_threshold": 0.1
+  "join_method": "inner",
+  "validate_bfe_numbers": true,
+  "include_merge_metadata": true
 }
 ```
 
-### Spatial Join Methods
+### Join Method
 
-- **`intersects`** (default): Property geometry intersects with cadastral parcel
-- **`within`**: Property geometry is completely within cadastral parcel  
-- **`contains`**: Property geometry completely contains cadastral parcel
+- **`inner`** (default): Only properties with matching cadastral parcels
+  - Ensures complete records with both ownership and parcel data
+  - Filters out invalid/orphaned BFE numbers automatically
+  - Recommended for production use to ensure data quality
 
-### Buffer Distance
-- Applied to property geometries before spatial join
+### BFE Number Validation
+- Validates BFE number format and presence
+- Filters out invalid or missing BFE numbers
+- Reports validation statistics
 - Useful for accounting for GPS accuracy or surveying differences
 - Specified in meters (converted using Danish UTM Zone 32N)
 

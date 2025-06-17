@@ -20,25 +20,17 @@ on:
         required: false
         default: false
         type: boolean
-      spatial_method:
-        description: 'Spatial join method'
+      # BFE join method is fixed to 'inner' as it's the only sensible option
+      validate_bfe:
+        description: 'Validate BFE number format and consistency'
         required: false
-        default: 'intersects'
-        type: choice
-        options:
-          - intersects
-          - within
-          - contains
-      buffer_distance:
-        description: 'Buffer distance in meters'
+        default: true
+        type: boolean
+      include_metadata:
+        description: 'Include merge metadata in output'
         required: false
-        default: '10.0'
-        type: string
-      min_overlap:
-        description: 'Minimum overlap threshold'
-        required: false
-        default: '0.1'
-        type: string
+        default: true
+        type: boolean
       dry_run:
         description: 'Run in dry-run mode (validation only)'
         required: false
@@ -139,24 +131,21 @@ jobs:
       working-directory: backend/pipelines/unified_pipeline
       run: |
         # Set parameters from inputs or defaults
-        SPATIAL_METHOD="${{ github.event.inputs.spatial_method || 'intersects' }}"
-        BUFFER_DISTANCE="${{ github.event.inputs.buffer_distance || '10.0' }}"
-        MIN_OVERLAP="${{ github.event.inputs.min_overlap || '0.1' }}"
-        DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+        VALIDATE_BFE="${{ github.event.inputs.validate_bfe || true }}"
+        INCLUDE_METADATA="${{ github.event.inputs.include_metadata || true }}"
+        DRY_RUN="${{ github.event.inputs.dry_run || false }}"
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         
         echo "Configuration:"
-        echo "  Spatial method: ${SPATIAL_METHOD}"
-        echo "  Buffer distance: ${BUFFER_DISTANCE}m" 
-        echo "  Min overlap: ${MIN_OVERLAP}"
+        echo "  BFE join method: inner (fixed)"
+        echo "  Validate BFE numbers: ${VALIDATE_BFE}"
+        echo "  Include metadata: ${INCLUDE_METADATA}"
         echo "  Dry run: ${DRY_RUN}"
         echo "  Timestamp: ${TIMESTAMP}"
         
-        # Build command arguments
+        # Build command arguments - use config file approach
         CMD_ARGS=(
-          "--spatial-method" "${SPATIAL_METHOD}"
-          "--buffer-distance" "${BUFFER_DISTANCE}"
-          "--min-overlap" "${MIN_OVERLAP}"
+          "--config-file" "config/property_cadastral_merge_config.json"
           "--output-dataset" "property_cadastral_merged_${TIMESTAMP}"
         )
         
