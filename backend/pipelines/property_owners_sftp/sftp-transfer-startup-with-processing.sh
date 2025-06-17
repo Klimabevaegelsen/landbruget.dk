@@ -624,7 +624,7 @@ class SFTPToGCSTransferWithProcessing:
             raise
 
     def find_latest_file(self, sftp):
-        logger.info("Finding latest .zip file on SFTP server...")
+        logger.info("Finding latest testigen .zip file on SFTP server...")
         flush_logs()
         latest_file = None
         latest_time = None
@@ -633,17 +633,18 @@ class SFTPToGCSTransferWithProcessing:
             for entry in sftp.listdir_attr('.'):
                 logger.debug(f"SFTP entry: {entry.filename}, mtime: {entry.st_mtime}")
                 flush_logs()
-                if not entry.longname.startswith('d') and entry.filename.endswith('.zip'):
+                # Only look for testigen files, not bbr3 files
+                if not entry.longname.startswith('d') and entry.filename.endswith('.zip') and 'testigen' in entry.filename.lower():
                     if latest_time is None or entry.st_mtime > latest_time:
                         latest_file = entry.filename
                         latest_time = entry.st_mtime
-                        logger.debug(f"New latest candidate: {latest_file} (mtime: {latest_time})")
+                        logger.debug(f"New latest testigen candidate: {latest_file} (mtime: {latest_time})")
                         flush_logs()
 
             if latest_file is None:
-                logger.error("No .zip files found on SFTP server.")
+                logger.error("No testigen .zip files found on SFTP server.")
                 flush_logs()
-                raise FileNotFoundError("No .zip files found on SFTP server")
+                raise FileNotFoundError("No testigen .zip files found on SFTP server")
 
             logger.info(f"Found latest file: {latest_file}")
             flush_logs()
