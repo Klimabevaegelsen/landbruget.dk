@@ -136,7 +136,7 @@ jobs:
         echo "SAVE_LOCAL=false" >> $GITHUB_ENV
 
     - name: Run property-cadastral merge
-      working-directory: backend/pipelines/unified_pipeline/src
+      working-directory: backend/pipelines/unified_pipeline
       run: |
         # Set parameters from inputs or defaults
         SPATIAL_METHOD="${{ github.event.inputs.spatial_method || 'intersects' }}"
@@ -166,8 +166,8 @@ jobs:
         fi
         
         # Run the merge pipeline
-        echo "Running: python run_property_cadastral_merge.py ${CMD_ARGS[*]}"
-        cd ../.. && uv run python src/run_property_cadastral_merge.py "${CMD_ARGS[@]}"
+        echo "Running: python src/run_property_cadastral_merge.py ${CMD_ARGS[*]}"
+        uv run python src/run_property_cadastral_merge.py "${CMD_ARGS[@]}"
 
     - name: Upload logs to GCS
       if: always()
