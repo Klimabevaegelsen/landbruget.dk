@@ -31,7 +31,7 @@ def main():
 
     parser.add_argument(
         "--source",
-        choices=["inspire_bbr", "geodanmark_wfs"],
+        choices=["inspire_bbr", "geodanmark_wfs", "both"],
         help="Data source for bronze layer (required for bronze layer)",
     )
 
@@ -100,6 +100,20 @@ def run_bronze_layer(args: argparse.Namespace, settings: Settings, logger: loggi
     elif args.source == "geodanmark_wfs":
         fetcher = GeoDanmarkWFSFetcher(settings, logger)
         fetcher.fetch_samples(output_dir)
+
+    elif args.source == "both":
+        # Run both sources sequentially
+        logger.info("Running both data sources...")
+
+        # First run INSPIRE BBR
+        logger.info("Fetching INSPIRE BBR data...")
+        inspire_fetcher = InspireBBRFetcher(settings, logger)
+        inspire_fetcher.fetch_data(output_dir, sample_size=args.sample_size)
+
+        # Then run GeoDanmark WFS
+        logger.info("Fetching GeoDanmark WFS data...")
+        geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
+        geodanmark_fetcher.fetch_samples(output_dir)
 
     logger.info("Bronze layer processing completed successfully")
 
