@@ -38,7 +38,9 @@ class InspireBBRFetcher:
             {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         )
 
-    def fetch_data(self, output_dir: Path, sample_size: int | None = None) -> None:
+    def fetch_data(
+        self, output_dir: Path, sample_size: int | None = None, return_data: bool = False
+    ):
         """
         Fetch INSPIRE BBR data from SDFE FTP server.
 
@@ -78,6 +80,39 @@ class InspireBBRFetcher:
                 self.logger.info("Cleaned up ZIP file to save storage space")
 
             self.logger.info(f"Successfully fetched INSPIRE BBR data to {gpkg_path}")
+
+            # Optionally return data for in-memory processing
+            if return_data:
+                self.logger.info("Loading data for in-memory processing")
+                try:
+                    import geopandas as gpd
+
+                    data = gpd.read_file(gpkg_path)
+                    self.logger.info(f"Loaded {len(data):,} records for in-memory processing")
+                    return {
+                        "data": data,
+                        "gpkg_path": gpkg_path,
+                        "metadata": {
+                            "source": "inspire_bbr",
+                            "sample_size": sample_size,
+                            "file_info": file_info,
+                            "download_url": download_url,
+                        },
+                    }
+                except Exception as e:
+                    self.logger.warning(f"Failed to load data for in-memory processing: {e}")
+                    # Still return path info for fallback
+                    return {
+                        "gpkg_path": gpkg_path,
+                        "metadata": {
+                            "source": "inspire_bbr",
+                            "sample_size": sample_size,
+                            "file_info": file_info,
+                            "download_url": download_url,
+                        },
+                    }
+
+            return None
 
         except Exception as e:
             self.logger.error(f"Failed to fetch INSPIRE BBR data: {e}")
