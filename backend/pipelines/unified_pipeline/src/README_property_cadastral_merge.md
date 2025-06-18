@@ -87,10 +87,10 @@ python run_property_cadastral_merge.py
 
 ```bash
 python run_property_cadastral_merge.py \
-  --spatial-method intersects \
-  --buffer-distance 10.0 \
-  --min-overlap 0.1 \
-  --config-file config/property_cadastral_merge_config.json
+  --join-method inner \
+  --validate-bfe \
+  --include-metadata \
+  --output-dataset property_cadastral_merged_custom
 ```
 
 ### Dry Run
@@ -242,7 +242,7 @@ The merged dataset includes:
 - Performance benchmarks
 
 ### Configuration Updates
-- Modify `config/property_cadastral_merge_config.json`
+- Modify command line arguments as needed
 - Update schema mappings as source data evolves
 - Add new quality checks as needed
 
