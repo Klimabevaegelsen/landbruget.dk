@@ -244,7 +244,7 @@ def get_storage_interface() -> StorageInterface:
 
     if environment == "prod" and gcs_bucket:
         logging.info(f"Using GCS storage with bucket: {gcs_bucket}")
-        return GCSStorage(gcs_bucket, prefix="bronze/dst")
+        return GCSStorage(gcs_bucket)
     else:
         base_dir = os.getenv("LOCAL_STORAGE_DIR", "bronze/dst")
         logging.info(f"Using local storage with base directory: {base_dir}")
@@ -262,8 +262,14 @@ def save_raw_data(
 
     # Create paths following bronze layer structure - simplified
     date_str = datetime.now().strftime("%Y%m%d")
-    data_path = f"{date_str}/{table_id}_{data_type}.json"
-    metadata_path = f"{date_str}/{table_id}_{data_type}_metadata.json"
+
+    # Add bronze/dst prefix for GCS storage
+    if isinstance(storage, GCSStorage):
+        data_path = f"bronze/dst/{date_str}/{table_id}_{data_type}.json"
+        metadata_path = f"bronze/dst/{date_str}/{table_id}_{data_type}_metadata.json"
+    else:
+        data_path = f"{date_str}/{table_id}_{data_type}.json"
+        metadata_path = f"{date_str}/{table_id}_{data_type}_metadata.json"
 
     # Save raw data exactly as received (no transformations)
     storage.save_json(data, data_path)
