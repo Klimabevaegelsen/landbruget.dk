@@ -203,25 +203,63 @@ class BuildingProcessor:
             # First make sure spatial extension is available
             self.conn.execute("LOAD spatial;")
 
-            # Read both layers from GPKG file and combine them
-            # First create buildings table
+            # Create buildings table with layer source
             self.conn.execute(f"""
                 CREATE TABLE buildings_temp AS 
                 SELECT *, 'building' as layer_source FROM ST_Read('{gpkg_path}', layer='building')
             """)
 
-            # Then create other constructions table
+            # Create constructions table with layer source
             self.conn.execute(f"""
                 CREATE TABLE constructions_temp AS 
                 SELECT *, 'otherConstruction' as layer_source FROM ST_Read('{gpkg_path}', layer='otherConstruction')
             """)
 
-            # Combine both tables
+            # Get column information for both tables to handle schema differences
+            buildings_cols = self.conn.execute("DESCRIBE buildings_temp").fetchall()
+            constructions_cols = self.conn.execute("DESCRIBE constructions_temp").fetchall()
+
+            buildings_col_names = {col[0] for col in buildings_cols}
+            constructions_col_names = {col[0] for col in constructions_cols}
+
+            # Find common columns and unique columns
+            common_cols = buildings_col_names & constructions_col_names
+            buildings_only = buildings_col_names - constructions_col_names
+            constructions_only = constructions_col_names - buildings_col_names
+
+            self.logger.info(
+                f"Buildings columns: {len(buildings_col_names)}, Constructions columns: {len(constructions_col_names)}"
+            )
+            self.logger.info(
+                f"Common columns: {len(common_cols)}, Buildings-only: {len(buildings_only)}, Constructions-only: {len(constructions_only)}"
+            )
+
+            # Build SELECT statements with matching column structures
+            all_cols = sorted(common_cols | buildings_only | constructions_only)
+
+            buildings_select = []
+            constructions_select = []
+
+            for col in all_cols:
+                if col in buildings_col_names:
+                    buildings_select.append(col)
+                else:
+                    buildings_select.append(f"NULL as {col}")
+
+                if col in constructions_col_names:
+                    constructions_select.append(col)
+                else:
+                    constructions_select.append(f"NULL as {col}")
+
+            buildings_select_str = ", ".join(buildings_select)
+            constructions_select_str = ", ".join(constructions_select)
+
+            # Combine both tables with matching schemas
             self.conn.execute(f"""
                 CREATE TABLE {table_name} AS 
-                SELECT * FROM buildings_temp
+                SELECT {buildings_select_str} FROM buildings_temp
                 UNION ALL
-                SELECT * FROM constructions_temp
+                SELECT {constructions_select_str} FROM constructions_temp
             """)
 
             # Clean up temporary tables
