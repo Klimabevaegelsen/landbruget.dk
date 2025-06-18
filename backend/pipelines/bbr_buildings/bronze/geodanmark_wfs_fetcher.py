@@ -31,17 +31,14 @@ class GeoDanmarkWFSFetcher:
         self.logger = logger
         self.session = requests.Session()
 
-        # Set up authentication if credentials are available
-        if self.settings.has_datafordeler_credentials:
-            self.session.auth = (
-                self.settings.datafordeler_username,
-                self.settings.datafordeler_password,
+        # GeoDanmark WFS requires authentication - fail if credentials are missing
+        if not self.settings.has_datafordeler_credentials:
+            raise ValueError(
+                "GeoDanmark WFS requires authentication. "
+                "Please set DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables."
             )
-            self.logger.info("Using authenticated access to GeoDanmark WFS")
-        else:
-            self.logger.warning(
-                "No Datafordeleren credentials found - using unauthenticated access"
-            )
+
+        self.logger.info("Using authenticated access to GeoDanmark WFS")
 
     def fetch_samples(self, output_dir: Path, max_features: int = 1000, return_data: bool = False):
         """
@@ -88,6 +85,9 @@ class GeoDanmarkWFSFetcher:
 
                 except Exception as e:
                     self.logger.error(f"Failed to fetch sample for {feature_type}: {e}")
+                    # Don't continue if authentication fails or other critical errors occur
+                    if "401" in str(e) or "Unauthorized" in str(e):
+                        raise ValueError(f"Authentication failed for GeoDanmark WFS: {e}")
                     samples[feature_type] = {"error": str(e)}
 
             # Save combined samples
@@ -127,6 +127,15 @@ class GeoDanmarkWFSFetcher:
         self.logger.info("Fetching WFS capabilities")
 
         params = {"service": "WFS", "version": "1.0.0", "request": "GetCapabilities"}
+
+        # Add authentication parameters if available
+        if self.settings.has_datafordeler_credentials:
+            params.update(
+                {
+                    "username": self.settings.datafordeler_username,
+                    "password": self.settings.datafordeler_password,
+                }
+            )
 
         try:
             response = self.session.get(self.settings.geodanmark_wfs_url, params=params, timeout=30)
@@ -192,6 +201,15 @@ class GeoDanmarkWFSFetcher:
             "outputFormat": "application/json",
             "maxFeatures": max_features,
         }
+
+        # Add authentication parameters if available
+        if self.settings.has_datafordeler_credentials:
+            params.update(
+                {
+                    "username": self.settings.datafordeler_username,
+                    "password": self.settings.datafordeler_password,
+                }
+            )
 
         try:
             response = self.session.get(self.settings.geodanmark_wfs_url, params=params, timeout=60)
