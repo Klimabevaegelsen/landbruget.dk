@@ -45,25 +45,17 @@ def setup_logging(level: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(
-        description="Fetch data from Danmarks Statistik API and store in bronze layer"
-    )
+    parser = argparse.ArgumentParser(description="Fetch data from Danmarks Statistik API and store in bronze layer")
     parser.add_argument("--table-id", required=True, help="Table ID to fetch")
-    parser.add_argument(
-        "--output-dir", default="./bronze", help="Output directory for bronze data"
-    )
-    parser.add_argument(
-        "--lang", default="da", choices=["da", "en"], help="Language for API responses"
-    )
+    parser.add_argument("--output-dir", default="./bronze", help="Output directory for bronze data")
+    parser.add_argument("--lang", default="da", choices=["da", "en"], help="Language for API responses")
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
         help="Logging level (default: INFO)",
     )
-    parser.add_argument(
-        "--variables", nargs="*", help="Specific variables to fetch (optional)"
-    )
+    parser.add_argument("--variables", nargs="*", help="Specific variables to fetch (optional)")
     parser.add_argument("--start-time", help="Start time filter (optional)")
     parser.add_argument("--end-time", help="End time filter (optional)")
 
@@ -114,9 +106,7 @@ class DSTApiClient:
             url = f"{self.base_url}/data"
 
             # Build request payload based on table configuration
-            payload = self._build_request_payload(
-                table_id, variables, start_time, end_time
-            )
+            payload = self._build_request_payload(table_id, variables, start_time, end_time)
 
             logging.info(f"Fetching data for {table_id}")
             logging.debug(f"Request payload: {json.dumps(payload, indent=2)}")
@@ -201,9 +191,7 @@ class DSTApiClient:
         else:
             # For unknown tables, use minimal request
             if variables:
-                payload["variables"] = [
-                    {"code": var, "values": ["*"]} for var in variables
-                ]
+                payload["variables"] = [{"code": var, "values": ["*"]} for var in variables]
 
         # Add time filters if specified
         if start_time or end_time:
@@ -230,9 +218,7 @@ class DSTApiClient:
                 if response.status_code == 429:
                     # Rate limited
                     wait_time = 2**attempt
-                    logging.warning(
-                        f"Rate limited, waiting {wait_time}s before retry {attempt + 1}"
-                    )
+                    logging.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}")
                     time.sleep(wait_time)
                     continue
 
@@ -306,9 +292,7 @@ def save_raw_data(
         metadata["columns"] = data.get("columns", [])
     elif data_type == "tableinfo" and "variables" in data:
         metadata["variable_count"] = len(data["variables"])
-        metadata["variables"] = [
-            var.get("id") for var in data["variables"] if "id" in var
-        ]
+        metadata["variables"] = [var.get("id") for var in data["variables"] if "id" in var]
 
     storage.save_json(metadata, metadata_path)
 
@@ -347,20 +331,21 @@ def main_with_args(args: argparse.Namespace):
             # Log summary statistics
             if "data" in table_data:
                 record_count = len(table_data["data"])
-                logging.info(
-                    f"Successfully fetched and saved {record_count} data records"
-                )
+                logging.info(f"Successfully fetched and saved {record_count} data records")
 
             if "columns" in table_data:
                 column_count = len(table_data["columns"])
                 logging.info(f"Data includes {column_count} columns")
 
+            logging.info("Bronze layer pipeline completed successfully")
+            logging.info(f"Data stored with date: {date_str}")
+
+            # Return the data for in-memory processing by silver layer
+            return table_data
+
         else:
             logging.error("Failed to fetch table data")
             raise SystemExit(1)
-
-        logging.info("Bronze layer pipeline completed successfully")
-        logging.info(f"Data stored with date: {date_str}")
 
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
