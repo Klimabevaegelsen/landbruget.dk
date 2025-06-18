@@ -42,11 +42,18 @@ class InspireBBRFetcher:
         self, output_dir: Path, sample_size: int | None = None, return_data: bool = False
     ):
         """
-        Fetch INSPIRE BBR data from SDFE FTP server.
+        Fetch INSPIRE BBR data from SDFE FTP server with optimized disk usage.
+
+        Architecture:
+        1. Download raw ZIP file (761MB)
+        2. Extract and process GPKG file immediately with DuckDB streaming
+        3. Clean up files immediately to minimize disk usage
+        4. Return processed data for silver layer
 
         Args:
-            output_dir: Directory to save the data
-            sample_size: Optional sample size for testing
+            output_dir: Directory to save metadata
+            sample_size: Optional sample size for testing (if specified)
+            return_data: Whether to return data for silver layer processing
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
@@ -68,76 +75,266 @@ class InspireBBRFetcher:
             zip_path = run_dir / "DK_INSPIRE_BBR.zip"
             self._download_file(download_url, zip_path, file_info.get("size"))
 
-            # Extract the GPKG file
-            gpkg_path = self._extract_gpkg(zip_path, run_dir)
+            # Process data immediately to minimize disk usage
+            processed_data = None
+            if return_data:
+                processed_data = self._extract_and_process_immediately(zip_path, sample_size)
+            else:
+                # If not returning data, still clean up by extracting and removing
+                gpkg_path = self._extract_gpkg(zip_path, run_dir)
+                # Clean up immediately
+                if zip_path.exists():
+                    zip_path.unlink()
+                    self.logger.info("Cleaned up ZIP file")
+                if gpkg_path.exists():
+                    size_gb = gpkg_path.stat().st_size / (1024**3)
+                    gpkg_path.unlink()
+                    self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB)")
 
             # Save metadata
             self._save_metadata(run_dir, file_info, download_url, sample_size)
 
-            # Clean up ZIP file to save space
-            if zip_path.exists():
-                zip_path.unlink()
-                self.logger.info("Cleaned up ZIP file to save storage space")
+            self.logger.info("Successfully processed INSPIRE BBR data")
 
-            self.logger.info(f"Successfully fetched INSPIRE BBR data to {gpkg_path}")
-
-            # Optionally return data for in-memory processing
-            if return_data:
-                self.logger.info("Loading data for in-memory processing")
-                try:
-                    import geopandas as gpd
-                    import pandas as pd
-
-                    # Load both building and otherConstruction layers for comprehensive analysis
-                    self.logger.info("Loading 'building' layer from GPKG file")
-                    buildings_data = gpd.read_file(gpkg_path, layer="building")
-                    self.logger.info(f"Loaded {len(buildings_data):,} building records")
-
-                    self.logger.info("Loading 'otherConstruction' layer from GPKG file")
-                    constructions_data = gpd.read_file(gpkg_path, layer="otherConstruction")
-                    self.logger.info(
-                        f"Loaded {len(constructions_data):,} other construction records"
-                    )
-
-                    # Add a source column to distinguish between the two layers
-                    buildings_data["layer_source"] = "building"
-                    constructions_data["layer_source"] = "otherConstruction"
-
-                    # Combine both datasets
-                    data = gpd.GeoDataFrame(
-                        pd.concat([buildings_data, constructions_data], ignore_index=True)
-                    )
-                    self.logger.info(
-                        f"Combined total: {len(data):,} records for in-memory processing"
-                    )
-                    return {
-                        "data": data,
-                        "gpkg_path": gpkg_path,
-                        "metadata": {
-                            "source": "inspire_bbr",
-                            "sample_size": sample_size,
-                            "file_info": file_info,
-                            "download_url": download_url,
-                        },
-                    }
-                except Exception as e:
-                    self.logger.warning(f"Failed to load data for in-memory processing: {e}")
-                    # Still return path info for fallback
-                    return {
-                        "gpkg_path": gpkg_path,
-                        "metadata": {
-                            "source": "inspire_bbr",
-                            "sample_size": sample_size,
-                            "file_info": file_info,
-                            "download_url": download_url,
-                        },
-                    }
+            if return_data and processed_data:
+                return {
+                    "data": processed_data,
+                    "metadata": {
+                        "source": "inspire_bbr",
+                        "sample_size": sample_size,
+                        "actual_records": len(processed_data),
+                        "file_info": file_info,
+                        "download_url": download_url,
+                        "timestamp": timestamp,
+                    },
+                }
 
             return None
 
         except Exception as e:
             self.logger.error(f"Failed to fetch INSPIRE BBR data: {e}")
             raise
+
+    def _extract_and_process_immediately(self, zip_path: Path, sample_size: int | None):
+        """
+        Extract GPKG and process it immediately to minimize disk usage.
+        """
+        try:
+            # Extract GPKG
+            run_dir = zip_path.parent
+            gpkg_path = self._extract_gpkg(zip_path, run_dir)
+
+            # Immediately clean up ZIP file
+            if zip_path.exists():
+                zip_path.unlink()
+                self.logger.info("Cleaned up ZIP file to save disk space")
+
+            # Process with DuckDB
+            processed_data = self._load_full_dataset(gpkg_path, sample_size)
+
+            # Immediately clean up GPKG file after processing
+            if gpkg_path.exists():
+                size_gb = gpkg_path.stat().st_size / (1024**3)
+                gpkg_path.unlink()
+                self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB) after processing")
+
+            return processed_data
+
+        except Exception as e:
+            self.logger.error(f"Failed to extract and process immediately: {e}")
+            raise
+
+    def _load_full_dataset(self, gpkg_path: Path, sample_size: int | None):
+        """
+        Load the dataset using DuckDB for efficient streaming processing.
+        This avoids loading the entire 4.6GB file into memory.
+        """
+        try:
+            import duckdb
+
+            self.logger.info("Loading dataset using DuckDB for efficient processing...")
+
+            # Create DuckDB connection with spatial extension
+            conn = duckdb.connect(":memory:")
+            conn.execute("INSTALL spatial;")
+            conn.execute("LOAD spatial;")
+
+            # Build SQL query with optional sampling
+            if sample_size and sample_size > 0:
+                # Use DuckDB's standard sampling approach with ORDER BY RANDOM()
+                buildings_query = f"""
+                    SELECT *, 'building' as layer_source 
+                    FROM ST_Read('{gpkg_path}', layer='building')
+                    ORDER BY random()
+                    LIMIT {sample_size}
+                """
+                constructions_sample_size = max(1, sample_size // 4)
+                constructions_query = f"""
+                    SELECT *, 'otherConstruction' as layer_source 
+                    FROM ST_Read('{gpkg_path}', layer='otherConstruction')
+                    ORDER BY random()
+                    LIMIT {constructions_sample_size}
+                """
+                self.logger.info(
+                    f"Sampling {sample_size:,} buildings and {constructions_sample_size:,} constructions (testing mode)"
+                )
+            else:
+                # Load full dataset efficiently
+                buildings_query = f"""
+                    SELECT *, 'building' as layer_source 
+                    FROM ST_Read('{gpkg_path}', layer='building')
+                """
+                constructions_query = f"""
+                    SELECT *, 'otherConstruction' as layer_source 
+                    FROM ST_Read('{gpkg_path}', layer='otherConstruction')
+                """
+                self.logger.info("Loading full dataset using DuckDB streaming")
+
+            # Execute queries and get record counts
+            buildings_count = conn.execute(f"SELECT COUNT(*) FROM ({buildings_query})").fetchone()[
+                0
+            ]
+            constructions_count = conn.execute(
+                f"SELECT COUNT(*) FROM ({constructions_query})"
+            ).fetchone()[0]
+
+            self.logger.info(f"Buildings: {buildings_count:,} records")
+            self.logger.info(f"Constructions: {constructions_count:,} records")
+
+            # Combine datasets efficiently
+            combined_query = f"""
+                SELECT * FROM ({buildings_query})
+                UNION ALL
+                SELECT * FROM ({constructions_query})
+            """
+
+            # Convert to pandas for compatibility with silver layer
+            # This is much more memory efficient than geopandas.read_file()
+            combined_df = conn.execute(combined_query).df()
+
+            self.logger.info(f"Combined total: {len(combined_df):,} records loaded efficiently")
+
+            # Convert back to GeoDataFrame for compatibility
+            # ST_Read returns a 'geom' column with GEOMETRY type
+            if "geom" in combined_df.columns:
+                # Convert DuckDB geometry to geopandas using ST_AsText
+                import geopandas as gpd
+                from shapely import wkt
+
+                # Get WKT representation of geometries
+                wkt_query = f"""
+                    SELECT *, ST_AsText(geom) as wkt_geom FROM ({combined_query})
+                """
+                combined_df = conn.execute(wkt_query).df()
+
+                # Convert WKT geometry to shapely geometries
+                combined_df["geometry"] = combined_df["wkt_geom"].apply(wkt.loads)
+                combined_df = combined_df.drop(["geom", "wkt_geom"], axis=1)
+
+                # Create GeoDataFrame
+                combined_gdf = gpd.GeoDataFrame(combined_df, geometry="geometry")
+                self.logger.info("Converted DuckDB result to GeoDataFrame")
+
+                conn.close()
+                return combined_gdf
+            else:
+                # Fallback if no geometry column
+                import geopandas as gpd
+
+                combined_gdf = gpd.GeoDataFrame(combined_df)
+                conn.close()
+                return combined_gdf
+
+        except Exception as e:
+            self.logger.warning(f"DuckDB processing failed, falling back to geopandas: {e}")
+            # Fallback to original geopandas approach
+            return self._load_with_geopandas_fallback(gpkg_path, sample_size)
+
+    def _load_with_geopandas_fallback(self, gpkg_path: Path, sample_size: int | None):
+        """
+        Fallback method using geopandas (original approach).
+        """
+        try:
+            import geopandas as gpd
+            import pandas as pd
+
+            self.logger.info("Using geopandas fallback for data loading...")
+
+            # Load building layer
+            self.logger.info("Loading 'building' layer from GPKG file")
+            buildings_data = gpd.read_file(gpkg_path, layer="building")
+            self.logger.info(f"Loaded {len(buildings_data):,} building records")
+
+            # Apply sampling only if explicitly requested for testing
+            if sample_size and sample_size > 0:
+                if len(buildings_data) > sample_size:
+                    self.logger.info(
+                        f"Sampling {sample_size:,} buildings from {len(buildings_data):,} total (testing mode)"
+                    )
+                    buildings_data = buildings_data.sample(n=sample_size, random_state=42)
+
+            # Load construction layer
+            self.logger.info("Loading 'otherConstruction' layer from GPKG file")
+            constructions_data = gpd.read_file(gpkg_path, layer="otherConstruction")
+            self.logger.info(f"Loaded {len(constructions_data):,} other construction records")
+
+            # Apply sampling only if explicitly requested for testing
+            if sample_size and sample_size > 0:
+                if len(constructions_data) > sample_size:
+                    constructions_sample_size = max(
+                        1, sample_size // 4
+                    )  # Smaller sample for constructions
+                    self.logger.info(
+                        f"Sampling {constructions_sample_size:,} constructions from {len(constructions_data):,} total (testing mode)"
+                    )
+                    constructions_data = constructions_data.sample(
+                        n=constructions_sample_size, random_state=42
+                    )
+
+            # Add source column to distinguish layers
+            buildings_data["layer_source"] = "building"
+            constructions_data["layer_source"] = "otherConstruction"
+
+            # Combine datasets
+            combined_data = gpd.GeoDataFrame(
+                pd.concat([buildings_data, constructions_data], ignore_index=True)
+            )
+
+            self.logger.info(
+                f"Combined total: {len(combined_data):,} records ready for silver layer"
+            )
+            return combined_data
+
+        except Exception as e:
+            self.logger.error(f"Geopandas fallback also failed: {e}")
+            raise
+
+    def _save_metadata(
+        self, output_dir: Path, file_info: dict, download_url: str, sample_size: int | None
+    ) -> None:
+        """
+        Save metadata about the fetched data.
+
+        Args:
+            output_dir: Directory to save metadata
+            file_info: File information from FTP page
+            download_url: URL used for download
+            sample_size: Sample size if used for testing
+        """
+        metadata = {
+            "timestamp": datetime.now().isoformat(),
+            "source_url": self.settings.sdfe_ftp_base_url,
+            "download_url": download_url,
+            "file_info": file_info,
+            "sample_size": sample_size,
+            "pipeline_version": "1.0.0",
+        }
+
+        metadata_path = output_dir / "metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        self.logger.info(f"Saved metadata to {metadata_path}")
 
     def _parse_ftp_page(self) -> tuple[str | None, dict]:
         """
@@ -343,30 +540,3 @@ class InspireBBRFetcher:
         except Exception as e:
             self.logger.error(f"Failed to extract GPKG: {e}")
             raise
-
-    def _save_metadata(
-        self, output_dir: Path, file_info: dict, download_url: str, sample_size: int | None
-    ) -> None:
-        """
-        Save metadata about the fetched data.
-
-        Args:
-            output_dir: Directory to save metadata
-            file_info: File information from FTP page
-            download_url: URL used for download
-            sample_size: Sample size if used
-        """
-        metadata = {
-            "timestamp": datetime.now().isoformat(),
-            "source_url": self.settings.sdfe_ftp_base_url,
-            "download_url": download_url,
-            "file_info": file_info,
-            "sample_size": sample_size,
-            "pipeline_version": "1.0.0",
-        }
-
-        metadata_path = output_dir / "metadata.json"
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-        self.logger.info(f"Saved metadata to {metadata_path}")
