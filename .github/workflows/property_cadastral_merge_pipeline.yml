@@ -179,8 +179,8 @@ jobs:
       run: |
         echo "Validating merge pipeline output..."
         
-        # Check if new merged data exists - look for timestamped subdirectories under property_cadastral_merged
-        LATEST_FILE=$(gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/**/*.parquet" 2>/dev/null | sort | tail -1)
+        # Check if new merged data exists in the standard BaseSource directory structure
+        LATEST_FILE=$(gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/" | sort | tail -1)
         
         if [ -n "${LATEST_FILE}" ]; then
           echo "✅ Latest merged file: ${LATEST_FILE}"
@@ -198,7 +198,7 @@ jobs:
         else
           echo "❌ No merged output files found"
           echo "Checking available directories..."
-          gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/" || echo "No property_cadastral_merged directory found"
+          gsutil ls "gs://${GCS_BUCKET}/silver/" | grep property_cadastral_merged || echo "No property_cadastral_merged directories found"
           exit 1
         fi
 
