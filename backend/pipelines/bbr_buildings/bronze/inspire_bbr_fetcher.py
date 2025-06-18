@@ -2,18 +2,27 @@
 INSPIRE BBR Data Fetcher for the BBR Buildings Pipeline.
 
 This module handles fetching the DK_INSPIRE_BBR.zip file from SDFE's FTP server
-by parsing the FTP page to get the actual download link dynamically.
+and enriching building data with detailed BBR codes via GraphQL API.
+
+Strategy:
+1. Extract building UUIDs and attributes from INSPIRE BBR GPKG
+2. Use GraphQL API to get detailed BBR usage codes for agriculture and publicServices
+3. Filter publicServices for education buildings only (420-441 codes)
+4. Keep all agriculture buildings but attach detailed BBR codes (210-219 series)
+5. Keep all residential buildings as-is
 """
 
 import json
 import logging
 import re
 import shutil
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
@@ -21,7 +30,7 @@ from config import Settings
 
 
 class InspireBBRFetcher:
-    """Fetches INSPIRE BBR data from SDFE FTP server."""
+    """Fetches INSPIRE BBR data from SDFE FTP server and enriches with GraphQL API."""
 
     def __init__(self, settings: Settings, logger: logging.Logger):
         """
@@ -42,24 +51,25 @@ class InspireBBRFetcher:
         self, output_dir: Path, sample_size: int | None = None, return_data: bool = False
     ):
         """
-        Fetch INSPIRE BBR data from SDFE FTP server with optimized disk usage.
+        Fetch INSPIRE BBR data and enrich with GraphQL API.
 
-        Architecture:
-        1. Download raw ZIP file (761MB)
-        2. Extract and process GPKG file immediately with DuckDB streaming
-        3. Clean up files immediately to minimize disk usage
-        4. Return processed data for silver layer
+        Strategy:
+        1. Download and process INSPIRE BBR GPKG
+        2. Extract building UUIDs for residential, agriculture, and publicServices
+        3. Use GraphQL API to get detailed BBR codes for agriculture and publicServices
+        4. Filter publicServices for education buildings only
+        5. Return enriched building data
 
         Args:
             output_dir: Directory to save metadata
-            sample_size: Optional sample size for testing (if specified)
+            sample_size: Optional sample size for testing
             return_data: Whether to return data for silver layer processing
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        self.logger.info(f"Starting INSPIRE BBR data fetch to {run_dir}")
+        self.logger.info(f"Starting INSPIRE BBR data fetch with GraphQL enrichment to {run_dir}")
 
         try:
             # Parse the FTP page to get the actual download link
@@ -78,7 +88,7 @@ class InspireBBRFetcher:
             # Process data immediately to minimize disk usage
             processed_data = None
             if return_data:
-                processed_data = self._extract_and_process_immediately(zip_path, sample_size)
+                processed_data = self._extract_and_process_with_graphql(zip_path, sample_size)
             else:
                 # If not returning data, still clean up by extracting and removing
                 gpkg_path = self._extract_gpkg(zip_path, run_dir)
@@ -94,7 +104,7 @@ class InspireBBRFetcher:
             # Save metadata
             self._save_metadata(run_dir, file_info, download_url, sample_size)
 
-            self.logger.info("Successfully processed INSPIRE BBR data")
+            self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
 
             if return_data and processed_data is not None:
                 # Handle the new data structure
@@ -106,7 +116,7 @@ class InspireBBRFetcher:
                 return {
                     "data": processed_data,
                     "metadata": {
-                        "source": "inspire_bbr",
+                        "source": "inspire_bbr_with_graphql",
                         "sample_size": sample_size,
                         "actual_records": actual_records,
                         "file_info": file_info,
@@ -121,9 +131,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to fetch INSPIRE BBR data: {e}")
             raise
 
-    def _extract_and_process_immediately(self, zip_path: Path, sample_size: int | None):
+    def _extract_and_process_with_graphql(self, zip_path: Path, sample_size: int | None):
         """
-        Extract GPKG and process it immediately to minimize disk usage.
+        Extract GPKG and process it with GraphQL API enrichment.
         """
         try:
             # Extract GPKG
@@ -135,8 +145,8 @@ class InspireBBRFetcher:
                 zip_path.unlink()
                 self.logger.info("Cleaned up ZIP file to save disk space")
 
-            # Process with DuckDB
-            processed_data = self._load_full_dataset(gpkg_path, sample_size)
+            # Process with DuckDB and GraphQL enrichment
+            processed_data = self._load_and_enrich_with_graphql(gpkg_path, sample_size)
 
             # Immediately clean up GPKG file after processing
             if gpkg_path.exists():
@@ -147,423 +157,370 @@ class InspireBBRFetcher:
             return processed_data
 
         except Exception as e:
-            self.logger.error(f"Failed to extract and process immediately: {e}")
+            self.logger.error(f"Failed to extract and process with GraphQL: {e}")
             raise
 
-    def _load_full_dataset(self, gpkg_path: Path, sample_size: int | None):
+    def _load_and_enrich_with_graphql(self, gpkg_path: Path, sample_size: int | None):
         """
-        Load the dataset using DuckDB for efficient streaming processing.
-        This avoids loading the entire 4.6GB file into memory.
+        Load INSPIRE BBR data and enrich with GraphQL API for detailed BBR codes.
+
+        Strategy:
+        1. Extract all residential, agriculture, and publicServices buildings from INSPIRE BBR
+        2. For agriculture and publicServices: query GraphQL API for detailed BBR codes
+        3. Filter publicServices to keep only education buildings (420-441)
+        4. Keep all agriculture buildings but attach BBR codes
+        5. Keep all residential buildings as-is
         """
         try:
             import duckdb
 
-            self.logger.info("Loading dataset using DuckDB for efficient processing...")
+            self.logger.info("Loading INSPIRE BBR data and enriching with GraphQL API...")
 
             # Create DuckDB connection with spatial extension
             conn = duckdb.connect(":memory:")
             conn.execute("INSTALL spatial;")
             conn.execute("LOAD spatial;")
 
-            # Create temporary tables for both layers with chunking strategy
+            # Step 1: Extract building data from INSPIRE BBR GPKG
             if sample_size and sample_size > 0:
-                # For testing mode, apply filtering FIRST to reduce the dataset, then sample
                 self.logger.info(
-                    f"Testing mode: applying filtering before sampling {sample_size} records"
+                    f"Testing mode: sampling {sample_size} buildings from each category"
                 )
-
-                # Define filter values (same as production)
-                agricultural_current_use = list(self.settings.agricultural_current_use)
-                agricultural_usage_codes = list(self.settings.agricultural_usage_codes)
-                residential_current_use = list(self.settings.residential_current_use)
-                residential_usage_codes = list(self.settings.residential_usage_codes)
-                public_services_current_use = list(self.settings.public_services_current_use)
-                educational_usage_codes = list(self.settings.educational_usage_codes)
-                other_construction_current_use = list(self.settings.other_construction_current_use)
-
-                # Combine all target values
-                all_current_use = (
-                    agricultural_current_use
-                    + residential_current_use
-                    + public_services_current_use
-                    + other_construction_current_use
-                )
-
-                # Convert to SQL-safe format
-                current_use_sql = "'" + "','".join(all_current_use) + "'"
-
-                # Apply filtering during sampling to avoid loading full dataset
-                buildings_query = f"""
-                    CREATE TABLE buildings_temp AS 
-                    SELECT 
-                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
-                        inspireId_localId as inspireId,
-                        buildingUsage,
-                        currentUse,
-                        dateofconstruction as constructionYear,
-                        floorArea,
-                        numberoffloorsaboveground as numberOfFloors,
-                        numberofdwellings as numberOfDwellings,
-                        name as address,
-                        'building' as layer_source
-                    FROM ST_Read('{gpkg_path}', layer='building')
-                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
-                    ORDER BY random()
-                    LIMIT {sample_size}
-                """
-
-                constructions_sample_size = max(1, sample_size // 4)
-                constructions_query = f"""
-                    CREATE TABLE constructions_temp AS 
-                    SELECT 
-                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
-                        inspireId_localId as inspireId,
-                        buildingUsage,
-                        currentUse,
-                        dateofconstruction as constructionYear,
-                        floorArea,
-                        numberoffloorsaboveground as numberOfFloors,
-                        numberofdwellings as numberOfDwellings,
-                        name as address,
-                        'otherConstruction' as layer_source
-                    FROM ST_Read('{gpkg_path}', layer='otherConstruction')
-                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
-                    ORDER BY random()
-                    LIMIT {constructions_sample_size}
-                """
-
-                self.logger.info(
-                    f"Sampling {sample_size:,} filtered buildings and {constructions_sample_size:,} constructions"
-                )
+                buildings_data = self._extract_sample_buildings(conn, gpkg_path, sample_size)
             else:
-                # For production, process in chunks to avoid memory issues
-                chunk_size = 500000  # Process 500K records at a time
+                self.logger.info("Production mode: processing all relevant buildings")
+                buildings_data = self._extract_all_buildings(conn, gpkg_path)
 
-                # First, get counts to plan chunking
-                buildings_count_query = (
-                    f"SELECT COUNT(*) FROM ST_Read('{gpkg_path}', layer='building')"
-                )
-                constructions_count_query = (
-                    f"SELECT COUNT(*) FROM ST_Read('{gpkg_path}', layer='otherConstruction')"
-                )
-
-                buildings_total = conn.execute(buildings_count_query).fetchone()[0]
-                constructions_total = conn.execute(constructions_count_query).fetchone()[0]
-
-                self.logger.info(
-                    f"Planning chunked processing: {buildings_total:,} buildings, {constructions_total:,} constructions"
-                )
-
-                # Always apply agricultural filtering for production data
-                # This should reduce the dataset from 5.5M to ~200K-500K buildings
-
-                # Apply agricultural filtering and extract ATTRIBUTES ONLY (no geometries)
-                self.logger.info(
-                    "Extracting building attributes only (no geometries) with filtering..."
-                )
-
-                # Define agricultural filter values from settings
-                agricultural_current_use = list(self.settings.agricultural_current_use)
-                agricultural_usage_codes = list(self.settings.agricultural_usage_codes)
-                residential_current_use = list(self.settings.residential_current_use)
-                residential_usage_codes = list(self.settings.residential_usage_codes)
-                public_services_current_use = list(self.settings.public_services_current_use)
-                educational_usage_codes = list(self.settings.educational_usage_codes)
-                other_construction_current_use = list(self.settings.other_construction_current_use)
-
-                # Combine all target values
-                all_current_use = (
-                    agricultural_current_use
-                    + residential_current_use
-                    + public_services_current_use
-                    + other_construction_current_use
-                )
-                all_usage_codes = (
-                    agricultural_usage_codes + residential_usage_codes + educational_usage_codes
-                )
-
-                # Convert to SQL-safe format
-                current_use_sql = "'" + "','".join(all_current_use) + "'"
-                usage_codes_sql = ",".join(map(str, all_usage_codes))
-
-                self.logger.info(f"Filtering buildings by currentUse: {all_current_use}")
-                self.logger.info(f"Filtering buildings by buildingUsage: {all_usage_codes}")
-
-                # Extract attributes only (no geometries) for filtered buildings
-                buildings_query = f"""
-                    CREATE TABLE buildings_temp AS 
-                    SELECT 
-                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
-                        inspireId_localId as inspireId,
-                        buildingNature,
-                        currentUse,
-                        dateOfConstruction_dateOfEvent_anyPoint as constructionYear,
-                        officialArea as floorArea,
-                        numberOfFloorsAboveGround as numberOfFloors,
-                        numberOfDwellings as numberOfDwellings,
-                        addressRepresentation as address,
-                        'building' as layer_source
-                    FROM ST_Read('{gpkg_path}', layer='building')
-                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
-                """
-
-                # Try otherConstruction layer if it exists
-                constructions_query = f"""
-                    CREATE TABLE constructions_temp AS 
-                    SELECT 
-                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
-                        inspireId_localId as inspireId,
-                        buildingNature,
-                        currentUse,
-                        dateOfConstruction_dateOfEvent_anyPoint as constructionYear,
-                        officialArea as floorArea,
-                        numberOfFloorsAboveGround as numberOfFloors,
-                        numberOfDwellings as numberOfDwellings,
-                        addressRepresentation as address,
-                        'otherConstruction' as layer_source
-                    FROM ST_Read('{gpkg_path}', layer='otherConstruction')
-                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
-                """
-
-                self.logger.info(
-                    "Extracting filtered building attributes (no geometries) for memory efficiency"
-                )
-
-            # Execute table creation with progress logging
-            self.logger.info("Creating buildings table...")
-            conn.execute(buildings_query)
-
-            # Try to create constructions table - it might not exist
-            constructions_count = 0
-            try:
-                self.logger.info("Creating constructions table...")
-                conn.execute(constructions_query)
-                constructions_count = conn.execute(
-                    "SELECT COUNT(*) FROM constructions_temp"
-                ).fetchone()[0]
-                self.logger.info(f"Constructions: {constructions_count:,} records")
-            except Exception as e:
-                self.logger.info(f"otherConstruction layer not available or empty: {e}")
-                # Create empty constructions table with same schema
-                conn.execute("""
-                    CREATE TABLE constructions_temp AS 
-                    SELECT * FROM buildings_temp WHERE 1=0
-                """)
-
-            # Get actual counts after processing
-            buildings_count = conn.execute("SELECT COUNT(*) FROM buildings_temp").fetchone()[0]
-            if constructions_count == 0:  # Only get count if we didn't already get it above
-                constructions_count = conn.execute(
-                    "SELECT COUNT(*) FROM constructions_temp"
-                ).fetchone()[0]
-
-            self.logger.info(f"Buildings: {buildings_count:,} records")
-            if constructions_count == 0:
-                self.logger.info("Constructions: 0 records (layer not available)")
-            else:
-                self.logger.info(f"Constructions: {constructions_count:,} records")
-
-            # Memory optimization: check if we can proceed without OOM
-            total_records = buildings_count + constructions_count
-            if total_records > 3000000:  # 3M+ records might cause issues
-                self.logger.warning(
-                    f"Large dataset ({total_records:,} records) may cause memory issues"
-                )
-                # Apply additional filtering for CI/CD environments
-                if buildings_count > 1000000:
-                    self.logger.info("Applying additional filtering for memory optimization...")
-                    conn.execute("""
-                        DELETE FROM buildings_temp 
-                        WHERE buildingNature IS NULL 
-                        OR ST_IsEmpty(geom) 
-                        OR ST_GeometryType(geom) NOT IN ('POLYGON', 'MULTIPOLYGON')
-                    """)
-                    buildings_count = conn.execute(
-                        "SELECT COUNT(*) FROM buildings_temp"
-                    ).fetchone()[0]
-                    self.logger.info(f"Filtered buildings: {buildings_count:,} records remaining")
-
-            # Get column information for both tables to handle schema differences
-            buildings_cols = conn.execute("DESCRIBE buildings_temp").fetchall()
-            constructions_cols = conn.execute("DESCRIBE constructions_temp").fetchall()
-
-            buildings_col_names = {col[0] for col in buildings_cols}
-            constructions_col_names = {col[0] for col in constructions_cols}
-
-            # Find common columns and unique columns
-            common_cols = buildings_col_names & constructions_col_names
-            buildings_only = buildings_col_names - constructions_col_names
-            constructions_only = constructions_col_names - buildings_col_names
-
-            self.logger.info(
-                f"Schema analysis - Buildings: {len(buildings_col_names)} cols, Constructions: {len(constructions_col_names)} cols"
-            )
-            self.logger.info(
-                f"Common: {len(common_cols)}, Buildings-only: {len(buildings_only)}, Constructions-only: {len(constructions_only)}"
-            )
-
-            # Build SELECT statements with matching column structures
-            all_cols = sorted(common_cols | buildings_only | constructions_only)
-
-            buildings_select = []
-            constructions_select = []
-
-            for col in all_cols:
-                if col in buildings_col_names:
-                    buildings_select.append(col)
-                else:
-                    buildings_select.append(f"NULL as {col}")
-
-                if col in constructions_col_names:
-                    constructions_select.append(col)
-                else:
-                    constructions_select.append(f"NULL as {col}")
-
-            buildings_select_str = ", ".join(buildings_select)
-            constructions_select_str = ", ".join(constructions_select)
-
-            # Combine datasets efficiently with matching schemas
-            combined_query = f"""
-                SELECT {buildings_select_str} FROM buildings_temp
-                UNION ALL
-                SELECT {constructions_select_str} FROM constructions_temp
-            """
-
-            # Extract building attributes as regular DataFrame (no geometry processing needed)
-            combined_df = conn.execute(combined_query).df()
-
-            # Clean up temporary tables
-            conn.execute("DROP TABLE buildings_temp")
-            conn.execute("DROP TABLE constructions_temp")
-
-            self.logger.info(
-                f"Combined total: {len(combined_df):,} building records with attributes only"
-            )
-
-            # Extract building IDs for GeoDanmark WFS queries
-            # Try different possible column names for building ID (BBRUUID)
-            building_id_col = None
-            for col_name in [
-                "localId",
-                "externalReference_reference1",
-                "externalreferencereference",
-                "local_id",
-                "id",
-                "LOCALID",
-                "ID",
-                "gml_id",
-            ]:
-                if col_name in combined_df.columns:
-                    building_id_col = col_name
-                    break
-
-            if building_id_col:
-                building_ids = combined_df[building_id_col].dropna().unique().tolist()
-                self.logger.info(
-                    f"Extracted {len(building_ids):,} unique building IDs from column '{building_id_col}' for geometry lookup"
-                )
-            else:
-                self.logger.warning(
-                    f"No building ID column found. Available columns: {list(combined_df.columns)}"
-                )
-                building_ids = []
+            # Step 2: Enrich with GraphQL API
+            enriched_data = self._enrich_with_graphql_api(buildings_data)
 
             conn.close()
-
-            # Return both the attribute data and the building IDs list
-            return {"attributes_df": combined_df, "building_ids": building_ids}
+            return enriched_data
 
         except Exception as e:
-            self.logger.warning(f"DuckDB processing failed, falling back to geopandas: {e}")
-            # Fallback to original geopandas approach
-            return self._load_with_geopandas_fallback(gpkg_path, sample_size)
-
-    def _load_with_geopandas_fallback(self, gpkg_path: Path, sample_size: int | None):
-        """
-        Fallback method using geopandas (original approach).
-        """
-        try:
-            import geopandas as gpd
-            import pandas as pd
-
-            self.logger.info("Using geopandas fallback for data loading...")
-
-            # Load building layer
-            self.logger.info("Loading 'building' layer from GPKG file")
-            buildings_data = gpd.read_file(gpkg_path, layer="building")
-            self.logger.info(f"Loaded {len(buildings_data):,} building records")
-
-            # Apply sampling only if explicitly requested for testing
-            if sample_size and sample_size > 0:
-                if len(buildings_data) > sample_size:
-                    self.logger.info(
-                        f"Sampling {sample_size:,} buildings from {len(buildings_data):,} total (testing mode)"
-                    )
-                    buildings_data = buildings_data.sample(n=sample_size, random_state=42)
-
-            # Load construction layer
-            self.logger.info("Loading 'otherConstruction' layer from GPKG file")
-            constructions_data = gpd.read_file(gpkg_path, layer="otherConstruction")
-            self.logger.info(f"Loaded {len(constructions_data):,} other construction records")
-
-            # Apply sampling only if explicitly requested for testing
-            if sample_size and sample_size > 0:
-                if len(constructions_data) > sample_size:
-                    constructions_sample_size = max(
-                        1, sample_size // 4
-                    )  # Smaller sample for constructions
-                    self.logger.info(
-                        f"Sampling {constructions_sample_size:,} constructions from {len(constructions_data):,} total (testing mode)"
-                    )
-                    constructions_data = constructions_data.sample(
-                        n=constructions_sample_size, random_state=42
-                    )
-
-            # Add source column to distinguish layers
-            buildings_data["layer_source"] = "building"
-            constructions_data["layer_source"] = "otherConstruction"
-
-            # Combine datasets
-            combined_data = gpd.GeoDataFrame(
-                pd.concat([buildings_data, constructions_data], ignore_index=True)
-            )
-
-            self.logger.info(
-                f"Combined total: {len(combined_data):,} records ready for silver layer"
-            )
-
-            # Extract building IDs for GeoDanmark WFS queries
-            # Convert to regular DataFrame (remove geometry for attributes)
-            attributes_df = pd.DataFrame(combined_data.drop(columns=["geometry"]))
-
-            # Extract building IDs from the external reference column
-            building_id_col = None
-            for col_name in [
-                "externalReference_reference1",
-                "externalreferencereference",
-                "localId",
-            ]:
-                if col_name in attributes_df.columns:
-                    building_id_col = col_name
-                    break
-
-            if building_id_col:
-                building_ids = attributes_df[building_id_col].dropna().unique().tolist()
-                self.logger.info(
-                    f"Extracted {len(building_ids):,} unique building IDs from column '{building_id_col}' for geometry lookup"
-                )
-            else:
-                self.logger.warning(
-                    f"No building ID column found. Available columns: {list(attributes_df.columns)}"
-                )
-                building_ids = []
-
-            # Return the same structure as DuckDB version
-            return {"attributes_df": attributes_df, "building_ids": building_ids}
-
-        except Exception as e:
-            self.logger.error(f"Geopandas fallback also failed: {e}")
+            self.logger.error(f"Failed to load and enrich with GraphQL: {e}")
             raise
+
+    def _extract_sample_buildings(self, conn, gpkg_path: Path, sample_size: int):
+        """Extract sample buildings for testing"""
+
+        # Define target categories
+        residential_categories = ["individualResidence", "collectiveResidence", "twoDwellings"]
+        agriculture_categories = ["agriculture"]
+        publicservices_categories = ["publicServices"]
+
+        all_buildings = []
+
+        for category_group, categories in [
+            ("residential", residential_categories),
+            ("agriculture", agriculture_categories),
+            ("publicServices", publicservices_categories),
+        ]:
+            category_sql = "'" + "','".join(categories) + "'"
+
+            query = f"""
+            SELECT 
+                externalReference_reference1 as building_uuid,
+                inspireId_localId as inspire_id,
+                currentUse,
+                buildingNature,
+                dateOfConstruction_dateOfEvent_anyPoint as construction_year,
+                officialArea as floor_area,
+                numberOfFloorsAboveGround as floors,
+                numberOfDwellings as dwellings,
+                addressRepresentation as address,
+                '{category_group}' as category_group
+            FROM ST_Read('{gpkg_path}', layer='building')
+            WHERE currentUse IN ({category_sql})
+            ORDER BY random()
+            LIMIT {min(sample_size, 500)}
+            """
+
+            result = conn.execute(query).fetchall()
+
+            for row in result:
+                all_buildings.append(
+                    {
+                        "building_uuid": row[0],
+                        "inspire_id": row[1],
+                        "current_use": row[2],
+                        "building_nature": row[3],
+                        "construction_year": row[4],
+                        "floor_area": row[5],
+                        "floors": row[6],
+                        "dwellings": row[7],
+                        "address": row[8],
+                        "category_group": row[9],
+                    }
+                )
+
+            self.logger.info(f"Extracted {len(result)} {category_group} buildings")
+
+        return all_buildings
+
+    def _extract_all_buildings(self, conn, gpkg_path: Path):
+        """Extract all relevant buildings for production"""
+
+        # Extract all residential, agriculture, and publicServices buildings
+        query = f"""
+        SELECT 
+            externalReference_reference1 as building_uuid,
+            inspireId_localId as inspire_id,
+            currentUse,
+            buildingNature,
+            dateOfConstruction_dateOfEvent_anyPoint as construction_year,
+            officialArea as floor_area,
+            numberOfFloorsAboveGround as floors,
+            numberOfDwellings as dwellings,
+            addressRepresentation as address,
+            CASE 
+                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                WHEN currentUse = 'agriculture' THEN 'agriculture'
+                WHEN currentUse = 'publicServices' THEN 'publicServices'
+                ELSE 'other'
+            END as category_group
+        FROM ST_Read('{gpkg_path}', layer='building')
+        WHERE currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings', 'agriculture', 'publicServices')
+        """
+
+        result = conn.execute(query).fetchall()
+
+        buildings = []
+        for row in result:
+            buildings.append(
+                {
+                    "building_uuid": row[0],
+                    "inspire_id": row[1],
+                    "current_use": row[2],
+                    "building_nature": row[3],
+                    "construction_year": row[4],
+                    "floor_area": row[5],
+                    "floors": row[6],
+                    "dwellings": row[7],
+                    "address": row[8],
+                    "category_group": row[9],
+                }
+            )
+
+        self.logger.info(f"Extracted {len(buildings)} total buildings")
+
+        # Count by category
+        category_counts = {}
+        for building in buildings:
+            cat = building["category_group"]
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
+        for category, count in category_counts.items():
+            self.logger.info(f"  {category}: {count:,} buildings")
+
+        return buildings
+
+    def _enrich_with_graphql_api(self, buildings_data):
+        """
+        Enrich building data with detailed BBR codes from GraphQL API.
+
+        Strategy:
+        - Residential: Keep as-is (no GraphQL needed)
+        - Agriculture: Get BBR codes, keep all buildings
+        - PublicServices: Get BBR codes, filter for education only (420-441)
+        """
+
+        # Separate buildings by category
+        residential_buildings = [b for b in buildings_data if b["category_group"] == "residential"]
+        agriculture_buildings = [b for b in buildings_data if b["category_group"] == "agriculture"]
+        publicservices_buildings = [
+            b for b in buildings_data if b["category_group"] == "publicServices"
+        ]
+
+        self.logger.info(f"Processing {len(residential_buildings)} residential (no GraphQL needed)")
+        self.logger.info(
+            f"Processing {len(agriculture_buildings)} agriculture (GraphQL for BBR codes)"
+        )
+        self.logger.info(
+            f"Processing {len(publicservices_buildings)} publicServices (GraphQL + filtering)"
+        )
+
+        # Process agriculture buildings with GraphQL
+        enriched_agriculture = self._enrich_buildings_with_graphql(
+            agriculture_buildings,
+            "agriculture",
+            filter_codes=None,  # Keep all agriculture buildings
+        )
+
+        # Process publicServices buildings with GraphQL and filtering
+        enriched_education = self._enrich_buildings_with_graphql(
+            publicservices_buildings,
+            "education",
+            filter_codes=[420, 421, 422, 429, 440, 441],  # Filter for education only
+        )
+
+        # Combine all results
+        final_buildings = []
+        final_buildings.extend(residential_buildings)  # Keep as-is
+        final_buildings.extend(enriched_agriculture)  # All agriculture with BBR codes
+        final_buildings.extend(enriched_education)  # Education buildings only
+
+        # Convert to DataFrame
+        df = pd.DataFrame(final_buildings)
+
+        # Extract building IDs for geometry lookup
+        building_ids = df["building_uuid"].dropna().unique().tolist()
+
+        self.logger.info(f"Final dataset: {len(final_buildings)} buildings")
+        self.logger.info(f"  Residential: {len(residential_buildings)}")
+        self.logger.info(f"  Agriculture: {len(enriched_agriculture)}")
+        self.logger.info(f"  Education: {len(enriched_education)}")
+        self.logger.info(f"Building IDs for geometry lookup: {len(building_ids)}")
+
+        return {"attributes_df": df, "building_ids": building_ids}
+
+    def _enrich_buildings_with_graphql(self, buildings, category_name, filter_codes=None):
+        """
+        Enrich buildings with GraphQL API data and optionally filter by BBR codes.
+        """
+        if not buildings:
+            return []
+
+        if not self.settings.datafordeler_graphql_api_key:
+            self.logger.warning(
+                f"No GraphQL API key configured, skipping {category_name} enrichment"
+            )
+            return buildings
+
+        self.logger.info(f"Enriching {len(buildings)} {category_name} buildings with GraphQL API")
+
+        # Extract UUIDs for GraphQL queries
+        uuids = [b["building_uuid"] for b in buildings if b["building_uuid"]]
+
+        if not uuids:
+            self.logger.warning(f"No valid UUIDs found for {category_name} buildings")
+            return buildings
+
+        # Query GraphQL API in batches
+        bbr_codes_data = self._query_graphql_for_bbr_codes(uuids, category_name)
+
+        # Create lookup dictionary
+        bbr_lookup = {item["building_uuid"]: item["bbr_code"] for item in bbr_codes_data}
+
+        # Enrich buildings with BBR codes
+        enriched_buildings = []
+        filtered_count = 0
+
+        for building in buildings:
+            uuid = building["building_uuid"]
+            bbr_code = bbr_lookup.get(uuid)
+
+            # Add BBR code to building
+            building_copy = building.copy()
+            building_copy["bbr_usage_code"] = bbr_code
+
+            # Apply filtering if specified
+            if filter_codes is not None:
+                if bbr_code and int(bbr_code) in filter_codes:
+                    enriched_buildings.append(building_copy)
+                else:
+                    filtered_count += 1
+            else:
+                # No filtering, keep all buildings
+                enriched_buildings.append(building_copy)
+
+        if filter_codes:
+            self.logger.info(
+                f"Filtered {category_name}: kept {len(enriched_buildings)}, filtered out {filtered_count}"
+            )
+        else:
+            self.logger.info(
+                f"Enriched {category_name}: {len(enriched_buildings)} buildings with BBR codes"
+            )
+
+        return enriched_buildings
+
+    def _query_graphql_for_bbr_codes(self, uuids, category_name, batch_size=50):
+        """
+        Query GraphQL API to get BBR usage codes for building UUIDs.
+        """
+        graphql_url = f"https://graphql.datafordeler.dk/BBR/v1?apikey={self.settings.datafordeler_graphql_api_key}"
+
+        all_results = []
+        total_batches = (len(uuids) + batch_size - 1) // batch_size
+
+        self.logger.info(
+            f"Querying GraphQL API for {category_name} BBR codes ({total_batches} batches)"
+        )
+
+        for batch_idx in range(0, len(uuids), batch_size):
+            batch_uuids = uuids[batch_idx : batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
+
+            self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
+
+            # Create GraphQL query
+            uuid_list = ", ".join(f'"{uuid}"' for uuid in batch_uuids)
+            query = f"""
+            {{
+              BBR_Bygning(
+                virkningstid: "2025-06-18T16:35:33.727Z", 
+                registreringstid: "2025-06-18T16:35:33.727Z", 
+                where: {{id_lokalId: {{in: [{uuid_list}]}}}}, 
+                first: 1000
+              ) {{
+                pageInfo {{ hasNextPage }}
+                nodes {{ 
+                  id_lokalId 
+                  byg021BygningensAnvendelse 
+                }}
+              }}
+            }}
+            """
+
+            try:
+                response = requests.post(
+                    graphql_url,
+                    headers={"Content-Type": "application/json"},
+                    json={"query": query},
+                    timeout=30,
+                )
+
+                if response.status_code != 200:
+                    self.logger.warning(f"    HTTP Error: {response.status_code}")
+                    continue
+
+                data = response.json()
+                if "errors" in data:
+                    self.logger.warning(f"    GraphQL Errors: {data['errors']}")
+                    continue
+
+                if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
+                    self.logger.warning("    No data returned")
+                    continue
+
+                batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
+                buildings_with_codes = [
+                    {
+                        "building_uuid": b["id_lokalId"],
+                        "bbr_code": b.get("byg021BygningensAnvendelse"),
+                    }
+                    for b in batch_buildings
+                    if b.get("byg021BygningensAnvendelse")
+                ]
+
+                all_results.extend(buildings_with_codes)
+
+                self.logger.info(
+                    f"    ✅ {len(batch_buildings)} total, {len(buildings_with_codes)} with BBR codes"
+                )
+
+                # Rate limiting
+                time.sleep(0.5)
+
+            except Exception as e:
+                self.logger.warning(f"    Error: {e}")
+                continue
+
+        self.logger.info(
+            f"GraphQL API results for {category_name}: {len(all_results)} buildings with BBR codes"
+        )
+        return all_results
 
     def _save_metadata(
         self, output_dir: Path, file_info: dict, download_url: str, sample_size: int | None

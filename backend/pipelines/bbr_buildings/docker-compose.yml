@@ -15,7 +15,7 @@ services:
       - CHUNK_SIZE=50000
     env_file:
       - .env
-    command: ["python", "main.py", "--layer", "bronze", "--source", "inspire_bbr", "--sample-size", "1000"]
+    command: ["python", "main.py", "--layer", "bronze", "--sample-size", "1000"]
 
   test:
     build: .
