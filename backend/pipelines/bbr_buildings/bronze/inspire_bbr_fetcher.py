@@ -159,10 +159,11 @@ class InspireBBRFetcher:
             conn.execute("INSTALL spatial;")
             conn.execute("LOAD spatial;")
 
-            # Build SQL query with optional sampling
+            # Create temporary tables for both layers
             if sample_size and sample_size > 0:
-                # Use DuckDB's standard sampling approach with ORDER BY RANDOM()
+                # Apply sampling during table creation
                 buildings_query = f"""
+                    CREATE TABLE buildings_temp AS 
                     SELECT *, 'building' as layer_source 
                     FROM ST_Read('{gpkg_path}', layer='building')
                     ORDER BY random()
@@ -170,6 +171,7 @@ class InspireBBRFetcher:
                 """
                 constructions_sample_size = max(1, sample_size // 4)
                 constructions_query = f"""
+                    CREATE TABLE constructions_temp AS 
                     SELECT *, 'otherConstruction' as layer_source 
                     FROM ST_Read('{gpkg_path}', layer='otherConstruction')
                     ORDER BY random()
@@ -179,38 +181,84 @@ class InspireBBRFetcher:
                     f"Sampling {sample_size:,} buildings and {constructions_sample_size:,} constructions (testing mode)"
                 )
             else:
-                # Load full dataset efficiently
+                # Load full dataset
                 buildings_query = f"""
+                    CREATE TABLE buildings_temp AS 
                     SELECT *, 'building' as layer_source 
                     FROM ST_Read('{gpkg_path}', layer='building')
                 """
                 constructions_query = f"""
+                    CREATE TABLE constructions_temp AS 
                     SELECT *, 'otherConstruction' as layer_source 
                     FROM ST_Read('{gpkg_path}', layer='otherConstruction')
                 """
                 self.logger.info("Loading full dataset using DuckDB streaming")
 
-            # Execute queries and get record counts
-            buildings_count = conn.execute(f"SELECT COUNT(*) FROM ({buildings_query})").fetchone()[
-                0
-            ]
+            conn.execute(buildings_query)
+            conn.execute(constructions_query)
+
+            # Get counts
+            buildings_count = conn.execute("SELECT COUNT(*) FROM buildings_temp").fetchone()[0]
             constructions_count = conn.execute(
-                f"SELECT COUNT(*) FROM ({constructions_query})"
+                "SELECT COUNT(*) FROM constructions_temp"
             ).fetchone()[0]
 
             self.logger.info(f"Buildings: {buildings_count:,} records")
             self.logger.info(f"Constructions: {constructions_count:,} records")
 
-            # Combine datasets efficiently
+            # Get column information for both tables to handle schema differences
+            buildings_cols = conn.execute("DESCRIBE buildings_temp").fetchall()
+            constructions_cols = conn.execute("DESCRIBE constructions_temp").fetchall()
+
+            buildings_col_names = {col[0] for col in buildings_cols}
+            constructions_col_names = {col[0] for col in constructions_cols}
+
+            # Find common columns and unique columns
+            common_cols = buildings_col_names & constructions_col_names
+            buildings_only = buildings_col_names - constructions_col_names
+            constructions_only = constructions_col_names - buildings_col_names
+
+            self.logger.info(
+                f"Schema analysis - Buildings: {len(buildings_col_names)} cols, Constructions: {len(constructions_col_names)} cols"
+            )
+            self.logger.info(
+                f"Common: {len(common_cols)}, Buildings-only: {len(buildings_only)}, Constructions-only: {len(constructions_only)}"
+            )
+
+            # Build SELECT statements with matching column structures
+            all_cols = sorted(common_cols | buildings_only | constructions_only)
+
+            buildings_select = []
+            constructions_select = []
+
+            for col in all_cols:
+                if col in buildings_col_names:
+                    buildings_select.append(col)
+                else:
+                    buildings_select.append(f"NULL as {col}")
+
+                if col in constructions_col_names:
+                    constructions_select.append(col)
+                else:
+                    constructions_select.append(f"NULL as {col}")
+
+            buildings_select_str = ", ".join(buildings_select)
+            constructions_select_str = ", ".join(constructions_select)
+
+            # Combine datasets efficiently with matching schemas
             combined_query = f"""
-                SELECT * FROM ({buildings_query})
+                SELECT {buildings_select_str} FROM buildings_temp
                 UNION ALL
-                SELECT * FROM ({constructions_query})
+                SELECT {constructions_select_str} FROM constructions_temp
             """
 
             # Convert to pandas for compatibility with silver layer
             # This is much more memory efficient than geopandas.read_file()
             combined_df = conn.execute(combined_query).df()
+
+            # Clean up temporary tables
+            conn.execute("DROP TABLE buildings_temp")
+            conn.execute("DROP TABLE constructions_temp")
 
             self.logger.info(f"Combined total: {len(combined_df):,} records loaded efficiently")
 
