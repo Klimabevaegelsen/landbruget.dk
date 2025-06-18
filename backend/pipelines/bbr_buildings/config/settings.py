@@ -73,7 +73,8 @@ class Settings(BaseModel):
         description="BBR residential usage codes",
     )
     educational_usage_codes: tuple = Field(
-        default=(420, 440), description="BBR educational usage codes"
+        default=(420, 421, 422, 429, 440, 441),
+        description="BBR educational usage codes (includes both old and new codes: 420/421 schools, 422 university, 429 other education, 440/441 daycare)",
     )
 
     # INSPIRE Current Use Values
