@@ -9,6 +9,9 @@ from pydantic import ConfigDict
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.gcs_util import GCSUtil
 
+# Load environment variables at module level
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,9 +34,9 @@ class PropertyCadastralMergeConfig(BaseJobConfig):
     validate_bfe_numbers: bool = True  # Validate BFE number format and consistency
     include_merge_metadata: bool = True  # Add metadata about the merge process
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-    load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
 class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
@@ -56,8 +59,8 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             stats_query = f"""
             SELECT 
                 COUNT(*) as total_records,
-                COUNT(DISTINCT bestemtFastEjendomBFENr) as unique_bfe_numbers,
-                COUNT(CASE WHEN bestemtFastEjendomBFENr IS NOT NULL AND bestemtFastEjendomBFENr > 0 THEN 1 END) as valid_bfe_records
+                COUNT(DISTINCT properties.bestemtFastEjendomBFENr) as unique_bfe_numbers,
+                COUNT(CASE WHEN properties.bestemtFastEjendomBFENr IS NOT NULL AND properties.bestemtFastEjendomBFENr > 0 THEN 1 END) as valid_bfe_records
             FROM read_parquet('{file_path}')
             """
 
@@ -69,25 +72,27 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             self.log.info(f"  Unique BFE numbers: {unique_bfe_numbers:,}")
             self.log.info(f"  Valid BFE records: {valid_bfe_records:,}")
 
-            # Check if BFE column exists
+            # Check if BFE column exists in the nested structure
             try:
-                columns_query = f"DESCRIBE SELECT * FROM read_parquet('{file_path}') LIMIT 1"
-                columns_result = self.conn.execute(columns_query).fetchall()
-                columns = [row[0] for row in columns_result]
-
-                if "bestemtFastEjendomBFENr" not in columns:
-                    self.log.error(f"BFE column not found. Available columns: {columns}")
-                    return None
+                test_query = f"SELECT properties.bestemtFastEjendomBFENr FROM read_parquet('{file_path}') LIMIT 1"
+                self.conn.execute(test_query).fetchone()
+                self.log.info("✅ BFE column found in properties structure")
 
             except Exception as e:
-                self.log.error(f"Error checking columns: {e}")
+                self.log.error(f"BFE column not found in properties structure: {e}")
+                # Fallback: check available columns
+                try:
+                    columns_query = f"DESCRIBE SELECT * FROM read_parquet('{file_path}') LIMIT 1"
+                    columns_result = self.conn.execute(columns_query).fetchall()
+                    columns = [row[0] for row in columns_result]
+                    self.log.error(f"Available top-level columns: {columns}")
+                except Exception as desc_e:
+                    self.log.error(f"Failed to describe columns: {desc_e}")
                 return None
 
             # Create filtered table with only valid BFE numbers if validation is enabled
             if self.config.validate_bfe_numbers:
-                filter_condition = (
-                    "WHERE bestemtFastEjendomBFENr IS NOT NULL AND bestemtFastEjendomBFENr > 0"
-                )
+                filter_condition = "WHERE properties.bestemtFastEjendomBFENr IS NOT NULL AND properties.bestemtFastEjendomBFENr > 0"
                 self.log.info(
                     f"Applying BFE validation: {valid_bfe_records:,} of {total_records:,} records will be used"
                 )
@@ -95,10 +100,13 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
                 filter_condition = ""
                 self.log.info(f"No BFE validation: using all {total_records:,} records")
 
-            # Create the main property owners table
+            # Create the main property owners table with flattened BFE number for easier joining
             create_table_query = f"""
             CREATE OR REPLACE TABLE property_owners AS 
-            SELECT * FROM read_parquet('{file_path}')
+            SELECT 
+                *,
+                properties.bestemtFastEjendomBFENr as bestemtFastEjendomBFENr
+            FROM read_parquet('{file_path}')
             {filter_condition}
             """
 
