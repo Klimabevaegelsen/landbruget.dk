@@ -96,13 +96,19 @@ class InspireBBRFetcher:
 
             self.logger.info("Successfully processed INSPIRE BBR data")
 
-            if return_data and processed_data:
+            if return_data and processed_data is not None:
+                # Handle the new data structure
+                if isinstance(processed_data, dict) and "attributes_df" in processed_data:
+                    actual_records = len(processed_data["attributes_df"])
+                else:
+                    actual_records = len(processed_data) if processed_data is not None else 0
+
                 return {
                     "data": processed_data,
                     "metadata": {
                         "source": "inspire_bbr",
                         "sample_size": sample_size,
-                        "actual_records": len(processed_data),
+                        "actual_records": actual_records,
                         "file_info": file_info,
                         "download_url": download_url,
                         "timestamp": timestamp,
@@ -161,24 +167,73 @@ class InspireBBRFetcher:
 
             # Create temporary tables for both layers with chunking strategy
             if sample_size and sample_size > 0:
-                # Apply sampling during table creation
+                # For testing mode, apply filtering FIRST to reduce the dataset, then sample
+                self.logger.info(
+                    f"Testing mode: applying filtering before sampling {sample_size} records"
+                )
+
+                # Define filter values (same as production)
+                agricultural_current_use = list(self.settings.agricultural_current_use)
+                agricultural_usage_codes = list(self.settings.agricultural_usage_codes)
+                residential_current_use = list(self.settings.residential_current_use)
+                residential_usage_codes = list(self.settings.residential_usage_codes)
+                public_services_current_use = list(self.settings.public_services_current_use)
+                educational_usage_codes = list(self.settings.educational_usage_codes)
+                other_construction_current_use = list(self.settings.other_construction_current_use)
+
+                # Combine all target values
+                all_current_use = (
+                    agricultural_current_use
+                    + residential_current_use
+                    + public_services_current_use
+                    + other_construction_current_use
+                )
+
+                # Convert to SQL-safe format
+                current_use_sql = "'" + "','".join(all_current_use) + "'"
+
+                # Apply filtering during sampling to avoid loading full dataset
                 buildings_query = f"""
                     CREATE TABLE buildings_temp AS 
-                    SELECT *, 'building' as layer_source 
+                    SELECT 
+                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
+                        inspireId_localId as inspireId,
+                        buildingUsage,
+                        currentUse,
+                        dateofconstruction as constructionYear,
+                        floorArea,
+                        numberoffloorsaboveground as numberOfFloors,
+                        numberofdwellings as numberOfDwellings,
+                        name as address,
+                        'building' as layer_source
                     FROM ST_Read('{gpkg_path}', layer='building')
+                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
                     ORDER BY random()
                     LIMIT {sample_size}
                 """
+
                 constructions_sample_size = max(1, sample_size // 4)
                 constructions_query = f"""
                     CREATE TABLE constructions_temp AS 
-                    SELECT *, 'otherConstruction' as layer_source 
+                    SELECT 
+                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
+                        inspireId_localId as inspireId,
+                        buildingUsage,
+                        currentUse,
+                        dateofconstruction as constructionYear,
+                        floorArea,
+                        numberoffloorsaboveground as numberOfFloors,
+                        numberofdwellings as numberOfDwellings,
+                        name as address,
+                        'otherConstruction' as layer_source
                     FROM ST_Read('{gpkg_path}', layer='otherConstruction')
+                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
                     ORDER BY random()
                     LIMIT {constructions_sample_size}
                 """
+
                 self.logger.info(
-                    f"Sampling {sample_size:,} buildings and {constructions_sample_size:,} constructions (testing mode)"
+                    f"Sampling {sample_size:,} filtered buildings and {constructions_sample_size:,} constructions"
                 )
             else:
                 # For production, process in chunks to avoid memory issues
@@ -199,120 +254,114 @@ class InspireBBRFetcher:
                     f"Planning chunked processing: {buildings_total:,} buildings, {constructions_total:,} constructions"
                 )
 
-                # For GitHub Actions, limit to a reasonable subset if dataset is too large
-                if buildings_total > 2000000:  # If more than 2M buildings
-                    self.logger.info(
-                        "Dataset too large for GitHub Actions, applying intelligent sampling..."
-                    )
-                    # Use stratified sampling to get representative data
-                    buildings_query = f"""
-                        CREATE TABLE buildings_temp AS 
-                        SELECT *, 'building' as layer_source 
-                        FROM (
-                            SELECT *, ROW_NUMBER() OVER (PARTITION BY buildingNature ORDER BY random()) as rn
-                            FROM ST_Read('{gpkg_path}', layer='building')
-                        ) 
-                        WHERE rn <= 100  -- Max 100 buildings per building type
-                    """
-                    constructions_query = f"""
-                        CREATE TABLE constructions_temp AS 
-                        SELECT *, 'otherConstruction' as layer_source 
-                        FROM ST_Read('{gpkg_path}', layer='otherConstruction')
-                        ORDER BY random()
-                        LIMIT 50000
-                    """
-                    self.logger.info("Applied stratified sampling to reduce dataset size for CI/CD")
-                else:
-                    # Apply agricultural filtering and extract ATTRIBUTES ONLY (no geometries)
-                    self.logger.info(
-                        "Extracting building attributes only (no geometries) with filtering..."
-                    )
+                # Always apply agricultural filtering for production data
+                # This should reduce the dataset from 5.5M to ~200K-500K buildings
 
-                    # Define agricultural filter values from settings
-                    agricultural_current_use = list(self.settings.agricultural_current_use)
-                    agricultural_usage_codes = list(self.settings.agricultural_usage_codes)
-                    residential_current_use = list(self.settings.residential_current_use)
-                    residential_usage_codes = list(self.settings.residential_usage_codes)
-                    public_services_current_use = list(self.settings.public_services_current_use)
-                    educational_usage_codes = list(self.settings.educational_usage_codes)
-                    other_construction_current_use = list(
-                        self.settings.other_construction_current_use
-                    )
+                # Apply agricultural filtering and extract ATTRIBUTES ONLY (no geometries)
+                self.logger.info(
+                    "Extracting building attributes only (no geometries) with filtering..."
+                )
 
-                    # Combine all target values
-                    all_current_use = (
-                        agricultural_current_use
-                        + residential_current_use
-                        + public_services_current_use
-                        + other_construction_current_use
-                    )
-                    all_usage_codes = (
-                        agricultural_usage_codes + residential_usage_codes + educational_usage_codes
-                    )
+                # Define agricultural filter values from settings
+                agricultural_current_use = list(self.settings.agricultural_current_use)
+                agricultural_usage_codes = list(self.settings.agricultural_usage_codes)
+                residential_current_use = list(self.settings.residential_current_use)
+                residential_usage_codes = list(self.settings.residential_usage_codes)
+                public_services_current_use = list(self.settings.public_services_current_use)
+                educational_usage_codes = list(self.settings.educational_usage_codes)
+                other_construction_current_use = list(self.settings.other_construction_current_use)
 
-                    # Convert to SQL-safe format
-                    current_use_sql = "'" + "','".join(all_current_use) + "'"
-                    usage_codes_sql = ",".join(map(str, all_usage_codes))
+                # Combine all target values
+                all_current_use = (
+                    agricultural_current_use
+                    + residential_current_use
+                    + public_services_current_use
+                    + other_construction_current_use
+                )
+                all_usage_codes = (
+                    agricultural_usage_codes + residential_usage_codes + educational_usage_codes
+                )
 
-                    self.logger.info(f"Filtering buildings by currentUse: {all_current_use}")
-                    self.logger.info(f"Filtering buildings by buildingUsage: {all_usage_codes}")
+                # Convert to SQL-safe format
+                current_use_sql = "'" + "','".join(all_current_use) + "'"
+                usage_codes_sql = ",".join(map(str, all_usage_codes))
 
-                    # Extract ATTRIBUTES ONLY - skip geometry to save massive memory
-                    # Key: we need localId (BBRUUID) to join with GeoDanmark WFS later
-                    buildings_query = f"""
-                        CREATE TABLE buildings_temp AS 
-                        SELECT 
-                            localId,
-                            buildingUsage,
-                            currentUse,
-                            constructionYear,
-                            floorArea,
-                            numberOfFloors,
-                            numberOfDwellings,
-                            address,
-                            'building' as layer_source
-                        FROM ST_Read('{gpkg_path}', layer='building')
-                        WHERE (currentUse IN ({current_use_sql}) 
-                               OR buildingUsage IN ({usage_codes_sql})
-                               OR currentUse IS NULL OR buildingUsage IS NULL)
-                    """
+                self.logger.info(f"Filtering buildings by currentUse: {all_current_use}")
+                self.logger.info(f"Filtering buildings by buildingUsage: {all_usage_codes}")
 
-                    # Extract attributes from constructions as well
-                    constructions_query = f"""
-                        CREATE TABLE constructions_temp AS 
-                        SELECT 
-                            localId,
-                            buildingUsage,
-                            currentUse,
-                            constructionYear,
-                            floorArea,
-                            numberOfFloors,
-                            numberOfDwellings,
-                            address,
-                            'otherConstruction' as layer_source
-                        FROM ST_Read('{gpkg_path}', layer='otherConstruction')
-                        WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
-                    """
+                # Extract attributes only (no geometries) for filtered buildings
+                buildings_query = f"""
+                    CREATE TABLE buildings_temp AS 
+                    SELECT 
+                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
+                        inspireId_localId as inspireId,
+                        buildingNature,
+                        currentUse,
+                        dateOfConstruction_dateOfEvent_anyPoint as constructionYear,
+                        officialArea as floorArea,
+                        numberOfFloorsAboveGround as numberOfFloors,
+                        numberOfDwellings as numberOfDwellings,
+                        addressRepresentation as address,
+                        'building' as layer_source
+                    FROM ST_Read('{gpkg_path}', layer='building')
+                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
+                """
 
-                    self.logger.info(
-                        "Extracting filtered building attributes (no geometries) for memory efficiency"
-                    )
+                # Try otherConstruction layer if it exists
+                constructions_query = f"""
+                    CREATE TABLE constructions_temp AS 
+                    SELECT 
+                        externalReference_reference1 as localId,  -- This is the BBRUUID for joining with GeoDanmark
+                        inspireId_localId as inspireId,
+                        buildingNature,
+                        currentUse,
+                        dateOfConstruction_dateOfEvent_anyPoint as constructionYear,
+                        officialArea as floorArea,
+                        numberOfFloorsAboveGround as numberOfFloors,
+                        numberOfDwellings as numberOfDwellings,
+                        addressRepresentation as address,
+                        'otherConstruction' as layer_source
+                    FROM ST_Read('{gpkg_path}', layer='otherConstruction')
+                    WHERE currentUse IN ({current_use_sql}) OR currentUse IS NULL
+                """
+
+                self.logger.info(
+                    "Extracting filtered building attributes (no geometries) for memory efficiency"
+                )
 
             # Execute table creation with progress logging
             self.logger.info("Creating buildings table...")
             conn.execute(buildings_query)
 
-            self.logger.info("Creating constructions table...")
-            conn.execute(constructions_query)
+            # Try to create constructions table - it might not exist
+            constructions_count = 0
+            try:
+                self.logger.info("Creating constructions table...")
+                conn.execute(constructions_query)
+                constructions_count = conn.execute(
+                    "SELECT COUNT(*) FROM constructions_temp"
+                ).fetchone()[0]
+                self.logger.info(f"Constructions: {constructions_count:,} records")
+            except Exception as e:
+                self.logger.info(f"otherConstruction layer not available or empty: {e}")
+                # Create empty constructions table with same schema
+                conn.execute("""
+                    CREATE TABLE constructions_temp AS 
+                    SELECT * FROM buildings_temp WHERE 1=0
+                """)
 
             # Get actual counts after processing
             buildings_count = conn.execute("SELECT COUNT(*) FROM buildings_temp").fetchone()[0]
-            constructions_count = conn.execute(
-                "SELECT COUNT(*) FROM constructions_temp"
-            ).fetchone()[0]
+            if constructions_count == 0:  # Only get count if we didn't already get it above
+                constructions_count = conn.execute(
+                    "SELECT COUNT(*) FROM constructions_temp"
+                ).fetchone()[0]
 
             self.logger.info(f"Buildings: {buildings_count:,} records")
-            self.logger.info(f"Constructions: {constructions_count:,} records")
+            if constructions_count == 0:
+                self.logger.info("Constructions: 0 records (layer not available)")
+            else:
+                self.logger.info(f"Constructions: {constructions_count:,} records")
 
             # Memory optimization: check if we can proceed without OOM
             total_records = buildings_count + constructions_count
@@ -392,10 +441,32 @@ class InspireBBRFetcher:
             )
 
             # Extract building IDs for GeoDanmark WFS queries
-            building_ids = combined_df["localId"].dropna().unique().tolist()
-            self.logger.info(
-                f"Extracted {len(building_ids):,} unique building IDs for geometry lookup"
-            )
+            # Try different possible column names for building ID (BBRUUID)
+            building_id_col = None
+            for col_name in [
+                "localId",
+                "externalReference_reference1",
+                "externalreferencereference",
+                "local_id",
+                "id",
+                "LOCALID",
+                "ID",
+                "gml_id",
+            ]:
+                if col_name in combined_df.columns:
+                    building_id_col = col_name
+                    break
+
+            if building_id_col:
+                building_ids = combined_df[building_id_col].dropna().unique().tolist()
+                self.logger.info(
+                    f"Extracted {len(building_ids):,} unique building IDs from column '{building_id_col}' for geometry lookup"
+                )
+            else:
+                self.logger.warning(
+                    f"No building ID column found. Available columns: {list(combined_df.columns)}"
+                )
+                building_ids = []
 
             conn.close()
 
@@ -460,7 +531,35 @@ class InspireBBRFetcher:
             self.logger.info(
                 f"Combined total: {len(combined_data):,} records ready for silver layer"
             )
-            return combined_data
+
+            # Extract building IDs for GeoDanmark WFS queries
+            # Convert to regular DataFrame (remove geometry for attributes)
+            attributes_df = pd.DataFrame(combined_data.drop(columns=["geometry"]))
+
+            # Extract building IDs from the external reference column
+            building_id_col = None
+            for col_name in [
+                "externalReference_reference1",
+                "externalreferencereference",
+                "localId",
+            ]:
+                if col_name in attributes_df.columns:
+                    building_id_col = col_name
+                    break
+
+            if building_id_col:
+                building_ids = attributes_df[building_id_col].dropna().unique().tolist()
+                self.logger.info(
+                    f"Extracted {len(building_ids):,} unique building IDs from column '{building_id_col}' for geometry lookup"
+                )
+            else:
+                self.logger.warning(
+                    f"No building ID column found. Available columns: {list(attributes_df.columns)}"
+                )
+                building_ids = []
+
+            # Return the same structure as DuckDB version
+            return {"attributes_df": attributes_df, "building_ids": building_ids}
 
         except Exception as e:
             self.logger.error(f"Geopandas fallback also failed: {e}")
