@@ -77,7 +77,7 @@ def get_storage_interface() -> StorageInterface:
 
     if environment == "prod" and gcs_bucket:
         logging.info(f"Using GCS storage with bucket: {gcs_bucket}")
-        return GCSStorage(gcs_bucket, prefix="silver/dst")
+        return GCSStorage(gcs_bucket)
     else:
         base_dir = os.getenv("LOCAL_STORAGE_DIR", "bronze/dst")
         logging.info(f"Using local storage with base directory: {base_dir}")
@@ -604,7 +604,7 @@ def save_silver_data(
             """)
 
             # Upload to GCS using storage interface
-            gcs_path = f"{timestamp}/{parquet_filename}"
+            gcs_path = f"silver/dst/{timestamp}/{parquet_filename}"
 
             # Read temp parquet and save via storage interface
             import pandas as pd  # Only used here for GCS upload compatibility
@@ -621,7 +621,7 @@ def save_silver_data(
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-        metadata_path = f"{timestamp}/{metadata_filename}"
+        metadata_path = f"silver/dst/{timestamp}/{metadata_filename}"
 
     # Save metadata
     metadata = {
@@ -740,7 +740,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
         logging.info(f"Saved summary to {summary_file}")
     else:
         # Save summary to GCS
-        summary_path = f"{timestamp}/processing_summary.json"
+        summary_path = f"silver/dst/{timestamp}/processing_summary.json"
         storage.save_json(summary, summary_path)
 
     logging.info("Silver layer processing completed successfully")
