@@ -4,7 +4,7 @@ name: Unified Pipeline
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # every Sunday at midnight UTC
+    - cron: '0 0 * * 0'  # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
   workflow_dispatch:
     # Allow manual triggering
     inputs:
