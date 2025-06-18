@@ -244,7 +244,7 @@ def get_storage_interface() -> StorageInterface:
 
     if environment == "prod" and gcs_bucket:
         logging.info(f"Using GCS storage with bucket: {gcs_bucket}")
-        return GCSStorage(gcs_bucket)
+        return GCSStorage(gcs_bucket, prefix="bronze/dst")
     else:
         base_dir = os.getenv("LOCAL_STORAGE_DIR", "bronze/dst")
         logging.info(f"Using local storage with base directory: {base_dir}")
