@@ -125,16 +125,24 @@ def run_bronze_layer(
     elif args.source == "both":
         # Run both sources sequentially
         logger.info("Running both data sources...")
+        result = None
 
         # First run INSPIRE BBR
         logger.info("Fetching INSPIRE BBR data...")
         inspire_fetcher = InspireBBRFetcher(settings, logger)
-        inspire_fetcher.fetch_data(output_dir, sample_size=args.sample_size)
+        inspire_result = inspire_fetcher.fetch_data(
+            output_dir, sample_size=args.sample_size, return_data=return_data
+        )
 
         # Then run GeoDanmark WFS
         logger.info("Fetching GeoDanmark WFS data...")
         geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
-        geodanmark_fetcher.fetch_samples(output_dir)
+        geodanmark_result = geodanmark_fetcher.fetch_samples(output_dir, return_data=return_data)
+
+        # Use INSPIRE BBR data as primary result for silver layer processing
+        # (GeoDanmark WFS is mainly for enhanced classification)
+        if return_data:
+            result = inspire_result
 
     logger.info("Bronze layer processing completed successfully")
 
