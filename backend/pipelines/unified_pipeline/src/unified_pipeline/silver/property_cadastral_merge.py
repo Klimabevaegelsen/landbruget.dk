@@ -273,30 +273,6 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         return quality_stats
 
-    def _export_to_parquet(self, output_path: str) -> None:
-        """Export merged data directly to parquet using DuckDB."""
-        self.log.info(f"Exporting merged data to parquet: {output_path}")
-
-        try:
-            # Export from DuckDB to parquet
-            export_query = f"""
-            COPY merged_data TO '{output_path}' (FORMAT PARQUET)
-            """
-
-            self.conn.execute(export_query)
-
-            # Get file size for logging
-            file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-            record_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
-
-            self.log.info(
-                f"Exported {record_count:,} records to {output_path} ({file_size_mb:.1f} MB)"
-            )
-
-        except Exception as e:
-            self.log.error(f"Failed to export merged data: {e}")
-            raise
-
     async def run(self):
         """
         Run the complete property-cadastral merge job using pure DuckDB operations.
@@ -312,7 +288,6 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         property_temp_path = None
         cadastral_temp_path = None
-        output_temp_path = None
 
         try:
             # Download property owners file
@@ -373,43 +348,54 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             # Perform merge
             quality_stats = self._perform_bfe_merge(property_stats, cadastral_stats)
 
-            # Export to parquet
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_temp_path = f"/tmp/{self.config.dataset}_{timestamp}.parquet"
-            self._export_to_parquet(output_temp_path)
-
-            # Clean up large DuckDB tables from memory to free space before upload
+            # Clean up large DuckDB tables from memory to free space before conversion
             self.conn.execute("DROP TABLE IF EXISTS property_owners")
             self.conn.execute("DROP TABLE IF EXISTS cadastral_data")
             self.log.info("Cleaned up large DuckDB tables from memory")
 
-            # Upload directly to GCS without loading into memory
-            # This avoids the 1.7GB memory spike that was killing the runner
-            # Use directory structure: silver/property_cadastral_merged/TIMESTAMP/filename.parquet
+            # Convert DuckDB result to GeoDataFrame and use BaseSource _save_data method
+            # This uses the standard directory structure and upload pattern
+            self.log.info("Converting merged data to GeoDataFrame for upload...")
+
+            # Get the merged data as a pandas DataFrame first (DuckDB -> Pandas)
+            merged_df = self.conn.execute("SELECT * FROM merged_data").df()
+
+            # Convert to GeoDataFrame if geometry columns exist
+            try:
+                import geopandas as gpd
+                from shapely import wkb
+
+                # Check if there are geometry columns to convert
+                geometry_columns = [
+                    col
+                    for col in merged_df.columns
+                    if "geom" in col.lower() or "geometry" in col.lower()
+                ]
+
+                if geometry_columns:
+                    # Convert WKB geometry columns to shapely geometries
+                    for geom_col in geometry_columns:
+                        if merged_df[geom_col].dtype == "object":
+                            merged_df[geom_col] = merged_df[geom_col].apply(
+                                lambda x: wkb.loads(x) if x is not None else None
+                            )
+
+                    # Create GeoDataFrame with the first geometry column as the active geometry
+                    merged_gdf = gpd.GeoDataFrame(
+                        merged_df, geometry=geometry_columns[0], crs="EPSG:4326"
+                    )
+                else:
+                    # No geometry columns, create a regular GeoDataFrame without geometry
+                    merged_gdf = gpd.GeoDataFrame(merged_df)
+
+            except Exception as e:
+                self.log.warning(f"Could not convert to GeoDataFrame, using regular DataFrame: {e}")
+                # Fallback: create a simple GeoDataFrame without geometry
+                merged_gdf = gpd.GeoDataFrame(merged_df)
+
+            # Use the standard BaseSource _save_data method with fixed dataset name
             base_dataset_name = "property_cadastral_merged"
-            # Extract timestamp from dataset name or use current timestamp
-            dataset_timestamp = (
-                self.config.dataset.replace("property_cadastral_merged_", "")
-                if "property_cadastral_merged_" in self.config.dataset
-                else timestamp
-            )
-            output_gcs_path = f"silver/{base_dataset_name}/{dataset_timestamp}/{os.path.basename(output_temp_path)}"
-
-            self.log.info(f"Uploading merged data to GCS: {output_gcs_path}")
-
-            # Use the same upload pattern as BaseSource
-            bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
-            working_blob = bucket.blob(output_gcs_path)
-            working_blob.upload_from_filename(output_temp_path)
-
-            # Get final file size for logging
-            file_size_gb = os.path.getsize(output_temp_path) / (1024 * 1024 * 1024)
-            self.log.info(f"Successfully uploaded {file_size_gb:.2f} GB merged dataset to GCS")
-            self.log.info(f"Uploaded to: gs://{self.config.bucket}/{output_gcs_path}")
-
-            # Clean up temp file
-            if os.path.exists(output_temp_path):
-                os.remove(output_temp_path)
+            self._save_data(merged_gdf, base_dataset_name, self.config.bucket)
 
             self.log.info("Pure DuckDB Property-Cadastral BFE merge job completed successfully")
             self.log.info(
@@ -422,7 +408,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         finally:
             # Clean up temporary files
-            for temp_path in [property_temp_path, cadastral_temp_path, output_temp_path]:
+            for temp_path in [property_temp_path, cadastral_temp_path]:
                 if temp_path and os.path.exists(temp_path):
                     try:
                         os.unlink(temp_path)
