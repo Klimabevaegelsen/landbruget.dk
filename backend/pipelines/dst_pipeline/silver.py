@@ -46,15 +46,9 @@ def setup_logging(level: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(
-        description="Process bronze layer DST data to silver layer"
-    )
-    parser.add_argument(
-        "--bronze-dir", default="./bronze", help="Bronze layer input directory"
-    )
-    parser.add_argument(
-        "--silver-dir", default="./silver", help="Silver layer output directory"
-    )
+    parser = argparse.ArgumentParser(description="Process bronze layer DST data to silver layer")
+    parser.add_argument("--bronze-dir", default="./bronze", help="Bronze layer input directory")
+    parser.add_argument("--silver-dir", default="./silver", help="Silver layer output directory")
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -91,10 +85,16 @@ def get_storage_interface() -> StorageInterface:
 
 
 def find_latest_bronze_data(
-    storage: StorageInterface, table_id: str
+    storage: StorageInterface, table_id: str, bronze_data: dict = None
 ) -> Optional[Dict[str, Any]]:
     """Find and load the most recent bronze data for a table"""
 
+    # If we have in-memory bronze data, use it directly
+    if bronze_data and table_id in bronze_data:
+        logging.info(f"Using in-memory bronze data for table {table_id}")
+        return bronze_data[table_id]
+
+    # Fallback to storage if no in-memory data
     if isinstance(storage, LocalStorage):
         bronze_base = Path(storage.base_dir)
         bronze_files = list(bronze_base.glob(f"*/{table_id}_data.json"))
@@ -114,10 +114,32 @@ def find_latest_bronze_data(
             return None
 
     else:
-        # For GCS storage, we'd need to implement listing and reading
-        # This would require extending the storage interface
-        logging.warning("GCS bronze data reading not yet implemented")
-        return None
+        # For GCS storage, list and read the latest bronze data
+        try:
+            # List all bronze data files for this table
+            bronze_files = []
+            for blob in storage.client.list_blobs(storage.bucket_name, prefix="bronze/dst/"):
+                if blob.name.endswith(f"{table_id}_data.json"):
+                    bronze_files.append(blob.name)
+
+            if not bronze_files:
+                logging.warning(f"No bronze data files found for table {table_id}")
+                return None
+
+            # Sort by path (which includes date) and get the most recent
+            bronze_files.sort(reverse=True)
+            latest_file = bronze_files[0]
+
+            logging.info(f"Loading latest bronze data from GCS: {latest_file}")
+
+            # Read the JSON data from GCS
+            blob = storage.client.bucket(storage.bucket_name).blob(latest_file)
+            json_content = blob.download_as_text()
+            return json.loads(json_content)
+
+        except Exception as e:
+            logging.error(f"Failed to load bronze data from GCS: {e}")
+            return None
 
 
 def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, Any]:
@@ -128,9 +150,7 @@ def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, A
 
         # Look for the most recent metadata files - simplified paths
         data_metadata_files = list(bronze_base.glob(f"*/{table_id}_data_metadata.json"))
-        tableinfo_metadata_files = list(
-            bronze_base.glob(f"*/{table_id}_tableinfo_metadata.json")
-        )
+        tableinfo_metadata_files = list(bronze_base.glob(f"*/{table_id}_tableinfo_metadata.json"))
         tableinfo_files = list(bronze_base.glob(f"*/{table_id}_tableinfo.json"))
 
         metadata = {}
@@ -213,9 +233,7 @@ def load_dst_json_into_duckdb(json_data: Dict[str, Any], table_name: str):
         record = {}
         temp_i = i
 
-        for j, (dim_name, dim_size) in enumerate(
-            zip(reversed(dim_names), reversed(dim_sizes))
-        ):
+        for j, (dim_name, dim_size) in enumerate(zip(reversed(dim_names), reversed(dim_sizes))):
             dim_index = temp_i % dim_size
             temp_i = temp_i // dim_size
 
@@ -626,9 +644,7 @@ def save_silver_data(
         storage.save_json(metadata, metadata_path)
         logging.info(f"Saved metadata to GCS at {metadata_path}")
 
-    logging.info(
-        f"Successfully saved {record_count} records using DuckDB native export"
-    )
+    logging.info(f"Successfully saved {record_count} records using DuckDB native export")
 
 
 def main_with_args(args: argparse.Namespace) -> bool:
@@ -657,9 +673,9 @@ def main_with_args(args: argparse.Namespace) -> bool:
         try:
             logging.info(f"Processing table: {table_id}")
 
-            # Find and load latest bronze data
-            bronze_data = find_latest_bronze_data(storage, table_id)
-            if not bronze_data:
+            # Find and load latest bronze data (use in-memory data if available)
+            table_bronze_data = find_latest_bronze_data(storage, table_id, getattr(args, "bronze_data", None))
+            if not table_bronze_data:
                 logging.warning(f"No bronze data found for table {table_id}")
                 continue
 
@@ -672,7 +688,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
             if table_id in processors:
                 logging.info(f"Calling processor for {table_id}")
                 try:
-                    df_processed = processors[table_id](bronze_data, metadata)
+                    df_processed = processors[table_id](table_bronze_data, metadata)
                     logging.info(f"Processor completed for {table_id}")
                 except Exception as e:
                     logging.error(f"Error in processor for {table_id}: {e}")
@@ -680,9 +696,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
 
                 # Save to silver layer
                 try:
-                    save_silver_data(
-                        df_processed, storage, table_id, timestamp, args.silver_dir
-                    )
+                    save_silver_data(df_processed, storage, table_id, timestamp, args.silver_dir)
                     processed_tables.append(table_id)
                     logging.info(f"Successfully processed {table_id}")
                 except Exception as e:
@@ -723,9 +737,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
         storage.save_json(summary, summary_path)
 
     logging.info("Silver layer processing completed successfully")
-    logging.info(
-        f"Processed {len(processed_tables)} tables: {', '.join(processed_tables)}"
-    )
+    logging.info(f"Processed {len(processed_tables)} tables: {', '.join(processed_tables)}")
     logging.info(f"Output saved with timestamp: {timestamp}")
 
     return len(processed_tables) > 0

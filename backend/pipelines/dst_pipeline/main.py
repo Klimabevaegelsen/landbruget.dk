@@ -73,20 +73,14 @@ Examples:
     )
 
     # Bronze layer options
-    parser.add_argument(
-        "--lang", choices=["da", "en"], default="da", help="Language for API requests"
-    )
+    parser.add_argument("--lang", choices=["da", "en"], default="da", help="Language for API requests")
     parser.add_argument("--variables", nargs="*", help="Specific variables to fetch")
     parser.add_argument("--start-time", help="Start time for data (YYYY format)")
     parser.add_argument("--end-time", help="End time for data (YYYY format)")
 
     # Silver layer options
-    parser.add_argument(
-        "--bronze-dir", default="bronze/dst", help="Bronze layer input directory"
-    )
-    parser.add_argument(
-        "--silver-dir", default="silver/dst", help="Silver layer output directory"
-    )
+    parser.add_argument("--bronze-dir", default="bronze/dst", help="Bronze layer input directory")
+    parser.add_argument("--silver-dir", default="silver/dst", help="Silver layer output directory")
     parser.add_argument("--force", action="store_true", help="Force reprocessing")
 
     # General options
@@ -100,14 +94,15 @@ Examples:
     return parser.parse_args()
 
 
-def run_bronze_layer(args: argparse.Namespace) -> bool:
-    """Run the bronze layer for specified tables"""
+def run_bronze_layer(args: argparse.Namespace) -> tuple[bool, dict]:
+    """Run the bronze layer for specified tables and return the fetched data"""
     logging.info("=" * 60)
     logging.info("STARTING BRONZE LAYER - Data Fetching")
     logging.info("=" * 60)
 
     success_count = 0
     total_tables = len(args.tables)
+    bronze_data = {}
 
     for table_id in args.tables:
         try:
@@ -123,25 +118,27 @@ def run_bronze_layer(args: argparse.Namespace) -> bool:
                 log_level=args.log_level,
             )
 
-            # Run bronze layer
-            bronze.main_with_args(bronze_args)
-            success_count += 1
-            logging.info(f"✅ Successfully processed bronze layer for {table_id}")
+            # Run bronze layer and get the data
+            table_data = bronze.main_with_args(bronze_args)
+            if table_data:
+                bronze_data[table_id] = table_data
+                success_count += 1
+                logging.info(f"✅ Successfully processed bronze layer for {table_id}")
+            else:
+                logging.error(f"❌ No data returned from bronze layer for {table_id}")
 
         except Exception as e:
             logging.error(f"❌ Failed to process bronze layer for {table_id}: {e}")
             continue
 
     logging.info("=" * 60)
-    logging.info(
-        f"BRONZE LAYER COMPLETE: {success_count}/{total_tables} tables processed"
-    )
+    logging.info(f"BRONZE LAYER COMPLETE: {success_count}/{total_tables} tables processed")
     logging.info("=" * 60)
 
-    return success_count > 0
+    return success_count > 0, bronze_data
 
 
-def run_silver_layer(args: argparse.Namespace) -> bool:
+def run_silver_layer(args: argparse.Namespace, bronze_data: dict = None) -> bool:
     """Run the silver layer for specified tables"""
     logging.info("=" * 60)
     logging.info("STARTING SILVER LAYER - Data Processing")
@@ -155,6 +152,7 @@ def run_silver_layer(args: argparse.Namespace) -> bool:
             log_level=args.log_level,
             tables=args.tables,
             force=args.force,
+            bronze_data=bronze_data,  # Pass in-memory data
         )
 
         # Run silver layer
@@ -189,15 +187,17 @@ def main():
         sys.exit(1)
 
     try:
+        bronze_data = {}
+
         # Run bronze layer (unless silver-only)
         if not args.silver_only:
-            bronze_success = run_bronze_layer(args)
+            bronze_success, bronze_data = run_bronze_layer(args)
             if not bronze_success:
                 logging.warning("⚠️ Bronze layer had failures, but continuing...")
 
         # Run silver layer (unless bronze-only)
         if not args.bronze_only:
-            silver_success = run_silver_layer(args)
+            silver_success = run_silver_layer(args, bronze_data)
             if not silver_success:
                 logging.error("❌ Silver layer failed")
                 success = False
