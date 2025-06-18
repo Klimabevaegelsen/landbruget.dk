@@ -144,6 +144,7 @@ def find_latest_bronze_data(
 
 def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, Any]:
     """Load table metadata from bronze layer"""
+    metadata = {}
 
     if isinstance(storage, LocalStorage):
         bronze_base = Path(storage.base_dir)
@@ -152,8 +153,6 @@ def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, A
         data_metadata_files = list(bronze_base.glob(f"*/{table_id}_data_metadata.json"))
         tableinfo_metadata_files = list(bronze_base.glob(f"*/{table_id}_tableinfo_metadata.json"))
         tableinfo_files = list(bronze_base.glob(f"*/{table_id}_tableinfo.json"))
-
-        metadata = {}
 
         if data_metadata_files:
             data_metadata_files.sort(reverse=True)
@@ -178,6 +177,10 @@ def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, A
                     metadata["table_structure"] = json.load(f)
             except Exception as e:
                 logging.warning(f"Could not load table structure: {e}")
+    else:
+        # For GCS storage, metadata loading is not yet implemented
+        # Return empty metadata for now since processing functions can handle it
+        logging.info(f"Metadata loading from GCS not implemented, using empty metadata for {table_id}")
 
     return metadata
 
@@ -681,8 +684,12 @@ def main_with_args(args: argparse.Namespace) -> bool:
 
             logging.info(f"Found bronze data for {table_id}")
 
-            # Load metadata
-            metadata = load_table_metadata(storage, table_id)
+            # Load metadata (use empty dict if not available)
+            try:
+                metadata = load_table_metadata(storage, table_id)
+            except Exception as e:
+                logging.warning(f"Could not load metadata for {table_id}: {e}")
+                metadata = {}
 
             # Process data using appropriate processor
             if table_id in processors:
