@@ -259,13 +259,64 @@ class GCSUtil(metaclass=Singleton):
 
     def download_file(self, bucket_name: str, source_blob_name: str, destination_file_name: str):
         """
-        Download a file from GCS to local filesystem.
+        Download a file from GCS to local filesystem with timeout and retry support.
 
         Args:
             bucket_name (str): Name of the bucket
             source_blob_name (str): Name of the source blob
             destination_file_name (str): Path to save the file locally
         """
+        import time
+
+        from google.api_core import exceptions as gcs_exceptions
+        from google.api_core import retry
+
         blob = self.get_blob(bucket_name, source_blob_name)
-        blob.download_to_filename(destination_file_name)
-        self.log.info(f"Downloaded {source_blob_name} to {destination_file_name}")
+
+        # Get file size for progress tracking
+        file_size = blob.size
+        file_size_mb = file_size / (1024 * 1024) if file_size else 0
+
+        self.log.info(
+            f"Starting download of {source_blob_name} ({file_size_mb:.1f} MB) to {destination_file_name}"
+        )
+
+        # Configure retry strategy for large files
+        download_retry = retry.Retry(
+            predicate=retry.if_exception_type(
+                gcs_exceptions.TooManyRequests,
+                gcs_exceptions.InternalServerError,
+                gcs_exceptions.ServiceUnavailable,
+                ConnectionError,
+                TimeoutError,
+            ),
+            deadline=1800,  # 30 minutes total timeout for large files
+            initial=1.0,
+            maximum=60.0,
+            multiplier=2.0,
+        )
+
+        start_time = time.time()
+
+        try:
+            # Download with retry logic and timeout
+            blob.download_to_filename(destination_file_name, retry=download_retry, timeout=1800)
+
+            elapsed_time = time.time() - start_time
+            download_speed = file_size_mb / elapsed_time if elapsed_time > 0 else 0
+
+            self.log.info(f"Downloaded {source_blob_name} to {destination_file_name}")
+            self.log.info(f"Download completed in {elapsed_time:.1f}s at {download_speed:.1f} MB/s")
+
+        except Exception as e:
+            self.log.error(f"Failed to download {source_blob_name}: {e}")
+            # Clean up partial download
+            import os
+
+            if os.path.exists(destination_file_name):
+                try:
+                    os.unlink(destination_file_name)
+                    self.log.info(f"Cleaned up partial download: {destination_file_name}")
+                except Exception as cleanup_e:
+                    self.log.warning(f"Failed to clean up partial download: {cleanup_e}")
+            raise
