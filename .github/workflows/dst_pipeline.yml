@@ -71,13 +71,13 @@ jobs:
 
     - name: Authenticate to Google Cloud (Production only)
       id: auth
-      if: inputs.environment == 'prod'
+      if: inputs.environment == 'prod' || inputs.environment == null
       uses: google-github-actions/auth@v2
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
     - name: Set up Cloud SDK (Production only)
-      if: inputs.environment == 'prod'
+      if: inputs.environment == 'prod' || inputs.environment == null
       uses: google-github-actions/setup-gcloud@v2
 
     - name: Create data directories
@@ -85,30 +85,14 @@ jobs:
         mkdir -p bronze/dst
         mkdir -p silver/dst
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/dst_pipeline
-        
-        # Create .env file
-        echo "ENVIRONMENT=${{ inputs.environment || 'prod' }}" > .env
-        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
-        
-        # Add GCS settings for production
-        if [ "${{ inputs.environment }}" == "prod" ]; then
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        else
-          # For dev environment, use local directories
-          echo "LOCAL_STORAGE_DIR=$(pwd)/../../../bronze/dst" >> .env
-        fi
-
-
-
     - name: Run DST Pipeline
       working-directory: backend/pipelines/dst_pipeline
+      env:
+        ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+        LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        LOCAL_STORAGE_DIR: ${{ inputs.environment == 'dev' && '../../../bronze/dst' || '' }}
       run: |
         # Build base command
         TABLES="${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
