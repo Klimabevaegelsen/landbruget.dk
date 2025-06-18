@@ -140,7 +140,15 @@ def run_bronze_layer(
             geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
 
             # Extract building IDs from INSPIRE BBR result
-            building_ids = inspire_result["data"]["building_ids"]
+            # Handle the new return structure from inspire_bbr_fetcher
+            if isinstance(inspire_result, dict) and "building_ids" in inspire_result:
+                building_ids = inspire_result["building_ids"]
+                attributes_df = inspire_result["attributes_df"]
+            else:
+                # Fallback for old structure
+                building_ids = inspire_result.get("data", {}).get("building_ids", [])
+                attributes_df = inspire_result.get("data", {}).get("attributes_df", None)
+
             logger.info(f"Requesting geometries for {len(building_ids):,} buildings")
 
             geodanmark_result = geodanmark_fetcher.fetch_building_geometries(
@@ -150,12 +158,12 @@ def run_bronze_layer(
             # Combine both results for silver layer
             result = {
                 "data": {
-                    "attributes": inspire_result["data"]["attributes_df"],
+                    "attributes": attributes_df,
                     "geometries": geodanmark_result["geometries"] if geodanmark_result else [],
                     "building_ids": building_ids,
                 },
                 "metadata": {
-                    "inspire_metadata": inspire_result["metadata"],
+                    "inspire_metadata": getattr(inspire_result, "metadata", None),
                     "geodanmark_metadata": geodanmark_result["metadata"]
                     if geodanmark_result
                     else None,

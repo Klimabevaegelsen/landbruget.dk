@@ -372,7 +372,7 @@ class BuildingProcessor:
 
                             geometries_data.append(
                                 {
-                                    "localId": bbruuid,  # Use same column name as attributes
+                                    "join_id": bbruuid,  # Generic join key
                                     "geometry_wkt": geom_wkt,
                                     "geometry_type": geom.get("type"),
                                     "has_geometry": True,
@@ -386,15 +386,34 @@ class BuildingProcessor:
                 self.conn.register("attributes_table", attributes_df)
                 self.conn.register("geometries_table", geometries_df)
 
+                # Find the building ID column in attributes
+                building_id_col = None
+                for col_name in [
+                    "externalreferencereference",
+                    "externalReference_reference1",
+                    "localId",
+                    "BBRUUID",
+                ]:
+                    if col_name in attributes_df.columns:
+                        building_id_col = col_name
+                        break
+
+                if not building_id_col:
+                    raise ValueError(
+                        f"No building ID column found in attributes. Available columns: {list(attributes_df.columns)}"
+                    )
+
+                self.logger.info(f"Using '{building_id_col}' as join key for attributes")
+
                 # Perform LEFT JOIN to combine attributes with geometries
-                join_query = """
+                join_query = f"""
                     SELECT 
                         a.*,
                         g.geometry_wkt,
                         g.geometry_type,
                         CASE WHEN g.has_geometry IS NOT NULL THEN true ELSE false END as has_geometry
                     FROM attributes_table a
-                    LEFT JOIN geometries_table g ON a.localId = g.localId
+                    LEFT JOIN geometries_table g ON a.{building_id_col} = g.join_id
                 """
 
                 self.conn.execute(f"CREATE TABLE buildings_joined AS {join_query}")
@@ -488,7 +507,13 @@ class BuildingProcessor:
 
             # Try different possible column names for building usage
             usage_code_col = None
-            for col_name in ["buildingUsage", "building_usage", "BUILDINGUSAGE", "usage"]:
+            for col_name in [
+                "buildingNature",
+                "buildingUsage",
+                "building_usage",
+                "BUILDINGUSAGE",
+                "usage",
+            ]:
                 if col_name in columns:
                     usage_code_col = col_name
                     break
