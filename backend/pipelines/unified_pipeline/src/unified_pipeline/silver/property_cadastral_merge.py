@@ -385,7 +385,15 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
             # Upload directly to GCS without loading into memory
             # This avoids the 1.7GB memory spike that was killing the runner
-            output_gcs_path = f"silver/{self.config.dataset}/{os.path.basename(output_temp_path)}"
+            # Use directory structure: silver/property_cadastral_merged/TIMESTAMP/filename.parquet
+            base_dataset_name = "property_cadastral_merged"
+            # Extract timestamp from dataset name or use current timestamp
+            dataset_timestamp = (
+                self.config.dataset.replace("property_cadastral_merged_", "")
+                if "property_cadastral_merged_" in self.config.dataset
+                else timestamp
+            )
+            output_gcs_path = f"silver/{base_dataset_name}/{dataset_timestamp}/{os.path.basename(output_temp_path)}"
 
             self.log.info(f"Uploading merged data to GCS: {output_gcs_path}")
 
