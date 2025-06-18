@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from typing import Any, Dict
 
-import duckdb
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
@@ -38,20 +37,15 @@ class PropertyCadastralMergeConfig(BaseJobConfig):
 
 
 class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
-    """Merge property owners data with cadastral parcels using pure DuckDB operations."""
+    """Pure DuckDB-based Property-Cadastral merge pipeline for memory efficiency."""
 
     def __init__(self, config: PropertyCadastralMergeConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
-        # Initialize DuckDB connection for memory-efficient operations
-        self.conn = duckdb.connect(":memory:")
-
-        # Install and load spatial extension for geometry handling
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-
-        # Configure DuckDB for optimal performance with large files
-        self.conn.execute("SET memory_limit = '4GB'")  # Reasonable limit for GitHub Actions
+        # Configure DuckDB for GitHub Actions resource limits
+        self.conn.execute("SET memory_limit = '4GB'")
         self.conn.execute("SET threads = 2")  # GitHub Actions has 2 cores
+        self.conn.execute("INSTALL spatial")  # Enable spatial extension
+        self.conn.execute("LOAD spatial")  # Load spatial extension
 
     def _load_and_validate_property_data(self, file_path: str) -> Dict[str, Any]:
         """Load property owners data using DuckDB and return validation stats."""
@@ -294,23 +288,6 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             self.log.error(f"Failed to export merged data: {e}")
             raise
 
-    def _upload_to_gcs(self, local_path: str, gcs_path: str) -> None:
-        """Upload the final parquet file to GCS."""
-        try:
-            self.log.info(f"Uploading to GCS: gs://{self.config.bucket}/{gcs_path}")
-
-            self.gcs_util.download_file(  # This is actually upload_file but the method name is wrong in the util
-                bucket_name=self.config.bucket,
-                source_blob_name=gcs_path,
-                destination_file_name=local_path,
-            )
-
-            self.log.info(f"Successfully uploaded to gs://{self.config.bucket}/{gcs_path}")
-
-        except Exception as e:
-            self.log.error(f"Failed to upload to GCS: {e}")
-            raise
-
     async def run(self):
         """
         Run the complete property-cadastral merge job using pure DuckDB operations.
@@ -392,13 +369,39 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             output_temp_path = f"/tmp/{self.config.dataset}_{timestamp}.parquet"
             self._export_to_parquet(output_temp_path)
 
-            # Upload to GCS using the proper _save_data method from BaseSource
-            # Create a minimal pandas DataFrame just for the upload process
-            import pandas as pd
+            # Save the result using the proper BaseSource method
+            # Load as GeoDataFrame since _save_data expects that
+            import geopandas as gpd
 
-            # Read back the parquet file as pandas for the _save_data method
-            df = pd.read_parquet(output_temp_path)
-            self._save_data(df, self.config.dataset, self.config.bucket)
+            # Load the exported data as GeoDataFrame for proper saving
+            gdf = gpd.read_parquet(output_temp_path)
+
+            # Handle geometry column if it exists
+            geometry_cols = [
+                col
+                for col in gdf.columns
+                if col.lower().endswith("geometry") or col.lower() == "geom"
+            ]
+            if geometry_cols:
+                # Use the first geometry column found
+                geom_col = geometry_cols[0]
+                gdf = gdf.set_geometry(geom_col)
+                # Set CRS if not already set (common Danish coordinate system)
+                if gdf.crs is None:
+                    gdf = gdf.set_crs(
+                        "EPSG:25832", allow_override=True
+                    )  # ETRS89 / UTM zone 32N (common for Denmark)
+            else:
+                # If no geometry column, convert to regular DataFrame for _save_data
+                # Note: BaseSource._save_data expects GeoDataFrame, so we create one without geometry
+                gdf = gpd.GeoDataFrame(gdf)
+
+            # Use BaseSource._save_data method which handles the GCS upload properly
+            self._save_data(gdf, self.config.dataset, self.config.bucket)
+
+            # Clean up temp file
+            if os.path.exists(output_temp_path):
+                os.remove(output_temp_path)
 
             self.log.info("Pure DuckDB Property-Cadastral BFE merge job completed successfully")
             self.log.info(
