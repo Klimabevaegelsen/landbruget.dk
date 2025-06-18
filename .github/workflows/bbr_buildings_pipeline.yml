@@ -43,6 +43,7 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    timeout-minutes: 180  # Increased timeout for full dataset processing
     
     # Add permissions for GCS access
     permissions:
@@ -54,6 +55,43 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Free up disk space for large dataset processing
+      run: |
+        echo "=== Initial disk usage ==="
+        df -h
+        
+        echo "=== Freeing up disk space ==="
+        # Remove unnecessary software to free up space
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/share/swift
+        
+        # Clean up docker
+        sudo docker system prune -af
+        sudo docker image prune -af
+        
+        # Clean up apt cache
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        
+        echo "=== Disk usage after cleanup ==="
+        df -h
+        
+        # Check if we have enough space for full dataset processing
+        AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+        echo "Available space: ${AVAILABLE_GB}GB"
+        
+        if [ $AVAILABLE_GB -lt 20 ]; then
+          echo "❌ ERROR: Not enough disk space! Available: ${AVAILABLE_GB}GB, Required: ~20GB"
+          echo "💡 The pipeline processes 761MB→4.6GB but cleans up immediately"
+          exit 1
+        fi
+        
+        echo "✅ Sufficient disk space available: ${AVAILABLE_GB}GB"
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -104,6 +142,7 @@ jobs:
 
     - name: Run BBR Buildings Pipeline
       working-directory: backend/pipelines/bbr_buildings
+      timeout-minutes: 150  # Set step-level timeout for full dataset
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
@@ -126,9 +165,12 @@ jobs:
           CMD="$CMD --input-dir $LATEST_BRONZE_DIR"
         fi
         
-        # Add sample size if specified
+        # Add sample size if specified (0 means full dataset)
         if [[ "${{ inputs.sample_size }}" != "0" ]]; then
           CMD="$CMD --sample-size ${{ inputs.sample_size }}"
+          echo "🧪 Running with sample size: ${{ inputs.sample_size }}"
+        else
+          echo "🔄 Processing full dataset (~2M buildings + constructions)"
         fi
         
         # Add enhancement flag
@@ -140,7 +182,44 @@ jobs:
         CMD="$CMD --log-level ${{ inputs.log_level }}"
         
         echo "Running command: $CMD"
-        eval $CMD
+        
+        # Monitor disk space during execution
+        (while true; do
+          sleep 300  # Check every 5 minutes
+          echo "$(date): Disk usage: $(df -h . | tail -1)"
+          echo "$(date): Memory usage: $(free -h | grep Mem)"
+          
+          # Check if we're running low on space (less than 2GB)
+          AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
+          if [ $AVAILABLE_MB -lt 2048 ]; then
+            echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
+          fi
+        done) &
+        MONITOR_PID=$!
+        
+        # Run the pipeline with timeout handling
+        timeout 8400 $CMD || {
+          EXIT_CODE=$?
+          kill $MONITOR_PID 2>/dev/null || true
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "Pipeline timed out after 140 minutes"
+            echo "Full dataset processing requires significant time"
+          fi
+          exit $EXIT_CODE
+        }
+        
+        # Stop monitoring
+        kill $MONITOR_PID 2>/dev/null || true
+
+    - name: Check final disk usage
+      if: always()
+      run: |
+        echo "Final disk usage:"
+        df -h
+        echo "Pipeline output size:"
+        if [ -d "backend/pipelines/bbr_buildings/data" ]; then
+          du -sh backend/pipelines/bbr_buildings/data/ || true
+        fi
 
     - name: Upload pipeline artifacts
       if: always()
@@ -150,6 +229,7 @@ jobs:
         path: |
           backend/pipelines/bbr_buildings/output/
           backend/pipelines/bbr_buildings/logs/
+          backend/pipelines/bbr_buildings/data/
         retention-days: 7
 
     - name: Handle pipeline failure
@@ -161,4 +241,15 @@ jobs:
         echo "- Network connectivity issues with SDFE FTP server"
         echo "- Insufficient disk space for large building datasets"
         echo "- Memory issues when processing millions of building records"
+        echo "- Pipeline timeout for full dataset processing"
+        echo ""
+        echo "For troubleshooting:"
+        echo "1. Use sample_size parameter to test with smaller data"
+        echo "2. Check disk space and memory monitoring logs above"
+        echo "3. Consider running bronze and silver layers separately"
+        echo "For large datasets, consider:"
+        echo "1. Using sample_size parameter to test with smaller data (try 10000-50000)"
+        echo "2. Running bronze and silver layers separately"
+        echo "3. Using local processing for full datasets"
+        echo "4. Using self-hosted runners with more disk space"
         exit 1 
