@@ -167,7 +167,7 @@ property-cadastral-merge:
 # Run merge pipeline with custom configuration
 property-cadastral-merge-config:
 	@echo "Running Property-Cadastral merge pipeline with configuration..."
-	cd src && python run_property_cadastral_merge.py --config-file config/property_cadastral_merge_config.json
+	cd src && python run_property_cadastral_merge.py --output-dataset property_cadastral_merged_config
 
 # Run tests
 test-merge:
