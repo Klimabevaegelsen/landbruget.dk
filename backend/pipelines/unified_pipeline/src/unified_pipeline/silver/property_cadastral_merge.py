@@ -388,15 +388,16 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             output_gcs_path = f"silver/{self.config.dataset}/{os.path.basename(output_temp_path)}"
 
             self.log.info(f"Uploading merged data to GCS: {output_gcs_path}")
-            self.gcs_util.upload_file(
-                bucket_name=self.config.bucket,
-                source_file_name=output_temp_path,
-                destination_blob_name=output_gcs_path,
-            )
+
+            # Use the same upload pattern as BaseSource
+            bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
+            working_blob = bucket.blob(output_gcs_path)
+            working_blob.upload_from_filename(output_temp_path)
 
             # Get final file size for logging
             file_size_gb = os.path.getsize(output_temp_path) / (1024 * 1024 * 1024)
             self.log.info(f"Successfully uploaded {file_size_gb:.2f} GB merged dataset to GCS")
+            self.log.info(f"Uploaded to: gs://{self.config.bucket}/{output_gcs_path}")
 
             # Clean up temp file
             if os.path.exists(output_temp_path):
