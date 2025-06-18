@@ -123,26 +123,52 @@ def run_bronze_layer(
         result = fetcher.fetch_samples(output_dir, return_data=return_data)
 
     elif args.source == "both":
-        # Run both sources sequentially
-        logger.info("Running both data sources...")
+        # Run both sources in coordinated fashion
+        logger.info("Running coordinated data sources...")
         result = None
 
-        # First run INSPIRE BBR
-        logger.info("Fetching INSPIRE BBR data...")
+        # First run INSPIRE BBR to get building attributes and IDs
+        logger.info("Fetching INSPIRE BBR building attributes...")
         inspire_fetcher = InspireBBRFetcher(settings, logger)
         inspire_result = inspire_fetcher.fetch_data(
             output_dir, sample_size=args.sample_size, return_data=return_data
         )
 
-        # Then run GeoDanmark WFS
-        logger.info("Fetching GeoDanmark WFS data...")
-        geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
-        geodanmark_result = geodanmark_fetcher.fetch_samples(output_dir, return_data=return_data)
+        # Then run GeoDanmark WFS to get geometries for the filtered buildings
+        if return_data and inspire_result:
+            logger.info("Fetching GeoDanmark WFS geometries for filtered buildings...")
+            geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
 
-        # Use INSPIRE BBR data as primary result for silver layer processing
-        # (GeoDanmark WFS is mainly for enhanced classification)
-        if return_data:
-            result = inspire_result
+            # Extract building IDs from INSPIRE BBR result
+            building_ids = inspire_result["data"]["building_ids"]
+            logger.info(f"Requesting geometries for {len(building_ids):,} buildings")
+
+            geodanmark_result = geodanmark_fetcher.fetch_building_geometries(
+                output_dir, building_ids, return_data=True
+            )
+
+            # Combine both results for silver layer
+            result = {
+                "data": {
+                    "attributes": inspire_result["data"]["attributes_df"],
+                    "geometries": geodanmark_result["geometries"] if geodanmark_result else [],
+                    "building_ids": building_ids,
+                },
+                "metadata": {
+                    "inspire_metadata": inspire_result["metadata"],
+                    "geodanmark_metadata": geodanmark_result["metadata"]
+                    if geodanmark_result
+                    else None,
+                    "source": "both",
+                },
+            }
+        else:
+            # If not returning data, still run GeoDanmark WFS for consistency
+            logger.info("Fetching sample GeoDanmark WFS data...")
+            geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
+            geodanmark_result = geodanmark_fetcher.fetch_samples(
+                output_dir, return_data=return_data
+            )
 
     logger.info("Bronze layer processing completed successfully")
 
