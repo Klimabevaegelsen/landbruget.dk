@@ -34,7 +34,7 @@ class PropertyCadastralMergeConfig(BaseJobConfig):
     validate_bfe_numbers: bool = True  # Validate BFE number format and consistency
     include_merge_metadata: bool = True  # Add metadata about the merge process
 
-    save_local: bool = os.getenv("SAVE_LOCAL", False)
+    save_local: bool = os.getenv("SAVE_LOCAL", "false").lower() in ("true", "1", "yes")
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -383,6 +383,10 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             )
 
             # Upload to GCS using BaseSource pattern
+            self.log.info(
+                f"DEBUG - save_local config: {self.config.save_local} (type: {type(self.config.save_local)})"
+            )
+
             if not self.config.save_local:
                 bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
                 gcs_path = f"silver/property_cadastral_merged/{date_str}.parquet"
@@ -393,7 +397,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
                 # Clean up temp file after upload
                 os.remove(temp_file)
             else:
-                self.log.info(f"Saved locally at {temp_file}")
+                self.log.info(f"Save local is enabled, saved locally at {temp_file}")
 
             self.log.info("Pure DuckDB Property-Cadastral BFE merge job completed successfully")
             self.log.info(
