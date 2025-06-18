@@ -336,24 +336,143 @@ class BuildingProcessor:
 
     def _load_building_data_from_object(self, bronze_data: dict) -> ibis.Table:
         """
-        Load building data from coordinated bronze layer data object.
-        Joins building attributes from INSPIRE BBR with geometries from GeoDanmark WFS.
+        Load building data from GraphQL-enriched bronze layer data object.
+        Handles the new structure with GraphQL-enriched attributes and optional geometries.
 
         Args:
-            bronze_data: Data object from coordinated bronze layer
+            bronze_data: Data object from bronze layer with GraphQL enrichment
 
         Returns:
-            Ibis table with joined building data
+            Ibis table with building data
         """
-        self.logger.info("Loading and joining building data from coordinated bronze sources")
+        self.logger.info("Loading GraphQL-enriched building data from bronze layer")
 
         try:
-            # Check if this is the new coordinated data structure
-            if "data" in bronze_data and "attributes" in bronze_data["data"]:
-                # New coordinated structure: attributes + geometries
+            # Check if this is the new GraphQL-enriched data structure
+            if "data" in bronze_data and "attributes_df" in bronze_data["data"]:
+                # New GraphQL-enriched structure: attributes_df + building_ids
+                attributes_df = bronze_data["data"]["attributes_df"]
+                building_ids = bronze_data["data"]["building_ids"]
+
+                self.logger.info(f"Attributes: {len(attributes_df):,} records")
+                self.logger.info(f"Building IDs for geometry lookup: {len(building_ids):,}")
+
+                # Check if we also have geometries data
+                geometries_list = bronze_data["data"].get("geometries", [])
+
+                if geometries_list:
+                    self.logger.info(f"Geometries: {len(geometries_list):,} features")
+
+                    # Convert geometries list to DataFrame
+                    geometries_data = []
+                    for geom_feature in geometries_list:
+                        if "properties" in geom_feature and "geometry" in geom_feature:
+                            props = geom_feature["properties"]
+                            geom = geom_feature["geometry"]
+
+                            # Extract BBRUUID (the join key)
+                            bbruuid = props.get("BBRUUID")
+                            if bbruuid:
+                                # Convert geometry to WKT
+                                geom_wkt = self._geojson_to_wkt(geom)
+
+                                geometries_data.append(
+                                    {
+                                        "join_id": bbruuid,  # Generic join key
+                                        "geometry_wkt": geom_wkt,
+                                        "geometry_type": geom.get("type"),
+                                        "has_geometry": True,
+                                    }
+                                )
+
+                    geometries_df = pd.DataFrame(geometries_data)
+                    self.logger.info(f"Processed {len(geometries_df):,} geometries for joining")
+
+                    # Register both DataFrames with DuckDB
+                    self.conn.register("attributes_table", attributes_df)
+                    self.conn.register("geometries_table", geometries_df)
+
+                    # Find the building ID column in attributes
+                    building_id_col = None
+                    for col_name in [
+                        "building_uuid",
+                        "externalreferencereference",
+                        "externalReference_reference1",
+                        "localId",
+                        "BBRUUID",
+                    ]:
+                        if col_name in attributes_df.columns:
+                            building_id_col = col_name
+                            break
+
+                    if not building_id_col:
+                        raise ValueError(
+                            f"No building ID column found in attributes. Available columns: {list(attributes_df.columns)}"
+                        )
+
+                    self.logger.info(f"Using '{building_id_col}' as join key for attributes")
+
+                    # Perform LEFT JOIN to combine attributes with geometries
+                    join_query = f"""
+                        SELECT 
+                            a.*,
+                            g.geometry_wkt,
+                            g.geometry_type,
+                            CASE WHEN g.has_geometry IS NOT NULL THEN true ELSE false END as has_geometry
+                        FROM attributes_table a
+                        LEFT JOIN geometries_table g ON a.{building_id_col} = g.join_id
+                    """
+
+                    self.conn.execute(f"CREATE TABLE buildings_joined AS {join_query}")
+                    buildings_table = self.ibis_conn.table("buildings_joined")
+
+                    # Log join results
+                    total_count = buildings_table.count().execute()
+                    with_geometry_count = (
+                        buildings_table.filter(buildings_table.has_geometry == True)
+                        .count()
+                        .execute()
+                    )
+
+                    self.logger.info(f"Joined total: {total_count:,} buildings")
+                    self.logger.info(
+                        f"With geometry: {with_geometry_count:,} buildings ({with_geometry_count / total_count:.1%})"
+                    )
+
+                    return buildings_table
+
+                else:
+                    # No geometries data, just use attributes
+                    self.logger.info("No geometries data, using attributes only")
+
+                    # Register attributes DataFrame with DuckDB
+                    self.conn.register("attributes_table", attributes_df)
+
+                    # Add a placeholder geometry column
+                    query = """
+                        SELECT 
+                            *,
+                            NULL as geometry_wkt,
+                            NULL as geometry_type,
+                            false as has_geometry
+                        FROM attributes_table
+                    """
+
+                    self.conn.execute(f"CREATE TABLE buildings_attributes AS {query}")
+                    buildings_table = self.ibis_conn.table("buildings_attributes")
+
+                    total_count = buildings_table.count().execute()
+                    self.logger.info(f"Loaded {total_count:,} buildings (attributes only)")
+
+                    return buildings_table
+
+            # Check if this is the old coordinated data structure
+            elif "data" in bronze_data and "attributes" in bronze_data["data"]:
+                # Old coordinated structure: attributes + geometries
                 attributes_df = bronze_data["data"]["attributes"]
                 geometries_list = bronze_data["data"]["geometries"]
 
+                self.logger.info("Using legacy coordinated structure")
                 self.logger.info(f"Attributes: {len(attributes_df):,} records")
                 self.logger.info(f"Geometries: {len(geometries_list):,} features")
 
@@ -486,13 +605,16 @@ class BuildingProcessor:
         """
         Filter buildings based on usage codes and current use values.
 
+        Since the bronze layer now pre-filters using GraphQL API, this layer
+        applies additional quality filters rather than category-based filtering.
+
         Args:
             buildings_table: Input buildings table
 
         Returns:
             Filtered buildings table
         """
-        self.logger.info("Applying building filters")
+        self.logger.info("Applying building quality filters")
 
         try:
             # Determine which columns are available for filtering
@@ -500,14 +622,15 @@ class BuildingProcessor:
 
             # Try different possible column names for current use
             current_use_col = None
-            for col_name in ["currentUse", "current_use", "CURRENTUSE"]:
+            for col_name in ["current_use", "currentUse", "CURRENTUSE"]:
                 if col_name in columns:
                     current_use_col = col_name
                     break
 
-            # Try different possible column names for building usage
+            # Try different possible column names for building usage (including GraphQL BBR codes)
             usage_code_col = None
             for col_name in [
+                "bbr_usage_code",  # New GraphQL-enriched column
                 "buildingNature",
                 "buildingUsage",
                 "building_usage",
@@ -518,50 +641,68 @@ class BuildingProcessor:
                     usage_code_col = col_name
                     break
 
-            # Build filter conditions
+            # Check if we have category_group column (from GraphQL enrichment)
+            category_group_col = None
+            for col_name in ["category_group", "building_category_group"]:
+                if col_name in columns:
+                    category_group_col = col_name
+                    break
+
+            # Apply quality filters rather than category filters
             filter_conditions = []
 
-            if current_use_col:
-                # Filter by INSPIRE current use values
-                all_target_uses = (
-                    self.settings.agricultural_current_use
-                    + self.settings.residential_current_use
-                    + self.settings.public_services_current_use
-                    + self.settings.other_construction_current_use
-                )
-                filter_conditions.append(buildings_table[current_use_col].isin(all_target_uses))
-                self.logger.info(
-                    f"Filtering by {current_use_col} column with values: {all_target_uses}"
-                )
+            # Filter out buildings with invalid UUIDs
+            if "building_uuid" in columns:
+                filter_conditions.append(buildings_table["building_uuid"].notnull())
+                filter_conditions.append(buildings_table["building_uuid"] != "")
 
-            if usage_code_col:
-                # Filter by BBR usage codes
-                all_usage_codes = (
-                    self.settings.agricultural_usage_codes
-                    + self.settings.residential_usage_codes
-                    + self.settings.educational_usage_codes
+            # Filter out buildings with invalid current use (if available)
+            if current_use_col:
+                filter_conditions.append(buildings_table[current_use_col].notnull())
+                filter_conditions.append(buildings_table[current_use_col] != "")
+
+            # For education buildings, ensure they have valid BBR codes
+            if category_group_col and usage_code_col:
+                # Education buildings should have valid BBR codes
+                education_filter = (buildings_table[category_group_col] != "education") | (
+                    buildings_table[usage_code_col].notnull()
                 )
-                filter_conditions.append(buildings_table[usage_code_col].isin(all_usage_codes))
-                self.logger.info(
-                    f"Filtering by {usage_code_col} column with codes: {all_usage_codes}"
-                )
+                filter_conditions.append(education_filter)
 
             # Apply filters
             if filter_conditions:
-                # Combine conditions with OR (building matches any criteria)
+                # Combine conditions with AND (building must meet all quality criteria)
                 combined_filter = filter_conditions[0]
                 for condition in filter_conditions[1:]:
-                    combined_filter = combined_filter | condition
+                    combined_filter = combined_filter & condition
 
                 filtered_table = buildings_table.filter(combined_filter)
             else:
-                self.logger.warning("No recognized filter columns found, using all buildings")
+                self.logger.info("No quality filters applied, using all buildings")
                 filtered_table = buildings_table
 
             # Log filtering results
             original_count = buildings_table.count().execute()
             filtered_count = filtered_table.count().execute()
-            self.logger.info(f"Filtered from {original_count:,} to {filtered_count:,} buildings")
+            self.logger.info(
+                f"Quality filtered from {original_count:,} to {filtered_count:,} buildings"
+            )
+
+            # Log category breakdown if available
+            if category_group_col:
+                try:
+                    category_counts = (
+                        filtered_table.group_by(category_group_col)
+                        .aggregate(count=ibis._.count())
+                        .execute()
+                    )
+                    self.logger.info("Category breakdown:")
+                    for row in category_counts.itertuples():
+                        category = getattr(row, category_group_col)
+                        count = row.count
+                        self.logger.info(f"  {category}: {count:,} buildings")
+                except Exception as e:
+                    self.logger.warning(f"Could not generate category breakdown: {e}")
 
             return filtered_table
 
@@ -589,25 +730,34 @@ class BuildingProcessor:
                 "geom": "geo_building_polygon",
                 "geometry_wkt": "geo_building_polygon",
                 # Building attributes
-                "currentUse": "building_current_use",
                 "current_use": "building_current_use",
+                "currentUse": "building_current_use",
                 "CURRENTUSE": "building_current_use",
+                # BBR usage codes (GraphQL-enriched)
+                "bbr_usage_code": "building_usage_code",
                 "buildingUsage": "building_usage_code",
                 "building_usage": "building_usage_code",
                 "BUILDINGUSAGE": "building_usage_code",
-                "constructionYear": "building_construction_year",
+                # Construction year
                 "construction_year": "building_construction_year",
+                "constructionYear": "building_construction_year",
                 "CONSTRUCTIONYEAR": "building_construction_year",
-                "floorArea": "building_floor_area_sqm",
+                # Floor area
                 "floor_area": "building_floor_area_sqm",
+                "floorArea": "building_floor_area_sqm",
                 "FLOORAREA": "building_floor_area_sqm",
+                # Number of floors
+                "floors": "building_floors_above_ground",
                 "numberOfFloors": "building_floors_above_ground",
                 "number_of_floors": "building_floors_above_ground",
                 "NUMBEROFFLOORS": "building_floors_above_ground",
+                # Number of dwellings
+                "dwellings": "building_dwellings_count",
                 "numberOfDwellings": "building_dwellings_count",
                 "number_of_dwellings": "building_dwellings_count",
                 "NUMBEROFDWELLINGS": "building_dwellings_count",
                 # Administrative attributes
+                "building_uuid": "bbr_uuid",
                 "localId": "bbr_uuid",
                 "local_id": "bbr_uuid",
                 "LOCALID": "bbr_uuid",
@@ -617,6 +767,11 @@ class BuildingProcessor:
                 "parcelId": "parcel_id",
                 "parcel_id": "parcel_id",
                 "PARCELID": "parcel_id",
+                # Category group (from GraphQL enrichment)
+                "category_group": "building_category_group",
+                # Building nature
+                "building_nature": "building_nature",
+                "buildingNature": "building_nature",
                 # Layer source (added by our processing)
                 "layer_source": "layer_source",
             }

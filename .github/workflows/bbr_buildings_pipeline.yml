@@ -12,15 +12,7 @@ on:
           - silver
           - both
         default: 'both'
-      source:
-        description: 'Data source for bronze layer'
-        type: choice
-        required: false
-        options:
-          - inspire_bbr
-          - geodanmark_wfs
-          - both
-        default: 'inspire_bbr'
+
       sample_size:
         description: 'Sample size for testing (0 for full dataset)'
         type: number
@@ -126,6 +118,7 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
         DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
       run: |
         cd backend/pipelines/bbr_buildings
         echo "ENVIRONMENT=production" >> .env
@@ -139,6 +132,9 @@ jobs:
         if [[ -n "$DATAFORDELER_PASSWORD" ]]; then
           echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
         fi
+        if [[ -n "$DATAFORDELER_GRAPHQL_API_KEY" ]]; then
+          echo "DATAFORDELER_GRAPHQL_API_KEY=$DATAFORDELER_GRAPHQL_API_KEY" >> .env
+        fi
 
     - name: Run BBR Buildings Pipeline
       working-directory: backend/pipelines/bbr_buildings
@@ -150,10 +146,7 @@ jobs:
         # Build command based on inputs
         CMD="python main.py --layer ${{ inputs.layer }}"
         
-        # Add source parameter for bronze layer
-        if [[ "${{ inputs.layer }}" == "bronze" || "${{ inputs.layer }}" == "both" ]]; then
-          CMD="$CMD --source ${{ inputs.source }}"
-        fi
+        # Note: Source parameter removed - pipeline always uses INSPIRE BBR + GeoDanmark WFS
         
         # Add input-dir parameter for silver layer (only when running silver alone)
         if [[ "${{ inputs.layer }}" == "silver" ]]; then
@@ -170,7 +163,7 @@ jobs:
           CMD="$CMD --sample-size ${{ inputs.sample_size }}"
           echo "🧪 Running with sample size: ${{ inputs.sample_size }}"
         else
-          echo "🔄 Processing full dataset (~2M buildings + constructions)"
+          echo "🔄 Processing full dataset (~2.9M buildings with GraphQL enrichment)"
         fi
         
         # Add enhancement flag
@@ -237,19 +230,21 @@ jobs:
       run: |
         echo "BBR Buildings Pipeline failed. Please check the logs above for details."
         echo "Common issues:"
-        echo "- Missing Datafordeleren credentials for GeoDanmark WFS access"
-        echo "- Network connectivity issues with SDFE FTP server"
-        echo "- Insufficient disk space for large building datasets"
-        echo "- Memory issues when processing millions of building records"
-        echo "- Pipeline timeout for full dataset processing"
+        echo "- Missing Datafordeleren credentials (USERNAME/PASSWORD for WFS, GRAPHQL_API_KEY for BBR codes)"
+        echo "- Network connectivity issues with SDFE FTP server or Datafordeleren APIs"
+        echo "- Insufficient disk space for large building datasets (761MB→4.6GB processing)"
+        echo "- Memory issues when processing millions of building records with GraphQL enrichment"
+        echo "- Pipeline timeout for full dataset processing with GraphQL API calls"
         echo ""
         echo "For troubleshooting:"
-        echo "1. Use sample_size parameter to test with smaller data"
+        echo "1. Use sample_size parameter to test with smaller data (try 100-1000 for testing)"
         echo "2. Check disk space and memory monitoring logs above"
-        echo "3. Consider running bronze and silver layers separately"
+        echo "3. Verify all three credentials are set: DATAFORDELER_USERNAME, DATAFORDELER_PASSWORD, DATAFORDELER_GRAPHQL_API_KEY"
+        echo "4. Consider running bronze and silver layers separately for large datasets"
+        echo ""
         echo "For large datasets, consider:"
-        echo "1. Using sample_size parameter to test with smaller data (try 10000-50000)"
-        echo "2. Running bronze and silver layers separately"
-        echo "3. Using local processing for full datasets"
-        echo "4. Using self-hosted runners with more disk space"
+        echo "1. Using sample_size parameter to test GraphQL API connectivity first"
+        echo "2. Running bronze and silver layers separately to isolate issues"
+        echo "3. Using local processing for full datasets (2.9M buildings + GraphQL calls)"
+        echo "4. Using self-hosted runners with more disk space and better network connectivity"
         exit 1 

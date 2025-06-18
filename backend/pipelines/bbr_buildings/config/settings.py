@@ -46,6 +46,9 @@ class Settings(BaseModel):
     # Datafordeleren API credentials
     datafordeler_username: str | None = Field(None, description="Datafordeleren username")
     datafordeler_password: str | None = Field(None, description="Datafordeleren password")
+    datafordeler_graphql_api_key: str | None = Field(
+        None, description="Datafordeleren GraphQL API key for BBR queries"
+    )
 
     # Storage Configuration
     storage_type: StorageType = Field(StorageType.LOCAL, description="Storage type (local or gcs)")
@@ -153,6 +156,7 @@ def get_settings() -> Settings:
         ),
         datafordeler_username=os.getenv("DATAFORDELER_USERNAME"),
         datafordeler_password=os.getenv("DATAFORDELER_PASSWORD"),
+        datafordeler_graphql_api_key=os.getenv("DATAFORDELER_GRAPHQL_API_KEY"),
         storage_type=os.getenv("STORAGE_TYPE", default_storage_type),
         gcs_bucket=os.getenv("GCS_BUCKET", default_gcs_bucket),
         environment=environment,
