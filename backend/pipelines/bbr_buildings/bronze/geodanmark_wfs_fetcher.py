@@ -48,74 +48,185 @@ class GeoDanmarkWFSFetcher:
             output_dir: Directory to save the sample data
             max_features: Maximum number of features to fetch per layer
         """
+
+    def fetch_building_geometries(
+        self, output_dir: Path, building_ids: list, return_data: bool = False
+    ):
+        """
+        Fetch building geometries from GeoDanmark WFS for specific building IDs.
+
+        Args:
+            output_dir: Directory to save the geometry data
+            building_ids: List of BBRUUID building IDs to fetch geometries for
+            return_data: Whether to return data for in-memory processing
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        self.logger.info(f"Starting GeoDanmark WFS sample fetch to {run_dir}")
+        self.logger.info(
+            f"Starting GeoDanmark WFS geometry fetch for {len(building_ids):,} building IDs to {run_dir}"
+        )
 
         try:
-            # Feature types to fetch
-            feature_types = [
-                "gdk60:Bygning",
-                "gdk60:TekniskAnlaegFlade",
-                "gdk60:TekniskAnlaegPunkt",
-            ]
+            # Process building IDs in batches to avoid overwhelming the WFS service
+            batch_size = 1000  # Reasonable batch size for WFS queries
+            all_geometries = []
 
-            # First, get WFS capabilities
-            capabilities = self._get_capabilities()
-            self._save_capabilities(run_dir, capabilities)
+            total_batches = (len(building_ids) + batch_size - 1) // batch_size
+            self.logger.info(
+                f"Processing {len(building_ids):,} building IDs in {total_batches} batches of {batch_size}"
+            )
 
-            # Fetch sample data for each feature type
-            samples = {}
-            for feature_type in feature_types:
+            for i in range(0, len(building_ids), batch_size):
+                batch_ids = building_ids[i : i + batch_size]
+                batch_num = (i // batch_size) + 1
+
+                self.logger.info(
+                    f"Processing batch {batch_num}/{total_batches} ({len(batch_ids)} IDs)"
+                )
+
                 try:
-                    self.logger.info(f"Fetching sample data for {feature_type}")
-                    sample_data = self._fetch_feature_sample(feature_type, max_features)
-                    samples[feature_type] = sample_data
-
-                    # Save individual sample file
-                    sample_file = run_dir / f"{feature_type.replace(':', '_')}_sample.json"
-                    with open(sample_file, "w", encoding="utf-8") as f:
-                        json.dump(sample_data, f, indent=2, ensure_ascii=False)
+                    batch_geometries = self._fetch_building_batch_geometries(batch_ids)
+                    all_geometries.extend(batch_geometries)
 
                     self.logger.info(
-                        f"Saved {len(sample_data.get('features', []))} features to {sample_file}"
+                        f"Batch {batch_num}: Retrieved {len(batch_geometries)} geometries"
                     )
 
                 except Exception as e:
-                    self.logger.error(f"Failed to fetch sample for {feature_type}: {e}")
-                    # Don't continue if authentication fails or other critical errors occur
-                    if "401" in str(e) or "Unauthorized" in str(e):
-                        raise ValueError(f"Authentication failed for GeoDanmark WFS: {e}")
-                    samples[feature_type] = {"error": str(e)}
+                    self.logger.error(f"Failed to fetch batch {batch_num}: {e}")
+                    # Continue with other batches rather than failing completely
+                    continue
 
-            # Save combined samples
-            self._save_combined_samples(run_dir, samples)
+            # Save combined geometries
+            geometries_data = {
+                "type": "FeatureCollection",
+                "features": all_geometries,
+                "metadata": {
+                    "total_requested": len(building_ids),
+                    "total_retrieved": len(all_geometries),
+                    "timestamp": timestamp,
+                    "source": "geodanmark_wfs_geometries",
+                },
+            }
+
+            # Save to file
+            geometries_file = run_dir / "building_geometries.json"
+            with open(geometries_file, "w", encoding="utf-8") as f:
+                json.dump(geometries_data, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(
+                f"Successfully retrieved {len(all_geometries):,} building geometries out of {len(building_ids):,} requested"
+            )
 
             # Save metadata
-            self._save_metadata(run_dir, max_features)
-
-            self.logger.info(f"Successfully fetched GeoDanmark WFS samples to {run_dir}")
+            self._save_geometries_metadata(run_dir, building_ids, all_geometries)
 
             # Optionally return data for in-memory processing
             if return_data:
                 return {
-                    "samples": samples,
-                    "capabilities": capabilities,
+                    "geometries": all_geometries,
+                    "metadata": geometries_data["metadata"],
                     "output_dir": run_dir,
-                    "metadata": {
-                        "source": "geodanmark_wfs",
-                        "max_features": max_features,
-                        "feature_types": list(samples.keys()),
-                    },
                 }
 
             return None
 
         except Exception as e:
-            self.logger.error(f"Failed to fetch GeoDanmark WFS samples: {e}")
+            self.logger.error(f"Failed to fetch building geometries: {e}")
             raise
+
+    def _fetch_building_batch_geometries(self, building_ids: list) -> list:
+        """
+        Fetch geometries for a batch of building IDs.
+
+        Args:
+            building_ids: List of BBRUUID building IDs
+
+        Returns:
+            List of GeoJSON features with geometries
+        """
+        # Create CQL filter for the building IDs
+        # GeoDanmark WFS uses BBRUUID field to link to BBR
+        ids_filter = "BBRUUID IN ('" + "','".join(building_ids) + "')"
+
+        params = {
+            "service": "WFS",
+            "version": "2.0.0",
+            "request": "GetFeature",
+            "typeName": "gdk60:Bygning",  # Building footprints
+            "outputFormat": "application/json",
+            "CQL_FILTER": ids_filter,
+            "srsName": "EPSG:4326",  # Ensure consistent projection
+        }
+
+        # Add authentication parameters
+        if self.settings.has_datafordeler_credentials:
+            params.update(
+                {
+                    "username": self.settings.datafordeler_username,
+                    "password": self.settings.datafordeler_password,
+                }
+            )
+
+        try:
+            response = self.session.get(
+                self.settings.geodanmark_wfs_url,
+                params=params,
+                timeout=60,  # Longer timeout for potentially large responses
+            )
+            response.raise_for_status()
+
+            # Parse JSON response
+            geojson_data = response.json()
+
+            if "features" in geojson_data:
+                return geojson_data["features"]
+            else:
+                self.logger.warning(f"No features returned for batch of {len(building_ids)} IDs")
+                return []
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch geometries for batch: {e}")
+            return []
+
+    def _save_geometries_metadata(
+        self, output_dir: Path, requested_ids: list, retrieved_geometries: list
+    ) -> None:
+        """
+        Save metadata about the geometry fetch operation.
+
+        Args:
+            output_dir: Directory to save metadata
+            requested_ids: List of requested building IDs
+            retrieved_geometries: List of successfully retrieved geometries
+        """
+        # Extract retrieved IDs from geometries
+        retrieved_ids = []
+        for feature in retrieved_geometries:
+            if "properties" in feature and "BBRUUID" in feature["properties"]:
+                retrieved_ids.append(feature["properties"]["BBRUUID"])
+
+        metadata = {
+            "timestamp": datetime.now().isoformat(),
+            "source": "geodanmark_wfs_geometries",
+            "total_requested": len(requested_ids),
+            "total_retrieved": len(retrieved_geometries),
+            "success_rate": len(retrieved_geometries) / len(requested_ids) if requested_ids else 0,
+            "missing_ids": list(set(requested_ids) - set(retrieved_ids)),
+            "wfs_endpoint": self.settings.geodanmark_wfs_url,
+            "feature_type": "gdk60:Bygning",
+        }
+
+        metadata_path = output_dir / "geometries_metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        self.logger.info(f"Saved geometry fetch metadata to {metadata_path}")
+        self.logger.info(
+            f"Success rate: {metadata['success_rate']:.1%} ({len(retrieved_geometries)}/{len(requested_ids)})"
+        )
 
     def _get_capabilities(self) -> dict:
         """

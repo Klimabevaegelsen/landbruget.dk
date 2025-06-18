@@ -336,21 +336,87 @@ class BuildingProcessor:
 
     def _load_building_data_from_object(self, bronze_data: dict) -> ibis.Table:
         """
-        Load building data from bronze layer data object.
+        Load building data from coordinated bronze layer data object.
+        Joins building attributes from INSPIRE BBR with geometries from GeoDanmark WFS.
 
         Args:
-            bronze_data: Data object from bronze layer
+            bronze_data: Data object from coordinated bronze layer
 
         Returns:
-            Ibis table with building data
+            Ibis table with joined building data
         """
-        self.logger.info("Loading building data from bronze layer object")
+        self.logger.info("Loading and joining building data from coordinated bronze sources")
 
         try:
-            # Check if we have direct data
-            if "data" in bronze_data and bronze_data["data"] is not None:
+            # Check if this is the new coordinated data structure
+            if "data" in bronze_data and "attributes" in bronze_data["data"]:
+                # New coordinated structure: attributes + geometries
+                attributes_df = bronze_data["data"]["attributes"]
+                geometries_list = bronze_data["data"]["geometries"]
+
+                self.logger.info(f"Attributes: {len(attributes_df):,} records")
+                self.logger.info(f"Geometries: {len(geometries_list):,} features")
+
+                # Convert geometries list to DataFrame
+                geometries_data = []
+                for geom_feature in geometries_list:
+                    if "properties" in geom_feature and "geometry" in geom_feature:
+                        props = geom_feature["properties"]
+                        geom = geom_feature["geometry"]
+
+                        # Extract BBRUUID (the join key)
+                        bbruuid = props.get("BBRUUID")
+                        if bbruuid:
+                            # Convert geometry to WKT
+                            geom_wkt = self._geojson_to_wkt(geom)
+
+                            geometries_data.append(
+                                {
+                                    "localId": bbruuid,  # Use same column name as attributes
+                                    "geometry_wkt": geom_wkt,
+                                    "geometry_type": geom.get("type"),
+                                    "has_geometry": True,
+                                }
+                            )
+
+                geometries_df = pd.DataFrame(geometries_data)
+                self.logger.info(f"Processed {len(geometries_df):,} geometries for joining")
+
+                # Register both DataFrames with DuckDB
+                self.conn.register("attributes_table", attributes_df)
+                self.conn.register("geometries_table", geometries_df)
+
+                # Perform LEFT JOIN to combine attributes with geometries
+                join_query = """
+                    SELECT 
+                        a.*,
+                        g.geometry_wkt,
+                        g.geometry_type,
+                        CASE WHEN g.has_geometry IS NOT NULL THEN true ELSE false END as has_geometry
+                    FROM attributes_table a
+                    LEFT JOIN geometries_table g ON a.localId = g.localId
+                """
+
+                self.conn.execute(f"CREATE TABLE buildings_joined AS {join_query}")
+                buildings_table = self.ibis_conn.table("buildings_joined")
+
+                # Log join results
+                total_count = buildings_table.count().execute()
+                with_geometry_count = (
+                    buildings_table.filter(buildings_table.has_geometry == True).count().execute()
+                )
+
+                self.logger.info(f"Joined total: {total_count:,} buildings")
+                self.logger.info(
+                    f"With geometry: {with_geometry_count:,} buildings ({with_geometry_count / total_count:.1%})"
+                )
+
+                return buildings_table
+
+            # Fallback: Check if we have direct GeoDataFrame data (old structure)
+            elif "data" in bronze_data and bronze_data["data"] is not None:
                 gdf = bronze_data["data"]
-                self.logger.info(f"Using in-memory data with {len(gdf):,} records")
+                self.logger.info(f"Using legacy in-memory data with {len(gdf):,} records")
 
                 # Convert to regular pandas DataFrame for DuckDB
                 df = pd.DataFrame(gdf)
@@ -372,11 +438,30 @@ class BuildingProcessor:
                 return self._load_building_data(bronze_data["gpkg_path"])
 
             else:
-                raise ValueError("Bronze data object doesn't contain 'data' or 'gpkg_path'")
+                raise ValueError("Bronze data object doesn't contain expected data structure")
 
         except Exception as e:
             self.logger.error(f"Failed to load building data from object: {e}")
             raise
+
+    def _geojson_to_wkt(self, geojson_geom: dict) -> str:
+        """
+        Convert GeoJSON geometry to WKT format.
+
+        Args:
+            geojson_geom: GeoJSON geometry object
+
+        Returns:
+            WKT representation of the geometry
+        """
+        try:
+            from shapely.geometry import shape
+
+            shapely_geom = shape(geojson_geom)
+            return shapely_geom.wkt
+        except Exception as e:
+            self.logger.warning(f"Failed to convert geometry to WKT: {e}")
+            return None
 
     def _filter_buildings(self, buildings_table: ibis.Table) -> ibis.Table:
         """
