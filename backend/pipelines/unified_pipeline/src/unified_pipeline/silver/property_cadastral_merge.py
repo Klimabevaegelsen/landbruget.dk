@@ -288,6 +288,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         property_temp_path = None
         cadastral_temp_path = None
+        output_temp_path = None
 
         try:
             # Download property owners file
@@ -348,54 +349,51 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             # Perform merge
             quality_stats = self._perform_bfe_merge(property_stats, cadastral_stats)
 
-            # Clean up large DuckDB tables from memory to free space before conversion
+            # Clean up large DuckDB tables from memory to free space before export
             self.conn.execute("DROP TABLE IF EXISTS property_owners")
             self.conn.execute("DROP TABLE IF EXISTS cadastral_data")
             self.log.info("Cleaned up large DuckDB tables from memory")
 
-            # Convert DuckDB result to GeoDataFrame and use BaseSource _save_data method
-            # This uses the standard directory structure and upload pattern
-            self.log.info("Converting merged data to GeoDataFrame for upload...")
+            # Export using DuckDB directly to avoid memory issues with 6.5M records
+            # Use BaseSource directory structure but with DuckDB export for efficiency
+            self.log.info("Exporting merged data directly from DuckDB to parquet...")
 
-            # Get the merged data as a pandas DataFrame first (DuckDB -> Pandas)
-            merged_df = self.conn.execute("SELECT * FROM merged_data").df()
+            # Use BaseSource date pattern for consistency
+            import pandas as pd
 
-            # Convert to GeoDataFrame if geometry columns exist
-            try:
-                import geopandas as gpd
-                from shapely import wkb
+            date_str = pd.Timestamp.now().strftime("%Y-%m-%d")
 
-                # Check if there are geometry columns to convert
-                geometry_columns = [
-                    col
-                    for col in merged_df.columns
-                    if "geom" in col.lower() or "geometry" in col.lower()
-                ]
+            # Create temp file with BaseSource naming convention
+            temp_dir = "/tmp/silver/property_cadastral_merged"
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file = f"{temp_dir}/{date_str}.parquet"
+            output_temp_path = temp_file  # Store for cleanup
 
-                if geometry_columns:
-                    # Convert WKB geometry columns to shapely geometries
-                    for geom_col in geometry_columns:
-                        if merged_df[geom_col].dtype == "object":
-                            merged_df[geom_col] = merged_df[geom_col].apply(
-                                lambda x: wkb.loads(x) if x is not None else None
-                            )
+            # Export directly from DuckDB to parquet (memory efficient)
+            export_query = f"""
+            COPY merged_data TO '{temp_file}' (FORMAT PARQUET)
+            """
+            self.conn.execute(export_query)
 
-                    # Create GeoDataFrame with the first geometry column as the active geometry
-                    merged_gdf = gpd.GeoDataFrame(
-                        merged_df, geometry=geometry_columns[0], crs="EPSG:4326"
-                    )
-                else:
-                    # No geometry columns, create a regular GeoDataFrame without geometry
-                    merged_gdf = gpd.GeoDataFrame(merged_df)
+            # Get file stats
+            file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
+            record_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
+            self.log.info(
+                f"Exported {record_count:,} records to {temp_file} ({file_size_mb:.1f} MB)"
+            )
 
-            except Exception as e:
-                self.log.warning(f"Could not convert to GeoDataFrame, using regular DataFrame: {e}")
-                # Fallback: create a simple GeoDataFrame without geometry
-                merged_gdf = gpd.GeoDataFrame(merged_df)
+            # Upload to GCS using BaseSource pattern
+            if not self.config.save_local:
+                bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
+                gcs_path = f"silver/property_cadastral_merged/{date_str}.parquet"
+                working_blob = bucket.blob(gcs_path)
+                working_blob.upload_from_filename(temp_file)
+                self.log.info(f"Uploaded to: gs://{self.config.bucket}/{gcs_path}")
 
-            # Use the standard BaseSource _save_data method with fixed dataset name
-            base_dataset_name = "property_cadastral_merged"
-            self._save_data(merged_gdf, base_dataset_name, self.config.bucket)
+                # Clean up temp file after upload
+                os.remove(temp_file)
+            else:
+                self.log.info(f"Saved locally at {temp_file}")
 
             self.log.info("Pure DuckDB Property-Cadastral BFE merge job completed successfully")
             self.log.info(
@@ -408,7 +406,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         finally:
             # Clean up temporary files
-            for temp_path in [property_temp_path, cadastral_temp_path]:
+            for temp_path in [property_temp_path, cadastral_temp_path, output_temp_path]:
                 if temp_path and os.path.exists(temp_path):
                     try:
                         os.unlink(temp_path)
