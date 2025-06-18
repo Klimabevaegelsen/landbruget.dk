@@ -44,9 +44,10 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
     def __init__(self, config: PropertyCadastralMergeConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
-        # Configure DuckDB for GitHub Actions resource limits
-        self.conn.execute("SET memory_limit = '4GB'")
-        self.conn.execute("SET threads = 2")  # GitHub Actions has 2 cores
+        # Configure DuckDB for GitHub Actions resource limits (16GB total RAM for public repos)
+        self.conn.execute("SET memory_limit = '12GB'")  # Leave 4GB for system + Python + file I/O
+        self.conn.execute("SET threads = 4")  # GitHub Actions public repos have 4 cores
+        self.conn.execute("SET temp_directory = '/tmp'")  # Use /tmp for spill
         self.conn.execute("INSTALL spatial")  # Enable spatial extension
         self.conn.execute("LOAD spatial")  # Load spatial extension
 
@@ -377,35 +378,25 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             output_temp_path = f"/tmp/{self.config.dataset}_{timestamp}.parquet"
             self._export_to_parquet(output_temp_path)
 
-            # Save the result using the proper BaseSource method
-            # Load as GeoDataFrame since _save_data expects that
-            import geopandas as gpd
+            # Clean up large DuckDB tables from memory to free space before upload
+            self.conn.execute("DROP TABLE IF EXISTS property_owners")
+            self.conn.execute("DROP TABLE IF EXISTS cadastral_data")
+            self.log.info("Cleaned up large DuckDB tables from memory")
 
-            # Load the exported data as GeoDataFrame for proper saving
-            gdf = gpd.read_parquet(output_temp_path)
+            # Upload directly to GCS without loading into memory
+            # This avoids the 1.7GB memory spike that was killing the runner
+            output_gcs_path = f"silver/{self.config.dataset}/{os.path.basename(output_temp_path)}"
 
-            # Handle geometry column if it exists
-            geometry_cols = [
-                col
-                for col in gdf.columns
-                if col.lower().endswith("geometry") or col.lower() == "geom"
-            ]
-            if geometry_cols:
-                # Use the first geometry column found
-                geom_col = geometry_cols[0]
-                gdf = gdf.set_geometry(geom_col)
-                # Set CRS if not already set (common Danish coordinate system)
-                if gdf.crs is None:
-                    gdf = gdf.set_crs(
-                        "EPSG:25832", allow_override=True
-                    )  # ETRS89 / UTM zone 32N (common for Denmark)
-            else:
-                # If no geometry column, convert to regular DataFrame for _save_data
-                # Note: BaseSource._save_data expects GeoDataFrame, so we create one without geometry
-                gdf = gpd.GeoDataFrame(gdf)
+            self.log.info(f"Uploading merged data to GCS: {output_gcs_path}")
+            self.gcs_util.upload_file(
+                bucket_name=self.config.bucket,
+                source_file_name=output_temp_path,
+                destination_blob_name=output_gcs_path,
+            )
 
-            # Use BaseSource._save_data method which handles the GCS upload properly
-            self._save_data(gdf, self.config.dataset, self.config.bucket)
+            # Get final file size for logging
+            file_size_gb = os.path.getsize(output_temp_path) / (1024 * 1024 * 1024)
+            self.log.info(f"Successfully uploaded {file_size_gb:.2f} GB merged dataset to GCS")
 
             # Clean up temp file
             if os.path.exists(output_temp_path):
