@@ -1,0 +1,250 @@
+name: BBR Buildings Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer:
+        description: 'Pipeline layer to run'
+        type: choice
+        required: true
+        options:
+          - bronze
+          - silver
+          - both
+        default: 'both'
+
+      sample_size:
+        description: 'Sample size for testing (0 for full dataset)'
+        type: number
+        default: 0
+      enhance_classification:
+        description: 'Enhance building classification with additional data'
+        type: boolean
+        default: false
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - INFO
+          - DEBUG
+          - WARNING
+          - ERROR
+        default: 'INFO'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # Increased timeout for full dataset processing
+    
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Free up disk space for large dataset processing
+      run: |
+        echo "=== Initial disk usage ==="
+        df -h
+        
+        echo "=== Freeing up disk space ==="
+        # Remove unnecessary software to free up space
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/share/swift
+        
+        # Clean up docker
+        sudo docker system prune -af
+        sudo docker image prune -af
+        
+        # Clean up apt cache
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        
+        echo "=== Disk usage after cleanup ==="
+        df -h
+        
+        # Check if we have enough space for full dataset processing
+        AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+        echo "Available space: ${AVAILABLE_GB}GB"
+        
+        if [ $AVAILABLE_GB -lt 20 ]; then
+          echo "❌ ERROR: Not enough disk space! Available: ${AVAILABLE_GB}GB, Required: ~20GB"
+          echo "💡 The pipeline processes 761MB→4.6GB but cleans up immediately"
+          exit 1
+        fi
+        
+        echo "✅ Sufficient disk space available: ${AVAILABLE_GB}GB"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/bbr_buildings
+        # Install system dependencies required by the pipeline
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
+      run: |
+        cd backend/pipelines/bbr_buildings
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        if [[ -n "$DATAFORDELER_USERNAME" ]]; then
+          echo "DATAFORDELER_USERNAME=$DATAFORDELER_USERNAME" >> .env
+        fi
+        if [[ -n "$DATAFORDELER_PASSWORD" ]]; then
+          echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
+        fi
+        if [[ -n "$DATAFORDELER_GRAPHQL_API_KEY" ]]; then
+          echo "DATAFORDELER_GRAPHQL_API_KEY=$DATAFORDELER_GRAPHQL_API_KEY" >> .env
+        fi
+
+    - name: Run BBR Buildings Pipeline
+      working-directory: backend/pipelines/bbr_buildings
+      timeout-minutes: 150  # Set step-level timeout for full dataset
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Build command based on inputs
+        CMD="python main.py --layer ${{ inputs.layer }}"
+        
+        # Note: Source parameter removed - pipeline always uses INSPIRE BBR + GeoDanmark WFS
+        
+        # Add input-dir parameter for silver layer (only when running silver alone)
+        if [[ "${{ inputs.layer }}" == "silver" ]]; then
+          LATEST_BRONZE_DIR=$(find data/bronze -maxdepth 1 -type d -name "20*" | sort -r | head -n 1)
+          if [[ -z "$LATEST_BRONZE_DIR" ]]; then
+            echo "Error: No bronze layer output found. Please run bronze layer first."
+            exit 1
+          fi
+          CMD="$CMD --input-dir $LATEST_BRONZE_DIR"
+        fi
+        
+        # Add sample size if specified (0 means full dataset)
+        if [[ "${{ inputs.sample_size }}" != "0" ]]; then
+          CMD="$CMD --sample-size ${{ inputs.sample_size }}"
+          echo "🧪 Running with sample size: ${{ inputs.sample_size }}"
+        else
+          echo "🔄 Processing full dataset (~2.9M buildings with GraphQL enrichment)"
+        fi
+        
+        # Add enhancement flag
+        if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
+          CMD="$CMD --enhance-classification"
+        fi
+        
+        # Add log level
+        CMD="$CMD --log-level ${{ inputs.log_level }}"
+        
+        echo "Running command: $CMD"
+        
+        # Monitor disk space during execution
+        (while true; do
+          sleep 300  # Check every 5 minutes
+          echo "$(date): Disk usage: $(df -h . | tail -1)"
+          echo "$(date): Memory usage: $(free -h | grep Mem)"
+          
+          # Check if we're running low on space (less than 2GB)
+          AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
+          if [ $AVAILABLE_MB -lt 2048 ]; then
+            echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
+          fi
+        done) &
+        MONITOR_PID=$!
+        
+        # Run the pipeline with timeout handling
+        timeout 8400 $CMD || {
+          EXIT_CODE=$?
+          kill $MONITOR_PID 2>/dev/null || true
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "Pipeline timed out after 140 minutes"
+            echo "Full dataset processing requires significant time"
+          fi
+          exit $EXIT_CODE
+        }
+        
+        # Stop monitoring
+        kill $MONITOR_PID 2>/dev/null || true
+
+    - name: Check final disk usage
+      if: always()
+      run: |
+        echo "Final disk usage:"
+        df -h
+        echo "Pipeline output size:"
+        if [ -d "backend/pipelines/bbr_buildings/data" ]; then
+          du -sh backend/pipelines/bbr_buildings/data/ || true
+        fi
+
+    - name: Upload pipeline artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bbr-buildings-pipeline-output
+        path: |
+          backend/pipelines/bbr_buildings/output/
+          backend/pipelines/bbr_buildings/logs/
+          backend/pipelines/bbr_buildings/data/
+        retention-days: 7
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "BBR Buildings Pipeline failed. Please check the logs above for details."
+        echo "Common issues:"
+        echo "- Missing Datafordeleren credentials (USERNAME/PASSWORD for WFS, GRAPHQL_API_KEY for BBR codes)"
+        echo "- Network connectivity issues with SDFE FTP server or Datafordeleren APIs"
+        echo "- Insufficient disk space for large building datasets (761MB→4.6GB processing)"
+        echo "- Memory issues when processing millions of building records with GraphQL enrichment"
+        echo "- Pipeline timeout for full dataset processing with GraphQL API calls"
+        echo ""
+        echo "For troubleshooting:"
+        echo "1. Use sample_size parameter to test with smaller data (try 100-1000 for testing)"
+        echo "2. Check disk space and memory monitoring logs above"
+        echo "3. Verify all three credentials are set: DATAFORDELER_USERNAME, DATAFORDELER_PASSWORD, DATAFORDELER_GRAPHQL_API_KEY"
+        echo "4. Consider running bronze and silver layers separately for large datasets"
+        echo ""
+        echo "For large datasets, consider:"
+        echo "1. Using sample_size parameter to test GraphQL API connectivity first"
+        echo "2. Running bronze and silver layers separately to isolate issues"
+        echo "3. Using local processing for full datasets (2.9M buildings + GraphQL calls)"
+        echo "4. Using self-hosted runners with more disk space and better network connectivity"
+        exit 1 

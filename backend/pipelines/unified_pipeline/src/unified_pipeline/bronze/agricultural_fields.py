@@ -55,19 +55,33 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     name: str = "Danish Agricultural Fields"
     type: str = "arcgis"
-    description: str = "Weekly updated agricultural field data"
-    fields_url: str = (
-        "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query"
-    )
-    blocks_url: str = (
-        "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query"
-    )
+    description: str = "Multi-year agricultural field data (2020-2025)"
+
+    # URLs for different years - Fields (Marker)
+    fields_urls: dict[int, str] = {
+        2025: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query",
+        2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/21/query",
+        2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/20/query",
+        2022: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/14/query",
+        2021: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/15/query",
+        2020: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/16/query",
+    }
+
+    # URLs for different years - Blocks (Markblokke)
+    blocks_urls: dict[int, str] = {
+        2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query",
+        2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/7/query",
+        2022: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/8/query",
+        2021: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/9/query",
+        2020: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/10/query",
+    }
+
     fields_dataset: str = "agricultural_fields"
     blocks_dataset: str = "agricultural_blocks"
     frequency: str = "weekly"
     bucket: str = "landbrugsdata-raw-data"
 
-    batch_size: int = 20000
+    batch_size: int = 2000
     max_concurrent: int = 5
     storage_batch_size: int = 10000
 
@@ -201,13 +215,14 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: list[str], year: int) -> pd.DataFrame:
         """
         Create a DataFrame from the raw data.
         This method takes a list of strings and converts it into a pandas DataFrame.
 
         Args:
             raw_data (list[str]): List of strings.
+            year (int): The year this data represents.
 
         Returns:
             pd.DataFrame: DataFrame containing the raw data with metadata.
@@ -218,11 +233,12 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
             }
         )
         df["source"] = self.config.name
+        df["year"] = year
         df["created_at"] = pd.Timestamp.now()
         df["updated_at"] = pd.Timestamp.now()
         return df
 
-    async def _process_data(self, url: str, dataset: str) -> None:
+    async def _process_data(self, url: str, dataset: str, year: int) -> None:
         """
         Process data from the specified URL and save it to Google Cloud Storage.
 
@@ -235,6 +251,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
         Args:
             url (str): The URL of the ArcGIS endpoint to fetch data from
             dataset (str): The name of the dataset, used for logging and storage path
+            year (int): The year this data represents
 
         Returns:
             None
@@ -275,32 +292,43 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
                 return
             self.log.info("Fetched raw data successfully")
 
-            df = self.create_dataframe(raw_data)
-            self.log.info(f"Saving data to GCS for {dataset}")
-            self._save_raw_data(df, dataset, self.config.bucket)
+            df = self.create_dataframe(raw_data, year)
+            dataset_with_year = f"{dataset}_{year}"
+            self.log.info(f"Saving data to GCS for {dataset_with_year}")
+            self._save_raw_data(df, dataset_with_year, self.config.bucket)
             self.log.info(f"Data processing completed for {dataset}")
 
     async def run(self) -> None:
         """
-        Run the data source processing pipeline.
+        Run the data source processing pipeline for all available years.
 
         This method orchestrates the entire data retrieval process:
-        1. First processes agricultural fields data from the fields endpoint
-        2. Then processes agricultural blocks data from the blocks endpoint
+        1. Processes agricultural fields data for all available years (2020-2025)
+        2. Processes agricultural blocks data for all available years (2020-2024)
         3. Tracks overall execution time for performance monitoring
 
-        The method uses the configured URLs and dataset names from the configuration object,
-        and delegates the actual processing to the _process_data method for each dataset.
+        Each year's data is stored separately with year information to enable
+        historical analysis and trend identification.
 
         Returns:
             None
 
         Note:
             This is the main entry point for the bronze layer processing of
-            agricultural fields data.
+            multi-year agricultural fields data.
         """
-        self.log.info("Running Agricultural Fields bronze job")
+        self.log.info("Running Agricultural Fields bronze job for all available years")
         async with AsyncTimer("Total run time"):
-            await self._process_data(self.config.fields_url, self.config.fields_dataset)
-            await self._process_data(self.config.blocks_url, self.config.blocks_dataset)
-            self.log.info("Agricultural Fields bronze job completed successfully")
+            # Process agricultural fields for all available years
+            self.log.info("Processing agricultural fields data for all years")
+            for year, url in self.config.fields_urls.items():
+                self.log.info(f"Processing fields data for year {year}")
+                await self._process_data(url, self.config.fields_dataset, year)
+
+            # Process agricultural blocks for all available years
+            self.log.info("Processing agricultural blocks data for all years")
+            for year, url in self.config.blocks_urls.items():
+                self.log.info(f"Processing blocks data for year {year}")
+                await self._process_data(url, self.config.blocks_dataset, year)
+
+            self.log.info("Agricultural Fields bronze job completed successfully for all years")
