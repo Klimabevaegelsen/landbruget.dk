@@ -239,7 +239,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig]):
             self.log.info("Starting soil types silver layer processing")
 
             # Get the bronze data path
-            bronze_path = self._get_bronze_path(self.config.dataset, self.config.bucket)
+            current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+            path = f"bronze/{self.config.dataset}/{current_date}.parquet"
+            bronze_path = self._get_bronze_path(self.config.dataset, self.config.bucket, path)
             if bronze_path is None:
                 self.log.error("Bronze data not found for soil types")
                 return
