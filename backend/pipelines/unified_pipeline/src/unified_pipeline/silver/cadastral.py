@@ -64,7 +64,8 @@ class CadastralSilver(BaseSource[CadastralSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running Cadastral silver job")
-        bronze_path = self._get_bronze_path(self.config.dataset, self.config.bucket)
+        path = f"/tmp/bronze/{self.config.dataset}/{self.date_pattern}/data.parquet"
+        bronze_path = self._get_bronze_path(self.config.dataset, self.config.bucket, path)
         if bronze_path is None:
             self.log.error("Bronze data not found")
             return

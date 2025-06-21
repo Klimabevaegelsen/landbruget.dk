@@ -223,7 +223,9 @@ class BaseSource(Generic[T], ABC):
         """
         self.log.info(f"Reading data from bronze layer in bucket: {bucket_name}")
         # Load the parquet file
-        temp_file = self._get_bronze_path(dataset, bucket_name)
+        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+        path = f"bronze/{dataset}/{current_date}.parquet"
+        temp_file = self._get_bronze_path(dataset, bucket_name, path)
         if temp_file is None:
             return None
         raw_data = pd.read_parquet(temp_file)
@@ -231,10 +233,9 @@ class BaseSource(Generic[T], ABC):
 
         return raw_data
 
-    def _get_bronze_path(self, dataset: str, bucket_name: str) -> Optional[str]:
+    def _get_bronze_path(self, dataset: str, bucket_name: str, path: str) -> Optional[str]:
         # Define the path to the bronze data
         current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        bronze_path = f"bronze/{dataset}/{current_date}.parquet"
 
         # Download to temporary file
         temp_dir = f"/tmp/bronze/{dataset}"
@@ -245,9 +246,9 @@ class BaseSource(Generic[T], ABC):
             return temp_file
 
         bucket = self.gcs_util.get_gcs_client().bucket(bucket_name)
-        blob = bucket.blob(bronze_path)
+        blob = bucket.blob(path)
         if not blob.exists():
-            self.log.error(f"Bronze data not found at {bronze_path}")
+            self.log.error(f"Bronze data not found at {path}")
             return None
         blob.download_to_filename(temp_file)
         return temp_file
