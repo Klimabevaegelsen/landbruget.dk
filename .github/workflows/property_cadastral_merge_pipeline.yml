@@ -91,6 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-dependencies
     if: needs.check-dependencies.outputs.should_run == 'true'
+    timeout-minutes: 300  # 5 hour timeout (6 hours is the maximum, leave 1 hour buffer)
     
     steps:
     - name: Checkout code
