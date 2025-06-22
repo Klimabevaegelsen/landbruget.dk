@@ -118,12 +118,17 @@ class GoogleDriveFetcher:
 
             # Process items
             for item in items:
-                if item["mimeType"] == FOLDER_MIME_TYPE and recursive:
-                    # Recursively list subfolder contents
-                    subfolder = self.list_folder_contents(
-                        item["id"], recursive=True, parent_path=folder.path
-                    )
-                    folder.subfolders.append(subfolder)
+                if item["mimeType"] == FOLDER_MIME_TYPE:
+                    if recursive:
+                        # Recursively list subfolder contents
+                        subfolder = self.list_folder_contents(
+                            item["id"], recursive=True, parent_path=folder.path
+                        )
+                        folder.subfolders.append(subfolder)
+                    else:
+                        # Just create the subfolder without recursing into it
+                        subfolder = DriveFolder.from_api_response(item, folder.path)
+                        folder.subfolders.append(subfolder)
                 elif self._is_supported_file(item["mimeType"]):
                     # Add file to the folder
                     file = DriveFile.from_api_response(item, folder.path)
