@@ -369,21 +369,97 @@ class SilverProcessor:
                 logger.error(f"Failed to transform {original_filename}: {str(e)}")
                 return False
 
-            if not transformed_data:
+            # Check if we have valid transformed data
+            if transformed_data is None:
                 logger.warning(f"No data extracted from {original_filename}")
                 return False
 
-            # Create output filename and path
-            output_filename = f"{Path(original_filename).stem}.parquet"
-            output_path = silver_run_path / metadata.original_subfolder / output_filename
+            # Handle different return types from transformers
+            if isinstance(transformed_data, dict):
+                # Multiple DataFrames (e.g., multi-sheet Excel)
+                if not transformed_data:
+                    logger.warning(f"No data extracted from {original_filename}")
+                    return False
 
-            # Save the transformed data
-            try:
-                self.parquet_manager.save_dataframe(transformed_data, output_path)
-                logger.info(f"Saved transformed data to: {output_path}")
-            except Exception as e:
-                logger.error(f"Failed to save transformed data for {original_filename}: {str(e)}")
-                return False
+                # Save each DataFrame
+                saved_files = []
+                for sheet_name, df in transformed_data.items():
+                    if df is not None and not df.empty:
+                        output_filename = f"{Path(original_filename).stem}_{sheet_name}.parquet"
+                        output_path = (
+                            silver_run_path / metadata.original_subfolder / output_filename
+                        )
+
+                        try:
+                            self.parquet_manager.save_dataframe(df, output_path)
+                            saved_files.append(output_path)
+                            logger.info(f"Saved transformed data to: {output_path}")
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to save transformed data for {original_filename} sheet {sheet_name}: {str(e)}"
+                            )
+                            return False
+
+                if not saved_files:
+                    logger.warning(f"No valid data saved from {original_filename}")
+                    return False
+
+                # Use the first saved file for schema/PII processing
+                output_path = saved_files[0]
+
+            elif isinstance(transformed_data, list):
+                # List of DataFrames
+                if not transformed_data:
+                    logger.warning(f"No data extracted from {original_filename}")
+                    return False
+
+                # Save each DataFrame
+                saved_files = []
+                for i, df in enumerate(transformed_data):
+                    if df is not None and not df.empty:
+                        output_filename = f"{Path(original_filename).stem}_{i}.parquet"
+                        output_path = (
+                            silver_run_path / metadata.original_subfolder / output_filename
+                        )
+
+                        try:
+                            self.parquet_manager.save_dataframe(df, output_path)
+                            saved_files.append(output_path)
+                            logger.info(f"Saved transformed data to: {output_path}")
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to save transformed data for {original_filename} part {i}: {str(e)}"
+                            )
+                            return False
+
+                if not saved_files:
+                    logger.warning(f"No valid data saved from {original_filename}")
+                    return False
+
+                # Use the first saved file for schema/PII processing
+                output_path = saved_files[0]
+
+            else:
+                # Single DataFrame
+                import pandas as pd
+
+                if not isinstance(transformed_data, pd.DataFrame) or transformed_data.empty:
+                    logger.warning(f"No valid data extracted from {original_filename}")
+                    return False
+
+                # Create output filename and path
+                output_filename = f"{Path(original_filename).stem}.parquet"
+                output_path = silver_run_path / metadata.original_subfolder / output_filename
+
+                # Save the transformed data
+                try:
+                    self.parquet_manager.save_dataframe(transformed_data, output_path)
+                    logger.info(f"Saved transformed data to: {output_path}")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to save transformed data for {original_filename}: {str(e)}"
+                    )
+                    return False
 
             # Apply schema if requested
             if apply_schemas:
