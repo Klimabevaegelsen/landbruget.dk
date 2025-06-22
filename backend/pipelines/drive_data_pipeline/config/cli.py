@@ -41,15 +41,21 @@ def parse_args() -> argparse.Namespace:
     )
 
     # Processing flags
-    parser.add_argument(
+    processing_group = parser.add_mutually_exclusive_group()
+    processing_group.add_argument(
         "--bronze-only",
         action="store_true",
         help="Run only the Bronze layer processing",
     )
-    parser.add_argument(
+    processing_group.add_argument(
         "--silver-only",
         action="store_true",
         help="Run only the Silver layer processing (requires existing Bronze data)",
+    )
+    processing_group.add_argument(
+        "--both",
+        action="store_true",
+        help="Run both layers with in-memory data passing (bronze exports and passes data to silver in memory)",
     )
 
     # Output options
