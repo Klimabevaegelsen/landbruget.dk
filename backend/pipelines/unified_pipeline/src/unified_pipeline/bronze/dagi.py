@@ -18,6 +18,7 @@ from asyncio import Semaphore
 from typing import Dict, Optional
 
 import aiohttp
+import pandas as pd
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -186,12 +187,18 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig]):
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
-                        self._save_raw_data(
-                            [raw_data],
-                            dataset_name,
-                            f"{self.config.name} - {layer_name}",
-                            self.config.bucket,
+                        # Create DataFrame with the raw JSON payload and metadata
+                        raw_df = pd.DataFrame(
+                            [
+                                {
+                                    "payload": raw_data,
+                                    "source": f"{self.config.name} - {layer_name}",
+                                    "created_at": pd.Timestamp.now(tz="UTC"),
+                                    "updated_at": pd.Timestamp.now(tz="UTC"),
+                                }
+                            ]
                         )
+                        self._save_raw_data(raw_df, dataset_name, self.config.bucket)
                         self.log.info(f"Saved raw data for {layer_name}")
                     except Exception as e:
                         self.log.error(f"Failed to save {layer_name}: {e}")
