@@ -267,6 +267,9 @@ jobs:
           CMD="$CMD --bronze-only"
         elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
           CMD="$CMD --silver-only"
+        else
+          # Default to --both for in-memory processing (faster and more reliable)
+          CMD="$CMD --both"
         fi
         
         if [[ -n "${{ inputs.file_types }}" ]]; then
@@ -355,6 +358,9 @@ jobs:
           CMD="$CMD --bronze-only"
         elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
           CMD="$CMD --silver-only"
+        else
+          # Default to --both for in-memory processing (faster and more reliable)
+          CMD="$CMD --both"
         fi
         
         if [[ -n "${{ inputs.subfolders }}" ]]; then
