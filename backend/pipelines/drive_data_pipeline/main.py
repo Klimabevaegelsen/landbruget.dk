@@ -246,6 +246,8 @@ def main() -> int:
 
         # Process the Google Drive folder (Bronze layer)
         bronze_run_path = None
+        bronze_data = None
+
         if not args.silver_only:
             # List files once and reuse the result
             if not args.quiet:
@@ -268,13 +270,24 @@ def main() -> int:
             # Initialize progress tracking
             progress.start_bronze_operation(len(all_files))
 
+            # Determine if we need in-memory data for Silver processing
+            return_data = args.both
+
             # Process bronze layer - OPTIMIZED: Pass the already-fetched drive_folder
-            bronze_processor.process_drive_folder(
+            result = bronze_processor.process_drive_folder(
                 drive_folder=drive_folder,  # Use the already-fetched folder
                 specific_subfolders=subfolders,
                 supported_file_types=file_types,
+                return_data=return_data,
             )
-            bronze_run_path = bronze_processor.run_path
+
+            if return_data:
+                # Extract data and run path from result
+                bronze_data = result
+                bronze_run_path = bronze_processor.run_path
+            else:
+                # Traditional mode - just get the run path
+                bronze_run_path = bronze_processor.run_path
 
         # Process Silver layer if not bronze_only
         if not args.bronze_only:
@@ -308,7 +321,47 @@ def main() -> int:
                     print(f"Using Bronze data from: {bronze_run_path}")
 
             # Process Bronze files to Silver
-            if bronze_run_path:
+            if bronze_data is not None:
+                # In-memory processing mode
+                logger.info("Processing Bronze data from memory - skipping disk I/O")
+
+                # Count files from in-memory data
+                file_data = bronze_data.get("data", {})
+                files_to_process_count = len(file_data)
+
+                # Apply filtering if specified
+                if file_types or subfolders:
+                    filtered_count = 0
+                    for file_key, file_info in file_data.items():
+                        # Filter by file type if specified
+                        if file_types:
+                            file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")
+                            if file_extension not in file_types:
+                                continue
+
+                        # Filter by subfolder if specified
+                        if subfolders and file_info.get("folder_name") not in subfolders:
+                            continue
+
+                        filtered_count += 1
+                    files_to_process_count = filtered_count
+
+                logger.info(
+                    f"Found {files_to_process_count} files to process in Silver layer from memory"
+                )
+
+                # Initialize progress tracking
+                progress.start_silver_operation(files_to_process_count)
+
+                # Process from memory
+                silver_processor.process_from_memory(
+                    bronze_data=bronze_data,
+                    specific_subfolders=subfolders,
+                    supported_file_types=file_types,
+                )
+
+            elif bronze_run_path:
+                # Traditional file-based processing mode
                 # Count files to process for progress tracking using storage manager
                 # This ensures compatibility with both local and GCS storage
                 try:
@@ -360,7 +413,7 @@ def main() -> int:
                     supported_file_types=file_types,
                 )
             else:
-                error_msg = "No Bronze run path available for Silver processing"
+                error_msg = "No Bronze run path or data available for Silver processing"
                 logger.error(error_msg)
                 if not args.quiet:
                     print(f"Error: {error_msg}")
