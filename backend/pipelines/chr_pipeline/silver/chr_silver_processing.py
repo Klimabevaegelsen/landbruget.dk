@@ -229,10 +229,7 @@ def process_chr_data(
             "file_key": "besaetning_details.json",
         },
         "diko_flyt": {"mem_key": "diko_flytninger", "file_key": "diko_flytninger.json"},
-        "chr_dyr_animal_movements": {
-            "mem_key": "chr_dyr_animal_movements",
-            "file_key": "chr_dyr_animal_movements.json",
-        },
+        "cattle_movements": {"mem_key": "cattle_movement_summaries", "file_key": "cattle_movement_summaries.json"},
         "ejendom_oplys": {
             "mem_key": "ejendom_oplysninger",
             "file_key": "ejendom_oplysninger.json",
@@ -489,7 +486,6 @@ def process_chr_data(
     context = {
         "bes_details_table": raw_tables.get("bes_details"),
         "diko_flyt_table": raw_tables.get("diko_flyt"),
-        "chr_dyr_animal_movements_table": raw_tables.get("chr_dyr_animal_movements"),
         "ejendom_oplys_table": raw_tables.get("ejendom_oplys"),
         "ejendom_vet_table": raw_tables.get("ejendom_vet"),
         "vetstat_table": raw_tables.get("vetstat"),
@@ -508,7 +504,6 @@ def process_chr_data(
         "silver_herd_users",  # Added herd users step
         "silver_herd_sizes",
         "silver_animal_movements",
-        "silver_chr_dyr_animal_movements",  # Added CHR_dyr animal movements step
         "silver_property_vet_events",
         "silver_antibiotic_usage",
     ]
@@ -565,11 +560,6 @@ def process_chr_data(
             elif step == "silver_animal_movements":
                 animal_movements_table = animal_movements.create_animal_movements_table(
                     con, context.get("diko_flyt_table"), silver_dir
-                )
-
-            elif step == "silver_chr_dyr_animal_movements":
-                chr_dyr_animal_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
-                    con, context.get("chr_dyr_animal_movements_table"), silver_dir
                 )
 
             elif step == "silver_property_vet_events":
