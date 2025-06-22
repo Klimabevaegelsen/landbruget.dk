@@ -18,13 +18,13 @@ The data processing includes:
 """
 
 import json
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import geopandas as gpd
 import pandas as pd
 from pydantic import Field
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer
@@ -89,7 +89,7 @@ class DAGISilverConfig(BaseJobConfig):
     )
 
 
-class DAGISilver(BaseSource[DAGISilverConfig]):
+class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
     """
     Silver layer implementation for DAGI (Danish Administrative Geographic Division) data.
 
@@ -349,13 +349,17 @@ class DAGISilver(BaseSource[DAGISilverConfig]):
             self.log.error(f"Error processing DAGI layer {layer_type}: {e}")
             return None
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the DAGI silver layer processing for all configured layers.
 
         This method processes all DAGI layers from the bronze layer,
         transforming raw JSON data into structured GeoDataFrames
         and saving them in the silver layer.
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
         """
         try:
             async with AsyncTimer("DAGI silver layer processing") as timer:
@@ -369,11 +373,33 @@ class DAGISilver(BaseSource[DAGISilverConfig]):
                         dataset_name = f"{self.config.dataset}_{layer_name}"
                         self.log.info(f"Processing silver layer for DAGI {layer_name}")
 
-                        # Read bronze data
-                        bronze_df = self._read_bronze_data(dataset_name, self.config.bucket)
-                        if bronze_df is None or bronze_df.empty:
-                            self.log.warning(f"No bronze data found for DAGI {layer_name}")
-                            continue
+                        # Read data with support for in-memory passing
+                        if bronze_data is not None:
+                            self.log.info("Using bronze data from memory (in-memory data passing)")
+                            # Bronze data is a dict mapping layer names to raw JSON data
+                            if isinstance(bronze_data, dict) and layer_name in bronze_data:
+                                raw_json = bronze_data[layer_name]
+                                # Create DataFrame with the raw JSON payload
+                                bronze_df = pd.DataFrame(
+                                    [
+                                        {
+                                            "payload": raw_json,
+                                            "source": f"{self.config.name} - {layer_name}",
+                                            "created_at": pd.Timestamp.now(tz="UTC"),
+                                            "updated_at": pd.Timestamp.now(tz="UTC"),
+                                        }
+                                    ]
+                                )
+                            else:
+                                self.log.warning(f"No in-memory data found for layer {layer_name}")
+                                continue
+                        else:
+                            # Fallback to reading from storage
+                            self.log.info("Reading bronze data from storage (fallback)")
+                            bronze_df = self._read_bronze_data(dataset_name, self.config.bucket)
+                            if bronze_df is None or bronze_df.empty:
+                                self.log.warning(f"No bronze data found for DAGI {layer_name}")
+                                continue
 
                         # Process the data
                         processed_df = self._process_layer(bronze_df, layer_name)

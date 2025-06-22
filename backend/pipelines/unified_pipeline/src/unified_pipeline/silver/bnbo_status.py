@@ -21,7 +21,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely import MultiPolygon, Polygon, difference, unary_union, wkt
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer, timed
@@ -58,7 +58,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
 
 
-class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
+class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     """
     Silver layer processor for BNBO status data.
 
@@ -373,15 +373,19 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error during dissolve operation: {str(e)}")
             raise e
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the complete BNBO status silver layer processing job.
 
         This is the main entry point that orchestrates the entire process:
-        1. Reads data from the bronze layer
+        1. Reads data from the bronze layer (either in-memory or from storage)
         2. Processes XML data into a GeoDataFrame
         3. Creates a dissolved version of the GeoDataFrame
         4. Saves both the original and dissolved data to GCS
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         Returns:
             None
@@ -390,18 +394,27 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running BNBO status silver job")
-        async with AsyncTimer("Running Water Projects silver job for"):
-            raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
+        async with AsyncTimer("Running BNBO status silver job for"):
+            # Read data with support for in-memory passing
+            raw_data = self._read_bronze_data(
+                self.config.dataset, self.config.bucket, bronze_data=bronze_data
+            )
             if raw_data is None:
                 self.log.error("Failed to read raw data")
                 return
             self.log.info("Read raw data successfully")
+
             geo_df = self._process_xml_data(raw_data)
             if geo_df is None:
                 self.log.error("Failed to process raw data")
                 return
             self.log.info("Processed raw data successfully")
+
             dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-            self._save_data(geo_df, self.config.dataset, self.config.bucket)
-            self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
+
+            # Save using new unified method
+            self._save_data(geo_df, self.config.dataset, self.config.bucket, stage="silver")
+            self._save_data(
+                dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket, stage="silver"
+            )
             self.log.info("Saved processed data successfully")
