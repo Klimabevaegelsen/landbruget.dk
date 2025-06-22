@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict
 
@@ -45,10 +46,13 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
     def __init__(self, config: PropertyCadastralMergeConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
-        # Configure DuckDB for GitHub Actions resource limits (16GB total RAM for public repos)
+        # Configure DuckDB for GitHub Actions resource limits (16GB RAM, 4 cores for public repos)
         self.conn.execute("SET memory_limit = '12GB'")  # Leave 4GB for system + Python + file I/O
-        self.conn.execute("SET threads = 4")  # GitHub Actions public repos have 4 cores
+        self.conn.execute("SET threads = 4")  # GitHub Actions standard runners have 4 cores
         self.conn.execute("SET temp_directory = '/tmp'")  # Use /tmp for spill
+        self.conn.execute(
+            "SET preserve_insertion_order = false"
+        )  # Allow reordering for performance
         self.conn.execute("INSTALL spatial")  # Enable spatial extension
         self.conn.execute("LOAD spatial")  # Load spatial extension
 
@@ -267,37 +271,18 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         merged_records, unique_bfe_matches = merge_stats
 
-        self.log.info(f"BFE join completed. Result: {merged_records:,} records")
-
-        # Calculate match rates
-        if self.config.join_method == "inner":
-            match_rate = (
-                (merged_records / property_stats["final_records"]) * 100
-                if property_stats["final_records"] > 0
-                else 0
-            )
-        elif self.config.join_method == "left":
-            matched_count = self.conn.execute(
-                "SELECT COUNT(*) FROM merged_data WHERE cadastral_bfe_number IS NOT NULL"
-            ).fetchone()[0]
-            match_rate = (
-                (matched_count / property_stats["final_records"]) * 100
-                if property_stats["final_records"] > 0
-                else 0
-            )
-        else:
-            match_rate = 0
+        # Calculate match rate
+        total_property_records = property_stats["final_records"]
+        match_rate = (
+            (merged_records / total_property_records) * 100 if total_property_records > 0 else 0
+        )
 
         quality_stats = {
-            "total_properties": property_stats["final_records"],
-            "total_cadastral_parcels": cadastral_stats["total_records"],
             "merged_records": merged_records,
             "unique_bfe_matches": unique_bfe_matches,
             "match_rate_percent": match_rate,
-            "join_method": self.config.join_method,
         }
 
-        # Log quality statistics
         self.log.info("BFE Merge Quality Statistics:")
         self.log.info(f"  Total property records: {property_stats['final_records']:,}")
         self.log.info(f"  Total cadastral parcels: {cadastral_stats['total_records']:,}")
@@ -306,6 +291,100 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
         self.log.info(f"  Match rate: {match_rate:.1f}%")
 
         return quality_stats
+
+    def _export_merged_data_optimized(self, temp_file: str) -> int:
+        """
+        Export merged data using optimized approach for large datasets.
+        Uses streaming export with compression and memory management.
+
+        Returns:
+            Number of records exported
+        """
+        self.log.info("Using optimized export for large dataset...")
+
+        # First, get record count
+        record_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
+        self.log.info(f"Preparing to export {record_count:,} records")
+
+        # Check available disk space
+        import shutil
+
+        disk_usage = shutil.disk_usage("/tmp")
+        available_gb = disk_usage.free / (1024**3)
+        self.log.info(f"Available disk space: {available_gb:.1f} GB")
+
+        # Configure DuckDB for memory-efficient export
+        self.conn.execute("SET memory_limit = '10GB'")  # Reduce memory limit for export
+        self.conn.execute("SET threads = 3")  # Reduce threads to conserve memory
+
+        # Use COPY with compression and row group size optimization for large files
+        export_query = f"""
+        COPY merged_data TO '{temp_file}' (
+            FORMAT PARQUET,
+            COMPRESSION 'SNAPPY',
+            ROW_GROUP_SIZE 50000
+        )
+        """
+
+        try:
+            self.log.info("Starting optimized parquet export...")
+            self.log.info("This may take several minutes for large datasets...")
+            start_time = time.time()
+
+            # Log progress every 30 seconds during export
+            import threading
+
+            def log_progress():
+                elapsed = 0
+                while True:
+                    time.sleep(30)
+                    elapsed += 30
+                    self.log.info(
+                        f"Export still running... {elapsed // 60}m {elapsed % 60}s elapsed"
+                    )
+
+            progress_thread = threading.Thread(target=log_progress, daemon=True)
+            progress_thread.start()
+
+            self.conn.execute(export_query)
+            export_duration = time.time() - start_time
+
+            # Get file stats
+            file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
+            self.log.info(
+                f"Export completed in {export_duration:.1f}s - {record_count:,} records, {file_size_mb:.1f} MB"
+            )
+
+            return record_count
+
+        except Exception as e:
+            self.log.error(f"Optimized export failed: {e}")
+            self.log.info("Checking system resources...")
+
+            # Check memory usage
+            import psutil
+
+            memory = psutil.virtual_memory()
+            self.log.info(
+                f"Memory usage: {memory.percent}% ({memory.used / (1024**3):.1f}GB used of {memory.total / (1024**3):.1f}GB)"
+            )
+
+            # Check disk usage again
+            disk_usage = shutil.disk_usage("/tmp")
+            available_gb = disk_usage.free / (1024**3)
+            self.log.info(f"Available disk space: {available_gb:.1f} GB")
+
+            # Fallback: try without compression if it fails
+            self.log.info("Attempting fallback export without compression...")
+            fallback_query = f"COPY merged_data TO '{temp_file}' (FORMAT PARQUET)"
+            self.conn.execute(fallback_query)
+
+            file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
+            self.log.info(
+                f"Fallback export completed - {record_count:,} records, {file_size_mb:.1f} MB"
+            )
+
+            return record_count
 
     def _ensure_output_crs_epsg4326(self, temp_file: str) -> str:
         """
@@ -443,17 +522,13 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             output_temp_path = temp_file  # Store for cleanup
 
             # Export directly from DuckDB to parquet (memory efficient)
-            export_query = f"""
-            COPY merged_data TO '{temp_file}' (FORMAT PARQUET)
-            """
-            self.conn.execute(export_query)
+            record_count = self._export_merged_data_optimized(temp_file)
 
             # Ensure output has proper EPSG:4326 CRS
             temp_file = self._ensure_output_crs_epsg4326(temp_file)
 
             # Get file stats
             file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
-            record_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
             self.log.info(
                 f"Exported {record_count:,} records to {temp_file} ({file_size_mb:.1f} MB)"
             )
