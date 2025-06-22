@@ -351,20 +351,14 @@ class SilverProcessor:
 
             logger.info(f"Processing file from memory to Silver: {original_filename}")
 
-            # Determine the file format based on extension and MIME type
-            file_extension = Path(original_filename).suffix.lower()
-            file_format = self._determine_file_format(file_extension, mime_type)
+            # Use content type from metadata (same approach as _process_file method)
+            content_type = metadata.content_type
 
-            if not file_format:
-                logger.warning(f"Unsupported file format for {original_filename}")
+            if not content_type or content_type not in self.transformers:
+                logger.warning(f"Unsupported content type: {content_type} for {original_filename}")
                 return False
 
-            # Get the appropriate transformer
-            if file_format not in self.transformers:
-                logger.warning(f"No transformer available for format: {file_format}")
-                return False
-
-            transformer = self.transformers[file_format]
+            transformer = self.transformers[content_type]
 
             # Transform the file content directly from memory
             try:
