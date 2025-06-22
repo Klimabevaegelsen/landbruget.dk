@@ -706,15 +706,13 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             # Use BaseSource directory structure but with DuckDB export for efficiency
             self.log.info("Exporting merged data directly from DuckDB to parquet...")
 
-            # Use BaseSource date pattern for consistency
-            import pandas as pd
+            # Use BaseSource date pattern for consistency (YYYYMMDD_HHMMSS format)
+            date_str = self.date_pattern
 
-            date_str = pd.Timestamp.now().strftime("%Y-%m-%d")
-
-            # Create temp file with BaseSource naming convention
-            temp_dir = "/tmp/silver/property_cadastral_merged"
+            # Create temp file with BaseSource naming convention using timestamped subfolder
+            temp_dir = f"/tmp/silver/property_cadastral_merged/{date_str}"
             os.makedirs(temp_dir, exist_ok=True)
-            temp_file = f"{temp_dir}/{date_str}.parquet"
+            temp_file = f"{temp_dir}/data.parquet"
             output_temp_path = temp_file  # Store for cleanup
 
             # Export directly from DuckDB to parquet (memory efficient)
@@ -737,7 +735,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             if not self.config.save_local:
                 self.log.info("Starting upload to GCS...")
                 bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
-                gcs_path = f"silver/property_cadastral_merged/{date_str}.parquet"
+                gcs_path = f"silver/property_cadastral_merged/{date_str}/data.parquet"
                 working_blob = bucket.blob(gcs_path)
 
                 self.log.info(
