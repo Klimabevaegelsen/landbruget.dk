@@ -20,23 +20,27 @@ logger = logging.getLogger(__name__)
 # Initialize storage paths and clients
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+LOCAL_DATA_PATH = os.getenv("LOCAL_DATA_PATH", "/tmp/data")  # Default to /tmp/data for GitHub Actions
 
 # Use GCS if we have the required configuration
 USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+
+logger.info(f"GCS Configuration - Bucket: {GCS_BUCKET}, Project: {GOOGLE_CLOUD_PROJECT}, USE_GCS: {USE_GCS}")
 
 # Initialize GCS client if bucket is configured
 gcs_client = None
 if USE_GCS:
     try:
+        logger.info("Attempting to initialize GCS client...")
         gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.info(f"Using GCS storage with bucket: {GCS_BUCKET}")
+        logger.info(f"Successfully initialized GCS client. Using GCS storage with bucket: {GCS_BUCKET}")
     except Exception as e:
-        logger.error(f"Failed to initialize GCS client: {e}")
+        logger.error(f"Failed to initialize GCS client: {e}", exc_info=True)
         logger.info("Falling back to local storage")
         USE_GCS = False
 
 if not USE_GCS:
-    logger.info("Using local storage in /data/bronze/")
+    logger.info(f"Using local storage in {LOCAL_DATA_PATH}/bronze/")
 
 # --- In-memory buffer for consolidated output ---
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
@@ -59,7 +63,7 @@ def _ensure_dir(filepath: Path):
 
 def _get_final_filename(data_source: str, operation: str, format: str) -> Path:
     """Generate the filename for the final consolidated file."""
-    base_path = Path(f"/usr/data/bronze/{data_source}")
+    base_path = Path(f"{LOCAL_DATA_PATH}/bronze/{data_source}")
     # Sanitize operation name for filename
     safe_operation = operation.replace(" ", "_").replace("/", "_")
     filename = f"{safe_operation}.{format}"
@@ -191,7 +195,7 @@ def finalize_export(clear_buffer: bool = True):
                 except Exception as e:
                     logger.error(f"Error writing JSON to GCS {filename}: {e}")
             else:
-                filepath = Path(f"/usr/data/bronze/chr/{filename}")
+                filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
                     _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), "json")
@@ -213,7 +217,7 @@ def finalize_export(clear_buffer: bool = True):
                 except Exception as e:
                     logger.error(f"Error writing XML to GCS {filename}: {e}")
             else:
-                filepath = Path(f"/usr/data/bronze/chr/{filename}")
+                filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                 try:
                     logger.info(f"Writing {len(xml_data_list)} records locally to {filepath}")
                     _save_locally(filepath, full_xml_content, "xml")
@@ -280,3 +284,93 @@ if __name__ == "__main__":
 
 #     # Example with identifiers
 #     save_raw_data(sample_zeep_like, 'besaetning', 'hentStamoplysninger', {'herd': 5392, 'species': 15})
+
+
+def export_context_data(context: Dict[str, Any], export_path: Path):
+    """Export pipeline context data for use by dependent jobs."""
+    logger.info("Exporting pipeline context data...")
+
+    # Extract serializable context data
+    context_data = {
+        "export_timestamp": EXPORT_TIMESTAMP,
+        "herd_to_species": context.get("herd_to_species", {}),
+        "chr_to_species": {},  # Convert sets to lists for JSON serialization
+        "combinations": context.get("combinations", []),
+        "args": {
+            "start_date": str(context.get("args", {}).get("start_date", "")),
+            "end_date": str(context.get("args", {}).get("end_date", "")),
+            "limit_total_herds": context.get("args", {}).get("limit_total_herds"),
+            "limit_herds_per_species": context.get("args", {}).get("limit_herds_per_species"),
+            "test_species_codes": context.get("args", {}).get("test_species_codes"),
+        },
+    }
+
+    # Convert chr_to_species sets to lists for JSON serialization
+    chr_to_species_raw = context.get("chr_to_species", {})
+    for chr_num, species_set in chr_to_species_raw.items():
+        if isinstance(species_set, set):
+            context_data["chr_to_species"][str(chr_num)] = list(species_set)
+        else:
+            context_data["chr_to_species"][str(chr_num)] = species_set
+
+    # Save context data
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(export_path, "w") as f:
+        json.dump(context_data, f, indent=2, default=str)
+
+    logger.info(f"Context data exported to {export_path}")
+    logger.info(f"Exported {len(context_data['herd_to_species'])} herd mappings")
+    logger.info(f"Exported {len(context_data['chr_to_species'])} CHR mappings")
+
+
+def import_context_data(import_path: Path) -> Dict[str, Any]:
+    """Import pipeline context data from a previous job."""
+    if not import_path.exists():
+        logger.warning(f"Context data file not found: {import_path}")
+        return {}
+
+    logger.info(f"Importing pipeline context data from {import_path}")
+
+    try:
+        with open(import_path, "r") as f:
+            context_data = json.load(f)
+
+        # Convert chr_to_species lists back to sets
+        chr_to_species = {}
+        for chr_num, species_list in context_data.get("chr_to_species", {}).items():
+            chr_to_species[int(chr_num)] = set(species_list)
+
+        # Convert herd_to_species string keys back to integers
+        herd_to_species = {}
+        for herd_num, species_code in context_data.get("herd_to_species", {}).items():
+            herd_to_species[int(herd_num)] = species_code
+
+        imported_context = {
+            "herd_to_species": herd_to_species,
+            "chr_to_species": chr_to_species,
+            "combinations": context_data.get("combinations", []),
+            "export_timestamp": context_data.get("export_timestamp", ""),
+            "args": context_data.get("args", {}),
+        }
+
+        logger.info(f"Imported {len(imported_context['herd_to_species'])} herd mappings")
+        logger.info(f"Imported {len(imported_context['chr_to_species'])} CHR mappings")
+
+        return imported_context
+
+    except Exception as e:
+        logger.error(f"Failed to import context data: {e}", exc_info=True)
+        return {}
+
+
+def export_bronze_data_summary() -> Dict[str, Any]:
+    """Export a summary of bronze data for verification."""
+    summary = {"export_timestamp": EXPORT_TIMESTAMP, "buffer_keys": list(_data_buffer.keys()), "data_counts": {}}
+
+    for key, data in _data_buffer.items():
+        summary["data_counts"][key] = {
+            "json_records": len(data.get("json", [])),
+            "xml_records": len(data.get("xml", [])),
+        }
+
+    return summary

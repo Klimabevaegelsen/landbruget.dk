@@ -11,19 +11,17 @@ on:
         required: true
         options:
           - all
-          - bronze_foundation  # stamdata + herds + herd_details
-          - bronze_data_collection  # diko + animal_movements + ejendom + vetstat
-          - bronze_parallel_group_1  # diko + cattle_movements (parallel after herds)
-          - bronze_parallel_group_2  # ejendom + vetstat (parallel after herd_details)
-          - silver_processing  # all silver steps
+          - bronze_foundation
+          - bronze_data_collection
+          - silver_processing
           - stamdata
           - herds
           - herd_details
           - diko
-          - cattle_movements
-          - non_cattle_movements
+          - animal_movements
           - ejendom
           - vetstat
+          - silver_all
         default: 'all'
       start_date:
         description: 'Start date (YYYY-MM-DD)'
@@ -35,10 +33,6 @@ on:
         type: string
         required: false
         default: ''
-      test_mode:
-        description: 'Run in test mode'
-        type: boolean
-        default: false
       max_herds:
         description: 'Maximum number of herds to process'
         type: string
@@ -67,17 +61,15 @@ on:
         default: ''
 
 jobs:
-  # Job 1: Foundation Bronze Steps (stamdata, herds, herd_details)
+  # Job 1: Foundation Steps (stamdata, herds, herd_details)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_1' || inputs.step == 'bronze_parallel_group_2' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' }}
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' }}
+    timeout-minutes: 120
     
     permissions:
       contents: 'read'
       id-token: 'write'
-
-    outputs:
-      export-timestamp: ${{ steps.run-foundation.outputs.export-timestamp }}
 
     steps:
     - uses: actions/checkout@v4
@@ -118,19 +110,20 @@ jobs:
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
 
     - name: Run Foundation Steps
-      id: run-foundation
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Determine which foundation step to run
-        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_foundation" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" || "${{ inputs.step }}" == "bronze_parallel_group_2" ]]; then
+        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_foundation" || "${{ inputs.step }}" == "bronze_data_collection" ]]; then
           STEP="herd_details"  # This will run stamdata -> herds -> herd_details
         else
           STEP="${{ inputs.step }}"
@@ -155,16 +148,29 @@ jobs:
         
         echo "Running foundation command: $CMD"
         $CMD
-        
-        # Extract export timestamp from the pipeline output for use by dependent jobs
-        EXPORT_TIMESTAMP=$(find /tmp/data/bronze/chr -name "*.json" | head -1 | xargs dirname | xargs basename)
-        echo "export-timestamp=$EXPORT_TIMESTAMP" >> $GITHUB_OUTPUT
 
-  # Job 2: Parallel Group 1 - Early data collection (diko + cattle movements)
+    - name: Upload context artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/chr_context.json
+        retention-days: 1
+
+    - name: Upload bronze data summary
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bronze-foundation-logs
+        path: |
+          /tmp/data/
+        retention-days: 1
+
+  # Job 2: Parallel Data Collection (diko + animal_movements)
   bronze-parallel-group-1:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_1' || inputs.step == 'diko' || inputs.step == 'cattle_movements' || inputs.step == 'non_cattle_movements' }}
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' }}
+    timeout-minutes: 120
     
     permissions:
       contents: 'read'
@@ -172,9 +178,7 @@ jobs:
 
     strategy:
       matrix:
-        data_type: 
-          - diko  # DIKO for all species (12,13,14,15) - deduplication happens later
-          - cattle_movements  # CHR_dyr smart aggregation for cattle (species 12)
+        data_type: [diko, animal_movements]
 
     steps:
     - uses: actions/checkout@v4
@@ -203,6 +207,12 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
     - name: Set up environment variables
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -215,46 +225,25 @@ jobs:
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
 
-    - name: Download Foundation Data
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      run: |
-        # Download the foundation data from the previous job
-        EXPORT_TIMESTAMP="${{ needs.bronze-foundation.outputs.export-timestamp }}"
-        if [[ -n "$EXPORT_TIMESTAMP" ]]; then
-          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No foundation data found to download"
-        fi
-
-    - name: Run Parallel Group 1 Steps
+    - name: Run Parallel Group 1 Step
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        # Determine which step to run based on matrix
-        if [[ "${{ matrix.data_type }}" == "diko" ]]; then
-          # Run DIKO for all species (deduplication with cattle movements happens later)
-          if [[ "${{ inputs.step }}" == "diko" || "${{ inputs.step }}" == "non_cattle_movements" || "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" ]]; then
-            STEP="diko"
-          else
-            echo "Skipping DIKO step for this matrix configuration"
-            exit 0
-          fi
-        elif [[ "${{ matrix.data_type }}" == "cattle_movements" ]]; then
-          # Run cattle movements (CHR_dyr smart aggregation)
-          if [[ "${{ inputs.step }}" == "cattle_movements" || "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" ]]; then
-            STEP="animal_movements"
-          else
-            echo "Skipping cattle movements step for this matrix configuration"
-            exit 0
-          fi
+        # Skip if this specific step is not requested
+        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "${{ matrix.data_type }}" ]]; then
+          echo "Skipping ${{ matrix.data_type }} step for this configuration"
+          exit 0
         fi
         
+        STEP="${{ matrix.data_type }}"
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
@@ -292,11 +281,12 @@ jobs:
         echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
         $CMD
 
-  # Job 3: Parallel Group 2 - Later data collection (ejendom + vetstat)
+  # Job 3: Parallel Data Collection (ejendom + vetstat)
   bronze-parallel-group-2:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_2' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    timeout-minutes: 120
     
     permissions:
       contents: 'read'
@@ -333,6 +323,12 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
     - name: Set up environment variables
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -346,39 +342,34 @@ jobs:
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-        echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
 
-    - name: Download Foundation Data
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      run: |
-        # Download the foundation data from the previous job
-        EXPORT_TIMESTAMP="${{ needs.bronze-foundation.outputs.export-timestamp }}"
-        if [[ -n "$EXPORT_TIMESTAMP" ]]; then
-          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No foundation data found to download"
-        fi
-
-    - name: Run Parallel Group 2 Steps
+    - name: Run Parallel Group 2 Step
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        # Run the specific step from the matrix
-        STEP="${{ matrix.data_type }}"
-        
         # Skip if this specific step is not requested
-        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "bronze_parallel_group_2" && "${{ inputs.step }}" != "$STEP" ]]; then
-          echo "Skipping $STEP step for this matrix configuration"
+        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "${{ matrix.data_type }}" ]]; then
+          echo "Skipping ${{ matrix.data_type }} step for this configuration"
           exit 0
         fi
         
+        STEP="${{ matrix.data_type }}"
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
@@ -410,6 +401,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [bronze-foundation, bronze-parallel-group-1, bronze-parallel-group-2]
     if: ${{ inputs.step == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
+    timeout-minutes: 60
     
     permissions:
       contents: 'read'
@@ -450,19 +442,31 @@ jobs:
         cd backend/pipelines/chr_pipeline
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
 
-    - name: Download Bronze Data
+    - name: Download Bronze Data from GCS
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
-        # Download all bronze data from all previous jobs
-        EXPORT_TIMESTAMP="${{ needs.bronze-foundation.outputs.export-timestamp }}"
-        if [[ -n "$EXPORT_TIMESTAMP" ]]; then
-          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
+        # Download all bronze data from GCS
+        echo "Downloading bronze data from GCS..."
+        
+        # Get the latest timestamp folder
+        LATEST_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/chr/bronze/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+        
+        if [[ -n "$LATEST_TIMESTAMP" ]]; then
+          echo "Found latest bronze data timestamp: $LATEST_TIMESTAMP"
+          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$LATEST_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
+          
+          # Set the timestamp for silver processing
+          echo "BRONZE_DATE_FOLDER_OVERRIDE=$LATEST_TIMESTAMP" >> .env
+        else
+          echo "No bronze data timestamp found in GCS"
+          exit 1
         fi
 
     - name: Run Silver Processing
@@ -489,10 +493,29 @@ jobs:
         echo "Running silver processing command: $CMD"
         $CMD
 
-  # Job 5: Handle single step runs that don't fit the above pattern
+    - name: Verify Pipeline Output
+      if: always()
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        echo "=== Silver Processing Output Verification ==="
+        
+        if [[ -n "$GCS_BUCKET" ]]; then
+          echo "Checking silver data in GCS..."
+          gsutil ls -l gs://$GCS_BUCKET/chr/silver/ | tail -20 || echo "No silver data found in GCS"
+        fi
+        
+        if [[ -d "/tmp/data/silver" ]]; then
+          echo "Local silver data files:"
+          find /tmp/data/silver -name "*.parquet" | head -20
+        fi
+
+  # Job 5: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "bronze_parallel_group_1", "bronze_parallel_group_2", "silver_processing", "stamdata", "herds", "herd_details", "diko", "cattle_movements", "non_cattle_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    if: ${{ !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    timeout-minutes: 180
     
     permissions:
       contents: 'read'
@@ -538,9 +561,16 @@ jobs:
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-        echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
@@ -592,6 +622,14 @@ jobs:
     - name: Handle pipeline failure
       if: failure()
       run: |
-        STEP="${{ inputs.step }}"
-        echo "Pipeline step '$STEP' failed. Please check the logs above for details."
+        echo "❌ CHR Pipeline step '${{ inputs.step }}' failed. Please check the logs above for details."
+        echo ""
+        echo "🔧 Common issues:"
+        echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
+        echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
+        echo "3. Network connectivity issues with FVM services"
+        echo "4. GCS authentication or bucket access issues"
+        echo "5. Pipeline timeout or memory issues"
+        echo ""
+        echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
         exit 1
