@@ -179,6 +179,7 @@ The pipeline supports both local development and production deployment:
 - ✅ Added timestamped output directories for data versioning
 - ✅ **Clean, harmonized Parquet files with standardized column names**
 - ✅ **Added crop categorization and data type standardization**
+- ✅ **Created comprehensive DST-Field crop mapping table (180 crops, 74.5% field coverage)**
 
 ## API Documentation
 
@@ -341,14 +342,40 @@ Danmarks Statistik API has limitations:
 - Large datasets may require streaming formats (not implemented in this version)
 - Consider using variable and time filters for large tables
 
-## Next Steps (Silver Layer)
+## DST-Field Crop Mapping Integration
 
-After data is collected in the bronze layer, the next steps would be:
+The DST pipeline data can be integrated with agricultural field data using the comprehensive crop mapping table located at `../../dst_field_crop_mapping_table.py`. This mapping enables field-level production estimation by linking field crop types to DST statistical categories.
 
-1. **Silver Layer Processing**: Clean and harmonize the raw JSON data
-2. **Data Transformation**: Convert to Parquet format using ibis/duckdb
-3. **Data Validation**: Ensure data quality and consistency
-4. **Schema Standardization**: Apply consistent naming conventions
+### Key Integration Features:
+- **180 mapped crop types** covering 74.5% of agricultural field records
+- **Cross-table mapping** across all 4 DST tables (HST77, GARTN1, FRO, HALM1)
+- **Quality-rated matches** (perfect, good, approximate, partial)
+- **Production-focused coverage** excluding environmental set-aside and forestry
+
+### Usage Example:
+```python
+# Load the mapping table
+exec(open('../../dst_field_crop_mapping_table.py').read())
+
+# Load DST data and field data
+dst_data = pd.read_parquet('silver/dst/latest/hst77_processed.parquet')
+field_data = pd.read_parquet('../../data_cache/agricultural_fields/agricultural_fields_2024_data.parquet')
+
+# Map field crops to DST categories
+field_data['dst_info'] = field_data['crop_type'].apply(get_dst_category)
+
+# Join with DST yield data for production estimation
+# ... integration logic
+```
+
+## Next Steps (Gold Layer)
+
+After data is collected and processed through bronze and silver layers:
+
+1. **Gold Layer Processing**: Aggregate and prepare analytics-ready datasets
+2. **Field-DST Integration**: Combine field-level data with DST statistics using the crop mapping
+3. **Production Estimation**: Calculate field-level production using DST yield data
+4. **Regional Analysis**: Aggregate to administrative boundaries for policy analysis
 
 ## Troubleshooting
 
@@ -370,6 +397,8 @@ After data is collected in the bronze layer, the next steps would be:
 - [Danmarks Statistik API Documentation](https://www.dst.dk/da/Statistik/hjaelp-til-statistikbanken/api)
 - [API Console](https://www.dst.dk/da/Statistik/hjaelp-til-statistikbanken/api#konsol)
 - [Pipeline Architecture Documentation](../README.md)
+- [DST-Field Crop Mapping Table](../../dst_field_crop_mapping_table.py)
+- [Data Cache Catalog](../../DATA_CACHE_CATALOG.md)
 
 ## Silver Layer Processing
 
