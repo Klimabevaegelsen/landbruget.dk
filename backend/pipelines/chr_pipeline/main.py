@@ -4,10 +4,12 @@
 import argparse
 import concurrent.futures
 import logging
+import os
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from bronze.export import EXPORT_TIMESTAMP, finalize_export, get_data_buffer
+from bronze.export import EXPORT_TIMESTAMP, export_context_data, finalize_export, get_data_buffer, import_context_data
 from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
 from bronze.load_besaetning import create_soap_client as create_bes_client
 from bronze.load_besaetning import get_fvm_credentials, load_herd_details, load_herd_list
@@ -557,18 +559,46 @@ def main():
     setup_logging(args["log_level"])
 
     try:
-        # Initialize context
-        username, password = get_fvm_credentials()
-        context = {
-            "args": args,
-            "username": username,
-            "clients": {
-                "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
-            },
-        }
+        # Check if we should import context from a previous job
+        context_import_path = os.getenv("CONTEXT_IMPORT_PATH")
+        if context_import_path and os.path.exists(context_import_path):
+            logging.warning(f"Importing context data from {context_import_path}")
+            imported_context = import_context_data(Path(context_import_path))
+
+            # Initialize context with imported data
+            username, password = get_fvm_credentials()
+            context = {
+                "args": args,
+                "username": username,
+                "clients": {
+                    "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
+                    "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
+                    "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
+                    "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                },
+                # Merge imported context
+                **imported_context,
+            }
+
+            # Update args with imported values if not explicitly provided
+            if not args.get("start_date") and imported_context.get("args", {}).get("start_date"):
+                context["args"]["start_date"] = imported_context["args"]["start_date"]
+            if not args.get("end_date") and imported_context.get("args", {}).get("end_date"):
+                context["args"]["end_date"] = imported_context["args"]["end_date"]
+
+        else:
+            # Initialize fresh context
+            username, password = get_fvm_credentials()
+            context = {
+                "args": args,
+                "username": username,
+                "clients": {
+                    "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
+                    "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
+                    "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
+                    "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                },
+            }
 
         # Determine steps to run
         requested_step = args["steps"]
@@ -604,6 +634,12 @@ def main():
             context = run_bronze_step(step, context)
         logging.warning("Bronze steps completed.")
 
+        # Export context data if requested (for multi-job workflows)
+        context_export_path = os.getenv("CONTEXT_EXPORT_PATH")
+        if context_export_path:
+            logging.warning(f"Exporting context data to {context_export_path}")
+            export_context_data(context, Path(context_export_path))
+
         # Run silver processing if requested
         if run_silver:
             logging.warning("Starting silver processing...")
@@ -620,8 +656,10 @@ def main():
                 raise  # Re-raise to indicate pipeline failure
 
         # Finalize bronze export (always run this to save fetched bronze data)
+        # But don't clear buffer if we're exporting context (dependent jobs might need the data)
+        clear_buffer_after_export = not bool(context_export_path)
         logging.warning("Finalizing bronze export...")
-        finalize_export(clear_buffer=True)  # Clear buffer after potentially being used by silver
+        finalize_export(clear_buffer=clear_buffer_after_export)
 
         logging.warning(f"Pipeline run for steps '{requested_step}' completed successfully")
 
