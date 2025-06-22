@@ -21,7 +21,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely import Polygon, unary_union
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer, timed
@@ -54,7 +54,7 @@ class WetlandsSilverConfig(BaseJobConfig):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
 
 
-class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
+class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
     """
     Silver layer processor for wetlands data.
 
@@ -403,7 +403,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
             self.log.error(f"Error during dissolve operation: {str(e)}")
             raise e
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the wetlands silver layer processing pipeline.
 
@@ -412,6 +412,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         2. Processes XML data into a GeoDataFrame
         3. Creates a dissolved version with merged adjacent polygons
         4. Saves both the original and dissolved datasets to GCS
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         The method handles error conditions at each step and logs progress.
 
@@ -423,10 +427,35 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
         """
         self.log.info("Running Wetlands silver job")
         async with AsyncTimer("Wetlands silver job"):
-            raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-            if raw_data is None:
-                self.log.error("Failed to read raw data")
-                return
+            # Read data with support for in-memory passing
+            if bronze_data is not None:
+                self.log.info("Using bronze data from memory (in-memory data passing)")
+                # Bronze data is expected to be a list of raw XML strings
+                if isinstance(bronze_data, list):
+                    raw_data = pd.DataFrame(
+                        [
+                            {
+                                "payload": xml_data,
+                                "source": self.config.dataset,
+                                "created_at": pd.Timestamp.now(),
+                                "updated_at": pd.Timestamp.now(),
+                            }
+                            for xml_data in bronze_data
+                        ]
+                    )
+                else:
+                    self.log.error(
+                        f"Expected list of XML strings from bronze stage, got {type(bronze_data)}"
+                    )
+                    return
+            else:
+                # Fallback to reading from storage
+                self.log.info("Reading bronze data from storage (fallback)")
+                raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
+                if raw_data is None:
+                    self.log.error("Failed to read raw data")
+                    return
+
             self.log.info("Read raw data successfully")
             geo_df = self._process_xml_data(raw_data)
             if geo_df is None:
@@ -434,6 +463,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig]):
                 return
             self.log.info("Processed raw data successfully")
             dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-            self._save_data(geo_df, self.config.dataset, self.config.bucket)
-            self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
+            self._save_data(geo_df, self.config.dataset, self.config.bucket, stage="silver")
+            self._save_data(
+                dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket, stage="silver"
+            )
             self.log.info("Saved processed data successfully")

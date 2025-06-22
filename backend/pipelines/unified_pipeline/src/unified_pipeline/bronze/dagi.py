@@ -22,7 +22,7 @@ import pandas as pd
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -73,7 +73,7 @@ class DAGIBronzeConfig(BaseJobConfig):
     retries: int = Field(default=3, description="Number of retry attempts for failed requests")
 
 
-class DAGIBronze(BaseSource[DAGIBronzeConfig]):
+class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer implementation for DAGI (Danish Administrative Geographic Division) data.
 
@@ -165,12 +165,17 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig]):
 
             return results
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[Dict[str, str]]:
         """
         Run the DAGI data source processing pipeline.
 
         This method processes all configured DAGI layers, fetching
         their data from the DAWA API and storing it in Google Cloud Storage.
+        Returns the raw data for in-memory passing to silver stage.
+
+        Returns:
+            Optional[Dict[str, str]]: Dictionary mapping layer names to their raw JSON data,
+                                     or None if processing fails
         """
         try:
             async with AsyncTimer("DAGI bronze layer processing") as timer:
@@ -183,7 +188,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig]):
                 if not layer_data:
                     raise RuntimeError("No DAGI data could be fetched from any layer")
 
-                # Save each layer as raw data
+                # Save each layer as raw data using new unified method
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
@@ -198,7 +203,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig]):
                                 }
                             ]
                         )
-                        self._save_raw_data(raw_df, dataset_name, self.config.bucket)
+                        self._save_data(raw_df, dataset_name, self.config.bucket, stage="bronze")
                         self.log.info(f"Saved raw data for {layer_name}")
                     except Exception as e:
                         self.log.error(f"Failed to save {layer_name}: {e}")
@@ -208,6 +213,9 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig]):
                     f"DAGI bronze processing completed in {timer.elapsed():.2f}s. "
                     f"Processed {len(layer_data)} layers: {list(layer_data.keys())}"
                 )
+
+                # Return data for in-memory passing
+                return layer_data
 
         except Exception as e:
             self.log.error(f"Critical error in DAGI bronze processing: {e}")

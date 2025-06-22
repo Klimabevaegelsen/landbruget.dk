@@ -21,7 +21,7 @@ from pydantic import ConfigDict
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -80,7 +80,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig]):
+class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJobInterface):
     """
     Silver layer processing for Jordbrugsanalyser marker data.
 
@@ -346,24 +346,42 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig]):
             self.log.error(f"Error parsing WFS response for year {year}: {e}")
             return []
 
-    def _process_year_data(self, year: int) -> Optional[gpd.GeoDataFrame]:
+    def _process_year_data(
+        self, year: int, bronze_data: Optional[Any] = None
+    ) -> Optional[gpd.GeoDataFrame]:
         """
         Process all data for a specific year from bronze layer.
 
         Args:
             year: Year to process (e.g., 2012)
+            bronze_data: Optional in-memory data from bronze stage
 
         Returns:
             GeoDataFrame with processed data or None if no data/errors
         """
         try:
-            # Read bronze data for this year
-            bronze_dataset_name = f"{self.config.bronze_dataset}_{year}"
-            bronze_df = self._read_bronze_data(bronze_dataset_name, self.config.bucket)
+            # Read data with support for in-memory passing
+            if bronze_data is not None:
+                self.log.info(
+                    f"Using bronze data from memory for year {year} (in-memory data passing)"
+                )
+                # Bronze data is a dict mapping year to list of raw WFS responses
+                if isinstance(bronze_data, dict) and str(year) in bronze_data:
+                    raw_responses = bronze_data[str(year)]
+                    # Create DataFrame with the raw XML payloads
+                    bronze_df = pd.DataFrame({"payload": raw_responses})
+                else:
+                    self.log.warning(f"No in-memory data found for year {year}")
+                    return None
+            else:
+                # Fallback to reading from storage
+                self.log.info(f"Reading bronze data from storage for year {year} (fallback)")
+                bronze_dataset_name = f"{self.config.bronze_dataset}_{year}"
+                bronze_df = self._read_bronze_data(bronze_dataset_name, self.config.bucket)
 
-            if bronze_df is None or bronze_df.empty:
-                self.log.warning(f"No bronze data found for year {year}")
-                return None
+                if bronze_df is None or bronze_df.empty:
+                    self.log.warning(f"No bronze data found for year {year}")
+                    return None
 
             self.log.info(f"Processing {len(bronze_df)} bronze records for year {year}")
 
@@ -417,7 +435,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig]):
             self.log.error(f"Error processing year {year}: {e}")
             return None
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the silver layer processing pipeline.
 
@@ -427,6 +445,10 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig]):
         3. Applies data cleaning and validation
         4. Creates GeoDataFrames with proper geometries and field mapping
         5. Saves processed data to Google Cloud Storage
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         The method processes years sequentially to manage memory usage
         and provides detailed logging for monitoring progress.
@@ -445,7 +467,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig]):
                 try:
                     self.log.info(f"Processing silver layer for year {year}")
 
-                    gdf = self._process_year_data(year)
+                    gdf = self._process_year_data(year, bronze_data)
 
                     if gdf is not None and not gdf.empty:
                         # Save data with year suffix for easy identification

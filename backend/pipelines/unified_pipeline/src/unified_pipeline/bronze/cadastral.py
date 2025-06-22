@@ -5,6 +5,7 @@ import time
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
 from datetime import datetime
+from typing import Optional
 
 import aiohttp
 import geopandas as gpd
@@ -14,7 +15,7 @@ from pydantic import ConfigDict
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     save_local: bool = os.getenv("SAVE_LOCAL", False)
 
 
-class CadastralBronze(BaseSource[CadastralBronzeConfig]):
+class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
     def __init__(self, config: CadastralBronzeConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
         self.last_request_time = {}
@@ -319,7 +320,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig]):
                             # Log progress every 10,000 features
                             if total_processed % 10000 == 0:
                                 logger.info(
-                                    f"Progress: {total_processed:,}/{total_features:,} features ({(total_processed/total_features)*100:.1f}%)"
+                                    f"Progress: {total_processed:,}/{total_features:,} features ({(total_processed / total_features) * 100:.1f}%)"
                                 )
 
                     except Exception as e:
@@ -401,16 +402,18 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig]):
             self.log.error(f"Error getting total count: {str(e)}")
             raise
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[gpd.GeoDataFrame]:
         """
         Run the complete Cadastral bronze layer job.
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
         2. Saves the raw data to Google Cloud Storage
+        3. Returns the processed data for in-memory passing to silver stage
 
         Returns:
-            None
+            Optional[gpd.GeoDataFrame]: The processed cadastral data that can be
+                                       passed to silver stage, or None if processing fails
 
         Raises:
             Exception: If there are issues at any step in the process.
@@ -424,7 +427,12 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig]):
         _, gdf = await self._parse_features()
         if gdf is None:
             self.log.error("Failed to fetch raw data")
-            return
+            return None
         self.log.info("Fetched raw data successfully")
+
+        # Save using existing method (already uses timestamped structure)
         self._save_data(gdf, self.config.dataset, self.config.bucket, "bronze")
         self.log.info("Saved raw data successfully")
+
+        # Return data for in-memory passing
+        return gdf

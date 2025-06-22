@@ -19,7 +19,7 @@ from typing import Optional
 import geopandas as gpd
 from pydantic import ConfigDict
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -57,7 +57,7 @@ class SoilTypesBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True)
 
 
-class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig]):
+class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for soil types data.
 
@@ -147,16 +147,18 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig]):
             self.log.error(f"Error fetching soil types data: {str(e)}")
             raise Exception(f"Failed to fetch soil types data from WFS: {str(e)}")
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[gpd.GeoDataFrame]:
         """
         Run the soil types data processing pipeline.
 
         This method orchestrates the entire process of fetching soil types data
         from the WFS endpoint and saving it to Google Cloud Storage. It handles
-        the complete workflow from data retrieval to storage.
+        the complete workflow from data retrieval to storage and returns the
+        processed data for in-memory passing to the silver stage.
 
         Returns:
-            None
+            Optional[gpd.GeoDataFrame]: The processed soil types data that can be
+                                       passed to silver stage, or None if processing fails
 
         Raises:
             Exception: If any step in the pipeline fails
@@ -169,7 +171,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig]):
 
             if soil_types_gdf is None or soil_types_gdf.empty:
                 self.log.warning("No soil types data to process")
-                return
+                return None
 
             # Log data summary
             self.log.info(f"Processing {len(soil_types_gdf):,} soil type features")
@@ -178,15 +180,18 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig]):
                 f"Geometry type: {soil_types_gdf.geom_type.iloc[0] if len(soil_types_gdf) > 0 else 'Unknown'}"
             )
 
-            # Save to GCS
+            # Save to GCS using new unified method
             self._save_data(
-                df=soil_types_gdf,
+                data=soil_types_gdf,
                 dataset=self.config.dataset,
                 bucket_name=self.config.bucket,
                 stage="bronze",
             )
 
             self.log.info(f"Successfully completed {self.config.name} bronze layer processing")
+
+            # Return data for in-memory passing
+            return soil_types_gdf
 
         except Exception as e:
             self.log.error(f"Error in soil types bronze processing: {str(e)}")

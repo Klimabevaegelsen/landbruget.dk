@@ -17,13 +17,13 @@ with proper error handling and retry logic for robustness.
 import asyncio
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import aiohttp
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -91,7 +91,7 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig]):
+class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for Jordbrugsanalyser marker data.
 
@@ -374,7 +374,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig]):
                 self.log.error(f"Error processing year {year}: {str(e)}")
                 raise
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[Dict[str, List[str]]]:
         """
         Run the data source processing pipeline.
 
@@ -383,18 +383,19 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig]):
         2. For each year, fetches all available marker features
         3. Saves raw WFS responses to Google Cloud Storage
         4. Tracks overall execution time for performance monitoring
-
-        The method processes years sequentially to avoid overwhelming the WFS service,
-        but uses parallel requests within each year for efficiency.
+        Returns the raw data for in-memory passing to silver stage.
 
         Returns:
-            None
+            Optional[Dict[str, List[str]]]: Dictionary mapping year to list of raw WFS responses,
+                                           or None if processing fails
 
         Note:
             This is the main entry point for the bronze layer processing of
             Jordbrugsanalyser marker data.
         """
         self.log.info("Running Jordbrugsanalyser Markers bronze job")
+
+        all_year_data = {}
 
         async with AsyncTimer("Total Jordbrugsanalyser run time"):
             async with aiohttp.ClientSession(timeout=self.config.timeout_config) as session:
@@ -404,13 +405,16 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig]):
                         raw_responses = await self._process_year_data(session, year)
 
                         if raw_responses:
-                            # Save data with year suffix for easy identification
+                            # Save data with year suffix for easy identification using new unified method
                             dataset_name = f"{self.config.dataset}_{year}"
                             self.log.info(f"Saving {len(raw_responses)} responses for year {year}")
-                            self._save_raw_data(
-                                raw_responses, dataset_name, self.config.name, self.config.bucket
+                            self._save_data(
+                                raw_responses, dataset_name, self.config.bucket, stage="bronze"
                             )
                             self.log.info(f"Year {year}: Data saved successfully")
+
+                            # Store data for in-memory passing
+                            all_year_data[str(year)] = raw_responses
                         else:
                             self.log.warning(f"Year {year}: No data to save")
 
@@ -420,3 +424,6 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig]):
                         continue
 
             self.log.info("Jordbrugsanalyser Markers bronze job completed successfully")
+
+            # Return data for in-memory passing
+            return all_year_data if all_year_data else None
