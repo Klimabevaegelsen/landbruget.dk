@@ -25,14 +25,16 @@ class SilverStorageManager:
 
         Args:
             storage_manager: Storage manager for file operations
-            base_path: Base path for Silver layer storage
+            base_path: Base path for Silver layer storage (ignored for GCS, used for local)
         """
         self.storage_manager = storage_manager
         self.base_path = base_path
-        logger.info(f"Initialized Silver storage manager with base path: {base_path}")
+        # Use standard pipeline folder structure
+        self.pipeline_name = "drive_data"
+        logger.info(f"Initialized Silver storage manager for pipeline: {self.pipeline_name}")
 
     def create_run_directory(self, timestamp: str | None = None) -> Path:
-        """Create a timestamped run directory.
+        """Create a timestamped run directory following standard GCS structure.
 
         Args:
             timestamp: Optional timestamp string (if not provided, one will be generated)
@@ -44,8 +46,15 @@ class SilverStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Create run directory path
-        run_dir = self.base_path / timestamp
+        # Use standard GCS structure: silver/drive_data/{timestamp}
+        # For local storage, this will be relative to base_path
+        # For GCS, this will be the full path in the bucket
+        if hasattr(self.storage_manager.storage, "bucket"):
+            # GCS storage - use standard structure
+            run_dir = Path(f"silver/{self.pipeline_name}/{timestamp}")
+        else:
+            # Local storage - use base_path
+            run_dir = self.base_path / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(run_dir)

@@ -63,9 +63,33 @@ class DriveStorageManager:
                         f"CRITICAL: File write failed - file does not exist at: {full_path}"
                     )
             else:
-                # For GCS, we can use the blob upload
-                blob = self.storage.bucket.blob(str(path))
-                blob.upload_from_string(file_bytes)
+                # For GCS, use blob upload with better error handling
+                try:
+                    blob = self.storage.bucket.blob(str(path))
+
+                    # Upload with retry logic for better reliability
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            blob.upload_from_string(file_bytes)
+                            logger.debug(
+                                f"Successfully uploaded to GCS: {path} ({len(file_bytes)} bytes)"
+                            )
+                            break
+                        except Exception as upload_error:
+                            if attempt < max_retries - 1:
+                                logger.warning(
+                                    f"GCS upload attempt {attempt + 1} failed, retrying: {upload_error}"
+                                )
+                                import time
+
+                                time.sleep(1)  # Brief wait before retry
+                            else:
+                                raise upload_error
+
+                except Exception as gcs_error:
+                    logger.error(f"GCS upload failed for {path}: {gcs_error}")
+                    raise StorageError(f"Failed to upload to GCS: {gcs_error}")
 
             logger.debug(f"Saved file to {path}")
         except Exception as e:
