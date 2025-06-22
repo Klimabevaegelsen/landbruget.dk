@@ -40,8 +40,8 @@ class PIIValidator(BaseValidator):
     # Regular expressions for different PII types
     PII_PATTERNS = {
         PIIType.EMAIL: r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-        # Danish phone: require +45 country code OR formatting with spaces/dashes to avoid CVR conflict
-        PIIType.PHONE: r"\b(?:\+45[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}|\d{2}[ -]\d{2}[ -]\d{2}[ -]\d{2})\b",
+        # Danish phone: ONLY with +45 country code to avoid false positives with dates/other numbers
+        PIIType.PHONE: r"\b\+45[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}\b",
         PIIType.CPR: r"\b\d{6}[-]?\d{4}\b",
         PIIType.CVR: r"\b\d{8}\b",
         PIIType.CREDIT_CARD: r"\b(?:\d{4}[ -]?){3}\d{4}\b",
@@ -136,7 +136,7 @@ class PIIValidator(BaseValidator):
                             result, f"Column '{col}' might contain {pii_type.value} based on name"
                         )
 
-        # Check column contents
+                # Check column contents
         for pii_type in self.pii_types:
             if pii_type not in self.PII_PATTERNS:
                 continue
@@ -151,6 +151,23 @@ class PIIValidator(BaseValidator):
                 # Skip columns already identified by name
                 if pii_type in pii_columns and col in pii_columns[pii_type]:
                     continue
+
+                # Skip date-related columns for phone detection to avoid false positives
+                if pii_type == PIIType.PHONE:
+                    col_lower = col.lower()
+                    date_keywords = [
+                        "date",
+                        "dato",
+                        "time",
+                        "tid",
+                        "arrival",
+                        "ankomst",
+                        "departure",
+                        "afgang",
+                    ]
+                    if any(keyword in col_lower for keyword in date_keywords):
+                        logger.debug(f"Skipping phone detection for date column: {col}")
+                        continue
 
                 # Check for PII in column values
                 try:
