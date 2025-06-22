@@ -391,7 +391,7 @@ class SilverProcessor:
                         )
 
                         try:
-                            self.parquet_manager.save_dataframe(df, output_path)
+                            self.parquet_manager.save_dataframe_to_parquet(df, output_path)
                             saved_files.append(output_path)
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
@@ -423,7 +423,7 @@ class SilverProcessor:
                         )
 
                         try:
-                            self.parquet_manager.save_dataframe(df, output_path)
+                            self.parquet_manager.save_dataframe_to_parquet(df, output_path)
                             saved_files.append(output_path)
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
@@ -453,7 +453,7 @@ class SilverProcessor:
 
                 # Save the transformed data
                 try:
-                    self.parquet_manager.save_dataframe(transformed_data, output_path)
+                    self.parquet_manager.save_dataframe_to_parquet(transformed_data, output_path)
                     logger.info(f"Saved transformed data to: {output_path}")
                 except Exception as e:
                     logger.error(
