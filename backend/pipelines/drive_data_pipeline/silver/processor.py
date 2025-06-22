@@ -11,7 +11,7 @@ from .models.schema_adapter import SchemaAdapter
 from .parquet_manager import ParquetManager
 from .schema_manager import SchemaManager
 from .storage import SilverStorageManager
-from .validators.pii_validator import PIIAction, PIIValidator
+from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 
 # Get logger
 logger = get_logger()
@@ -61,8 +61,16 @@ class SilverProcessor:
         # Initialize schema adapter
         self.schema_adapter = SchemaAdapter()
 
-        # Initialize PII validator
+        # Initialize PII validator (excluding CVR from masking)
         self.pii_validator = PIIValidator(
+            pii_types={
+                PIIType.EMAIL,
+                PIIType.PHONE,
+                PIIType.CPR,
+                # PIIType.CVR,  # Excluded - CVRs should not be masked
+                PIIType.CREDIT_CARD,
+                PIIType.IP_ADDRESS,
+            },
             action=PIIAction.MASK,
             threshold=0.3,
         )
