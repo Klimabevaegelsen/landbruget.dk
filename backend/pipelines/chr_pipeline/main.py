@@ -505,8 +505,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             logging.info(f"Processing {len(cattle_movement_tasks)} cattle herds with smart aggregation")
 
         # Use the smart aggregation function that processes individual records but stores summaries
-        def smart_cattle_task(args):
-            client, username, herd_num, start_date, end_date = args
+        def smart_cattle_task(client, username, herd_num, start_date, end_date):
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
         results = process_parallel(
