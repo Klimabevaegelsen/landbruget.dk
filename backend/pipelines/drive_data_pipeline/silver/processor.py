@@ -82,6 +82,87 @@ class SilverProcessor:
 
         logger.info("Initialized Silver processor")
 
+    def process_from_memory(
+        self,
+        bronze_data: dict,
+        specific_subfolders: list[str] | None = None,
+        supported_file_types: set[str] | None = None,
+        apply_schemas: bool = True,
+        handle_pii: bool = True,
+    ) -> int:
+        """Process files from in-memory Bronze data.
+
+        Args:
+            bronze_data: Bronze data dict with file data and metadata
+            specific_subfolders: List of specific subfolder names to process
+            supported_file_types: Set of supported file extensions
+            apply_schemas: Whether to apply schemas to the data
+            handle_pii: Whether to detect and handle PII
+
+        Returns:
+            Number of files processed
+
+        Raises:
+            Exception: If the processing fails
+        """
+        try:
+            logger.info("Processing Bronze data from memory - skipping disk I/O")
+
+            # Extract data from bronze_data structure
+            file_data = bronze_data.get("data", {})
+            bronze_metadata = bronze_data.get("metadata", {})
+
+            logger.info(f"Found {len(file_data)} files in Bronze data")
+
+            # Create a new run directory in the Silver layer
+            silver_run_path = self.silver_storage.create_run_directory()
+            processed_count = 0
+
+            # Process each file from memory
+            for file_key, file_info in file_data.items():
+                # Apply filters
+                file_metadata_dict = file_info.get("metadata", {})
+
+                # Filter by file type if specified
+                if supported_file_types:
+                    file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")
+                    if file_extension not in supported_file_types:
+                        logger.debug(
+                            f"Skipping unsupported file type: {file_info['original_filename']}"
+                        )
+                        continue
+
+                # Filter by subfolder if specified
+                if specific_subfolders and file_info.get("folder_name") not in specific_subfolders:
+                    logger.debug(
+                        f"Skipping file from unspecified subfolder: {file_info.get('folder_name')}"
+                    )
+                    continue
+
+                # Process the file from memory
+                success = self._process_file_from_memory(
+                    file_info,
+                    silver_run_path,
+                    apply_schemas,
+                    handle_pii,
+                )
+
+                # Update progress tracking if callback is provided
+                if self.progress_callback:
+                    self.progress_callback(1, success)
+
+                if success:
+                    processed_count += 1
+
+            logger.info(
+                f"Successfully processed {processed_count} files from memory to Silver layer"
+            )
+            return processed_count
+
+        except Exception as e:
+            logger.error(f"Failed to process Bronze data from memory: {str(e)}")
+            raise
+
     def process_bronze_files(
         self,
         bronze_run_path: Path,
@@ -232,6 +313,106 @@ class SilverProcessor:
 
         logger.info(f"Found {len(bronze_files)} Bronze files to process")
         return bronze_files
+
+    def _process_file_from_memory(
+        self,
+        file_info: dict,
+        silver_run_path: Path,
+        apply_schemas: bool = True,
+        handle_pii: bool = True,
+    ) -> bool:
+        """Process a single file from in-memory data.
+
+        Args:
+            file_info: Dict containing file content and metadata
+            silver_run_path: Path to the Silver layer run directory
+            apply_schemas: Whether to apply schemas to the data
+            handle_pii: Whether to detect and handle PII
+
+        Returns:
+            True if the file was processed successfully, False otherwise
+        """
+        try:
+            # Extract file information
+            file_content = file_info["content"]
+            metadata_dict = file_info["metadata"]
+            original_filename = file_info["original_filename"]
+            mime_type = file_info.get("mime_type", "")
+
+            # Convert metadata dict to FileMetadata object
+            from ..bronze.metadata import FileMetadata
+
+            metadata = FileMetadata(**metadata_dict)
+
+            set_context(
+                file_id=metadata.file_id,
+                file_name=original_filename,
+            )
+
+            logger.info(f"Processing file from memory to Silver: {original_filename}")
+
+            # Determine the file format based on extension and MIME type
+            file_extension = Path(original_filename).suffix.lower()
+            file_format = self._determine_file_format(file_extension, mime_type)
+
+            if not file_format:
+                logger.warning(f"Unsupported file format for {original_filename}")
+                return False
+
+            # Get the appropriate transformer
+            if file_format not in self.transformers:
+                logger.warning(f"No transformer available for format: {file_format}")
+                return False
+
+            transformer = self.transformers[file_format]
+
+            # Transform the file content directly from memory
+            try:
+                transformed_data = transformer.transform_from_content(
+                    file_content, original_filename, metadata_dict
+                )
+            except Exception as e:
+                logger.error(f"Failed to transform {original_filename}: {str(e)}")
+                return False
+
+            if not transformed_data:
+                logger.warning(f"No data extracted from {original_filename}")
+                return False
+
+            # Create output filename and path
+            output_filename = f"{Path(original_filename).stem}.parquet"
+            output_path = silver_run_path / metadata.original_subfolder / output_filename
+
+            # Save the transformed data
+            try:
+                self.parquet_manager.save_dataframe(transformed_data, output_path)
+                logger.info(f"Saved transformed data to: {output_path}")
+            except Exception as e:
+                logger.error(f"Failed to save transformed data for {original_filename}: {str(e)}")
+                return False
+
+            # Apply schema if requested
+            if apply_schemas:
+                schema_output_path = self._apply_schema_to_file(
+                    output_path, metadata, silver_run_path
+                )
+                if schema_output_path:
+                    output_path = schema_output_path
+
+            # Handle PII if requested
+            if handle_pii:
+                pii_output_path = self._handle_pii_in_file(output_path, silver_run_path)
+                if pii_output_path:
+                    output_path = pii_output_path
+
+            logger.info(f"Successfully processed file from memory: {original_filename}")
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to process file from memory {file_info.get('original_filename', 'unknown')}: {str(e)}"
+            )
+            return False
 
     def _process_file(
         self,
