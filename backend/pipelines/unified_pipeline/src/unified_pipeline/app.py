@@ -36,6 +36,7 @@ from unified_pipeline.silver.agricultural_fields import (
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
 from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
+from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilver,
     JordbrugsanalyserSilverConfig,
@@ -156,10 +157,14 @@ def execute(cli_config: cli.CliConfig) -> None:
         },
         cli.Source.dagi: {
             cli.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
-            cli.Stage.silver: [(DAGISilver, DAGISilverConfig)],
+            cli.Stage.silver: [
+                (DAGISilver, DAGISilverConfig),
+                (DSTZoneMapping, DSTZoneMappingConfig),
+            ],
             cli.Stage.all: [
                 (DAGIBronze, DAGIBronzeConfig),
                 (DAGISilver, DAGISilverConfig),
+                (DSTZoneMapping, DSTZoneMappingConfig),
             ],
         },
         cli.Source.jordbrugsanalyser: {
