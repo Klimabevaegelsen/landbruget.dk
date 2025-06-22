@@ -38,14 +38,36 @@ class CadastralSilver(BaseSource[CadastralSilverConfig]):
         Validate and transform the GeoDataFrame.
 
         This method validates the GeoDataFrame and transforms it into a valid format.
+        Ensures the output is always in EPSG:4326, not OGC:CRS84.
 
         Args:
             gdf (gpd.GeoDataFrame): The GeoDataFrame to validate and transform.
 
         Returns:
-            gpd.GeoDataFrame: The validated and transformed GeoDataFrame.
+            gpd.GeoDataFrame: The validated and transformed GeoDataFrame in EPSG:4326.
         """
-        return validate_and_transform_geometries(gdf, self.config.dataset)
+        # First apply the standard validation and transformation
+        processed_gdf = validate_and_transform_geometries(gdf, self.config.dataset)
+
+        # Ensure the CRS is exactly EPSG:4326, not OGC:CRS84 or other equivalent forms
+        if not processed_gdf.crs or processed_gdf.crs.to_epsg() != 4326:
+            # If it's not EPSG:4326 equivalent, transform it
+            logger.info(
+                f"{self.config.dataset}: Converting CRS from {processed_gdf.crs} to EPSG:4326"
+            )
+            processed_gdf = processed_gdf.to_crs("EPSG:4326")
+
+        # Final verification
+        if not processed_gdf.crs or processed_gdf.crs.to_epsg() != 4326:
+            logger.warning(
+                f"{self.config.dataset}: Final CRS is not EPSG:4326: {processed_gdf.crs}"
+            )
+        else:
+            logger.info(
+                f"{self.config.dataset}: ✅ Final CRS confirmed as EPSG:4326 (code: {processed_gdf.crs.to_epsg()})"
+            )
+
+        return processed_gdf
 
     async def run(self):
         """
