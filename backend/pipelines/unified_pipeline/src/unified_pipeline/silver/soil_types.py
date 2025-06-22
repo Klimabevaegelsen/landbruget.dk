@@ -14,13 +14,14 @@ and quality assurance checks.
 """
 
 import os
+from typing import Any, Optional
 
 import geopandas as gpd
 import pandas as pd
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -56,7 +57,7 @@ class SoilTypesSilverConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class SoilTypesSilver(BaseSource[SoilTypesSilverConfig]):
+class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
     """
     Silver layer processing for soil types data.
 
@@ -219,15 +220,19 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig]):
             self.log.error(f"Error in quality checks: {str(e)}")
             # Don't raise here as quality checks are informational
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the complete soil types silver layer processing job.
 
         This is the main entry point that orchestrates the entire silver layer process:
-        1. Reads data from the bronze layer
+        1. Reads data from the bronze layer (either in-memory or from storage)
         2. Validates and transforms the data
         3. Performs quality checks
         4. Saves the processed data to the silver layer
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         Returns:
             None
@@ -238,38 +243,37 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig]):
         try:
             self.log.info("Starting soil types silver layer processing")
 
-            # Get the bronze data path
-            current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-            path = f"bronze/{self.config.dataset}/{current_date}.parquet"
-            bronze_path = self._get_bronze_path(self.config.dataset, self.config.bucket, path)
-            if bronze_path is None:
-                self.log.error("Bronze data not found for soil types")
-                return
+            # Read data with support for in-memory passing
+            if bronze_data is not None:
+                self.log.info("Using bronze data from memory (in-memory data passing)")
+                if isinstance(bronze_data, gpd.GeoDataFrame):
+                    raw_data = bronze_data
+                else:
+                    self.log.error(
+                        f"Expected GeoDataFrame from bronze stage, got {type(bronze_data)}"
+                    )
+                    return
+            else:
+                # Fallback to reading from storage
+                self.log.info("Reading bronze data from storage (fallback)")
+                raw_data = self._read_bronze_data_from_storage(
+                    self.config.dataset, self.config.bucket
+                )
+                if raw_data is None:
+                    self.log.error("Failed to read raw data from storage")
+                    return
 
-            self.log.info(f"Reading bronze data from: {bronze_path}")
+            self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
 
-            # Read the bronze data
-            gdf = gpd.read_parquet(bronze_path)
-
-            if gdf is None or gdf.empty:
-                self.log.warning("No data found in bronze layer")
-                return
-
-            self.log.info(f"Loaded {len(gdf):,} features from bronze layer")
-
-            # Process and validate the data
-            processed_data = self._validate_and_transform(gdf)
-
-            if processed_data is None or processed_data.empty:
-                self.log.warning("No data remaining after processing")
-                return
+            # Validate and transform the data
+            processed_data = self._validate_and_transform(raw_data)
 
             # Perform quality checks
             self._perform_quality_checks(processed_data)
 
-            # Save the processed data
+            # Save the processed data using new unified method
             self._save_data(
-                df=processed_data,
+                data=processed_data,
                 dataset=self.config.dataset,
                 bucket_name=self.config.bucket,
                 stage="silver",
@@ -278,5 +282,5 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig]):
             self.log.info("Soil types silver layer processing completed successfully")
 
         except Exception as e:
-            self.log.error(f"Error in soil types silver processing: {str(e)}")
+            self.log.error(f"Failed to process soil types silver layer: {e}")
             raise

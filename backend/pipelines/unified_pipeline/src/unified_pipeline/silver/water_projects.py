@@ -24,7 +24,7 @@ import pandas as pd
 from shapely import MultiPolygon, Polygon, unary_union, wkt
 from shapely.validation import explain_validity
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer, timed
@@ -77,7 +77,7 @@ class WaterProjectsSilverConfig(BaseJobConfig):
     service_types: dict[str, str] = {"Klima_lavbund_demarkation___offentlige_projekter:0": "arcgis"}
 
 
-class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
+class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterface):
     """
     Silver layer processing for Water Projects data.
     This class transforms raw water projects data from the bronze layer into
@@ -466,13 +466,46 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
             self.log.error(f"Error during dissolve operation: {str(e)}")
             raise e
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
+        """
+        Run the Water Projects silver layer processing.
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
+        """
         self.log.info("Running Water Projects silver job for")
         async with AsyncTimer("Water Projects silver job"):
-            raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-            if raw_data is None:
-                self.log.error("Failed to read raw data")
-                return
+            # Read data with support for in-memory passing
+            if bronze_data is not None:
+                self.log.info("Using bronze data from memory (in-memory data passing)")
+                # Bronze data is expected to be a list of tuples (layer, raw_data)
+                if isinstance(bronze_data, list):
+                    raw_data = pd.DataFrame(
+                        [
+                            {
+                                "payload": data,
+                                "layer": layer,
+                                "source": self.config.dataset,
+                                "created_at": pd.Timestamp.now(),
+                                "updated_at": pd.Timestamp.now(),
+                            }
+                            for layer, data in bronze_data
+                        ]
+                    )
+                else:
+                    self.log.error(
+                        f"Expected list of tuples from bronze stage, got {type(bronze_data)}"
+                    )
+                    return
+            else:
+                # Fallback to reading from storage
+                self.log.info("Reading bronze data from storage (fallback)")
+                raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
+                if raw_data is None:
+                    self.log.error("Failed to read raw data")
+                    return
+
             self.log.info("Read raw data successfully")
             geo_df = self._process_data(raw_data)
             if geo_df is None:
@@ -480,6 +513,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig]):
                 return
             self.log.info("Processed raw data successfully")
             dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-            self._save_data(geo_df, self.config.dataset, self.config.bucket)
-            self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
+            self._save_data(geo_df, self.config.dataset, self.config.bucket, stage="silver")
+            self._save_data(
+                dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket, stage="silver"
+            )
             self.log.info("Saved processed data successfully")

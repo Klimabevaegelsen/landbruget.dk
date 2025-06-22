@@ -16,11 +16,12 @@ validates geometries, and stores the processed data in GCS.
 
 import asyncio
 import json
+from typing import Any, Optional
 
 import geopandas as gpd
 import pandas as pd
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer
@@ -66,7 +67,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
     }
 
 
-class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig]):
+class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
     """
     Silver layer processor for agricultural fields data.
 
@@ -192,7 +193,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig]):
 
             return geo_df
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Execute the silver processing job for all available years.
 
@@ -200,6 +201,10 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig]):
         layer into structured GeoDataFrames. It reads raw data for both agricultural
         fields and blocks for all available years, processes each dataset separately,
         and saves the results to Google Cloud Storage.
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         The processing workflow for each dataset and year:
         1. Read raw data from GCS using the configured bucket and year
@@ -226,10 +231,27 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig]):
                         dataset_with_year = f"{dataset}_{year}"
                         self.log.info(f"Processing {dataset} for year {year}")
 
-                        raw_data = self._read_bronze_data(dataset_with_year, self.config.bucket)
-                        if raw_data is None:
-                            self.log.warning(f"No raw data found for {dataset_with_year}, skipping")
-                            continue
+                        # Read data with support for in-memory passing
+                        if bronze_data is not None:
+                            self.log.info("Using bronze data from memory (in-memory data passing)")
+                            # Bronze data is expected to be a complex dict structure with multi-year data
+                            if isinstance(bronze_data, dict) and dataset_with_year in bronze_data:
+                                raw_data = bronze_data[dataset_with_year]
+                                # Convert to DataFrame if it's not already
+                                if not isinstance(raw_data, pd.DataFrame):
+                                    raw_data = pd.DataFrame({"payload": raw_data})
+                            else:
+                                self.log.warning(f"No in-memory data found for {dataset_with_year}")
+                                continue
+                        else:
+                            # Fallback to reading from storage
+                            self.log.info("Reading bronze data from storage (fallback)")
+                            raw_data = self._read_bronze_data(dataset_with_year, self.config.bucket)
+                            if raw_data is None:
+                                self.log.warning(
+                                    f"No raw data found for {dataset_with_year}, skipping"
+                                )
+                                continue
 
                         self.log.info(f"Read raw data successfully for {dataset_with_year}")
                         geo_df = await self._process_data(raw_data, dataset, year)
@@ -239,7 +261,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig]):
                             continue
 
                         self.log.info(f"Processed raw data successfully for {dataset_with_year}")
-                        self._save_data(geo_df, dataset_with_year, self.config.bucket)
+                        self._save_data(
+                            geo_df, dataset_with_year, self.config.bucket, stage="silver"
+                        )
                         self.log.info(f"Saved processed data successfully for {dataset_with_year}")
 
                     except Exception as e:
