@@ -386,6 +386,62 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
             return record_count
 
+    def _detect_crs_from_coordinates(
+        self, min_x: float, max_x: float, min_y: float, max_y: float
+    ) -> str:
+        """
+        Detect likely CRS based on coordinate ranges.
+        This is a heuristic approach but works well for common Danish projections.
+
+        Args:
+            min_x, max_x, min_y, max_y: Coordinate bounds
+
+        Returns:
+            Likely CRS identifier string
+        """
+        # EPSG:4326 (WGS84) - Longitude/Latitude
+        # Denmark longitude: ~8-15°E, latitude: ~54-58°N
+        if (
+            -180 <= min_x <= 180
+            and -90 <= min_y <= 90
+            and -180 <= max_x <= 180
+            and -90 <= max_y <= 90
+        ):
+            if 8 <= min_x <= 15 and 54 <= min_y <= 58 and 8 <= max_x <= 15 and 54 <= max_y <= 58:
+                return "EPSG:4326"
+
+        # EPSG:25832 (ETRS89 / UTM zone 32N) - Common for Denmark
+        # Denmark in UTM32N: X~200,000-900,000, Y~6,000,000-6,400,000
+        if (
+            200000 <= min_x <= 900000
+            and 6000000 <= min_y <= 6400000
+            and 200000 <= max_x <= 900000
+            and 6000000 <= max_y <= 6400000
+        ):
+            return "EPSG:25832"
+
+        # EPSG:3857 (Web Mercator)
+        # Very large coordinate values
+        if (
+            abs(min_x) > 1000000
+            or abs(max_x) > 1000000
+            or abs(min_y) > 1000000
+            or abs(max_y) > 1000000
+        ):
+            return "EPSG:3857"
+
+        # If coordinates look like lat/lon but outside Denmark, still likely WGS84
+        if (
+            -180 <= min_x <= 180
+            and -90 <= min_y <= 90
+            and -180 <= max_x <= 180
+            and -90 <= max_y <= 90
+        ):
+            return "EPSG:4326"
+
+        # Default fallback
+        return "UNKNOWN"
+
     def _convert_crs_chunked(self, temp_file: str) -> str:
         """
         Convert CRS for large files using chunked processing to avoid memory issues.
@@ -488,33 +544,52 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
                 # Use DuckDB to check CRS without loading full dataset
                 try:
-                    # Try different DuckDB spatial functions to get CRS info
-                    # First, let's check what spatial functions are available
-                    self.log.info("Checking CRS using DuckDB spatial functions...")
+                    # Sample a small number of geometries and check their coordinate ranges
+                    # to infer the CRS
+                    self.log.info("Sampling geometries to detect CRS...")
 
-                    # DuckDB spatial doesn't have ST_SRID, but we can check geometry validity
-                    # and get basic info about the geometries
-                    crs_info = self.conn.execute(f"""
+                    sample_coords = self.conn.execute(f"""
                         SELECT 
                             COUNT(*) as total_geometries,
                             COUNT(CASE WHEN ST_IsValid(geometry) THEN 1 END) as valid_geometries,
-                            ST_AsText(ST_Envelope(ST_Union_Agg(geometry))) as overall_bounds
-                        FROM read_parquet('{temp_file}')
-                        LIMIT 1000
+                            MIN(ST_X(ST_Centroid(geometry))) as min_x,
+                            MAX(ST_X(ST_Centroid(geometry))) as max_x,
+                            MIN(ST_Y(ST_Centroid(geometry))) as min_y,
+                            MAX(ST_Y(ST_Centroid(geometry))) as max_y
+                        FROM (
+                            SELECT geometry 
+                            FROM read_parquet('{temp_file}')
+                            WHERE geometry IS NOT NULL
+                            LIMIT 1000
+                        )
                     """).fetchone()
 
-                    self.log.info(f"DuckDB CRS check - Total: {crs_info[0]}, Valid: {crs_info[1]}")
-                    self.log.info(f"Overall bounds: {crs_info[2]}")
+                    total_geoms, valid_geoms, min_x, max_x, min_y, max_y = sample_coords
+                    self.log.info(f"Sample: {valid_geoms}/{total_geoms} valid geometries")
+                    self.log.info(
+                        f"Coordinate ranges: X=[{min_x:.6f}, {max_x:.6f}], Y=[{min_y:.6f}, {max_y:.6f}]"
+                    )
 
-                    # Since we can't easily get CRS info from DuckDB spatial,
-                    # and the file is large, we'll assume it's correct
-                    self.log.info("Large file CRS validation completed using DuckDB")
-                    return temp_file
+                    # Detect CRS based on coordinate ranges
+                    crs_detected = self._detect_crs_from_coordinates(min_x, max_x, min_y, max_y)
+                    self.log.info(f"Detected CRS: {crs_detected}")
+
+                    if crs_detected == "EPSG:4326":
+                        self.log.info(
+                            "✅ Output CRS is EPSG:4326 (detected from coordinate ranges)"
+                        )
+                        return temp_file
+                    else:
+                        self.log.warning(f"Detected CRS ({crs_detected}) is not EPSG:4326")
+                        self.log.info(
+                            "CRS conversion needed but file too large - using chunked approach"
+                        )
+                        return self._convert_crs_chunked(temp_file)
 
                 except Exception as e:
-                    self.log.warning(f"DuckDB CRS check failed: {e}")
-                    self.log.info("Skipping CRS validation for large file to avoid memory issues")
-                    return temp_file
+                    self.log.warning(f"DuckDB CRS detection failed: {e}")
+                    self.log.warning("Cannot detect CRS - assuming conversion needed for safety")
+                    return self._convert_crs_chunked(temp_file)
 
             # For smaller files, use the original GeoPandas approach
             self.log.info("Small file - using GeoPandas for CRS validation")
