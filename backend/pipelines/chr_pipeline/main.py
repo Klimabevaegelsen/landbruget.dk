@@ -11,9 +11,6 @@ from bronze.export import EXPORT_TIMESTAMP, finalize_export, get_data_buffer
 from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
 from bronze.load_besaetning import create_soap_client as create_bes_client
 from bronze.load_besaetning import get_fvm_credentials, load_herd_details, load_herd_list
-from bronze.load_chr_dyr import ENDPOINTS as CHR_DYR_ENDPOINTS
-from bronze.load_chr_dyr import create_soap_client as create_chr_dyr_client
-from bronze.load_chr_dyr import load_animal_movements_task
 from bronze.load_diko import ENDPOINTS as DIKO_ENDPOINTS
 from bronze.load_diko import create_soap_client as create_diko_client
 from bronze.load_diko import load_diko_flytninger
@@ -258,11 +255,12 @@ def fetch_herds(
                 logger.error(f"Error fetching herds for species {species_code}, usage {usage_code}: {e}")
                 break  # Stop processing this combo on error
 
-    logger.info(
-        f"Finished fetching herds. Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
-    )
+        logger.info(
+            f"Finished fetching herds. Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
+        )
     for species, count in herds_count_per_species.items():
         logger.info(f"  Species {species}: {count} herds")
+
     return herd_to_species
 
 
@@ -465,7 +463,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if "herd_to_species" not in context:
             raise ValueError("Cannot run 'animal_movements' step without first running 'herds'")
 
-        # Filter for cattle herds only (species code 12)
+        # Filter for cattle herds only (species code 12) - USE SMART CHR_DYR AGGREGATION
         cattle_herds = {
             herd_num: species_code
             for herd_num, species_code in context["herd_to_species"].items()
@@ -477,14 +475,20 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             context["animal_movements_results"] = []
             return context
 
-        # Create CHR_dyr client
+        # Import the smart aggregation function
+        from bronze.load_chr_dyr import create_soap_client as create_chr_dyr_client
+        from bronze.load_chr_dyr import load_cattle_movement_summaries
+
+        # Create CHR_dyr client for smart aggregation
         if "chr_dyr" not in context["clients"]:
             # Get credentials
             username, password = get_fvm_credentials()
-            context["clients"]["chr_dyr"] = create_chr_dyr_client(CHR_DYR_ENDPOINTS["chr_dyr"], username, password)
+            context["clients"]["chr_dyr"] = create_chr_dyr_client(
+                "https://ws.fvst.dk/service/CHR_dyrWS?wsdl", username, password
+            )
 
-        # Create tasks for cattle herds only
-        chr_dyr_tasks = [
+        # Create smart aggregation tasks for cattle herds
+        cattle_movement_tasks = [
             (
                 context["clients"]["chr_dyr"],
                 context["username"],
@@ -496,16 +500,24 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
         if context["args"]["progress"]:
-            logging.info(f"Processing {len(chr_dyr_tasks)} animal movement tasks for cattle herds")
+            logging.info(f"Processing {len(cattle_movement_tasks)} cattle herds with smart aggregation")
+
+        # Use the smart aggregation function that processes individual records but stores summaries
+        def smart_cattle_task(args):
+            client, username, herd_num, start_date, end_date = args
+            return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
         results = process_parallel(
-            load_animal_movements_task, chr_dyr_tasks, context["args"]["workers"], "Processing Animal Movements"
+            smart_cattle_task, cattle_movement_tasks, context["args"]["workers"], "Processing Smart Cattle Movements"
         )
         context["animal_movements_results"] = results
 
         if context["args"]["progress"]:
             successful = sum(1 for r in results if r)
-            logging.info(f"Completed Animal Movement tasks. Success: {successful}/{len(chr_dyr_tasks)}")
+            total_movements = sum(len(r.get("movements", [])) for r in results if r)
+            logging.info(
+                f"Completed Smart Cattle Movement tasks. Success: {successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
+            )
 
     elif step == "vetstat":
         if "chr_to_species" not in context:
