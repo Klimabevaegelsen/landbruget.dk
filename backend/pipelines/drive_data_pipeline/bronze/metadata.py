@@ -213,10 +213,25 @@ class MetadataManager:
             True if the checksum is valid, False otherwise
         """
         try:
-            # Calculate the current checksum
-            current_checksum = calculate_file_checksum(
-                file_path, algorithm=metadata.checksum_algorithm
-            )
+            # Use storage manager to read file content and calculate checksum if available
+            if self.storage_manager:
+                try:
+                    # Try to read file content using storage manager (works for both GCS and local)
+                    file_content = self.storage_manager.read_bytes(file_path)
+                    current_checksum = calculate_content_checksum(
+                        file_content, metadata.checksum_algorithm
+                    )
+                except Exception as storage_error:
+                    logger.warning(f"Storage manager failed to read {file_path}: {storage_error}")
+                    # Fall back to direct file access if storage manager fails
+                    current_checksum = calculate_file_checksum(
+                        file_path, algorithm=metadata.checksum_algorithm
+                    )
+            else:
+                # Fall back to direct file access for local storage
+                current_checksum = calculate_file_checksum(
+                    file_path, algorithm=metadata.checksum_algorithm
+                )
 
             # Compare with the stored checksum
             is_valid = current_checksum == metadata.checksum
