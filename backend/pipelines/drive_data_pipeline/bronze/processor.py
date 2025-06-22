@@ -44,7 +44,7 @@ class BronzeProcessor:
         )
 
         # Initialize metadata manager
-        self.metadata_manager = MetadataManager(settings.bronze_path)
+        self.metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
 
         # Generate a timestamp for this run and create run directory
         self.run_timestamp = generate_timestamp()
