@@ -297,11 +297,8 @@ def export_context_data(context: Dict[str, Any], export_path: Path):
         "chr_to_species": {},  # Convert sets to lists for JSON serialization
         "combinations": context.get("combinations", []),
         "args": {
-            "start_date": str(context.get("args", {}).get("start_date", "")),
-            "end_date": str(context.get("args", {}).get("end_date", "")),
-            "limit_total_herds": context.get("args", {}).get("limit_total_herds"),
-            "limit_herds_per_species": context.get("args", {}).get("limit_herds_per_species"),
-            "test_species_codes": context.get("args", {}).get("test_species_codes"),
+            # Preserve all args, converting dates to strings for JSON serialization
+            **{k: (str(v) if k in ["start_date", "end_date"] else v) for k, v in context.get("args", {}).items()},
         },
     }
 
@@ -345,12 +342,24 @@ def import_context_data(import_path: Path) -> Dict[str, Any]:
         for herd_num, species_code in context_data.get("herd_to_species", {}).items():
             herd_to_species[int(herd_num)] = species_code
 
+        # Convert date strings back to date objects for imported args
+        imported_args = context_data.get("args", {}).copy()
+        for date_key in ["start_date", "end_date"]:
+            if date_key in imported_args and isinstance(imported_args[date_key], str) and imported_args[date_key]:
+                try:
+                    from datetime import datetime
+
+                    imported_args[date_key] = datetime.strptime(imported_args[date_key], "%Y-%m-%d").date()
+                except ValueError:
+                    logger.warning(f"Failed to parse {date_key}: {imported_args[date_key]}")
+                    imported_args[date_key] = None
+
         imported_context = {
             "herd_to_species": herd_to_species,
             "chr_to_species": chr_to_species,
             "combinations": context_data.get("combinations", []),
             "export_timestamp": context_data.get("export_timestamp", ""),
-            "args": context_data.get("args", {}),
+            "args": imported_args,
         }
 
         logger.info(f"Imported {len(imported_context['herd_to_species'])} herd mappings")

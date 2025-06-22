@@ -586,6 +586,10 @@ def main():
             if not args.get("end_date") and imported_context.get("args", {}).get("end_date"):
                 context["args"]["end_date"] = imported_context["args"]["end_date"]
 
+            # Ensure all current args are preserved (especially progress flag)
+            # Current args should take precedence over imported args
+            context["args"] = {**imported_context.get("args", {}), **args}
+
         else:
             # Initialize fresh context
             username, password = get_fvm_credentials()
