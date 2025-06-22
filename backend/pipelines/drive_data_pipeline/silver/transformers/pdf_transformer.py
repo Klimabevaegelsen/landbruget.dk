@@ -207,34 +207,59 @@ class PDFTransformer(BaseTransformer):
         df_clean = df.copy()
 
         for col in df_clean.columns:
-            # Handle date columns
+            # Skip columns that are already numeric or datetime
+            if pd.api.types.is_numeric_dtype(df_clean[col]) or pd.api.types.is_datetime64_any_dtype(
+                df_clean[col]
+            ):
+                continue
+
+            # Only process object columns that contain strings
             if df_clean[col].dtype == "object":
-                # Try to convert to datetime if it looks like a date
+                # Check if column contains actual string values (not just NaN or numeric)
+                string_values = df_clean[col].dropna()
+                if string_values.empty:
+                    continue
+
+                # Ensure all non-null values are strings before applying string operations
+                non_null_mask = df_clean[col].notna()
+                if not non_null_mask.any():
+                    continue
+
+                # Convert all non-null values to strings for consistent processing
+                string_series = df_clean.loc[non_null_mask, col].astype(str)
+
+                # Handle date columns
                 try:
                     if (
-                        df_clean[col].str.contains(r"\d{2}[/.-]\d{2}[/.-]\d{4}").any()
-                        or df_clean[col].str.contains(r"\d{4}[/.-]\d{2}[/.-]\d{2}").any()
+                        string_series.str.contains(r"\d{2}[/.-]\d{2}[/.-]\d{4}").any()
+                        or string_series.str.contains(r"\d{4}[/.-]\d{2}[/.-]\d{2}").any()
                     ):
                         df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce")
-                except:
+                        continue  # Skip further processing if converted to datetime
+                except Exception:
                     pass
 
-            # Handle boolean columns (yes/no, true/false)
-            if df_clean[col].dtype == "object":
+                # Handle boolean columns (yes/no, true/false)
                 try:
                     # Check for boolean-like values
-                    bool_map = {"yes": 1, "no": 0, "true": 1, "false": 0}
-                    if df_clean[col].str.lower().isin(bool_map.keys()).all():
-                        df_clean[col] = df_clean[col].str.lower().map(bool_map)
-                except:
+                    bool_map = {"yes": 1, "no": 0, "true": 1, "false": 0, "ja": 1, "nej": 0}
+                    lower_values = string_series.str.lower()
+                    if lower_values.isin(bool_map.keys()).all():
+                        # Create a new series with boolean mapping
+                        bool_series = lower_values.map(bool_map)
+                        df_clean.loc[non_null_mask, col] = bool_series
+                        continue  # Skip numeric conversion if converted to boolean
+                except Exception:
                     pass
 
-            # Handle numeric columns that may be strings
-            if df_clean[col].dtype == "object":
+                # Handle numeric columns that may be strings
                 try:
                     # Try to convert strings with numbers to numeric
-                    df_clean[col] = pd.to_numeric(df_clean[col], errors="coerce")
-                except:
+                    numeric_converted = pd.to_numeric(df_clean[col], errors="coerce")
+                    # Only apply conversion if we successfully converted some values
+                    if not numeric_converted.isna().all():
+                        df_clean[col] = numeric_converted
+                except Exception:
                     pass
 
         return df_clean
