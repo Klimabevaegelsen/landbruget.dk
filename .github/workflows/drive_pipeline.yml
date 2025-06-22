@@ -19,6 +19,14 @@ on:
         description: 'Run only Silver layer processing'
         type: boolean
         default: false
+      use_matrix:
+        description: 'Run as matrix job (one job per top-level folder)'
+        type: boolean
+        default: false
+      max_parallel_jobs:
+        description: 'Maximum number of parallel jobs (for matrix mode)'
+        type: string
+        default: '5'
       log_level:
         description: 'Logging level'
         type: choice
@@ -31,14 +39,18 @@ on:
         default: 'INFO'
 
 jobs:
-  run-pipeline:
+  discover-folders:
+    if: ${{ inputs.use_matrix == true }}
     runs-on: ubuntu-latest
     
-    # Add permissions for GCS access
     permissions:
       contents: 'read'
       id-token: 'write'
-
+    
+    outputs:
+      folders: ${{ steps.get-folders.outputs.folders }}
+      folder_count: ${{ steps.get-folders.outputs.folder_count }}
+    
     env:
       ENVIRONMENT: production
 
@@ -58,7 +70,6 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/drive_data_pipeline
-        # Install system dependencies required by the pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -86,7 +97,230 @@ jobs:
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
 
-    - name: Run Google Drive Pipeline
+    - name: Discover top-level folders
+      id: get-folders
+      working-directory: backend/pipelines/drive_data_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Create a Python script to discover folders
+        cat > discover_folders.py << 'EOF'
+        import json
+        import sys
+        import os
+        
+        # Add the parent directory to sys.path to enable imports
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        
+        from drive_data_pipeline.bronze.drive import get_drive_service, GoogleDriveFetcher
+        from drive_data_pipeline.config import get_settings
+        
+        try:
+            settings = get_settings()
+            if not settings.google_drive_folder_id:
+                print("Error: GOOGLE_DRIVE_FOLDER_ID not set")
+                sys.exit(1)
+            
+            drive_service = get_drive_service(
+                credentials_path=settings.google_application_credentials,
+                use_public_access=settings.use_public_access,
+            )
+            fetcher = GoogleDriveFetcher(drive_service, use_public_access=settings.use_public_access)
+            
+            # List only top-level folders (non-recursive)
+            folder = fetcher.list_folder_contents(
+                folder_id=settings.google_drive_folder_id, 
+                recursive=False
+            )
+            
+            # Get folder names, filtering out empty folders if desired
+            folder_names = []
+            for subfolder in folder.subfolders:
+                # You could add logic here to filter folders
+                # e.g., only include folders with files, or exclude certain patterns
+                folder_names.append(subfolder.name)
+            
+            # If specific subfolders were requested, filter to only those
+            requested_subfolders = os.getenv('REQUESTED_SUBFOLDERS', '').strip()
+            if requested_subfolders:
+                requested_list = [f.strip() for f in requested_subfolders.split(',')]
+                folder_names = [f for f in folder_names if f in requested_list]
+            
+            print(f"Discovered folders: {folder_names}")
+            print(json.dumps(folder_names))
+            
+        except Exception as e:
+            print(f"Error discovering folders: {e}")
+            sys.exit(1)
+        EOF
+        
+        # Set requested subfolders if specified
+        if [[ -n "${{ inputs.subfolders }}" ]]; then
+          export REQUESTED_SUBFOLDERS="${{ inputs.subfolders }}"
+        fi
+        
+        # Run the discovery script
+        folders=$(python discover_folders.py | tail -n 1)
+        folder_count=$(echo "$folders" | jq '. | length')
+        
+        echo "folders=$folders" >> $GITHUB_OUTPUT
+        echo "folder_count=$folder_count" >> $GITHUB_OUTPUT
+        
+        echo "Discovered $folder_count folders for matrix processing"
+
+  run-matrix:
+    if: ${{ inputs.use_matrix == true }}
+    needs: discover-folders
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false  # Don't stop other jobs if one fails
+      matrix:
+        folder: ${{ fromJson(needs.discover-folders.outputs.folders) }}
+    
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr poppler-utils
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+
+    - name: Run pipeline for folder - ${{ matrix.folder }}
+      working-directory: backend/pipelines/drive_data_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Build command for this specific folder
+        CMD="python main.py --subfolders '${{ matrix.folder }}'"
+        
+        if [[ "${{ inputs.bronze_only }}" == "true" ]]; then
+          CMD="$CMD --bronze-only"
+        elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
+          CMD="$CMD --silver-only"
+        fi
+        
+        if [[ -n "${{ inputs.file_types }}" ]]; then
+          CMD="$CMD --file-types '${{ inputs.file_types }}'"
+        fi
+        
+        if [[ -n "${{ inputs.log_level }}" ]]; then
+          CMD="$CMD --log-level ${{ inputs.log_level }}"
+        fi
+        
+        CMD="$CMD --verbose"
+        
+        echo "Processing folder '${{ matrix.folder }}' with command: $CMD"
+        eval $CMD
+
+    - name: Handle pipeline failure for folder - ${{ matrix.folder }}
+      if: failure()
+      run: |
+        echo "Pipeline failed for folder '${{ matrix.folder }}'. Check logs above for details."
+        exit 1
+
+  run-single:
+    if: ${{ inputs.use_matrix != true }}
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr poppler-utils
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/drive_data_pipeline
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+
+    - name: Run Google Drive Pipeline (Single Mode)
       working-directory: backend/pipelines/drive_data_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
