@@ -13,12 +13,15 @@ on:
           - all
           - bronze_foundation  # stamdata + herds + herd_details
           - bronze_data_collection  # diko + animal_movements + ejendom + vetstat
+          - bronze_parallel_group_1  # diko + cattle_movements (parallel after herds)
+          - bronze_parallel_group_2  # ejendom + vetstat (parallel after herd_details)
           - silver_processing  # all silver steps
           - stamdata
           - herds
           - herd_details
           - diko
-          - animal_movements
+          - cattle_movements
+          - non_cattle_movements
           - ejendom
           - vetstat
         default: 'all'
@@ -67,7 +70,7 @@ jobs:
   # Job 1: Foundation Bronze Steps (stamdata, herds, herd_details)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' }}
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_1' || inputs.step == 'bronze_parallel_group_2' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' }}
     
     permissions:
       contents: 'read'
@@ -127,7 +130,7 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Determine which foundation step to run
-        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_foundation" ]]; then
+        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_foundation" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" || "${{ inputs.step }}" == "bronze_parallel_group_2" ]]; then
           STEP="herd_details"  # This will run stamdata -> herds -> herd_details
         else
           STEP="${{ inputs.step }}"
@@ -157,15 +160,151 @@ jobs:
         EXPORT_TIMESTAMP=$(find /tmp/data/bronze/chr -name "*.json" | head -1 | xargs dirname | xargs basename)
         echo "export-timestamp=$EXPORT_TIMESTAMP" >> $GITHUB_OUTPUT
 
-  # Job 2: Data Collection Bronze Steps (diko, animal_movements, ejendom, vetstat)
-  bronze-data-collection:
+  # Job 2: Parallel Group 1 - Early data collection (diko + cattle movements)
+  bronze-parallel-group-1:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_1' || inputs.step == 'diko' || inputs.step == 'cattle_movements' || inputs.step == 'non_cattle_movements' }}
     
     permissions:
       contents: 'read'
       id-token: 'write'
+
+    strategy:
+      matrix:
+        data_type: 
+          - diko  # DIKO for all species (12,13,14,15) - deduplication happens later
+          - cattle_movements  # CHR_dyr smart aggregation for cattle (species 12)
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Download Foundation Data
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        # Download the foundation data from the previous job
+        EXPORT_TIMESTAMP="${{ needs.bronze-foundation.outputs.export-timestamp }}"
+        if [[ -n "$EXPORT_TIMESTAMP" ]]; then
+          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No foundation data found to download"
+        fi
+
+    - name: Run Parallel Group 1 Steps
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Determine which step to run based on matrix
+        if [[ "${{ matrix.data_type }}" == "diko" ]]; then
+          # Run DIKO for all species (deduplication with cattle movements happens later)
+          if [[ "${{ inputs.step }}" == "diko" || "${{ inputs.step }}" == "non_cattle_movements" || "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" ]]; then
+            STEP="diko"
+          else
+            echo "Skipping DIKO step for this matrix configuration"
+            exit 0
+          fi
+        elif [[ "${{ matrix.data_type }}" == "cattle_movements" ]]; then
+          # Run cattle movements (CHR_dyr smart aggregation)
+          if [[ "${{ inputs.step }}" == "cattle_movements" || "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "bronze_parallel_group_1" ]]; then
+            STEP="animal_movements"
+          else
+            echo "Skipping cattle movements step for this matrix configuration"
+            exit 0
+          fi
+        fi
+        
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # Set default 3-year date range for animal_movements step
+        if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
+          START_DATE=$(date -d "3 years ago" +%Y-01-01)
+          END_DATE=$(date +%Y-%m-%d)
+          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
+        fi
+        
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        elif [[ -n "$START_DATE" ]]; then
+          CMD="$CMD --start-date $START_DATE"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        elif [[ -n "$END_DATE" ]]; then
+          CMD="$CMD --end-date $END_DATE"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
+        $CMD
+
+  # Job 3: Parallel Group 2 - Later data collection (ejendom + vetstat)
+  bronze-parallel-group-2:
+    runs-on: ubuntu-latest
+    needs: bronze-foundation
+    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'bronze_parallel_group_2' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        data_type: [ejendom, vetstat]
 
     steps:
     - uses: actions/checkout@v4
@@ -225,63 +364,51 @@ jobs:
           gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No foundation data found to download"
         fi
 
-    - name: Run Data Collection Steps
+    - name: Run Parallel Group 2 Steps
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        # Determine which data collection steps to run
-        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_data_collection" ]]; then
-          STEPS="diko,animal_movements,ejendom,vetstat"
-        else
-          STEPS="${{ inputs.step }}"
+        # Run the specific step from the matrix
+        STEP="${{ matrix.data_type }}"
+        
+        # Skip if this specific step is not requested
+        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "bronze_parallel_group_2" && "${{ inputs.step }}" != "$STEP" ]]; then
+          echo "Skipping $STEP step for this matrix configuration"
+          exit 0
         fi
         
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        # Set default 3-year date range for animal_movements step
-        if [[ ("$STEPS" == *"animal_movements"* || "${{ inputs.step }}" == "all") && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
-          START_DATE=$(date -d "3 years ago" +%Y-01-01)
-          END_DATE=$(date +%Y-%m-%d)
-          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
         fi
         
-        # Run each step individually to avoid timeout issues
-        for STEP in $(echo $STEPS | tr ',' ' '); do
-          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
-          if [[ "$SHOW_PROGRESS" == "true" ]]; then
-            CMD="$CMD --progress"
-          fi
-          if [[ -n "${{ inputs.start_date }}" ]]; then
-            CMD="$CMD --start-date ${{ inputs.start_date }}"
-          elif [[ -n "$START_DATE" ]]; then
-            CMD="$CMD --start-date $START_DATE"
-          fi
-          if [[ -n "${{ inputs.end_date }}" ]]; then
-            CMD="$CMD --end-date ${{ inputs.end_date }}"
-          elif [[ -n "$END_DATE" ]]; then
-            CMD="$CMD --end-date $END_DATE"
-          fi
-          if [[ -n "${{ inputs.max_herds }}" ]]; then
-            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-          fi
-          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-          fi
-          if [[ -n "${{ inputs.species_codes }}" ]]; then
-            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-          fi
-          
-          echo "Running data collection command for $STEP: $CMD"
-          $CMD
-        done
+        echo "Running parallel group 2 command for $STEP: $CMD"
+        $CMD
 
-  # Job 3: Silver Processing
+  # Job 4: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, bronze-data-collection]
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-parallel-group-2]
     if: ${{ inputs.step == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
     
     permissions:
@@ -332,7 +459,7 @@ jobs:
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
-        # Download all bronze data from both previous jobs
+        # Download all bronze data from all previous jobs
         EXPORT_TIMESTAMP="${{ needs.bronze-foundation.outputs.export-timestamp }}"
         if [[ -n "$EXPORT_TIMESTAMP" ]]; then
           gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$EXPORT_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
@@ -362,10 +489,10 @@ jobs:
         echo "Running silver processing command: $CMD"
         $CMD
 
-  # Job 4: Handle single step runs that don't fit the above pattern
+  # Job 5: Handle single step runs that don't fit the above pattern
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    if: ${{ !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "bronze_parallel_group_1", "bronze_parallel_group_2", "silver_processing", "stamdata", "herds", "herd_details", "diko", "cattle_movements", "non_cattle_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
     
     permissions:
       contents: 'read'
