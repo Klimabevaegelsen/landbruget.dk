@@ -226,7 +226,14 @@ class PDFTransformer(BaseTransformer):
                     continue
 
                 # Convert all non-null values to strings for consistent processing
-                string_series = df_clean.loc[non_null_mask, col].astype(str)
+                try:
+                    string_series = df_clean.loc[non_null_mask, col].astype(str)
+                    # Verify the conversion worked - if we still have non-string types, skip this column
+                    if not all(isinstance(x, str) for x in string_series.dropna()):
+                        continue
+                except Exception:
+                    # If string conversion fails, skip this column
+                    continue
 
                 # Handle date columns
                 try:
