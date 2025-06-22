@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict
 
+import geopandas as gpd
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
@@ -50,6 +51,39 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
         self.conn.execute("SET temp_directory = '/tmp'")  # Use /tmp for spill
         self.conn.execute("INSTALL spatial")  # Enable spatial extension
         self.conn.execute("LOAD spatial")  # Load spatial extension
+
+    def _validate_and_standardize_crs(self, file_path: str, dataset_name: str) -> str:
+        """
+        Validate and standardize CRS of a parquet file to EPSG:4326.
+
+        Args:
+            file_path: Path to the parquet file
+            dataset_name: Name of the dataset for logging
+
+        Returns:
+            Path to the CRS-standardized file (may be the same as input if no conversion needed)
+        """
+        try:
+            # Read the file to check CRS
+            gdf = gpd.read_parquet(file_path)
+
+            if gdf.crs and gdf.crs.to_epsg() == 4326:
+                self.log.info(f"{dataset_name}: CRS is already EPSG:4326 ✅")
+                return file_path
+            else:
+                self.log.info(f"{dataset_name}: Converting CRS from {gdf.crs} to EPSG:4326")
+                gdf = gdf.to_crs("EPSG:4326")
+
+            # Save the standardized version
+            standardized_path = file_path.replace(".parquet", "_epsg4326.parquet")
+            gdf.to_parquet(standardized_path)
+
+            self.log.info(f"{dataset_name}: ✅ CRS standardized and saved to {standardized_path}")
+            return standardized_path
+
+        except Exception as e:
+            self.log.error(f"{dataset_name}: Error validating/standardizing CRS: {e}")
+            return file_path  # Return original path if conversion fails
 
     def _load_and_validate_property_data(self, file_path: str) -> Dict[str, Any]:
         """Load property owners data using DuckDB and return validation stats."""
@@ -273,16 +307,46 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         return quality_stats
 
+    def _ensure_output_crs_epsg4326(self, temp_file: str) -> str:
+        """
+        Ensure the output file has EPSG:4326 CRS, not OGC:CRS84 or other variants.
+
+        Args:
+            temp_file: Path to the temporary output file
+
+        Returns:
+            Path to the CRS-corrected file
+        """
+        try:
+            # Read the file and check CRS
+            gdf = gpd.read_parquet(temp_file)
+
+            if gdf.crs and gdf.crs.to_epsg() == 4326:
+                self.log.info("✅ Output CRS is already EPSG:4326")
+                return temp_file
+            else:
+                self.log.info(f"Converting output CRS from {gdf.crs} to EPSG:4326")
+                gdf = gdf.to_crs("EPSG:4326")
+                gdf.to_parquet(temp_file)
+                self.log.info("✅ Output CRS converted to EPSG:4326")
+
+            return temp_file
+
+        except Exception as e:
+            self.log.error(f"Error validating output CRS: {e}")
+            return temp_file
+
     async def run(self):
         """
         Run the complete property-cadastral merge job using pure DuckDB operations.
 
         This orchestrates the entire process:
         1. Download input files from GCS
-        2. Load data into DuckDB tables
-        3. Perform BFE-based merge using SQL
-        4. Export results directly to parquet
-        5. Upload to GCS
+        2. Validate and standardize CRS of input files
+        3. Load data into DuckDB tables
+        4. Perform BFE-based merge using SQL
+        5. Export results directly to parquet with EPSG:4326 CRS
+        6. Upload to GCS
         """
         self.log.info("Running Pure DuckDB Property-Cadastral BFE merge job")
 
@@ -335,6 +399,15 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
                 destination_file_name=cadastral_temp_path,
             )
 
+            # Validate and standardize CRS of input files
+            self.log.info("Validating and standardizing CRS of input files...")
+            property_temp_path = self._validate_and_standardize_crs(
+                property_temp_path, "Property owners"
+            )
+            cadastral_temp_path = self._validate_and_standardize_crs(
+                cadastral_temp_path, "Cadastral"
+            )
+
             # Load data using DuckDB
             property_stats = self._load_and_validate_property_data(property_temp_path)
             if property_stats is None:
@@ -374,6 +447,9 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             COPY merged_data TO '{temp_file}' (FORMAT PARQUET)
             """
             self.conn.execute(export_query)
+
+            # Ensure output has proper EPSG:4326 CRS
+            temp_file = self._ensure_output_crs_epsg4326(temp_file)
 
             # Get file stats
             file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
