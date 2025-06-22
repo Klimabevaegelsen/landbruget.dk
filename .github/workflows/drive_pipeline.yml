@@ -119,41 +119,63 @@ jobs:
         from drive_data_pipeline.config import get_settings
         
         try:
+            print("DEBUG: Starting folder discovery...", file=sys.stderr)
             settings = get_settings()
+            
+            print(f"DEBUG: Google Drive Folder ID: {settings.google_drive_folder_id}", file=sys.stderr)
+            print(f"DEBUG: Use public access: {settings.use_public_access}", file=sys.stderr)
+            print(f"DEBUG: Credentials path exists: {settings.google_application_credentials and settings.google_application_credentials.exists() if settings.google_application_credentials else 'None'}", file=sys.stderr)
+            
             if not settings.google_drive_folder_id:
-                print("Error: GOOGLE_DRIVE_FOLDER_ID not set")
+                print("Error: GOOGLE_DRIVE_FOLDER_ID not set", file=sys.stderr)
                 sys.exit(1)
             
+            print("DEBUG: Authenticating with Google Drive...", file=sys.stderr)
             drive_service = get_drive_service(
                 credentials_path=settings.google_application_credentials,
                 use_public_access=settings.use_public_access,
             )
+            
+            print("DEBUG: Creating fetcher...", file=sys.stderr)
             fetcher = GoogleDriveFetcher(drive_service, use_public_access=settings.use_public_access)
             
-            # List only top-level folders (non-recursive)
+            print("DEBUG: Listing folder contents (non-recursive)...", file=sys.stderr)
             folder = fetcher.list_folder_contents(
                 folder_id=settings.google_drive_folder_id, 
                 recursive=False
             )
             
+            print(f"DEBUG: Main folder name: {folder.name}", file=sys.stderr)
+            print(f"DEBUG: Main folder ID: {folder.id}", file=sys.stderr)
+            print(f"DEBUG: Number of files in root: {len(folder.files)}", file=sys.stderr)
+            print(f"DEBUG: Number of subfolders: {len(folder.subfolders)}", file=sys.stderr)
+            
             # Get folder names, filtering out empty folders if desired
             folder_names = []
-            for subfolder in folder.subfolders:
-                # You could add logic here to filter folders
-                # e.g., only include folders with files, or exclude certain patterns
+            print("DEBUG: Processing subfolders...", file=sys.stderr)
+            for i, subfolder in enumerate(folder.subfolders):
+                print(f"DEBUG: Subfolder {i+1}: {subfolder.name} (ID: {subfolder.id})", file=sys.stderr)
                 folder_names.append(subfolder.name)
             
             # If specific subfolders were requested, filter to only those
             requested_subfolders = os.getenv('REQUESTED_SUBFOLDERS', '').strip()
             if requested_subfolders:
+                print(f"DEBUG: Filtering by requested subfolders: {requested_subfolders}", file=sys.stderr)
                 requested_list = [f.strip() for f in requested_subfolders.split(',')]
+                original_count = len(folder_names)
                 folder_names = [f for f in folder_names if f in requested_list]
+                print(f"DEBUG: Filtered from {original_count} to {len(folder_names)} folders", file=sys.stderr)
             
-            print(f"Discovered folders: {folder_names}")
+            print(f"DEBUG: Final folder list: {folder_names}", file=sys.stderr)
+            print(f"DEBUG: JSON output will be: {json.dumps(folder_names)}", file=sys.stderr)
+            
+            # Output ONLY the JSON to stdout (this is what gets captured)
             print(json.dumps(folder_names))
             
         except Exception as e:
-            print(f"Error discovering folders: {e}")
+            print(f"Error discovering folders: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             sys.exit(1)
         EOF
         
@@ -172,7 +194,7 @@ jobs:
         echo "Discovered $folder_count folders for matrix processing"
 
   run-matrix:
-    if: ${{ inputs.use_matrix == true }}
+    if: ${{ inputs.use_matrix == true && needs.discover-folders.outputs.folders != '[]' && needs.discover-folders.outputs.folders != '' }}
     needs: discover-folders
     runs-on: ubuntu-latest
     
