@@ -58,7 +58,8 @@ class BronzeProcessor:
         drive_folder: DriveFolder = None,
         specific_subfolders: list[str] | None = None,
         supported_file_types: set[str] | None = None,
-    ) -> int:
+        return_data: bool = False,
+    ) -> int | dict:
         """Process files from a Google Drive folder.
 
         Args:
@@ -66,9 +67,10 @@ class BronzeProcessor:
             drive_folder: Already fetched DriveFolder object (preferred)
             specific_subfolders: List of specific subfolder names to process (optional)
             supported_file_types: Set of supported file extensions (optional)
+            return_data: If True, return processed data in memory for Silver layer
 
         Returns:
-            Number of files processed
+            Number of files processed, or dict with data if return_data=True
 
         Raises:
             Exception: If the processing fails
@@ -91,15 +93,30 @@ class BronzeProcessor:
             else:
                 raise ValueError("Either folder_id or drive_folder must be provided")
 
+            # Initialize data collection for in-memory processing
+            in_memory_data = {} if return_data else None
+
             # Process the folder
             processed_count = self._process_folder(
-                drive_folder, specific_subfolders, supported_file_types
+                drive_folder, specific_subfolders, supported_file_types, in_memory_data
             )
 
             logger.info(
                 f"Successfully processed {processed_count} files from folder {drive_folder.id}"
             )
-            return processed_count
+
+            if return_data:
+                return {
+                    "data": in_memory_data,
+                    "metadata": {
+                        "run_timestamp": self.run_timestamp,
+                        "run_path": str(self.run_path),
+                        "processed_count": processed_count,
+                        "folder_id": drive_folder.id,
+                    },
+                }
+            else:
+                return processed_count
 
         except Exception as e:
             folder_ref = drive_folder.id if drive_folder else folder_id
@@ -111,6 +128,7 @@ class BronzeProcessor:
         folder: DriveFolder,
         specific_subfolders: list[str] | None = None,
         supported_file_types: set[str] | None = None,
+        in_memory_data: dict | None = None,
     ) -> int:
         """Process a folder and its contents.
 
@@ -118,6 +136,7 @@ class BronzeProcessor:
             folder: DriveFolder to process
             specific_subfolders: List of specific subfolder names to process (optional)
             supported_file_types: Set of supported file extensions (optional)
+            in_memory_data: Dict to collect file data for in-memory processing (optional)
 
         Returns:
             Number of files processed
@@ -134,7 +153,7 @@ class BronzeProcessor:
                     continue
 
             # Download and save the file
-            success = self._process_file(file, folder.path, folder.name)
+            success = self._process_file(file, folder.path, folder.name, in_memory_data)
             processed_count += 1 if success else 0
 
             # Update progress
@@ -147,21 +166,32 @@ class BronzeProcessor:
             # Process only specific subfolders
             for subfolder in folder.subfolders:
                 if subfolder.name in specific_subfolders:
-                    processed_count += self._process_folder(subfolder, None, supported_file_types)
+                    processed_count += self._process_folder(
+                        subfolder, None, supported_file_types, in_memory_data
+                    )
         else:
             # Process all subfolders
             for subfolder in folder.subfolders:
-                processed_count += self._process_folder(subfolder, None, supported_file_types)
+                processed_count += self._process_folder(
+                    subfolder, None, supported_file_types, in_memory_data
+                )
 
         return processed_count
 
-    def _process_file(self, file: DriveFile, folder_path: str, folder_name: str) -> bool:
+    def _process_file(
+        self,
+        file: DriveFile,
+        folder_path: str,
+        folder_name: str,
+        in_memory_data: dict | None = None,
+    ) -> bool:
         """Process a file.
 
         Args:
             file: DriveFile to process
             folder_path: Path of the file in the source (e.g., Google Drive)
             folder_name: Name of the folder containing the file
+            in_memory_data: Dict to collect file data for in-memory processing (optional)
 
         Returns:
             True if the file was processed successfully, False otherwise
@@ -236,6 +266,19 @@ class BronzeProcessor:
                 metadata=file_metadata.model_dump(),
                 file_path=target_path,
             )
+
+            # Collect data for in-memory processing if requested
+            if in_memory_data is not None:
+                file_key = f"{source_folder_path}/{file.name}".replace("//", "/")
+                in_memory_data[file_key] = {
+                    "content": file_content,
+                    "metadata": file_metadata.model_dump(),
+                    "file_path": str(target_path),
+                    "original_filename": file.name,
+                    "folder_name": folder_name,
+                    "mime_type": file.mime_type,
+                    "file_size": len(file_content),
+                }
 
             logger.info(f"Successfully processed file: {file.name}")
             return True
