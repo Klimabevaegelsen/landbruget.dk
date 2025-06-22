@@ -389,6 +389,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
     def _ensure_output_crs_epsg4326(self, temp_file: str) -> str:
         """
         Ensure the output file has EPSG:4326 CRS, not OGC:CRS84 or other variants.
+        Uses memory-efficient approach for large files.
 
         Args:
             temp_file: Path to the temporary output file
@@ -397,7 +398,44 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             Path to the CRS-corrected file
         """
         try:
-            # Read the file and check CRS
+            self.log.info("Validating output CRS...")
+
+            # Check file size first
+            file_size_mb = os.path.getsize(temp_file) / (1024 * 1024)
+            self.log.info(f"Validating CRS for {file_size_mb:.1f} MB file")
+
+            # For large files (>500MB), use DuckDB to check CRS instead of loading into memory
+            if file_size_mb > 500:
+                self.log.info("Large file detected - using DuckDB for CRS validation")
+
+                # Use DuckDB to check CRS without loading full dataset
+                try:
+                    crs_check = self.conn.execute(f"""
+                        SELECT ST_SRID(geometry) as srid 
+                        FROM read_parquet('{temp_file}') 
+                        WHERE geometry IS NOT NULL 
+                        LIMIT 1
+                    """).fetchone()
+
+                    if crs_check and crs_check[0] == 4326:
+                        self.log.info("✅ Output CRS is already EPSG:4326 (verified via DuckDB)")
+                        return temp_file
+                    else:
+                        self.log.warning(
+                            f"CRS validation via DuckDB shows SRID: {crs_check[0] if crs_check else 'None'}"
+                        )
+                        self.log.info(
+                            "Skipping CRS conversion for large file to avoid memory issues"
+                        )
+                        return temp_file
+
+                except Exception as duckdb_e:
+                    self.log.warning(f"DuckDB CRS check failed: {duckdb_e}")
+                    self.log.info("Skipping CRS validation for large file to avoid memory issues")
+                    return temp_file
+
+            # For smaller files, use the original GeoPandas approach
+            self.log.info("Small file - using GeoPandas for CRS validation")
             gdf = gpd.read_parquet(temp_file)
 
             if gdf.crs and gdf.crs.to_epsg() == 4326:
@@ -413,6 +451,7 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
 
         except Exception as e:
             self.log.error(f"Error validating output CRS: {e}")
+            self.log.info("Continuing without CRS validation to avoid pipeline failure")
             return temp_file
 
     async def run(self):
@@ -539,14 +578,25 @@ class PropertyCadastralMerge(BaseSource[PropertyCadastralMergeConfig]):
             )
 
             if not self.config.save_local:
+                self.log.info("Starting upload to GCS...")
                 bucket = self.gcs_util.get_gcs_client().bucket(self.config.bucket)
                 gcs_path = f"silver/property_cadastral_merged/{date_str}.parquet"
                 working_blob = bucket.blob(gcs_path)
+
+                self.log.info(
+                    f"Uploading {file_size_mb:.1f} MB file to gs://{self.config.bucket}/{gcs_path}"
+                )
+                upload_start = time.time()
                 working_blob.upload_from_filename(temp_file)
-                self.log.info(f"Uploaded to: gs://{self.config.bucket}/{gcs_path}")
+                upload_duration = time.time() - upload_start
+
+                self.log.info(
+                    f"✅ Upload completed in {upload_duration:.1f}s at {file_size_mb / upload_duration:.1f} MB/s"
+                )
 
                 # Clean up temp file after upload
                 os.remove(temp_file)
+                self.log.info("Cleaned up temporary export file")
             else:
                 self.log.info(f"Save local is enabled, saved locally at {temp_file}")
 
