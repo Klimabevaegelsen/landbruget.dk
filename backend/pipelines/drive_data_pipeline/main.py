@@ -195,7 +195,7 @@ def main() -> int:
         )
 
         # Initialize metadata manager
-        metadata_manager = MetadataManager(settings.bronze_path)
+        metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
 
         # Initialize Google Drive service
         drive_service = get_drive_service(
