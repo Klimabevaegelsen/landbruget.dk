@@ -91,12 +91,33 @@ class BaseTransformer(abc.ABC):
                 # Use the transform method
                 result = self.transform(temp_path, metadata, Path(temp_output_dir))
 
-                if result.success and result.output_path:
-                    # Read the result back as DataFrame
-                    import pandas as pd
+                if result.success:
+                    # Handle multiple output files (e.g., Excel with multiple sheets)
+                    if result.output_path:
+                        # Single output file
+                        df = pd.read_parquet(result.output_path)
+                        return df
+                    elif result.metadata and "output_paths" in result.metadata:
+                        # Multiple output files - combine them
+                        output_paths = result.metadata["output_paths"]
+                        if output_paths:
+                            # Read and combine all output files
+                            dfs = []
+                            for path_str in output_paths:
+                                path = Path(path_str)
+                                if path.exists():
+                                    df = pd.read_parquet(path)
+                                    # Add sheet identifier column
+                                    df["sheet_name"] = path.stem.split("_")[-1]
+                                    dfs.append(df)
 
-                    df = pd.read_parquet(result.output_path)
-                    return df
+                            if dfs:
+                                # Combine all sheets into one DataFrame
+                                combined_df = pd.concat(dfs, ignore_index=True)
+                                return combined_df
+
+                    logger.error("Transform succeeded but no output files found")
+                    return None
                 else:
                     logger.error(f"Transform failed: {result.error}")
                     return None
