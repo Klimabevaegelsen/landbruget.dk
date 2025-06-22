@@ -79,10 +79,18 @@ class ProgressTracker:
             self.bronze_stats["download_errors"] += file_count
 
         if self.verbose and not self.quiet:
-            pct = (self.bronze_stats["downloaded_files"] / self.bronze_stats["total_files"]) * 100
-            print(
-                f"Bronze progress: {self.bronze_stats['downloaded_files']}/{self.bronze_stats['total_files']} files ({pct:.1f}%)"
-            )
+            # Prevent division by zero
+            if self.bronze_stats["total_files"] > 0:
+                pct = (
+                    self.bronze_stats["downloaded_files"] / self.bronze_stats["total_files"]
+                ) * 100
+                print(
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/{self.bronze_stats['total_files']} files ({pct:.1f}%)"
+                )
+            else:
+                print(
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
+                )
 
     def start_silver_operation(self, total_files: int):
         """Start tracking a silver layer operation.
@@ -108,10 +116,18 @@ class ProgressTracker:
             self.silver_stats["processing_errors"] += file_count
 
         if self.verbose and not self.quiet:
-            pct = (self.silver_stats["processed_files"] / self.silver_stats["total_files"]) * 100
-            print(
-                f"Silver progress: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']} files ({pct:.1f}%)"
-            )
+            # Prevent division by zero
+            if self.silver_stats["total_files"] > 0:
+                pct = (
+                    self.silver_stats["processed_files"] / self.silver_stats["total_files"]
+                ) * 100
+                print(
+                    f"Silver progress: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']} files ({pct:.1f}%)"
+                )
+            else:
+                print(
+                    f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
+                )
 
     def print_summary(self):
         """Print a summary of the pipeline run."""
@@ -293,17 +309,49 @@ def main() -> int:
 
             # Process Bronze files to Silver
             if bronze_run_path:
-                # Count files to process for progress tracking
-                files_to_process = list(Path(bronze_run_path).glob("**/*.*"))
-                if file_types:
-                    files_to_process = [
-                        f
-                        for f in files_to_process
-                        if f.suffix.lower().replace(".", "") in file_types
-                    ]
+                # Count files to process for progress tracking using storage manager
+                # This ensures compatibility with both local and GCS storage
+                try:
+                    # Use storage manager to list metadata files (which correspond to processable files)
+                    metadata_files = storage_manager.list_files(
+                        bronze_run_path, pattern="*.metadata.json"
+                    )
+
+                    # For GCS storage, also check recursively
+                    if hasattr(storage_manager.storage, "bucket"):
+                        # GCS storage - list with recursive prefix
+                        prefix = str(bronze_run_path).rstrip("/") + "/"
+                        blobs = storage_manager.storage.bucket.list_blobs(prefix=prefix)
+                        additional_files = [
+                            Path(blob.name)
+                            for blob in blobs
+                            if blob.name.endswith(".metadata.json")
+                        ]
+                        metadata_files.extend(additional_files)
+
+                    # Filter by file types if specified
+                    files_to_process_count = len(metadata_files)
+                    if file_types:
+                        # We need to check each metadata file to see if it matches the file types
+                        filtered_count = 0
+                        for metadata_path in metadata_files:
+                            try:
+                                metadata = metadata_manager.read_metadata(metadata_path)
+                                if metadata.file_extension.lstrip(".") in file_types:
+                                    filtered_count += 1
+                            except Exception:
+                                # Skip files we can't read metadata for
+                                continue
+                        files_to_process_count = filtered_count
+
+                    logger.info(f"Found {files_to_process_count} files to process in Silver layer")
+
+                except Exception as e:
+                    logger.warning(f"Could not count files for progress tracking: {e}")
+                    files_to_process_count = 1  # Fallback to avoid division by zero
 
                 # Initialize progress tracking
-                progress.start_silver_operation(len(files_to_process))
+                progress.start_silver_operation(files_to_process_count)
 
                 logger.info(f"Processing Bronze files to Silver layer from: {bronze_run_path}")
                 silver_processor.process_bronze_files(
