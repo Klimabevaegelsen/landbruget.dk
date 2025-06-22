@@ -27,6 +27,7 @@ dependencies = [
     "pypdf>=3.15.1",
     "pdfplumber>=0.10.2",
     "tabula-py>=2.8.2",
+    "JPype1>=1.4.1",
     "google-cloud-storage>=2.10.0",
     "tenacity>=8.2.3",
     "loguru>=0.7.0",
