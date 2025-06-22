@@ -53,8 +53,8 @@ class DAGISilverConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     target_crs: str = Field(
-        default="EPSG:25832",
-        description="Target coordinate reference system for Danish data (UTM Zone 32N)",
+        default="EPSG:4326",
+        description="Target coordinate reference system - WGS84 for consistency with other datasets",
     )
 
     endpoints: Dict[str, str] = Field(
