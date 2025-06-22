@@ -170,8 +170,17 @@ class BronzeProcessor:
             set_context(file_id=file.id, file_name=file.name)
             logger.info(f"Processing file: {file.name} (ID: {file.id})")
 
+            # Use the file's full path if available, otherwise fall back to folder path
+            # The file.path includes the full Google Drive hierarchy
+            file_source_path = file.path if hasattr(file, "path") and file.path else folder_path
+            # Extract the directory part of the file path (remove the filename)
+            if file_source_path and "/" in file_source_path:
+                source_folder_path = "/".join(file_source_path.split("/")[:-1])
+            else:
+                source_folder_path = folder_path
+
             # Check if file already exists in this run
-            if self.bronze_storage.file_exists(self.run_path, folder_path, file.name):
+            if self.bronze_storage.file_exists(self.run_path, source_folder_path, file.name):
                 logger.info(f"File {file.name} already exists in this run, skipping")
                 return True
 
@@ -179,11 +188,11 @@ class BronzeProcessor:
             file_content, metadata = self.drive_fetcher.download_file(file.id)
             logger.info(f"Downloaded {len(file_content)} bytes for file {file.name}")
 
-            # Save the file
+            # Save the file using the full Google Drive path hierarchy
             target_path = self.bronze_storage.save_file(
                 content=file_content,
                 run_dir=self.run_path,
-                source_path=folder_path,
+                source_path=source_folder_path,
                 filename=file.name,
             )
 
