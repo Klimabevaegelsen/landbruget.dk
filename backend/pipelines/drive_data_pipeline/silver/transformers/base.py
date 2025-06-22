@@ -133,17 +133,19 @@ class BaseTransformer(abc.ABC):
             except Exception:
                 pass
 
-    def _standardize_column_names(self, columns: list[str]) -> list[str]:
+    def _standardize_column_names(self, columns: list[str | int]) -> list[str]:
         """Standardize column names according to project conventions.
 
         Args:
-            columns: Original column names
+            columns: Original column names (can be strings or integers)
 
         Returns:
-            Standardized column names
+            Standardized column names as strings
         """
         standardized = []
         for col in columns:
+            # Convert to string first to handle integer column names
+            col = str(col)
             # Convert to lowercase
             col = col.lower()
 
