@@ -38,6 +38,7 @@ class SilverProcessor:
             progress_callback: Optional callback function for progress tracking
         """
         self.settings = settings
+        self.storage_manager = storage_manager
         self.progress_callback = progress_callback
 
         # Initialize Silver-specific storage manager
@@ -159,8 +160,45 @@ class SilverProcessor:
         """
         bronze_files = []
 
-        # Walk through the Bronze run directory
-        for metadata_path in bronze_run_path.glob("**/*.metadata.json"):
+        # FIXED: Use storage manager to list files instead of Path.glob() for GCS compatibility
+        try:
+            # List all files in the bronze run directory using storage manager
+            all_files = self.storage_manager.list_files(bronze_run_path, pattern="*.metadata.json")
+
+            # Also check subdirectories for metadata files
+            # For GCS, we need to list files recursively
+            if hasattr(self.storage_manager.storage, "bucket"):
+                # GCS storage - list with recursive prefix
+                prefix = str(bronze_run_path).rstrip("/") + "/"
+                blobs = self.storage_manager.storage.bucket.list_blobs(prefix=prefix)
+                for blob in blobs:
+                    if blob.name.endswith(".metadata.json"):
+                        all_files.append(Path(blob.name))
+            else:
+                # Local storage - use recursive glob through storage manager
+                import os
+
+                for root, dirs, files in os.walk(
+                    self.storage_manager.storage.base_dir / bronze_run_path
+                ):
+                    for file in files:
+                        if file.endswith(".metadata.json"):
+                            file_path = Path(root) / file
+                            # Convert to relative path from storage base
+                            relative_path = file_path.relative_to(
+                                Path(self.storage_manager.storage.base_dir)
+                            )
+                            all_files.append(relative_path)
+
+        except Exception as e:
+            logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {str(e)}")
+            return bronze_files
+
+        # Process each metadata file
+        for metadata_path in all_files:
+            if not str(metadata_path).endswith(".metadata.json"):
+                continue
+
             try:
                 # Read metadata
                 metadata = self.metadata_manager.read_metadata(metadata_path)
@@ -183,8 +221,8 @@ class SilverProcessor:
                 # Get the corresponding file path
                 file_path = metadata_path.with_suffix("").with_suffix(metadata.file_extension)
 
-                # Validate the file exists
-                if file_path.exists():
+                # Validate the file exists using storage manager
+                if self.storage_manager.file_exists(file_path):
                     bronze_files.append((file_path, metadata_path))
                 else:
                     logger.warning(f"File does not exist: {file_path}")

@@ -61,13 +61,15 @@ class FileMetadata(BaseModel):
 class MetadataManager:
     """Manager for file metadata."""
 
-    def __init__(self, base_path: Path):
+    def __init__(self, base_path: Path, storage_manager=None):
         """Initialize the metadata manager.
 
         Args:
             base_path: Base path for storing metadata
+            storage_manager: Optional storage manager for reading metadata files
         """
         self.base_path = base_path
+        self.storage_manager = storage_manager
         logger.info(f"Initialized metadata manager with base path: {base_path}")
 
     def generate_metadata(
@@ -184,8 +186,12 @@ class MetadataManager:
             StorageError: If the metadata file could not be read
         """
         try:
-            with open(metadata_path, encoding="utf-8") as f:
-                metadata_dict = json.load(f)
+            # Use storage manager if available, otherwise fall back to direct file access
+            if self.storage_manager:
+                metadata_dict = self.storage_manager.read_json(metadata_path)
+            else:
+                with open(metadata_path, encoding="utf-8") as f:
+                    metadata_dict = json.load(f)
 
             metadata = FileMetadata.model_validate(metadata_dict)
             logger.debug(f"Read metadata from {metadata_path}")
