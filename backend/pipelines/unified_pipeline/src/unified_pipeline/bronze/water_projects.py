@@ -25,7 +25,7 @@ import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -103,7 +103,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
+class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer data processor for Danish water projects.
 
@@ -453,7 +453,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
         df["updated_at"] = pd.Timestamp.now()
         return df
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[list[tuple[str, str]]]:
         """
         Execute the complete Water Projects bronze job workflow.
 
@@ -464,10 +464,14 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
         2. Validates that data was successfully retrieved
         3. Creates a standardized DataFrame with metadata
         4. Saves the raw data to Google Cloud Storage
-        5. Logs the completion status
+        5. Returns the raw data for in-memory passing to silver stage
 
         The method includes comprehensive timing and logging to track job
         performance and troubleshoot any issues.
+
+        Returns:
+            Optional[list[tuple[str, str]]]: List of tuples containing layer and raw data,
+                                           or None if no data was fetched
 
         Raises:
             Exception: If critical errors occur during data fetching or storage
@@ -477,9 +481,12 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig]):
             raw_data = await self._fetch_raw_data()
             if not raw_data:
                 self.log.error("No raw data fetched")
-                return
+                return None
             self.log.info("Fetched raw data successfully")
             df = self.create_dataframe(raw_data)
-            self._save_raw_data(df, self.config.dataset, self.config.bucket)
+            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
             self.log.info("Saved raw data successfully")
             self.log.info("Water Projects bronze job completed successfully")
+
+            # Return data for in-memory passing
+            return raw_data

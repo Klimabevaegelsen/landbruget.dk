@@ -24,7 +24,7 @@ import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -75,7 +75,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
+class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
 
@@ -286,16 +286,18 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
         df["updated_at"] = pd.Timestamp.now()
         return df
 
-    async def run(self) -> None:
+    async def run(self) -> Optional[list[str]]:
         """
         Run the complete BNBO status bronze layer job.
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
         2. Saves the raw data to Google Cloud Storage
+        3. Returns the raw data for in-memory passing to silver stage
 
         Returns:
-            None
+            Optional[list[str]]: Raw XML data that can be passed to silver stage,
+                               or None if processing fails
 
         Raises:
             Exception: If there are issues at any step in the process.
@@ -308,9 +310,16 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
             raw_data = await self._fetch_raw_data()
             if not raw_data:
                 self.log.error("No raw data fetched")
-                return
+                return None
             self.log.info("Fetched raw data successfully")
+
+            # Create DataFrame for storage (backward compatibility)
             df = self.create_dataframe(raw_data)
-            self._save_raw_data(df, self.config.dataset, self.config.bucket)
+
+            # Save using new unified method
+            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
             self.log.info("Saved raw data successfully")
             self.log.info("BNBO Status bronze job completed successfully")
+
+            # Return raw data for in-memory passing
+            return raw_data

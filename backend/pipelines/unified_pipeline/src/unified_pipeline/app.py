@@ -23,8 +23,10 @@ from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronzeConfig,
 )
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
+from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
+from unified_pipeline.common.base import BronzeJobInterface, SilverJobInterface
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.silver.agricultural_fields import (
@@ -39,16 +41,56 @@ from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilverConfig,
 )
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
+from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
-
-from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
-from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
-
 load_dotenv()
+
+
+async def execute_pipeline_jobs(jobs: list, gcs_util: GCSUtil, stage: cli.Stage) -> None:
+    """
+    Execute pipeline jobs with support for in-memory data passing.
+
+    This function handles the execution of bronze and silver jobs, implementing
+    in-memory data passing when Stage.all is used. When bronze and silver jobs
+    are run together, bronze data is passed directly to silver jobs without
+    disk I/O for improved performance.
+
+    Args:
+        jobs: List of (job_class, config_class) tuples to execute
+        gcs_util: GCS utility instance
+        stage: The stage being executed (bronze, silver, or all)
+    """
+    log = Logger.get_logger()
+    bronze_data = None
+
+    for job_cls, config_cls in jobs:
+        log.info(f"Running {job_cls.__name__} for stage {stage}")
+        instance = job_cls(config=config_cls(), gcs_util=gcs_util)
+
+        # Check if this is a bronze job that supports in-memory data passing
+        if issubclass(job_cls, BronzeJobInterface):
+            # Bronze stage - get data for memory passing
+            bronze_data = await instance.run()
+            log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
+
+        # Check if this is a silver job that supports in-memory data passing
+        elif issubclass(job_cls, SilverJobInterface):
+            # Silver stage - pass in-memory data if available
+            await instance.run(bronze_data=bronze_data)
+            log.info(
+                f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
+            )
+
+        else:
+            # Legacy support - jobs that don't implement the new interfaces
+            await instance.run()
+            log.info(f"Legacy job {job_cls.__name__} completed")
+
+        log.info(f"Finished {job_cls.__name__} for stage {stage}")
 
 
 def execute(cli_config: cli.CliConfig) -> None:
@@ -57,7 +99,7 @@ def execute(cli_config: cli.CliConfig) -> None:
 
     This function initializes the appropriate data processing pipeline based on
     the provided CLI configuration. It handles source selection and processing
-    stage (bronze, silver, or all stages).
+    stage (bronze, silver, or all stages) with support for in-memory data passing.
 
     Args:
         cli_config (cli.CliConfig): Configuration containing source and stage settings
@@ -102,7 +144,7 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (SpfSuBronze, SpfSuBronzeConfig),
                 (SpfSuSilver, SpfSuSilverConfig),
-            ]
+            ],
         },
         cli.Source.soil_types: {
             cli.Stage.bronze: [(SoilTypesBronze, SoilTypesBronzeConfig)],
@@ -145,17 +187,16 @@ def execute(cli_config: cli.CliConfig) -> None:
             ],
         },
     }
+
     # Retrieve jobs for given source and stage
     try:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
     except KeyError:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
-    # Execute each job sequentially
-    for job_cls, config_cls in jobs:
-        log.info(f"Running {job_cls.__name__} for stage {cli_config.stage}")
-        instance = job_cls(config=config_cls(), gcs_util=gcs_util)
-        asyncio.run(instance.run())
-        log.info(f"Finished {job_cls.__name__} for stage {cli_config.stage}")
+
+    # Execute jobs with support for in-memory data passing
+    asyncio.run(execute_pipeline_jobs(jobs, gcs_util, cli_config.stage))
+
     log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
 
 
