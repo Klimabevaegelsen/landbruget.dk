@@ -24,14 +24,16 @@ class BronzeStorageManager:
 
         Args:
             storage_manager: Storage manager for file operations
-            base_path: Base path for Bronze layer storage
+            base_path: Base path for Bronze layer storage (ignored for GCS, used for local)
         """
         self.storage_manager = storage_manager
         self.base_path = base_path
-        logger.info(f"Initialized Bronze storage manager with base path: {base_path}")
+        # Use standard pipeline folder structure
+        self.pipeline_name = "drive_data"
+        logger.info(f"Initialized Bronze storage manager for pipeline: {self.pipeline_name}")
 
     def create_run_directory(self, timestamp: str | None = None) -> Path:
-        """Create a timestamped run directory.
+        """Create a timestamped run directory following standard GCS structure.
 
         Args:
             timestamp: Optional timestamp string (if not provided, one will be generated)
@@ -43,8 +45,15 @@ class BronzeStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Create run directory path
-        run_dir = self.base_path / timestamp
+        # Use standard GCS structure: bronze/drive_data/{timestamp}
+        # For local storage, this will be relative to base_path
+        # For GCS, this will be the full path in the bucket
+        if hasattr(self.storage_manager.storage, "bucket"):
+            # GCS storage - use standard structure
+            run_dir = Path(f"bronze/{self.pipeline_name}/{timestamp}")
+        else:
+            # Local storage - use base_path
+            run_dir = self.base_path / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(run_dir)
@@ -65,16 +74,31 @@ class BronzeStorageManager:
         # Normalize folder path (remove leading/trailing slashes)
         folder_path = folder_path.strip("/")
 
-        # Create folder path
-        target_path = run_dir
+        # Preserve the full Google Drive folder hierarchy
+        # This allows for proper organization and avoids filename conflicts
         if folder_path:
-            for folder in folder_path.split("/"):
-                target_path = target_path / folder
+            # Split the path and sanitize each component
+            path_parts = folder_path.split("/")
+            sanitized_parts = []
+
+            for part in path_parts:
+                # Sanitize each folder name for storage
+                sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
+                # Remove any other problematic characters
+                sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
+                sanitized_parts.append(sanitized_part)
+
+            # Build the target path preserving hierarchy
+            target_path = run_dir
+            for part in sanitized_parts:
+                target_path = target_path / part
+        else:
+            target_path = run_dir
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(target_path)
 
-        logger.debug(f"Created folder structure: {target_path}")
+        logger.debug(f"Created folder structure: {target_path} (from: {folder_path})")
         return target_path
 
     def save_file(self, content: bytes, run_dir: Path, source_path: str, filename: str) -> Path:
@@ -94,7 +118,11 @@ class BronzeStorageManager:
         """
         try:
             # Create folder structure
-            folder_path = os.path.dirname(source_path) if source_path else ""
+            # If source_path is a folder name (not a full path), use it directly
+            if source_path and "/" not in source_path:
+                folder_path = source_path
+            else:
+                folder_path = os.path.dirname(source_path) if source_path else ""
             target_dir = self.create_folder_structure(run_dir, folder_path)
 
             # Create file path
@@ -103,12 +131,28 @@ class BronzeStorageManager:
             # Save the file
             self.storage_manager.save_file(content, file_path)
 
-            # Immediate verification after save - FIX: Use storage manager instead of local path check
-            file_exists = self.storage_manager.file_exists(file_path)
-            if not file_exists:
-                logger.error(
-                    f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
-                )
+            # Verify file was saved - add better error handling for GCS
+            try:
+                file_exists = self.storage_manager.file_exists(file_path)
+                if not file_exists:
+                    logger.error(
+                        f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
+                    )
+                    # For GCS, try a brief retry since there might be eventual consistency issues
+                    if hasattr(self.storage_manager.storage, "bucket"):
+                        import time
+
+                        time.sleep(0.5)  # Brief wait for GCS consistency
+                        file_exists = self.storage_manager.file_exists(file_path)
+                        if file_exists:
+                            logger.info(f"File verified after retry: {file_path}")
+                        else:
+                            raise StorageError(
+                                f"File save verification failed even after retry: {file_path}"
+                            )
+            except Exception as verify_error:
+                logger.error(f"File verification failed: {verify_error}")
+                raise StorageError(f"Could not verify file save: {verify_error}")
 
             logger.info(f"Saved file to {file_path}")
             return file_path
@@ -157,12 +201,21 @@ class BronzeStorageManager:
         Returns:
             True if the file exists, False otherwise
         """
-        # Create folder structure
-        folder_path = os.path.dirname(source_path) if source_path else ""
+        # Create folder structure path using the same logic as create_folder_structure
+        # If source_path is a folder name (not a full path), use it directly
+        if source_path and "/" not in source_path:
+            folder_path = source_path
+        else:
+            folder_path = os.path.dirname(source_path) if source_path else ""
+
         target_dir = run_dir
         if folder_path:
-            for folder in folder_path.split("/"):
-                target_dir = target_dir / folder
+            # Split the path and sanitize each component (same as create_folder_structure)
+            path_parts = folder_path.split("/")
+            for part in path_parts:
+                sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
+                sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
+                target_dir = target_dir / sanitized_part
 
         # Check if the file exists
         file_path = target_dir / filename
@@ -180,18 +233,23 @@ class BronzeStorageManager:
         """
         files = {}
 
-        # List files in the run directory
-        for file_path in self.storage_manager.list_files(run_dir, pattern):
-            files[file_path.name] = file_path
+        try:
+            # List files in the run directory
+            for file_path in self.storage_manager.list_files(run_dir, pattern):
+                files[file_path.name] = file_path
 
-        # List files in subdirectories
-        for root, _, _ in os.walk(run_dir):
-            root_path = Path(root)
-            if root_path != run_dir:
-                for file_path in self.storage_manager.list_files(root_path, pattern):
-                    # Use relative path as key
-                    rel_path = file_path.relative_to(run_dir)
-                    files[str(rel_path)] = file_path
+            # For local storage, also check subdirectories
+            if not hasattr(self.storage_manager.storage, "bucket"):
+                for root, _, _ in os.walk(run_dir):
+                    root_path = Path(root)
+                    if root_path != run_dir:
+                        for file_path in self.storage_manager.list_files(root_path, pattern):
+                            # Use relative path as key
+                            rel_path = file_path.relative_to(run_dir)
+                            files[str(rel_path)] = file_path
 
-        logger.debug(f"Listed {len(files)} files in run directory: {run_dir}")
+            logger.debug(f"Listed {len(files)} files in run directory: {run_dir}")
+        except Exception as e:
+            logger.warning(f"Could not list files in run directory {run_dir}: {e}")
+
         return files
