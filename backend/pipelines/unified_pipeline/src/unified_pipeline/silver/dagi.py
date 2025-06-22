@@ -275,10 +275,15 @@ class DAGISilver(BaseSource[DAGISilverConfig]):
             result["data_source"] = "dagi_dawa_api"
             result["crs_epsg"] = self.config.target_crs
 
-            # Add geometry-based metadata
-            result["area_m2"] = result.geometry.area
-            result["centroid_x"] = result.geometry.centroid.x
-            result["centroid_y"] = result.geometry.centroid.y
+            # Add geometry-based metadata (transform to projected CRS for accurate calculations)
+            # Use EPSG:25832 (UTM Zone 32N) for Denmark for accurate area/centroid calculations
+            projected_geom = result.geometry.to_crs("EPSG:25832")
+            result["area_m2"] = projected_geom.area
+
+            # Calculate centroids in projected coordinates, then transform back to target CRS
+            centroids_projected = projected_geom.centroid.to_crs(self.config.target_crs)
+            result["centroid_x"] = centroids_projected.x
+            result["centroid_y"] = centroids_projected.y
 
             # Add record count for the layer
             result["total_records_in_layer"] = len(result)
