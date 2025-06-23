@@ -17,7 +17,6 @@ Outputs:
 """
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -478,8 +477,55 @@ class FieldAnalysisSilver:
             WHERE ST_Area(field_bnbo_intersection) > 0
         """)
 
-        # Combine all results into final table
-        print("    🔗 Combining results...")
+        # Create JSON aggregation tables using DuckDB
+        print("    🔗 Creating JSON aggregations...")
+
+        # Property shares JSON
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_property_json AS
+            SELECT 
+                field_id,
+                block_id,
+                COALESCE('{' || string_agg('"' || bfe_number || '":' || area_share, ',') || '}', '{}') as property_area_shares
+            FROM field_property_shares
+            GROUP BY field_id, block_id
+        """)
+
+        # Soil shares JSON
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_json AS
+            SELECT 
+                field_id,
+                block_id,
+                COALESCE('{' || string_agg('"' || soil_code || '":' || area_share, ',') || '}', '{}') as soil_area_shares
+            FROM field_soil_shares
+            GROUP BY field_id, block_id
+        """)
+
+        # BNBO shares JSON
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_json AS
+            SELECT 
+                field_id,
+                block_id,
+                COALESCE('{' || string_agg('"' || status_category || '":' || area_share, ',') || '}', '{}') as bnbo_area_shares
+            FROM field_bnbo_shares
+            GROUP BY field_id, block_id
+        """)
+
+        # BNBO-water overlap shares JSON
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_water_json AS
+            SELECT 
+                field_id,
+                block_id,
+                COALESCE('{' || string_agg('"' || status_category || '":' || bnbo_water_projects_share, ',') || '}', '{}') as bnbo_water_projects_shares
+            FROM field_bnbo_water_overlap
+            GROUP BY field_id, block_id
+        """)
+
+        # Combine all results into final table using DuckDB
+        print("    🔗 Combining all results...")
         results = self.conn.execute("""
             SELECT 
                 f.field_id,
@@ -487,113 +533,20 @@ class FieldAnalysisSilver:
                 f.cvr_number,
                 COALESCE(fw.wetland_area_share, 0) as wetland_area_share,
                 COALESCE(fwo.wetland_water_projects_share, 0) as wetland_water_projects_share,
-                COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share
+                COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share,
+                COALESCE(fpj.property_area_shares, '{}') as property_area_shares,
+                COALESCE(fsj.soil_area_shares, '{}') as soil_area_shares,
+                COALESCE(fbj.bnbo_area_shares, '{}') as bnbo_area_shares,
+                COALESCE(fbwj.bnbo_water_projects_shares, '{}') as bnbo_water_projects_shares
             FROM current_fields f
             LEFT JOIN field_wetland_shares fw ON f.field_id = fw.field_id AND f.block_id = fw.block_id
             LEFT JOIN field_wetland_water_overlap fwo ON f.field_id = fwo.field_id AND f.block_id = fwo.block_id
             LEFT JOIN field_water_projects_shares fwp ON f.field_id = fwp.field_id AND f.block_id = fwp.block_id
+            LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
+            LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
+            LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
+            LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
         """).df()
-
-        # Get property shares as JSON - using pandas aggregation to avoid complex SQL
-        property_shares = self.conn.execute("""
-            SELECT field_id, block_id, bfe_number, area_share
-            FROM field_property_shares
-        """).df()
-
-        # Aggregate property shares by field using pandas
-        if not property_shares.empty:
-            property_agg = (
-                property_shares.groupby(["field_id", "block_id"])
-                .apply(
-                    lambda x: json.dumps(
-                        dict(zip(x["bfe_number"].astype(str), x["area_share"], strict=False))
-                    ),
-                    include_groups=False,
-                )
-                .rename("property_area_shares")
-                .reset_index()
-            )
-            results = results.merge(property_agg, on=["field_id", "block_id"], how="left")
-        else:
-            results["property_area_shares"] = "{}"
-
-        # Get soil shares as JSON - using pandas aggregation
-        soil_shares = self.conn.execute("""
-            SELECT field_id, block_id, soil_code, area_share
-            FROM field_soil_shares
-        """).df()
-
-        if not soil_shares.empty:
-            soil_agg = (
-                soil_shares.groupby(["field_id", "block_id"])
-                .apply(
-                    lambda x: json.dumps(
-                        dict(zip(x["soil_code"].astype(str), x["area_share"], strict=False))
-                    ),
-                    include_groups=False,
-                )
-                .rename("soil_area_shares")
-                .reset_index()
-            )
-            results = results.merge(soil_agg, on=["field_id", "block_id"], how="left")
-        else:
-            results["soil_area_shares"] = "{}"
-
-        # Get BNBO shares as JSON - using pandas aggregation
-        bnbo_shares = self.conn.execute("""
-            SELECT field_id, block_id, status_category, area_share
-            FROM field_bnbo_shares
-        """).df()
-
-        if not bnbo_shares.empty:
-            bnbo_agg = (
-                bnbo_shares.groupby(["field_id", "block_id"])
-                .apply(
-                    lambda x: json.dumps(
-                        dict(zip(x["status_category"], x["area_share"], strict=False))
-                    ),
-                    include_groups=False,
-                )
-                .rename("bnbo_area_shares")
-                .reset_index()
-            )
-            results = results.merge(bnbo_agg, on=["field_id", "block_id"], how="left")
-        else:
-            results["bnbo_area_shares"] = "{}"
-
-        # Get BNBO-water project overlap shares as JSON - using pandas aggregation
-        bnbo_water_shares = self.conn.execute("""
-            SELECT field_id, block_id, status_category, bnbo_water_projects_share
-            FROM field_bnbo_water_overlap
-        """).df()
-
-        if not bnbo_water_shares.empty:
-            bnbo_water_agg = (
-                bnbo_water_shares.groupby(["field_id", "block_id"])
-                .apply(
-                    lambda x: json.dumps(
-                        dict(
-                            zip(x["status_category"], x["bnbo_water_projects_share"], strict=False)
-                        )
-                    ),
-                    include_groups=False,
-                )
-                .rename("bnbo_water_projects_shares")
-                .reset_index()
-            )
-            results = results.merge(bnbo_water_agg, on=["field_id", "block_id"], how="left")
-        else:
-            results["bnbo_water_projects_shares"] = "{}"
-
-        # Fill null JSON fields with empty objects
-        json_cols = [
-            "property_area_shares",
-            "soil_area_shares",
-            "bnbo_area_shares",
-            "bnbo_water_projects_shares",
-        ]
-        for col in json_cols:
-            results[col] = results[col].fillna("{}")
 
         return results
 
