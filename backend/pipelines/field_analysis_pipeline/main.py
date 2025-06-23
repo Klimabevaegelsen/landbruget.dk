@@ -44,11 +44,13 @@ class FieldAnalysisSilver:
         self.conn.execute(f"SET threads={self.thread_count}")
         self.conn.execute(f"SET max_memory='{self.memory_limit}'")
 
-        # Install and load spatial extension
+        # Install and load extensions for GCS access and spatial operations
+        self.conn.execute("INSTALL httpfs")
+        self.conn.execute("LOAD httpfs")
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
 
-        print("✅ DuckDB Spatial loaded - Field Analysis Silver Layer")
+        print("✅ DuckDB Spatial and HTTPFS loaded - Field Analysis Silver Layer")
         print(
             f"   Memory: {self.memory_limit}, Threads: {self.thread_count}, Batch size: {self.batch_size:,}"
         )
@@ -91,52 +93,106 @@ class FieldAnalysisSilver:
             print(f"⚠️  Error finding latest property data: {e}")
             raise
 
+    def download_gcs_file(self, gcs_path: str, local_filename: str) -> str:
+        """Download a GCS file to local storage and return the local path"""
+        import tempfile
+        from pathlib import Path
+
+        # Create temp directory for this run
+        temp_dir = Path(tempfile.gettempdir()) / "field_analysis_cache"
+        temp_dir.mkdir(exist_ok=True)
+
+        local_path = temp_dir / local_filename
+
+        # Skip download if file already exists locally
+        if local_path.exists():
+            print(f"    📁 Using cached file: {local_path}")
+            return str(local_path)
+
+        print(f"    ⬇️  Downloading {gcs_path} to {local_path}")
+
+        # Remove gs:// prefix for gcsfs
+        gcs_file_path = gcs_path.replace("gs://", "")
+
+        try:
+            # Download using gcsfs
+            self.gcs.get(gcs_file_path, str(local_path))
+            print(
+                f"    ✅ Downloaded {local_path.name} ({local_path.stat().st_size / 1024 / 1024:.1f} MB)"
+            )
+            return str(local_path)
+        except Exception as e:
+            print(f"    ❌ Failed to download {gcs_path}: {e}")
+            raise
+
     def get_data_paths(self, year: str) -> dict[str, str]:
         """Get paths to all required data files, finding the most recent versions"""
 
         print("🔍 Discovering latest data files from GCS...")
 
         # Use environment variables if provided, otherwise discover latest
-        fields_path = os.getenv(
+        fields_gcs_path = os.getenv(
             "FIELDS_DATA_PATH",
             self.find_latest_data_path(f"landbrugsdata-raw-data/silver/agricultural_fields_{year}"),
         )
 
-        properties_path = os.getenv("PROPERTIES_DATA_PATH", self.find_latest_property_data())
+        properties_gcs_path = os.getenv("PROPERTIES_DATA_PATH", self.find_latest_property_data())
 
-        soil_path = os.getenv(
+        soil_gcs_path = os.getenv(
             "SOIL_DATA_PATH", self.find_latest_data_path("landbrugsdata-raw-data/silver/soil_types")
         )
 
-        bnbo_path = os.getenv(
+        bnbo_gcs_path = os.getenv(
             "BNBO_DATA_PATH",
             self.find_latest_data_path("landbrugsdata-raw-data/silver/bnbo_status_dissolved"),
         )
 
-        wetlands_path = os.getenv(
+        wetlands_gcs_path = os.getenv(
             "WETLANDS_DATA_PATH",
             self.find_latest_data_path("landbrugsdata-raw-data/silver/wetlands_dissolved"),
         )
 
-        water_projects_path = os.getenv(
+        water_projects_gcs_path = os.getenv(
             "WATER_PROJECTS_DATA_PATH",
             self.find_latest_data_path("landbrugsdata-raw-data/silver/water_projects_dissolved"),
         )
 
-        paths = {
-            "fields": fields_path,
-            "properties": properties_path,
-            "soil_types": soil_path,
-            "bnbo_status": bnbo_path,
-            "wetlands": wetlands_path,
-            "water_projects": water_projects_path,
+        print("📂 Latest GCS paths discovered:")
+        gcs_paths = {
+            "fields": fields_gcs_path,
+            "properties": properties_gcs_path,
+            "soil_types": soil_gcs_path,
+            "bnbo_status": bnbo_gcs_path,
+            "wetlands": wetlands_gcs_path,
+            "water_projects": water_projects_gcs_path,
         }
 
-        print("📂 Latest data paths discovered:")
-        for name, path in paths.items():
+        for name, path in gcs_paths.items():
             print(f"   {name}: {path}")
 
-        return paths
+        print("\n📥 Downloading files locally...")
+
+        # Download all files locally
+        local_paths = {
+            "fields": self.download_gcs_file(
+                fields_gcs_path, f"agricultural_fields_{year}.parquet"
+            ),
+            "properties": self.download_gcs_file(
+                properties_gcs_path, "property_cadastral_merged.parquet"
+            ),
+            "soil_types": self.download_gcs_file(soil_gcs_path, "soil_types.parquet"),
+            "bnbo_status": self.download_gcs_file(bnbo_gcs_path, "bnbo_status_dissolved.parquet"),
+            "wetlands": self.download_gcs_file(wetlands_gcs_path, "wetlands_dissolved.parquet"),
+            "water_projects": self.download_gcs_file(
+                water_projects_gcs_path, "water_projects_dissolved.parquet"
+            ),
+        }
+
+        print("\n📂 Local data paths ready:")
+        for name, path in local_paths.items():
+            print(f"   {name}: {path}")
+
+        return local_paths
 
     def load_reference_data(self, paths: dict[str, str]):
         """Load reference datasets efficiently"""
