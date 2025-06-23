@@ -181,23 +181,35 @@ jobs:
         echo "Validating merge pipeline output..."
         
         # Check if new merged data exists in the standard BaseSource directory structure
-        LATEST_FILE=$(gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/" | sort | tail -1)
+        LATEST_DIR=$(gsutil ls "gs://${GCS_BUCKET}/silver/property_cadastral_merged/" | sort | tail -1)
         
-        if [ -n "${LATEST_FILE}" ]; then
-          echo "✅ Latest merged file: ${LATEST_FILE}"
+        if [ -n "${LATEST_DIR}" ]; then
+          echo "✅ Latest merged directory: ${LATEST_DIR}"
           
-          # Get file info
-          gsutil stat "${LATEST_FILE}"
+          # Check for the data.parquet file inside the directory
+          LATEST_FILE="${LATEST_DIR}data.parquet"
           
-          # Basic validation - file should be reasonably sized
-          FILE_SIZE=$(gsutil stat "${LATEST_FILE}" | grep "Content-Length" | awk '{print $2}')
-          if [ "${FILE_SIZE}" -gt 1000000 ]; then  # > 1MB
-            echo "✅ Output file size looks reasonable: ${FILE_SIZE} bytes"
+          if gsutil ls "${LATEST_FILE}" > /dev/null 2>&1; then
+            echo "✅ Latest merged file: ${LATEST_FILE}"
+            
+            # Get file info
+            gsutil stat "${LATEST_FILE}"
+            
+            # Basic validation - file should be reasonably sized
+            FILE_SIZE=$(gsutil stat "${LATEST_FILE}" | grep "Content-Length" | awk '{print $2}')
+            if [ "${FILE_SIZE}" -gt 1000000 ]; then  # > 1MB
+              echo "✅ Output file size looks reasonable: ${FILE_SIZE} bytes"
+            else
+              echo "⚠️ Output file seems small: ${FILE_SIZE} bytes"
+            fi
           else
-            echo "⚠️ Output file seems small: ${FILE_SIZE} bytes"
+            echo "❌ No data.parquet file found in ${LATEST_DIR}"
+            echo "Checking directory contents..."
+            gsutil ls "${LATEST_DIR}" || echo "Directory is empty or inaccessible"
+            exit 1
           fi
         else
-          echo "❌ No merged output files found"
+          echo "❌ No merged output directories found"
           echo "Checking available directories..."
           gsutil ls "gs://${GCS_BUCKET}/silver/" | grep property_cadastral_merged || echo "No property_cadastral_merged directories found"
           exit 1
