@@ -953,7 +953,8 @@ def main():
     setup_logging(log_level=args.log_level)
 
     if not args.year and not args.all_years:
-        raise ValueError("Must specify either --year or --all-years")
+        logging.error("Must specify either --year or --all-years")
+        sys.exit(1)
 
     # Initialize GCS storage if bucket is specified
     gcs_storage = None
@@ -962,7 +963,11 @@ def main():
 
     # Initialize the optimized production estimator
     logging.info("Initializing optimized production estimator with DuckDB Spatial v1.2.2...")
-    estimator = FieldProductionEstimator(gcs_storage=gcs_storage)
+    try:
+        estimator = FieldProductionEstimator(gcs_storage=gcs_storage)
+    except Exception as e:
+        logging.error(f"Failed to initialize production estimator: {e}")
+        sys.exit(1)
 
     # Create output directory
     output_dir = Path(args.output_dir)
@@ -973,6 +978,11 @@ def main():
     else:
         years = [args.year]
 
+    # Track processing results
+    successful_years = []
+    failed_years = []
+    skipped_years = []
+
     # Process each year
     for year in years:
         try:
@@ -982,19 +992,42 @@ def main():
 
             overview_df = create_field_production_optimized(year, estimator, args.limit)
             save_production_data(overview_df, year, output_dir, gcs_storage)
+            successful_years.append(year)
 
         except FileNotFoundError as e:
             logging.warning(f"Skipping {year}: {e}")
+            skipped_years.append(year)
+        except ImportError as e:
+            # Critical dependency errors should fail the pipeline
+            logging.error(f"Critical dependency error processing {year}: {e}")
+            if "pyarrow" in str(e) or "parquet" in str(e):
+                logging.error("Missing pyarrow dependency - this is a critical error")
+                sys.exit(1)
+            failed_years.append(year)
         except Exception as e:
             logging.error(f"Error processing {year}: {e}")
             import traceback
 
             traceback.print_exc()
+            failed_years.append(year)
 
+    # Final status report
     logging.info(f"{'=' * 60}")
-    logging.info("Optimized field production pipeline complete!")
-    logging.info("Leveraged DuckDB Spatial v1.2.2 SPATIAL_JOIN operator for maximum performance")
-    logging.info(f"{'=' * 60}")
+    logging.info("Field Production Pipeline Results:")
+    logging.info(f"  Successfully processed: {successful_years}")
+    logging.info(f"  Skipped (data not found): {skipped_years}")
+    logging.info(f"  Failed: {failed_years}")
+
+    if failed_years:
+        logging.error(f"Pipeline failed for {len(failed_years)} year(s): {failed_years}")
+        sys.exit(1)
+    elif not successful_years:
+        logging.error("No years were successfully processed")
+        sys.exit(1)
+    else:
+        logging.info("Optimized field production pipeline complete!")
+        logging.info("Leveraged DuckDB Spatial v1.2.2 SPATIAL_JOIN operator for maximum performance")
+        logging.info(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

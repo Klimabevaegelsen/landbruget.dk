@@ -9,10 +9,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Install uv for faster package installation
+RUN pip install uv
+
+# Copy project configuration and install Python dependencies
 COPY pyproject.toml ./
-RUN pip install --upgrade pip \
-    && pip install .
+RUN uv pip install --system . --no-cache
 
 # Copy application code
 COPY . .

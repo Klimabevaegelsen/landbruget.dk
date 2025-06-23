@@ -101,7 +101,7 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/field_area_analysis_pipeline
-        uv pip install --system -e .
+        uv pip install --system .
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
