@@ -75,66 +75,61 @@ def get_default_dates() -> tuple[date, date]:
 
 def parse_args() -> Dict[str, Any]:
     """Parse command line arguments."""
-    start_date_def, end_date_def = get_default_dates()
+    parser = argparse.ArgumentParser(description="CHR Data Pipeline")
 
-    parser = argparse.ArgumentParser(description="Run the CHR Data Pipeline.")
     parser.add_argument(
         "--steps",
         type=str,
-        default="herds",
-        choices=[
-            "all",
-            "stamdata",
-            "herds",
-            "herd_details",
-            "diko",
-            "ejendom",
-            "animal_movements",
-            "vetstat",
-            "silver_all",  # Only silver steps
-            "silver_vet_practices",
-            "silver_properties",
-            "silver_herds",
-            "silver_herd_sizes",
-            "silver_animal_movements",
-            "silver_chr_dyr_animal_movements",
-            "silver_property_vet_events",
-            "silver_antibiotic_usage",
-        ],
-        help="Pipeline steps to run (bronze steps run sequentially before silver)",
+        default="all",
+        help="Pipeline steps to run (all, stamdata, herds, herd_details, diko, animal_movements, ejendom, vetstat, silver_*)",
     )
-    parser.add_argument(
-        "--start-date",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
-        default=start_date_def,
-        help="Start date (YYYY-MM-DD)",
-    )
-    parser.add_argument(
-        "--end-date",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
-        default=end_date_def,
-        help="End date (YYYY-MM-DD)",
-    )
+    parser.add_argument("--test-species-codes", type=str, help="Comma-separated list of species codes for testing")
+    parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds to process")
+    parser.add_argument("--limit-herds-per-species", type=int, help="Limit number of herds per species")
     parser.add_argument("--workers", type=int, default=10, help="Number of parallel workers")
-    parser.add_argument("--test-species-codes", type=str, help='Comma-separated species codes (e.g., "12,13,14,15")')
-    parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds processed")
-    parser.add_argument("--limit-herds-per-species", type=int, help="Limit number of herds processed per species")
-    parser.add_argument(
-        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="WARNING", help="Logging level"
-    )
+    parser.add_argument("--log-level", type=str, default="WARNING", help="Logging level")
     parser.add_argument("--progress", action="store_true", help="Show progress information")
+    parser.add_argument("--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)")
+    parser.add_argument("--end-date", type=str, help="End date for data collection (YYYY-MM-DD)")
+    parser.add_argument(
+        "--skip-dependencies", action="store_true", help="Skip running dependency steps (for parallel job execution)"
+    )
 
     args = parser.parse_args()
 
-    # Add validation for mutually exclusive arguments
-    if args.limit_total_herds is not None and args.limit_herds_per_species is not None:
-        parser.error("Cannot specify both --limit-total-herds and --limit-herds-per-species")
-
-    # Convert test species codes to list if provided
+    # Convert test_species_codes to list of integers if provided
+    test_species_codes = None
     if args.test_species_codes:
-        args.test_species_codes = [int(code.strip()) for code in args.test_species_codes.split(",")]
+        try:
+            test_species_codes = [int(code.strip()) for code in args.test_species_codes.split(",")]
+        except ValueError:
+            raise ValueError("test_species_codes must be comma-separated integers")
 
-    return vars(args)
+    # Parse dates if provided
+    start_date, end_date = get_default_dates()
+    if args.start_date:
+        try:
+            start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("start_date must be in YYYY-MM-DD format")
+    if args.end_date:
+        try:
+            end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("end_date must be in YYYY-MM-DD format")
+
+    return {
+        "steps": args.steps,
+        "test_species_codes": test_species_codes,
+        "limit_total_herds": args.limit_total_herds,
+        "limit_herds_per_species": args.limit_herds_per_species,
+        "workers": args.workers,
+        "log_level": args.log_level,
+        "progress": args.progress,
+        "start_date": start_date,
+        "end_date": end_date,
+        "skip_dependencies": args.skip_dependencies,
+    }
 
 
 def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List[int]] = None) -> List[Dict]:
@@ -620,6 +615,10 @@ def main():
             # If a silver step is requested, run all bronze prerequisites
             bronze_steps_to_run = get_required_steps(requested_step)
             run_silver = True
+        elif args.get("skip_dependencies", False):
+            # Skip dependencies - only run the specific step (for parallel job execution)
+            bronze_steps_to_run = [requested_step]
+            run_silver = False
         else:
             # Only run requested bronze step and its prerequisites
             bronze_steps_to_run = get_required_steps(requested_step) + [requested_step]
