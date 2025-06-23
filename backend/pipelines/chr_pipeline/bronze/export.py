@@ -46,8 +46,11 @@ if not USE_GCS:
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
 _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 
-# Get timestamp for this export run
-EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+# Get timestamp for this export run - use shared timestamp from workflow if available
+EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+logger.info(
+    f"Using export timestamp: {EXPORT_TIMESTAMP} (from {'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'})"
+)
 
 # --- Helper Functions ---
 
