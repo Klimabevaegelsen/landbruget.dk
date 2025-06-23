@@ -135,6 +135,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Required DAGI layers for DST mapping
             required_layers = ["landsdele", "regioner", "kommuner"]
 
+            # Column mapping for standardization (same as DAGI silver layer)
+            column_mapping = {
+                "kode": "code",
+                "navn": "name",
+                "nr": "code",
+                "nuts3": "code",
+                "regionskode": "region_code",
+            }
+
             for layer in required_layers:
                 try:
                     if bronze_data and layer in bronze_data:
@@ -144,6 +153,18 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                         data = json.loads(raw_json)
                         if "features" in data and data["features"]:
                             gdf = gpd.GeoDataFrame.from_features(data["features"], crs="EPSG:4326")
+
+                            # Apply column standardization (similar to DAGI silver layer)
+                            for old_name, new_name in column_mapping.items():
+                                if old_name in gdf.columns:
+                                    gdf = gdf.rename(columns={old_name: new_name})
+
+                            # Ensure standard data types
+                            if "code" in gdf.columns:
+                                gdf["code"] = gdf["code"].astype(str)
+                            if "name" in gdf.columns:
+                                gdf["name"] = gdf["name"].astype(str).str.strip()
+
                             dagi_data[layer] = gdf
                             self.log.info(f"Loaded {len(gdf)} features for {layer} from memory")
                     else:
@@ -191,12 +212,17 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             self.log.info(f"Creating DST zone lookup from {len(landsdele)} landsdele")
 
+            # Debug: Log available columns
+            self.log.info(f"Landsdele columns: {list(landsdele.columns)}")
+            self.log.info(f"Regioner columns: {list(regioner.columns)}")
+
             # Create lookup records for each landsdel
             lookup_records = []
 
             for _, landsdel in landsdele.iterrows():
-                landsdel_code = landsdel.get("code", landsdel.get("nuts3", ""))
-                landsdel_name = landsdel.get("name", landsdel.get("navn", ""))
+                # Handle both raw and standardized column names for landsdel
+                landsdel_code = landsdel.get("code") or landsdel.get("nuts3") or ""
+                landsdel_name = landsdel.get("name") or landsdel.get("navn") or ""
 
                 if not landsdel_code:
                     self.log.warning(f"No code found for landsdel: {landsdel_name}")
@@ -212,14 +238,24 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     self.log.warning(f"No DST mapping found for landsdel {landsdel_code}")
                     continue
 
-                # Get the DAGI region info
-                region_code = landsdel.get("region_code", landsdel.get("regionskode", ""))
+                # Get the DAGI region info - handle both raw and standardized column names
+                region_code = landsdel.get("region_code") or landsdel.get("regionskode") or ""
                 region_name = landsdel.get("regionsnavn", "")
 
                 # Find the corresponding DAGI region details
                 region_info = None
                 if region_code:
-                    region_matches = regioner[regioner["code"] == region_code]
+                    # Handle both raw and standardized column names for regioner
+                    if "code" in regioner.columns:
+                        region_matches = regioner[regioner["code"] == region_code]
+                    elif "kode" in regioner.columns:
+                        region_matches = regioner[regioner["kode"] == region_code]
+                    else:
+                        self.log.warning(
+                            f"No code column found in regioner. Available columns: {list(regioner.columns)}"
+                        )
+                        region_matches = gpd.GeoDataFrame()
+
                     if not region_matches.empty:
                         region_info = region_matches.iloc[0]
 
@@ -230,10 +266,14 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     "landsdel_dagi_id": landsdel.get("dagi_id", ""),
                     "dagi_region_code": region_code,
                     "dagi_region_name": region_name
-                    or (region_info.get("name") if region_info is not None else ""),
-                    "dagi_region_nuts2": region_info.get("nuts2", "")
-                    if region_info is not None
-                    else "",
+                    or (
+                        region_info.get("name") or region_info.get("navn", "")
+                        if region_info is not None
+                        else ""
+                    ),
+                    "dagi_region_nuts2": (
+                        region_info.get("nuts2", "") if region_info is not None else ""
+                    ),
                     "dst_regions": "|".join(dst_regions),  # Multiple DST regions separated by |
                     "geometry": landsdel["geometry"],
                     "area_m2": landsdel.get("area_m2", 0),
