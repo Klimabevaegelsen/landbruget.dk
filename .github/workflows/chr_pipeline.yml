@@ -257,7 +257,9 @@ jobs:
           echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
         fi
         
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        # IMPORTANT: Only run the specific step, not its dependencies
+        # Dependencies have already been satisfied by previous jobs and context import
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
         if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
         fi
@@ -355,7 +357,9 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        CMD="python -m main --steps herd_details --log-level $LOG_LEVEL"
+        # IMPORTANT: Only run the herd_details step, not its dependencies
+        # Dependencies have already been satisfied by the foundation job and context import
+        CMD="python -m main --steps herd_details --log-level $LOG_LEVEL --skip-dependencies"
         if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
         fi
@@ -471,7 +475,9 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        # IMPORTANT: Only run the specific step, not its dependencies
+        # Dependencies have already been satisfied by previous jobs and context import
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
         if [[ "$SHOW_PROGRESS" == "true" ]]; then
           CMD="$CMD --progress"
         fi
