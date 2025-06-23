@@ -510,9 +510,9 @@ class FieldAnalysisSilver:
                     ),
                     include_groups=False,
                 )
+                .rename("property_area_shares")
                 .reset_index()
             )
-            property_agg.columns = ["field_id", "block_id", "property_area_shares"]
             results = results.merge(property_agg, on=["field_id", "block_id"], how="left")
         else:
             results["property_area_shares"] = "{}"
@@ -532,9 +532,9 @@ class FieldAnalysisSilver:
                     ),
                     include_groups=False,
                 )
+                .rename("soil_area_shares")
                 .reset_index()
             )
-            soil_agg.columns = ["field_id", "block_id", "soil_area_shares"]
             results = results.merge(soil_agg, on=["field_id", "block_id"], how="left")
         else:
             results["soil_area_shares"] = "{}"
@@ -554,9 +554,9 @@ class FieldAnalysisSilver:
                     ),
                     include_groups=False,
                 )
+                .rename("bnbo_area_shares")
                 .reset_index()
             )
-            bnbo_agg.columns = ["field_id", "block_id", "bnbo_area_shares"]
             results = results.merge(bnbo_agg, on=["field_id", "block_id"], how="left")
         else:
             results["bnbo_area_shares"] = "{}"
@@ -578,9 +578,9 @@ class FieldAnalysisSilver:
                     ),
                     include_groups=False,
                 )
+                .rename("bnbo_water_projects_shares")
                 .reset_index()
             )
-            bnbo_water_agg.columns = ["field_id", "block_id", "bnbo_water_projects_shares"]
             results = results.merge(bnbo_water_agg, on=["field_id", "block_id"], how="left")
         else:
             results["bnbo_water_projects_shares"] = "{}"
