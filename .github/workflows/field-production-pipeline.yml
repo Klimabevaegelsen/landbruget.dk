@@ -37,7 +37,6 @@ env:
 jobs:
   field-production:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3 hours for large datasets
 
     steps:
       - name: Checkout code
