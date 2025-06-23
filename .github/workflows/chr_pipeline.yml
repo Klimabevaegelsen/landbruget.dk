@@ -558,12 +558,12 @@ jobs:
         # Download all bronze data from GCS
         echo "Downloading bronze data from GCS..."
         
-        # Get the latest timestamp folder
-        LATEST_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/chr/bronze/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+        # Get the latest timestamp folder (corrected path: bronze/chr not chr/bronze)
+        LATEST_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/bronze/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
         
         if [[ -n "$LATEST_TIMESTAMP" ]]; then
           echo "Found latest bronze data timestamp: $LATEST_TIMESTAMP"
-          gsutil -m cp -r gs://$GCS_BUCKET/chr/bronze/$LATEST_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
+          gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$LATEST_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
           
           # Set the timestamp for silver processing
           echo "BRONZE_DATE_FOLDER_OVERRIDE=$LATEST_TIMESTAMP" >> .env
@@ -607,7 +607,10 @@ jobs:
         
         if [[ -n "$GCS_BUCKET" ]]; then
           echo "Checking silver data in GCS..."
-          gsutil ls -l gs://$GCS_BUCKET/chr/silver/ | tail -20 || echo "No silver data found in GCS"
+          gsutil ls -l gs://$GCS_BUCKET/silver/chr/ | tail -20 || echo "No silver data found in GCS"
+          echo ""
+          echo "Checking bronze data in GCS..."
+          gsutil ls -l gs://$GCS_BUCKET/bronze/chr/ | tail -20 || echo "No bronze data found in GCS"
         fi
         
         if [[ -d "/tmp/data/silver" ]]; then
