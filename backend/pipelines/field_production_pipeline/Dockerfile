@@ -19,11 +19,11 @@ ENV C_INCLUDE_PATH=/usr/include/gdal
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file
-COPY requirements.txt .
+# Copy the project configuration
+COPY pyproject.toml .
 
 # Install Python dependencies using uv
-RUN uv pip install --system -r requirements.txt --no-cache
+RUN uv pip install --system . --no-cache
 
 # Copy the pipeline code
 COPY . .
