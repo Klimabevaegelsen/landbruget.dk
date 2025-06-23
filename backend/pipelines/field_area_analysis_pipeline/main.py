@@ -19,6 +19,7 @@ Outputs:
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -800,11 +801,15 @@ def main():
         print(f"📅 Using specified year: {actual_year}")
 
     # Create the main pipeline instance
-    pipeline = FieldAnalysisSilver(
-        batch_size=args.batch_size,
-        memory_limit=args.memory_limit,
-        thread_count=args.threads,
-    )
+    try:
+        pipeline = FieldAnalysisSilver(
+            batch_size=args.batch_size,
+            memory_limit=args.memory_limit,
+            thread_count=args.threads,
+        )
+    except Exception as e:
+        print(f"\n❌ Failed to initialize pipeline: {e}")
+        sys.exit(1)
 
     print(f"🚀 Starting Field Area Analysis Silver Layer for {actual_year}")
     if args.max_batches:
@@ -815,11 +820,35 @@ def main():
 
     try:
         output_file = pipeline.run_analysis(actual_year, args.max_batches)
+
+        # Verify output file exists and has content
+        if not Path(output_file).exists():
+            print(f"\n❌ Pipeline reported success but output file not found: {output_file}")
+            sys.exit(1)
+
+        file_size = Path(output_file).stat().st_size
+        if file_size == 0:
+            print(f"\n❌ Pipeline reported success but output file is empty: {output_file}")
+            sys.exit(1)
+
         print("\n✅ Field Area Analysis Silver Layer completed successfully!")
         print(f"   Output: {output_file}")
+        print(f"   File size: {file_size / 1024 / 1024:.1f} MB")
+    except ImportError as e:
+        # Critical dependency errors should fail the pipeline
+        print(f"\n❌ Critical dependency error: {e}")
+        if "pyarrow" in str(e) or "parquet" in str(e):
+            print("Missing pyarrow dependency - this is a critical error")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"\n❌ Required data not found: {e}")
+        sys.exit(1)
     except Exception as e:
         print(f"\n❌ Pipeline failed: {e}")
-        raise
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
