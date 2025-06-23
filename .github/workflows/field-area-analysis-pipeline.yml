@@ -192,42 +192,53 @@ jobs:
         if [ -n "${LATEST_DIR}" ]; then
           echo "✅ Latest analysis directory: ${LATEST_DIR}"
           
-          # Check for the analysis file inside the directory
-          ANALYSIS_FILE="${LATEST_DIR}field_spatial_analysis_${{ inputs.year }}_*.parquet"
+          # List all files in the directory to see what's actually there
+          echo "Checking directory contents..."
+          DIR_CONTENTS=$(gsutil ls "${LATEST_DIR}" 2>/dev/null || echo "")
           
-          if gsutil ls "${ANALYSIS_FILE}" > /dev/null 2>&1; then
-            LATEST_FILE=$(gsutil ls "${ANALYSIS_FILE}" | head -1)
-            echo "✅ Latest analysis file: ${LATEST_FILE}"
+          if [ -n "${DIR_CONTENTS}" ]; then
+            echo "${DIR_CONTENTS}"
             
-            # Get file info
-            gsutil stat "${LATEST_FILE}"
+            # Look for any parquet file that matches the expected pattern
+            ANALYSIS_FILE=$(echo "${DIR_CONTENTS}" | grep "data\.parquet" | head -1)
             
-            # Basic validation - file should be reasonably sized
-            FILE_SIZE=$(gsutil stat "${LATEST_FILE}" | grep "Content-Length" | awk '{print $2}')
-            if [ "${FILE_SIZE}" -gt 1000000 ]; then  # > 1MB
-              echo "✅ Output file size looks reasonable: ${FILE_SIZE} bytes"
+            if [ -n "${ANALYSIS_FILE}" ]; then
+              echo "✅ Found analysis file: ${ANALYSIS_FILE}"
+              
+              # Get file info
+              gsutil stat "${ANALYSIS_FILE}"
+              
+              # Basic validation - file should be reasonably sized
+              FILE_SIZE=$(gsutil stat "${ANALYSIS_FILE}" | grep "Content-Length" | awk '{print $2}')
+              if [ "${FILE_SIZE}" -gt 1000000 ]; then  # > 1MB
+                echo "✅ Output file size looks reasonable: ${FILE_SIZE} bytes"
+              else
+                echo "⚠️ Output file seems small: ${FILE_SIZE} bytes"
+              fi
             else
-              echo "⚠️ Output file seems small: ${FILE_SIZE} bytes"
+              echo "❌ No data.parquet file found in ${LATEST_DIR}"
+              echo "Available files:"
+              echo "${DIR_CONTENTS}"
+              
+              # In development/testing, this might be expected if not uploading to GCS
+              if [[ "${{ inputs.max_batches }}" != "0" ]]; then
+                echo "ℹ️ This was a test run with limited batches - GCS upload may be skipped"
+              else
+                exit 1
+              fi
             fi
           else
-            echo "❌ No analysis file found in ${LATEST_DIR}"
-            echo "Checking directory contents..."
-            gsutil ls "${LATEST_DIR}" || echo "Directory is empty or inaccessible"
-            
-            # In development/testing, this might be expected if not uploading to GCS
-            if [[ "${{ inputs.max_batches }}" != "0" ]]; then
-              echo "ℹ️ This was a test run with limited batches - GCS upload may be skipped"
-            else
-              exit 1
-            fi
+            echo "❌ Directory is empty or inaccessible: ${LATEST_DIR}"
+            exit 1
           fi
         else
           echo "ℹ️ No field area analysis directories found in GCS"
           echo "This is expected for development runs or if GCS upload is disabled"
           
           # Check local files were created
-          if [ -f "backend/pipelines/field_area_analysis_pipeline/silver/*.parquet" ]; then
+          if ls backend/pipelines/field_area_analysis_pipeline/silver/*.parquet 1> /dev/null 2>&1; then
             echo "✅ Local output files were created successfully"
+            ls -la backend/pipelines/field_area_analysis_pipeline/silver/*.parquet
           else
             echo "❌ No local output files found either"
             exit 1
