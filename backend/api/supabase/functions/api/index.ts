@@ -62,7 +62,7 @@ async function getCompanyDetails(supabase: SupabaseClient, companyId: string): P
 // Define a basic type for chart data structures
 type ChartData = {
   xAxis?: { label: string; values?: any[] }; // Made values optional
-  yAxis?: { label: string; values?: any[] }; 
+  yAxis?: { label: string; values?: any[] };
   series?: { name: string; data: any[]; type?: string; yAxis?: string }[];
 };
 // Define a general type for component processing results
@@ -115,7 +115,7 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
     head: false
   });
 
-  // --- DEBUGGING for site_species_production_ranked --- 
+  // --- DEBUGGING for site_species_production_ranked ---
   if (sourceTable === 'site_species_production_ranked') {
     console.log(`DEBUG_SSPR: getLatestYearForCompany for ${sourceTable}`);
     console.log(`DEBUG_SSPR: filterContext:`, filterContext);
@@ -254,7 +254,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   if (!source || !columns) throw new Error(`Invalid config for dataGrid: missing source or columns.`);
   console.log(`processDataGrid: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(initialFilter)}`);
 
-  // --- Reverted Logic: Standard approach --- 
+  // --- Reverted Logic: Standard approach ---
   const selectColumns = columns.map((c: any) => c.column).join(',');
   let query: any = supabase.from(source).select(selectColumns);
 
@@ -266,7 +266,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
     console.log(`processDataGrid: Skipping company_id filter for ${source}`);
   }
 
-  // Apply initial filters (potentially using context) 
+  // Apply initial filters (potentially using context)
   if (initialFilter) {
     for (const key in initialFilter) {
       let filterValue = initialFilter[key];
@@ -282,10 +282,10 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
         }
       }
 
-      // Apply the filter 
+      // Apply the filter
       if (filterValue === 'latest') {
-         // Check latest year based on the source table 
-        const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context); 
+         // Check latest year based on the source table
+        const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context);
         if (latestYear) {
            if (await tableHasColumn(supabase, source, 'year')) {
                query = query.eq('year', latestYear);
@@ -298,7 +298,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
           return { rows: [], columns: columns, allowFiltering };
         }
       } else {
-        // Apply other filters 
+        // Apply other filters
         if (await tableHasColumn(supabase, source, key)){
              query = query.eq(key, filterValue);
         } else {
@@ -309,7 +309,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
     }
   }
 
-  // Apply ordering 
+  // Apply ordering
   if (orderBy?.length > 0) {
     orderBy.forEach((order: any) => {
         // Check if order column exists before applying
@@ -338,7 +338,7 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
     };
   }
 
-  // --- Reverted Logic: Standard data processing --- 
+  // --- Reverted Logic: Standard data processing ---
   const processedData = data; // No need for special handling anymore
 
   const rows = processedData.map((row: any) => {
@@ -949,9 +949,10 @@ function formatValue(value: any, format: any): string {
 }
 // Define type for iterated section results
 type IteratedSectionResult = {
-    title: string;
-    layout: string;
-    content: ComponentResult[];
+  _key: string;
+  title: string;
+  layout: string;
+  content: ComponentResult[];
 }
 // --- Recursive Component Processor ---
 async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
@@ -1031,6 +1032,7 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
             sectionContent.push(processedItem);
           } // End template component loop
           iteratedSections.push({
+            _key: `${_key}-item-${iteratedSections.length}`,
             title: iterationConfig?.titleField ? item[iterationConfig.titleField] : `Item ${iteratedSections.length + 1}`,
             layout: iterationConfig?.layout || 'default',
             content: sectionContent
@@ -1081,8 +1083,8 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   } else {
     // Error path remains the same
     return {
-      _key: _key,       
-      _type: "error",   
+      _key: _key,
+      _type: "error",
       title: title || _key,
       error: finalResultData?.error || processingError || "Unknown processing error"
     };

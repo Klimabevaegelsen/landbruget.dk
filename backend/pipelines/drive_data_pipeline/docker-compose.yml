@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  drive-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data:/app/data
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials.json}:/app/credentials.json:ro
+    environment:
+      - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+      - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      - GCS_BUCKET=${GCS_BUCKET:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_WORKERS=${MAX_WORKERS:-4}
+    command: ["--log-level", "${LOG_LEVEL:-INFO}"] 

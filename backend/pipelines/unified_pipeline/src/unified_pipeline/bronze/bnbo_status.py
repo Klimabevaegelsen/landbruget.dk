@@ -1,3 +1,18 @@
+"""
+Bronze layer data ingestion for BNBO status data.
+
+This module handles the extraction of BNBO status data from the WFS service.
+It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+for further processing in the silver layer.
+
+The module contains:
+- BNBOStatusBronzeConfig: Configuration class for the data source
+- BNBOStatusBronze: Implementation class for fetching and processing data
+
+The data is fetched in parallel batches to optimize performance, with proper
+error handling and retry logic for robustness.
+"""
+
 import asyncio
 import ssl
 import xml.etree.ElementTree as ET
@@ -5,11 +20,13 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
+import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.timing import AsyncTimer
 
 
 class BNBOStatusBronzeConfig(BaseJobConfig):
@@ -58,7 +75,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
+class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
 
@@ -144,7 +161,12 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
             This method is decorated with retry logic to handle transient failures.
             It will retry up to 5 times with exponential backoff between 4 and 10 seconds.
         """
-        async with self.config.request_semaphore:
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(
+                f"Fetching chunk from {start_index} to {start_index + self.config.batch_size}"
+            ),
+        ):
             self.log.debug(
                 f"Trying to fetch data from {start_index} to {start_index + self.config.batch_size}"
             )
@@ -200,9 +222,10 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         raw_features = []
-        async with aiohttp.ClientSession(
-            headers=self.config.headers, connector=connector
-        ) as session:
+        async with (
+            aiohttp.ClientSession(headers=self.config.headers, connector=connector) as session,
+            AsyncTimer("Fetching raw data from WFS service for BNBO Status"),
+        ):
             try:
                 raw_data = await self._fetch_chunck(session, 0)
                 total_features = raw_data["total_features"]
@@ -242,16 +265,39 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
                 self.log.error(f"Error occured while fetching chunk: {e}")
                 raise e
 
-    async def run(self) -> None:
+    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+        """
+        Create a DataFrame from the raw data.
+        This method takes a list of strings and converts it into a pandas DataFrame.
+
+        Args:
+            raw_data (list[str]): List of strings.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the raw data with metadata.
+        """
+        df = pd.DataFrame(
+            {
+                "payload": raw_data,
+            }
+        )
+        df["source"] = self.config.name
+        df["created_at"] = pd.Timestamp.now()
+        df["updated_at"] = pd.Timestamp.now()
+        return df
+
+    async def run(self) -> Optional[list[str]]:
         """
         Run the complete BNBO status bronze layer job.
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
         2. Saves the raw data to Google Cloud Storage
+        3. Returns the raw data for in-memory passing to silver stage
 
         Returns:
-            None
+            Optional[list[str]]: Raw XML data that can be passed to silver stage,
+                               or None if processing fails
 
         Raises:
             Exception: If there are issues at any step in the process.
@@ -259,11 +305,21 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig]):
         Note:
             This method is typically called by the pipeline orchestrator.
         """
-        self.log.info("Running BNBO status data source")
-        raw_data = await self._fetch_raw_data()
-        if raw_data is None:
-            self.log.error("Failed to fetch raw data")
-            return
-        self.log.info("Fetched raw data successfully")
-        self._save_raw_data(raw_data, self.config.dataset, self.config.name, self.config.bucket)
-        self.log.info("Saved raw data successfully")
+        async with AsyncTimer("Running BNBO Status bronze job for"):
+            self.log.info("Running BNBO Status bronze job")
+            raw_data = await self._fetch_raw_data()
+            if not raw_data:
+                self.log.error("No raw data fetched")
+                return None
+            self.log.info("Fetched raw data successfully")
+
+            # Create DataFrame for storage (backward compatibility)
+            df = self.create_dataframe(raw_data)
+
+            # Save using new unified method
+            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
+            self.log.info("Saved raw data successfully")
+            self.log.info("BNBO Status bronze job completed successfully")
+
+            # Return raw data for in-memory passing
+            return raw_data

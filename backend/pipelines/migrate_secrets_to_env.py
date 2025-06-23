@@ -7,20 +7,19 @@ Requires:
 - python-dotenv
 """
 
-import os
 import logging
+import os
 from typing import Dict, Optional
-from google.cloud import secretmanager
+
+from dotenv import load_dotenv
 from github import Github
 from github.Repository import Repository
-from dotenv import load_dotenv
+from google.cloud import secretmanager
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def get_google_secrets(project_id: str) -> Dict[str, str]:
     """Get all secrets from Google Secret Manager."""
@@ -31,7 +30,7 @@ def get_google_secrets(project_id: str) -> Dict[str, str]:
         # List all secrets in the project
         parent = f"projects/{project_id}"
         for secret in client.list_secrets(request={"parent": parent}):
-            secret_name = secret.name.split('/')[-1]
+            secret_name = secret.name.split("/")[-1]
 
             # Get the latest version of each secret
             version_name = f"{secret.name}/versions/latest"
@@ -48,6 +47,7 @@ def get_google_secrets(project_id: str) -> Dict[str, str]:
         logger.error(f"Error getting secrets from Google Secret Manager: {e}")
         raise
 
+
 def get_github_repo(token: str, repo_name: str) -> Optional[Repository]:
     """Get GitHub repository object."""
     try:
@@ -56,6 +56,7 @@ def get_github_repo(token: str, repo_name: str) -> Optional[Repository]:
     except Exception as e:
         logger.error(f"Error connecting to GitHub: {e}")
         raise
+
 
 def update_github_secrets(repo: Repository, secrets: Dict[str, str]) -> None:
     """Update GitHub repository secrets."""
@@ -66,7 +67,7 @@ def update_github_secrets(repo: Repository, secrets: Dict[str, str]) -> None:
         # Update each secret
         for name, value in secrets.items():
             # Convert secret name to GitHub format (uppercase with underscores)
-            github_name = name.upper().replace('-', '_')
+            github_name = name.upper().replace("-", "_")
 
             try:
                 if github_name in existing_secrets:
@@ -85,14 +86,15 @@ def update_github_secrets(repo: Repository, secrets: Dict[str, str]) -> None:
         logger.error(f"Error updating GitHub secrets: {e}")
         raise
 
+
 def main():
     """Main function to sync secrets."""
     load_dotenv()
 
     # Get required environment variables
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
-    github_token = os.getenv('GITHUB_TOKEN')
-    github_repo = os.getenv('GITHUB_REPOSITORY')  # Should be in format "owner/repo"
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    github_token = os.getenv("GITHUB_TOKEN")
+    github_repo = os.getenv("GITHUB_REPOSITORY")  # Should be in format "owner/repo"
 
     if not all([project_id, github_token, github_repo]):
         logger.error("Missing required environment variables")
@@ -114,6 +116,7 @@ def main():
     except Exception as e:
         logger.error(f"Error during secret sync: {e}")
         return
+
 
 if __name__ == "__main__":
     main()

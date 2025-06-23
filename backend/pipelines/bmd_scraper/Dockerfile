@@ -34,4 +34,4 @@ RUN if [ "$ENVIRONMENT" = "production" ]; then \
 ENV ENVIRONMENT=container
 
 # Command to run the application
-CMD ["python", "main.py"] 
+CMD ["python", "main.py"]

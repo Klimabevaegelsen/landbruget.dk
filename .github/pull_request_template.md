@@ -1,6 +1,6 @@
 ## 🛠️ Issue Fix
 <!-- Describe the issue this PR fixes -->
-Fixes #[ISSUE_NUMBER]  
+Fixes #[ISSUE_NUMBER]
 <!-- If there's no issue, you can write "No issue linked" -->
 
 ## 💡 Solution

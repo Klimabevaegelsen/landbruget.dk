@@ -1,13 +1,30 @@
+"""
+Silver layer processing for BNBO Status data.
+
+This module transforms raw data (from the bronze layer) into cleaner,
+more structured data for analytical purposes. It handles the extraction
+of GeoJSON features from API responses, converts them to GeoDataFrames,
+and applies transformations such as column renaming and geometry validation.
+
+The module consists of two main components:
+- BNBOStatusSilverConfig: Configuration for Silver processing
+- BNBOStatusSilver: Implementation of Silver processing logic
+
+The process reads in bronze layer data, transforms it into GeoDataFrames,
+validates geometries, and stores the processed data in GCS.
+"""
+
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import geopandas as gpd
 import pandas as pd
 from shapely import MultiPolygon, Polygon, difference, unary_union, wkt
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
+from unified_pipeline.util.timing import AsyncTimer, timed
 
 
 class BNBOStatusSilverConfig(BaseJobConfig):
@@ -41,7 +58,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
 
 
-class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
+class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     """
     Silver layer processor for BNBO status data.
 
@@ -50,8 +67,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
     the data pipeline architecture. The class handles XML processing, geometry
     operations, and data storage in GCS.
 
-    Attributes:
-        config (BNBOStatusSilverConfig): Configuration object containing settings for the processor.
+    The processing includes:
+    1. Reading raw XML data from the bronze layer.
+    2. Parsing XML features and extracting geometries.
+    3. Converting geometries to WKT format and calculating areas.
+    4. Creating a GeoDataFrame with the processed features.
+    5. Dissolving geometries based on status categories.
+    6. Saving the processed data back to GCS.
     """
 
     def __init__(self, config: BNBOStatusSilverConfig, gcs_util: GCSUtil):
@@ -111,7 +133,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         value = value.strip()
         return value if value else None
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[Dict[str, Any]]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[dict[str, Any]]:
         """
         Parse GML geometry into WKT format and calculate area.
 
@@ -122,7 +144,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             geom_elem (ET.Element): The XML element containing GML geometry data.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the WKT representation
+            Optional[dict[str, Any]]: A dictionary containing the WKT representation
                                      and area (in hectares) of the geometry, or None
                                      if parsing fails.
 
@@ -166,7 +188,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error parsing geometry: {str(e)}")
             return None
 
-    def _parse_feature(self, feature: ET.Element) -> Optional[Dict[str, Any]]:
+    def _parse_feature(self, feature: ET.Element) -> Optional[dict[str, Any]]:
         """
         Parse a single XML feature into a dictionary of attributes.
 
@@ -178,7 +200,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             feature (ET.Element): The XML element containing feature data.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing feature attributes including
+            Optional[dict[str, Any]]: A dictionary containing feature attributes including
                                      geometry and area, or None if parsing fails.
 
         Raises:
@@ -219,6 +241,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
             return None
 
+    @timed(name="Processing bronze data")  # type: ignore
     def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
         """
         Process XML data from the bronze layer into a GeoDataFrame.
@@ -271,6 +294,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         geometries = [wkt.loads(f["geometry"]) for f in features]
         return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
+    @timed(name="Creating dissolved GeoDataFrame")  # type: ignore
     def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
         """
         Create a dissolved GeoDataFrame by merging geometries by status category.
@@ -292,7 +316,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
         """
         try:
             # Convert to WGS84 before processing
-            if df.crs.to_epsg() != 4326:
+            if df.crs and df.crs.to_epsg() != 4326:
                 df = df.to_crs("EPSG:4326")
 
             # Split into two categories
@@ -318,16 +342,16 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
 
             if action_required_dissolved is not None:
                 if action_required_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(action_required_dissolved.geoms))
-                    categories.extend(["Action Required"] * len(action_required_dissolved.geoms))
+                    dissolved_geometries.extend(list(action_required_dissolved.geoms))  # type: ignore
+                    categories.extend(["Action Required"] * len(action_required_dissolved.geoms))  # type: ignore
                 else:
                     dissolved_geometries.append(action_required_dissolved)
                     categories.append("Action Required")
 
             if completed_dissolved is not None:
                 if completed_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(completed_dissolved.geoms))
-                    categories.extend(["Completed"] * len(completed_dissolved.geoms))
+                    dissolved_geometries.extend(list(completed_dissolved.geoms))  # type: ignore
+                    categories.extend(["Completed"] * len(completed_dissolved.geoms))  # type: ignore
                 else:
                     dissolved_geometries.append(completed_dissolved)
                     categories.append("Completed")
@@ -349,15 +373,19 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             self.log.error(f"Error during dissolve operation: {str(e)}")
             raise e
 
-    async def run(self) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the complete BNBO status silver layer processing job.
 
         This is the main entry point that orchestrates the entire process:
-        1. Reads data from the bronze layer
+        1. Reads data from the bronze layer (either in-memory or from storage)
         2. Processes XML data into a GeoDataFrame
         3. Creates a dissolved version of the GeoDataFrame
         4. Saves both the original and dissolved data to GCS
+
+        Args:
+            bronze_data: Optional in-memory data from bronze stage. If provided,
+                        this data will be used instead of reading from storage.
 
         Returns:
             None
@@ -366,17 +394,27 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig]):
             Exception: If there are issues at any step in the process.
         """
         self.log.info("Running BNBO status silver job")
-        raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-        if raw_data is None:
-            self.log.error("Failed to read raw data")
-            return
-        self.log.info("Read raw data successfully")
-        geo_df = self._process_xml_data(raw_data)
-        if geo_df is None:
-            self.log.error("Failed to process raw data")
-            return
-        self.log.info("Processed raw data successfully")
-        dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
-        self._save_data(geo_df, self.config.dataset, self.config.bucket)
-        self._save_data(dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket)
-        self.log.info("Saved processed data successfully")
+        async with AsyncTimer("Running BNBO status silver job for"):
+            # Read data with support for in-memory passing
+            raw_data = self._read_bronze_data(
+                self.config.dataset, self.config.bucket, bronze_data=bronze_data
+            )
+            if raw_data is None:
+                self.log.error("Failed to read raw data")
+                return
+            self.log.info("Read raw data successfully")
+
+            geo_df = self._process_xml_data(raw_data)
+            if geo_df is None:
+                self.log.error("Failed to process raw data")
+                return
+            self.log.info("Processed raw data successfully")
+
+            dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
+
+            # Save using new unified method
+            self._save_data(geo_df, self.config.dataset, self.config.bucket, stage="silver")
+            self._save_data(
+                dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket, stage="silver"
+            )
+            self.log.info("Saved processed data successfully")

@@ -97,7 +97,7 @@ The automation is configured in `.github/workflows/bmd_monthly.yml` with the fol
 
 - **Schedule**: Monthly runs on the 1st at 2 AM UTC (`cron: '0 2 1 * *'`)
 - **Manual Triggering**: Can be triggered manually with environment selection
-- **Environment Support**: 
+- **Environment Support**:
   - In production mode, uploads data to GCS and installs production dependencies
   - In development mode, saves artifacts in GitHub Actions
 - **GCP Authentication**: Automatically handles authentication for GCS in production mode
@@ -141,4 +141,4 @@ python main.py --stage bronze
 Run only the silver stage:
 ```bash
 python main.py --stage silver
-``` 
+```
