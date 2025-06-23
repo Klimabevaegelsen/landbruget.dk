@@ -33,7 +33,7 @@ class BronzeStorageManager:
         logger.info(f"Initialized Bronze storage manager for pipeline: {self.pipeline_name}")
 
     def create_run_directory(self, timestamp: str | None = None) -> Path:
-        """Create a timestamped run directory following standard GCS structure.
+        """Create a timestamped run directory following the required path structure.
 
         Args:
             timestamp: Optional timestamp string (if not provided, one will be generated)
@@ -45,15 +45,15 @@ class BronzeStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use standard GCS structure: bronze/drive_data/{timestamp}
+        # Use required structure: bronze/static_data/drive/{timestamp}
         # For local storage, this will be relative to base_path
         # For GCS, this will be the full path in the bucket
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use standard structure
-            run_dir = Path(f"bronze/{self.pipeline_name}/{timestamp}")
+            # GCS storage - use required structure
+            run_dir = Path(f"bronze/static_data/drive/{timestamp}")
         else:
-            # Local storage - use base_path
-            run_dir = self.base_path / timestamp
+            # Local storage - use base_path with required structure
+            run_dir = self.base_path / "static_data" / "drive" / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(run_dir)
@@ -62,10 +62,10 @@ class BronzeStorageManager:
         return run_dir
 
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
-        """Create a folder structure mirroring the source.
+        """Create a folder structure mirroring the source with subfolder organization.
 
         Args:
-            run_dir: Base run directory
+            run_dir: Base run directory (already includes bronze/static_data/drive/{timestamp})
             folder_path: Path of the folder in the source (e.g., Google Drive)
 
         Returns:
@@ -74,8 +74,9 @@ class BronzeStorageManager:
         # Normalize folder path (remove leading/trailing slashes)
         folder_path = folder_path.strip("/")
 
-        # Preserve the full Google Drive folder hierarchy
-        # This allows for proper organization and avoids filename conflicts
+        # For the required structure, we need to organize by subfolder name
+        # The run_dir is already bronze/static_data/drive/{timestamp}
+        # We need to add the subfolder name as the next level
         if folder_path:
             # Split the path and sanitize each component
             path_parts = folder_path.split("/")
@@ -88,7 +89,8 @@ class BronzeStorageManager:
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
                 sanitized_parts.append(sanitized_part)
 
-            # Build the target path preserving hierarchy
+            # For the required structure, the first part becomes the subfolder name
+            # Additional parts preserve the hierarchy within that subfolder
             target_path = run_dir
             for part in sanitized_parts:
                 target_path = target_path / part
