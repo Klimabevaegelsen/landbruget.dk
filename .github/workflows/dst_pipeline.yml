@@ -1,0 +1,158 @@
+name: Danish Statistics API Pipeline
+
+on:
+  schedule:
+    # Run weekly on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      tables:
+        description: 'Tables to process (space-separated)'
+        required: false
+        type: string
+        default: 'HST77 GARTN1 FRO HALM1'
+
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: false
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'INFO'
+      environment:
+        description: 'Environment to use'
+        type: choice
+        required: false
+        options:
+          - prod
+          - dev
+        default: 'prod'
+      layer:
+        description: 'Pipeline layer to run'
+        type: choice
+        required: false
+        options:
+          - all
+          - bronze-only
+          - silver-only
+        default: 'all'
+
+jobs:
+  run-dst-pipeline:
+    name: Run DST API Pipeline
+    runs-on: ubuntu-latest
+
+    # Add permissions for GCS access
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/dst_pipeline
+        uv pip install --system -e .
+
+    - name: Authenticate to Google Cloud (Production only)
+      id: auth
+      if: inputs.environment == 'prod' || inputs.environment == null
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK (Production only)
+      if: inputs.environment == 'prod' || inputs.environment == null
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Create data directories
+      run: |
+        mkdir -p bronze/dst
+        mkdir -p silver/dst
+
+    - name: Run DST Pipeline
+      working-directory: backend/pipelines/dst_pipeline
+      env:
+        ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+        LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        LOCAL_STORAGE_DIR: ${{ inputs.environment == 'dev' && '../../../bronze/dst' || '' }}
+      run: |
+        # Build base command
+        TABLES="${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        LOG_LEVEL="${{ inputs.log_level || 'INFO' }}"
+        
+        CMD="python main.py --tables $TABLES --log-level $LOG_LEVEL"
+        
+        # Add layer-specific arguments
+        if [ "${{ inputs.layer }}" == "bronze-only" ]; then
+          CMD="$CMD --bronze-only"
+        elif [ "${{ inputs.layer }}" == "silver-only" ]; then
+          CMD="$CMD --silver-only"
+        fi
+        
+        # Set directory paths for GitHub Actions
+        CMD="$CMD --bronze-dir ../../../bronze/dst --silver-dir ../../../silver/dst"
+        
+        echo "🚀 Running DST Pipeline with command: $CMD"
+        $CMD
+
+    - name: Verify output
+      run: |
+        echo "=== Bronze layer output ==="
+        if [ -d "bronze/dst" ]; then
+          find bronze/dst -type f -name "*.json" | head -10
+          echo "Bronze files count: $(find bronze/dst -type f -name "*.json" | wc -l)"
+        else
+          echo "No bronze output directory found"
+        fi
+        
+        echo ""
+        echo "=== Silver layer output ==="
+        if [ -d "silver/dst" ]; then
+          find silver/dst -type f -name "*.parquet" | head -10
+          echo "Silver files count: $(find silver/dst -type f -name "*.parquet" | wc -l)"
+        else
+          echo "No silver output directory found"
+        fi
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "DST Pipeline failed. Please check the logs above for details."
+        echo "Tables requested: ${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        echo "Environment: ${{ inputs.environment || 'prod' }}"
+        exit 1
+
+    - name: Upload artifacts (Development only)
+      uses: actions/upload-artifact@v4
+      if: inputs.environment == 'dev' && always()  # Upload even if the pipeline fails
+      with:
+        name: dst-pipeline-output-${{ github.run_number }}
+        path: |
+          bronze/dst
+          silver/dst
+        retention-days: 7
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "DST API Pipeline completed successfully on $(date)"
+        echo "Tables processed: ${{ inputs.tables || 'HST77 GARTN1 FRO HALM1' }}"
+        echo "Environment: ${{ inputs.environment || 'prod' }}" 

@@ -16,7 +16,7 @@ services:
       - VETSTAT_CERTIFICATE_PASSWORD=${VETSTAT_CERTIFICATE_PASSWORD}
       - VETSTAT_CERTIFICATE_PATH=/app/vetstat.p12
     command: >
-      sh -c "/opt/venv/bin/python debug_paths.py && /opt/venv/bin/python main.py --steps all --log-level INFO --progress --limit-herds-per-species 10"
+      sh -c "/opt/venv/bin/python debug_paths.py && /opt/venv/bin/python main.py --steps herds --log-level INFO --progress --limit-herds-per-species 10"
     networks:
       - chr_network
 

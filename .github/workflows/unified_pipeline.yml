@@ -1,0 +1,71 @@
+# Unified Pipeline
+
+name: Unified Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
+  workflow_dispatch:
+    # Allow manual triggering
+    inputs:
+      source:
+        description: 'Source to run the pipeline for'
+        required: true
+        default: 'cadastral'
+        type: choice
+        options:
+          - all
+          - cadastral
+          - agricultural_fields
+          - bnbo
+          - spf_su
+          - dagi
+          - jordbrugsanalyser
+          - soil_types
+          - wetlands
+          - water_projects
+
+jobs:
+  run-unified-pipeline:
+    name: Run Unified Pipeline
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        source: >-
+          ${{
+            github.event_name == 'schedule' &&
+            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "soil_types", "wetlands", "water_projects"]') ||
+            (github.event.inputs.source == 'all' &&
+            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "soil_types", "wetlands", "water_projects"]')) ||
+            fromJson(format('["{0}"]', github.event.inputs.source))
+          }}
+      fail-fast: false
+    env:
+      ENVIRONMENT: production
+      DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+      DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Unified Pipeline for ${{ matrix.source }}
+        run: python -m unified_pipeline -s ${{ matrix.source }} -j all

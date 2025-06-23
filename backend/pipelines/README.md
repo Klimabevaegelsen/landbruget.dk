@@ -21,7 +21,7 @@ backend/pipelines
 ....
 ├── common/
     ├── logger_utils.py
-    ├── argparser_utils.py 
+    ├── argparser_utils.py
     ├── storage.py      # Google Cloud Storage utils
     ├── config.py
 ├── pyproject.toml
@@ -43,7 +43,7 @@ pipeline_name/
 └── silver/             # Silver layer output directory
     └── ...             # Processed data code and files
 └── handler/             # Google cloud function handler for the pipeline (optional)
-    └── ...  
+    └── ...
 ```
 
 ## Getting Started
@@ -71,11 +71,11 @@ pipeline_name/
   # API/Service Credentials
   API_USERNAME=your_username
   API_PASSWORD=your_password
-  
+
   # Storage Configuration
   OUTPUT_BUCKET=your-gcs-bucket
   ENVIRONMENT=dev
-  
+
   # Source-specific Configuration
   SOURCE_URL=https://api.example.com
   FTP_HOST=ftp.example.com
@@ -167,24 +167,24 @@ def fetch_data(config: DataSourceConfig) -> Union[Dict, Any]:
     elif config.source_type == "file":
         return fetch_from_drive(config)
     # ... handle other source types
-    
+
 def save_raw_data(data: Any, output_dir: Path) -> None:
     """Save raw data with metadata, preserving original format"""
     # Save data in its original format (JSON, CSV, XML, etc.)
     # Add metadata including source information
-    # **IMPORTANT**: Absolutely NO transformations should happen here. 
+    # **IMPORTANT**: Absolutely NO transformations should happen here.
     # The data saved must be identical to what was fetched.
     pass
 
 def main() -> None:
     args = parse_args()
     setup_logging(args.log_level)
-    
+
     # Create timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(f"data/bronze/{timestamp}")
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         config = DataSourceConfig(args)
         data = fetch_data(config)
@@ -222,7 +222,7 @@ if __name__ == "__main__":
       file_id = config.file_id
       download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
       output_path = Path(f"temp_{datetime.now().timestamp()}")
-      
+
       try:
           # Download file in chunks
           with requests.get(download_url, stream=True) as r:
@@ -283,7 +283,7 @@ if __name__ == "__main__":
       data_path = path / "data.json"
       with data_path.open("w") as f:
           json.dump(data, f)
-      
+
       # Save metadata
       metadata = {
           "timestamp": datetime.now().isoformat(),
@@ -334,11 +334,13 @@ A pipeline fetching data from public Google Drive should:
 
 ## Testing
 
+### Unit and Integration Tests
 1. Create test fixtures or use sample data.
 2. Test data fetching logic for different scenarios (e.g., date ranges, connection issues).
 3. Test data processing/transformation logic, **preferably using `ibis` expressions and `duckdb`** for validation against expected outcomes.
 4. Verify output format (ideally Parquet) and metadata correctness.
 5. Check error handling mechanisms.
+
 Example:
 ```python
 def test_fetch_data():
@@ -347,9 +349,58 @@ def test_fetch_data():
     assert "records" in result
 ```
 
+### Local Pipeline Testing
+Test your pipeline locally before deployment:
+
+```bash
+# Test with Docker Compose
+docker-compose up --build
+
+# Test the main script directly
+python main.py --help
+python main.py --source-type api --dry-run
+```
+
+### GitHub Actions Workflow Testing with `act`
+
+Before pushing workflow changes, test them locally using [`act`](https://github.com/nektos/act):
+
+```bash
+# Install act (if not already installed)
+brew install act  # macOS
+# or curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+# List available workflows
+act -l
+
+# Test your pipeline workflow (dry run)
+act workflow_dispatch -W .github/workflows/your_pipeline.yml -n
+
+# Test with test secrets
+echo "API_KEY=test_key" > .secrets.test
+act workflow_dispatch -W .github/workflows/your_pipeline.yml --secret-file .secrets.test
+
+# Test specific workflow inputs
+act workflow_dispatch -W .github/workflows/drive_pipeline.yml \
+  --input drive_folder_id="test-folder-id" \
+  --input environment="test" \
+  -n
+```
+
+**Benefits of local testing with `act`:**
+- Catch workflow syntax errors before pushing
+- Validate job dependencies and conditionals
+- Test environment variable handling
+- Verify workflow logic without using GitHub Actions minutes
+
+**Limitations:**
+- Some GitHub-specific features may not work exactly the same
+- Certain actions may behave differently in containers
+- Always do a final test in the actual GitHub Actions environment
+
 ## Deployment
 
-**The target runtime environment for these pipelines is GitHub Actions.** Workflows defined in `.github/workflows/` will build the Docker image and execute the pipeline script (`main.py`) directly within a runner environment. 
+**The target runtime environment for these pipelines is GitHub Actions.** Workflows defined in `.github/workflows/` will build the Docker image and execute the pipeline script (`main.py`) directly within a runner environment.
 
 The typical development and deployment flow is:
 
@@ -402,4 +453,4 @@ Remember to follow the general guidelines in the main backend README.md regardin
 - Security considerations
 - PII handling
 - Performance optimization
-- Source-appropriate error handling 
+- Source-appropriate error handling

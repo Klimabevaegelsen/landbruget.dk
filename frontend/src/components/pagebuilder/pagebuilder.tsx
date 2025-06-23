@@ -5,11 +5,22 @@ import { BlockInfoCard } from "./pageBlocks/block-info-card";
 import { BlockContainer } from "./pageBlocks/block-container";
 import { BlockTable } from "./pageBlocks/block-table";
 import { BlockBarChart } from "./pageBlocks/block-bar-chart";
+import { BlockComboChart } from "./pageBlocks/block-combo-chart";
 import { BlockTimeline } from "./pageBlocks/block-timeline";
+import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
+import { BlockMapChart } from "./pageBlocks/block-map-chart";
+import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
 
-function PageBlock({ block }: { block: PageBuilderItem }) {
+export function PageBlock({
+  block,
+  level = 0,
+}: {
+  block: PageBuilderItem;
+  level?: number;
+}) {
   switch (block._type) {
     case "kpiGroup":
+      return <BlockKpiGroup kpiGroup={block} />;
     case "infoCard":
       return <BlockInfoCard infoCard={block} />;
     case "dataGrid":
@@ -18,11 +29,14 @@ function PageBlock({ block }: { block: PageBuilderItem }) {
     case "horizontalStackedBarChart":
     case "barChart":
       return <BlockBarChart chart={block} />;
+    case "comboChart":
+      return <BlockComboChart chart={block} />;
     case "timeline":
       return <BlockTimeline timeline={block} />;
     case "mapChart":
-    case "comboChart":
+      return <BlockMapChart chart={block} />;
     case "iteratedSection":
+      return <BlockIteratedSection iteratedSection={block} level={level} />;
     default:
       return <BlockPlaceholder block={block} />;
   }
@@ -33,6 +47,18 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
     name: item.title,
     href: `#${item._key}`,
     current: index === 0,
+    id: item._key,
+    subItems:
+      item._type === "iteratedSection"
+        ? item.sections.map((section, index) => {
+            return {
+              name: section.title,
+              href: `#${section._key}`,
+              current: index === 0,
+              id: section._key + index,
+            };
+          })
+        : undefined,
   }));
 
   return (
@@ -47,6 +73,7 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
               title={item.title}
               href={`#${item._key}`}
               secondaryTitle={item._type}
+              stickyTitle={item._type === "iteratedSection"}
             >
               <PageBlock block={item} />
             </BlockContainer>

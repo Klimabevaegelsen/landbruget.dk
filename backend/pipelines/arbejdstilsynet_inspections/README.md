@@ -66,13 +66,13 @@ The Bronze layer fetches the raw inspection data and stores it without any modif
     This will build the Docker image (if not already built or if changes were made) and run the `main.py` script inside the container.
 
 4.  **Run with Custom Parameters**:
-    
+
     Edit the `run.sh` script to modify the command-line parameters before building:
     ```bash
     # Inside run.sh:
     python main.py --start-date 2025-01-01 --end-date 2025-05-01 --log-level DEBUG --stage silver
     ```
-    
+
     Or pass them directly using environment variables:
     ```bash
     PIPELINE_ARGS="--start-date 2025-01-01 --end-date 2025-05-01 --stage silver" docker-compose up --build
@@ -118,10 +118,10 @@ The Silver layer takes the raw CSV data, cleans it, normalizes values, and conve
 ### Process
 
 1. **Data Loading**: Reads the latest Bronze layer CSV data.
-2. **Date Filtering**: 
+2. **Date Filtering**:
    - Filters data based on the specified date range (`--start-date` and `--end-date` command-line arguments)
    - Default date range is from 6 months ago to the current date if not specified
-3. **Cleaning**: 
+3. **Cleaning**:
    - Renames columns to follow consistent naming conventions
    - Deduplicates rows
    - Normalizes enum values and special characters (æ, ø, å)
@@ -162,7 +162,7 @@ When the `--gcs-bucket` parameter is provided, the pipeline will export data to 
 
 2. **Required Permissions**: The service account needs the following permissions:
    * `storage.objects.create`
-   * `storage.objects.get` 
+   * `storage.objects.get`
    * `storage.objects.list`
 
 3. **Data Storage Path**: The pipeline will export data to: `gs://<bucket-name>/arbejdstilsynet_inspections/<layer>/<timestamp>/`

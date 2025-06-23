@@ -25,9 +25,7 @@ class GCSStorage:
             _ = storage
             return True
         except (ImportError, NameError):
-            logging.warning(
-                "Google Cloud Storage library not available. Using local storage only."
-            )
+            logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
     def upload_file(self, local_path, gcs_path=None):
@@ -60,9 +58,7 @@ class SilverPipeline:
     Transforms raw CSV data into cleaned and structured parquet format.
     """
 
-    def __init__(
-        self, start_date=None, end_date=None, gcs_bucket=None, log_level="INFO"
-    ):
+    def __init__(self, start_date=None, end_date=None, gcs_bucket=None, log_level="INFO"):
         """Initialize the Silver Pipeline with paths, constants, and logging setup."""
         # Setup logging
         logging.basicConfig(
@@ -123,22 +119,14 @@ class SilverPipeline:
         """Find the latest bronze directory and CSV file."""
         try:
             self.logger.info(f"Looking for bronze data in: {self.data_root}")
-            bronze_dirs = [
-                d
-                for d in os.listdir(self.data_root)
-                if os.path.isdir(os.path.join(self.data_root, d))
-            ]
+            bronze_dirs = [d for d in os.listdir(self.data_root) if os.path.isdir(os.path.join(self.data_root, d))]
 
             if not bronze_dirs:
-                self.logger.error(
-                    f"No bronze data directories found in {self.data_root}"
-                )
+                self.logger.error(f"No bronze data directories found in {self.data_root}")
                 return False
 
             latest_bronze_dir = max(bronze_dirs)
-            self.input_csv = os.path.join(
-                self.data_root, latest_bronze_dir, "data_merged.csv"
-            )
+            self.input_csv = os.path.join(self.data_root, latest_bronze_dir, "data_merged.csv")
 
             if not os.path.exists(self.input_csv):
                 self.logger.error(f"Input CSV file not found: {self.input_csv}")
@@ -221,14 +209,7 @@ class SilverPipeline:
 
     def normalize_enum_ibis(self, col):
         """Normalize a column's values by replacing Danish characters and standardizing case."""
-        return (
-            col.cast("string")
-            .lower()
-            .replace("æ", "ae")
-            .replace("ø", "oe")
-            .replace("å", "aa")
-            .strip()
-        )
+        return col.cast("string").lower().replace("æ", "ae").replace("ø", "oe").replace("å", "aa").strip()
 
     def normalize_enums(self):
         """Normalize enums and special characters."""
@@ -241,9 +222,7 @@ class SilverPipeline:
                 "industry",
             ]:
                 if field in self.raw.columns:
-                    self.raw = self.raw.mutate(
-                        **{field: self.normalize_enum_ibis(self.raw[field])}
-                    )
+                    self.raw = self.raw.mutate(**{field: self.normalize_enum_ibis(self.raw[field])})
 
             self.logger.info("Normalized enum fields")
             return True
@@ -260,8 +239,7 @@ class SilverPipeline:
                         **{
                             field: ibis.cases(
                                 (
-                                    self.raw[field].isnull()
-                                    | (self.raw[field].cast("string") == ""),
+                                    self.raw[field].isnull() | (self.raw[field].cast("string") == ""),
                                     None,
                                 ),
                                 else_=self.raw[field],
@@ -290,14 +268,10 @@ class SilverPipeline:
                 mutate_dict["company_id"] = self.raw.company_id.cast("int64")
 
             if "appealed" in self.raw.columns:
-                mutate_dict["appealed"] = (self.raw.appealed == "paaklaget").ifelse(
-                    1, 0
-                )
+                mutate_dict["appealed"] = (self.raw.appealed == "paaklaget").ifelse(1, 0)
 
             if "complied" in self.raw.columns:
-                mutate_dict["complied"] = (self.raw.complied == "efterkommet").ifelse(
-                    1, 0
-                )
+                mutate_dict["complied"] = (self.raw.complied == "efterkommet").ifelse(1, 0)
 
             if mutate_dict:
                 self.raw = self.raw.mutate(**mutate_dict)
@@ -316,9 +290,7 @@ class SilverPipeline:
                 return True
 
             if "date" not in self.raw.columns:
-                self.logger.warning(
-                    "Date column not found, cannot filter by date range"
-                )
+                self.logger.warning("Date column not found, cannot filter by date range")
                 return False
 
             # Build the filter expression based on available date parameters
@@ -360,12 +332,8 @@ class SilverPipeline:
                 if end_date:
                     date_range_msg += f" to {end_date}"
 
-                self.logger.info(
-                    f"Filtered data by date range: {date_range_msg.strip()}"
-                )
-                self.logger.info(
-                    f"Rows before filtering: {original_count}, rows after: {filtered_count}"
-                )
+                self.logger.info(f"Filtered data by date range: {date_range_msg.strip()}")
+                self.logger.info(f"Rows before filtering: {original_count}, rows after: {filtered_count}")
 
             return True
 
@@ -383,19 +351,13 @@ class SilverPipeline:
             for col in self.df.columns:
                 if self.df[col].dtype == object:  # Check string columns
                     if self.df[col].astype(str).str.contains(r"\b\d{10}\b").any():
-                        self.logger.warning(
-                            f"⚠️ Potential PII detected in column: {col}"
-                        )
+                        self.logger.warning(f"⚠️ Potential PII detected in column: {col}")
                         pii_found = True
                         # Replace with UUIDv4 if found
                         self.df[col] = (
                             self.df[col]
                             .astype(str)
-                            .apply(
-                                lambda v: str(uuid.uuid4())
-                                if re.match(r"\b\d{10}\b", str(v))
-                                else v
-                            )
+                            .apply(lambda v: str(uuid.uuid4()) if re.match(r"\b\d{10}\b", str(v)) else v)
                         )
 
             if not pii_found:
@@ -517,13 +479,9 @@ if __name__ == "__main__":
         # Logger might not be configured if __main__ is run and SilverPipeline init fails before logger setup
         # So, print to stderr as well
         print(f"Silver Pipeline ERROR: {e}", file=sys.stderr)
-        logging.getLogger(__name__).error(
-            f"Silver Pipeline execution failed: {e}", exc_info=True
-        )
+        logging.getLogger(__name__).error(f"Silver Pipeline execution failed: {e}", exc_info=True)
         exit(1)
     except Exception as e:
         print(f"Silver Pipeline UNEXPECTED ERROR: {e}", file=sys.stderr)
-        logging.getLogger(__name__).error(
-            f"Unexpected error in silver pipeline __main__: {e}", exc_info=True
-        )
+        logging.getLogger(__name__).error(f"Unexpected error in silver pipeline __main__: {e}", exc_info=True)
         exit(1)

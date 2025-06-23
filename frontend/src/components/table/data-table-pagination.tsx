@@ -1,10 +1,4 @@
 import { Table } from "@tanstack/react-table";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useState } from "react";
+import {
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>;
@@ -75,7 +75,7 @@ export function DataTablePagination<TData>({
             disabled={!table.getCanPreviousPage()}
           >
             <span className="sr-only">Gå til første side</span>
-            <ChevronsLeft />
+            <ChevronDoubleLeftIcon />
           </Button>
           <Button
             variant="outline"
@@ -84,7 +84,7 @@ export function DataTablePagination<TData>({
             disabled={!table.getCanPreviousPage()}
           >
             <span className="sr-only">Gå til forrige side</span>
-            <ChevronLeft />
+            <ChevronLeftIcon />
           </Button>
           <Button
             variant="outline"
@@ -93,7 +93,7 @@ export function DataTablePagination<TData>({
             disabled={!table.getCanNextPage()}
           >
             <span className="sr-only">Gå til næste side</span>
-            <ChevronRight />
+            <ChevronRightIcon />
           </Button>
           <Button
             variant="outline"
@@ -102,7 +102,7 @@ export function DataTablePagination<TData>({
             disabled={!table.getCanNextPage()}
           >
             <span className="sr-only">Gå til sidste side</span>
-            <ChevronsRight />
+            <ChevronDoubleRightIcon />
           </Button>
         </div>
       </div>
