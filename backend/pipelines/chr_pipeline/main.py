@@ -553,26 +553,69 @@ def main():
     setup_logging(args["log_level"])
 
     try:
+        # Determine steps to run first to decide if we need FVM credentials
+        requested_step = args["steps"]
+
+        # Check if this is a silver-only operation
+        is_silver_only = requested_step.startswith("silver_")
+
         # Check if we should import context from a previous job
         context_import_path = os.getenv("CONTEXT_IMPORT_PATH")
+
+        # For silver-only operations, we might not need FVM credentials if:
+        # 1. We have existing bronze data files, OR
+        # 2. We have data in the buffer, OR
+        # 3. We're importing context from a previous job
+        needs_fvm_credentials = True
+
+        if is_silver_only:
+            # Check if we have existing bronze data or context
+            buffer_data = get_data_buffer()
+            has_buffer_data = bool(buffer_data)
+            has_context_import = context_import_path and os.path.exists(context_import_path)
+
+            # Check if we have bronze data files available
+            bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
+            has_bronze_files = False
+            if bronze_dir_override:
+                bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
+                has_bronze_files = bronze_path.exists() and any(bronze_path.glob("*.json"))
+
+            if has_buffer_data or has_context_import or has_bronze_files:
+                logging.warning(
+                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}"
+                )
+                needs_fvm_credentials = False
+
+        # Initialize context based on whether we need FVM credentials
         if context_import_path and os.path.exists(context_import_path):
             logging.warning(f"Importing context data from {context_import_path}")
             imported_context = import_context_data(Path(context_import_path))
 
-            # Initialize context with imported data
-            username, password = get_fvm_credentials()
-            context = {
-                "args": args,
-                "username": username,
-                "clients": {
-                    "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                    "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                    "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                    "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
-                },
-                # Merge imported context
-                **imported_context,
-            }
+            if needs_fvm_credentials:
+                # Initialize context with imported data and FVM credentials
+                username, password = get_fvm_credentials()
+                context = {
+                    "args": args,
+                    "username": username,
+                    "clients": {
+                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
+                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
+                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
+                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                    },
+                    # Merge imported context
+                    **imported_context,
+                }
+            else:
+                # Initialize minimal context for silver-only processing
+                context = {
+                    "args": args,
+                    "username": None,  # Not needed for silver processing
+                    "clients": {},  # Not needed for silver processing
+                    # Merge imported context
+                    **imported_context,
+                }
 
             # Update args with imported values if not explicitly provided
             if not args.get("start_date") and imported_context.get("args", {}).get("start_date"):
@@ -585,21 +628,28 @@ def main():
             context["args"] = {**imported_context.get("args", {}), **args}
 
         else:
-            # Initialize fresh context
-            username, password = get_fvm_credentials()
-            context = {
-                "args": args,
-                "username": username,
-                "clients": {
-                    "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                    "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                    "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                    "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
-                },
-            }
+            if needs_fvm_credentials:
+                # Initialize fresh context with FVM credentials
+                username, password = get_fvm_credentials()
+                context = {
+                    "args": args,
+                    "username": username,
+                    "clients": {
+                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
+                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
+                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
+                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                    },
+                }
+            else:
+                # Initialize minimal context for silver-only processing
+                context = {
+                    "args": args,
+                    "username": None,  # Not needed for silver processing
+                    "clients": {},  # Not needed for silver processing
+                }
 
         # Determine steps to run
-        requested_step = args["steps"]
         if requested_step == "all":
             bronze_steps_to_run = [
                 "stamdata",
@@ -612,8 +662,11 @@ def main():
             ]
             run_silver = True
         elif requested_step.startswith("silver_"):
-            # If a silver step is requested, run all bronze prerequisites
-            bronze_steps_to_run = get_required_steps(requested_step)
+            # If a silver step is requested, run all bronze prerequisites only if we need FVM credentials
+            if needs_fvm_credentials:
+                bronze_steps_to_run = get_required_steps(requested_step)
+            else:
+                bronze_steps_to_run = []  # Skip bronze steps for silver-only with existing data
             run_silver = True
         elif args.get("skip_dependencies", False):
             # Skip dependencies - only run the specific step (for parallel job execution)
@@ -630,11 +683,14 @@ def main():
             if step in bronze_steps_to_run and step not in unique_bronze_steps:
                 unique_bronze_steps.append(step)
 
-        # Run bronze steps sequentially
-        logging.warning(f"Running bronze steps: {', '.join(unique_bronze_steps)}")
-        for step in unique_bronze_steps:
-            context = run_bronze_step(step, context)
-        logging.warning("Bronze steps completed.")
+        # Run bronze steps sequentially (only if we have any to run)
+        if unique_bronze_steps:
+            logging.warning(f"Running bronze steps: {', '.join(unique_bronze_steps)}")
+            for step in unique_bronze_steps:
+                context = run_bronze_step(step, context)
+            logging.warning("Bronze steps completed.")
+        else:
+            logging.warning("No bronze steps to run - proceeding with silver processing using existing data.")
 
         # Export context data if requested (for multi-job workflows)
         context_export_path = os.getenv("CONTEXT_EXPORT_PATH")
@@ -650,18 +706,39 @@ def main():
                 silver_dir = config.SILVER_BASE_DIR / EXPORT_TIMESTAMP
                 silver_dir.mkdir(parents=True, exist_ok=True)  # Ensure it exists
 
-                # Call the consolidated silver processing function
-                run_silver_processing(in_memory_data=get_data_buffer(), silver_dir=silver_dir)
+                # For silver processing, check if we need to use files or buffer
+                buffer_data = get_data_buffer()
+                bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
+
+                if buffer_data:
+                    # Use in-memory data
+                    logging.warning("Using in-memory buffer data for silver processing")
+                    run_silver_processing(in_memory_data=buffer_data, silver_dir=silver_dir)
+                elif bronze_dir_override:
+                    # Use bronze files
+                    bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
+                    logging.warning(f"Using bronze files from {bronze_path} for silver processing")
+                    run_silver_processing(
+                        bronze_dir=bronze_path, silver_dir=silver_dir, export_timestamp=bronze_dir_override
+                    )
+                else:
+                    # Fallback to buffer (might be empty, but let silver processing handle it)
+                    logging.warning("No specific bronze data source found, using buffer")
+                    run_silver_processing(in_memory_data=buffer_data, silver_dir=silver_dir)
+
                 logging.warning(f"Silver processing completed. Output in: {silver_dir}")
             except Exception as e:
                 logging.error(f"Silver processing failed: {e}", exc_info=True)
                 raise  # Re-raise to indicate pipeline failure
 
-        # Finalize bronze export (always run this to save fetched bronze data)
-        # But don't clear buffer if we're exporting context (dependent jobs might need the data)
-        clear_buffer_after_export = not bool(context_export_path)
-        logging.warning("Finalizing bronze export...")
-        finalize_export(clear_buffer=clear_buffer_after_export)
+        # Finalize bronze export (only if we have bronze data to export)
+        if unique_bronze_steps or get_data_buffer():
+            # But don't clear buffer if we're exporting context (dependent jobs might need the data)
+            clear_buffer_after_export = not bool(context_export_path)
+            logging.warning("Finalizing bronze export...")
+            finalize_export(clear_buffer=clear_buffer_after_export)
+        else:
+            logging.warning("No bronze data to export - skipping bronze export finalization.")
 
         logging.warning(f"Pipeline run for steps '{requested_step}' completed successfully")
 
