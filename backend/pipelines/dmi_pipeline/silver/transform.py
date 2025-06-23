@@ -4,18 +4,21 @@ Processes raw geospatial climate data into aggregated statistics using DuckDB.
 Handles CRS transformation and calculates key metrics like averages, min/max values, and counts per time period.
 """
 
-import logging
-import duckdb
 import json
-from typing import Dict, Optional
+import logging
 from pathlib import Path
+from typing import Dict, Optional
+
+import duckdb
 import pandas as pd
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
 class DataTransformer:
     """Transforms raw climate data into processed statistics"""
+
     def __init__(self):
         self.TARGET_CRS = "EPSG:4326"  # Required target CRS
         self.SOURCE_CRS = "EPSG:25832"  # DMI's native CRS
@@ -23,7 +26,7 @@ class DataTransformer:
     def load_raw_data(self, input_path: Path) -> Optional[Dict]:
         """Load raw JSON data from the bronze layer"""
         try:
-            with open(input_path, 'r') as f:
+            with open(input_path, "r") as f:
                 data = json.load(f)
             logger.info(f"Successfully loaded raw data from {input_path}")
             return data
@@ -39,7 +42,7 @@ class DataTransformer:
 
         try:
             # Create DuckDB connection and enable spatial extension
-            con = duckdb.connect(':memory:')
+            con = duckdb.connect(":memory:")
             con.execute("INSTALL spatial;")
             con.execute("LOAD spatial;")
 
@@ -48,13 +51,15 @@ class DataTransformer:
             for feature in raw_data["features"]:
                 properties = feature.get("properties", {})
                 geometry = feature.get("geometry", {})
-                features.append({
-                    "value": properties.get("value"),
-                    "parameter_id": properties.get("parameterId"),
-                    "valid_time": properties.get("from"),
-                    "created": properties.get("created"),
-                    "geometry": json.dumps(geometry) if geometry else None
-                })
+                features.append(
+                    {
+                        "value": properties.get("value"),
+                        "parameter_id": properties.get("parameterId"),
+                        "valid_time": properties.get("from"),
+                        "created": properties.get("created"),
+                        "geometry": json.dumps(geometry) if geometry else None,
+                    }
+                )
 
             # Convert features to a format DuckDB can understand
             df = pd.DataFrame(features)

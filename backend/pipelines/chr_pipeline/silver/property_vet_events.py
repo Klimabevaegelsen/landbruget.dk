@@ -20,9 +20,7 @@ def create_property_vet_events_table(
 
     # Check for nested structure Response.VeterinaereHaendelser
     if ejendom_vet_raw is None or "Response" not in ejendom_vet_raw.columns:
-        logging.warning(
-            "Cannot create property_vet_events: 'Response' column missing in ejendom_vet_raw."
-        )
+        logging.warning("Cannot create property_vet_events: 'Response' column missing in ejendom_vet_raw.")
         return None
 
     try:
@@ -75,46 +73,23 @@ def create_property_vet_events_table(
         vet_events = vet_events.mutate(
             event_id=ibis.uuid(),
             chr_number=ibis.coalesce(
-                vet_events.chr_number_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int64),
+                vet_events.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
                 ibis.null().cast(dt.int64),
             ),
-            has_vet_problems=(
-                vet_events.has_vet_problems_raw.cast(dt.string)
-                .strip()
-                .nullif("")
-                .lower()
-                == "ja"
-            ),
+            has_vet_problems=(vet_events.has_vet_problems_raw.cast(dt.string).strip().nullif("").lower() == "ja"),
             species_code=ibis.coalesce(
-                vet_events.species_code.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.int32),
+                vet_events.species_code.cast(dt.string).strip().nullif("").cast(dt.int32),
                 ibis.null().cast(dt.int32),
             ),
             species_name=vet_events.species_name.cast(dt.string).strip().nullif(""),
             disease_code=vet_events.disease_code.cast(dt.string).strip().nullif(""),
             disease_name=vet_events.disease_name.cast(dt.string).strip().nullif(""),
-            vet_status_code=vet_events.vet_status_code.cast(dt.string)
-            .strip()
-            .nullif(""),
-            vet_status_name=vet_events.vet_status_name.cast(dt.string)
-            .strip()
-            .nullif(""),
-            disease_level_code=vet_events.disease_level_code.cast(dt.string)
-            .strip()
-            .nullif(""),
-            disease_level_name=vet_events.disease_level_name.cast(dt.string)
-            .strip()
-            .nullif(""),
+            vet_status_code=vet_events.vet_status_code.cast(dt.string).strip().nullif(""),
+            vet_status_name=vet_events.vet_status_name.cast(dt.string).strip().nullif(""),
+            disease_level_code=vet_events.disease_level_code.cast(dt.string).strip().nullif(""),
+            disease_level_name=vet_events.disease_level_name.cast(dt.string).strip().nullif(""),
             vet_status_date=ibis.coalesce(
-                vet_events.vet_status_date.cast(dt.string)
-                .strip()
-                .nullif("")
-                .cast(dt.date),
+                vet_events.vet_status_date.cast(dt.string).strip().nullif("").cast(dt.date),
                 ibis.null().cast(dt.date),
             ),
             remark=vet_events.remark.cast(dt.string).strip().nullif(""),
@@ -122,20 +97,11 @@ def create_property_vet_events_table(
 
         # Join with lookups (optional)
         if "species" in lookup_tables and lookup_tables["species"] is not None:
-            vet_events = vet_events.left_join(
-                lookup_tables["species"], ["species_code"]
-            )
+            vet_events = vet_events.left_join(lookup_tables["species"], ["species_code"])
         if "diseases" in lookup_tables and lookup_tables["diseases"] is not None:
-            vet_events = vet_events.left_join(
-                lookup_tables["diseases"], ["disease_code"]
-            )
-        if (
-            "vet_statuses" in lookup_tables
-            and lookup_tables["vet_statuses"] is not None
-        ):
-            vet_events = vet_events.left_join(
-                lookup_tables["vet_statuses"], ["vet_status_code"]
-            )
+            vet_events = vet_events.left_join(lookup_tables["diseases"], ["disease_code"])
+        if "vet_statuses" in lookup_tables and lookup_tables["vet_statuses"] is not None:
+            vet_events = vet_events.left_join(lookup_tables["vet_statuses"], ["vet_status_code"])
 
         # Select final columns
         final_cols = [
@@ -163,9 +129,7 @@ def create_property_vet_events_table(
             return None
 
         logging.info(f"Saving property_vet_events table with {rows} rows.")
-        saved_path = export.save_table(
-            output_path, vet_events_final.execute(), is_geo=False
-        )
+        saved_path = export.save_table(output_path, vet_events_final.execute(), is_geo=False)
         if saved_path is None:
             logging.error("Failed to save property_vet_events table - no path returned")
             return None

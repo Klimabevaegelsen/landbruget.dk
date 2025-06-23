@@ -17,4 +17,4 @@ services:
     env_file:
       - .env
     # For development, you might want to keep the container running
-    # command: tail -f /dev/null 
+    # command: tail -f /dev/null

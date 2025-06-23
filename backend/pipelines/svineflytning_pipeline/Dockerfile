@@ -26,4 +26,4 @@ ENV DATA_DIR=/data \
     PYTHONUNBUFFERED=1
 
 # Define the command to run this pipeline's main script
-CMD ["python", "main.py"] 
+CMD ["python", "main.py"]

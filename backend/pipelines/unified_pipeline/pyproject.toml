@@ -4,11 +4,12 @@ version = "0.1.0"
 description = "Unified pipeline for fetching and processing data."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" } 
+license = { text = "MIT" }
 authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]
 dependencies = [
+    "aiohttp>=3.10.0",
     "click>=8.1.8",
     "cryptography>=44.0.3",
     "gcsfs>=2025.3.2",
@@ -18,12 +19,18 @@ dependencies = [
     "loguru>=0.7.3",
     "lxml>=5.4.0",
     "pandas>=2.2.3",
+    "psutil>=6.1.0",
     "pyarrow>=20.0.0",
     "pydantic-settings>=2.9.1",
     "pydantic>=2.11.4",
     "python-dotenv>=1.1.0",
     "simple-singleton>=2.0.0",
     "tenacity>=9.1.2",
+    "tqdm>=4.66.2",
+    "xmltodict>=0.13.0",
+    "zeep>=4.3.1",
+    "duckdb>=1.2.2",
+    "beautifulsoup4>=4.13.4",
 ]
 
 [build-system]
@@ -61,6 +68,16 @@ no_implicit_optional = true
 strict_optional = true
 warn_redundant_casts = true
 follow_untyped_imports = true
+
+# Add explicit package configuration to resolve duplicate module issue
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "backend.pipelines.*"
+ignore_errors = true
+
 
 [tool.ruff]
 line-length = 100

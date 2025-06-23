@@ -184,12 +184,12 @@ pageBuilder:
       params:
         source: 'field_yearly_data'
         category:
-          timeContext: 'last_n_years' 
-          n: 1 
+          timeContext: 'last_n_years'
+          n: 1
           categoryColumn: 'crop_name'
           valueColumn: 'area_ha'
           stackByColumn: 'is_organic'
-          topN: 9 
+          topN: 9
           orderBy:
             - column: 'area_ha'
               direction: 'desc'

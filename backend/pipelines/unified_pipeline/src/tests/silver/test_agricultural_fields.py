@@ -9,7 +9,6 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import Polygon
-
 from unified_pipeline.silver.agricultural_fields import (
     AgriculturalFieldsSilver,
     AgriculturalFieldsSilverConfig,

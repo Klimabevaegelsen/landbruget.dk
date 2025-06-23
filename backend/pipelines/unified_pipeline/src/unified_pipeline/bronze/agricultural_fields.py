@@ -17,12 +17,14 @@ import asyncio
 import json
 import ssl
 from asyncio import Semaphore
+from typing import Optional
 
 import aiohttp
+import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -54,19 +56,33 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     name: str = "Danish Agricultural Fields"
     type: str = "arcgis"
-    description: str = "Weekly updated agricultural field data"
-    fields_url: str = (
-        "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query"
-    )
-    blocks_url: str = (
-        "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query"
-    )
+    description: str = "Multi-year agricultural field data (2020-2025)"
+
+    # URLs for different years - Fields (Marker)
+    fields_urls: dict[int, str] = {
+        2025: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query",
+        2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/21/query",
+        2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/20/query",
+        2022: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/14/query",
+        2021: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/15/query",
+        2020: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/16/query",
+    }
+
+    # URLs for different years - Blocks (Markblokke)
+    blocks_urls: dict[int, str] = {
+        2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query",
+        2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/7/query",
+        2022: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/8/query",
+        2021: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/9/query",
+        2020: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/10/query",
+    }
+
     fields_dataset: str = "agricultural_fields"
     blocks_dataset: str = "agricultural_blocks"
     frequency: str = "weekly"
     bucket: str = "landbrugsdata-raw-data"
 
-    batch_size: int = 20000
+    batch_size: int = 2000
     max_concurrent: int = 5
     storage_batch_size: int = 10000
 
@@ -78,7 +94,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
+class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for agricultural fields data.
 
@@ -126,17 +142,19 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
 
         try:
             self.log.info(f"Fetching total count from {url}")
-            async with session.get(url, params=params) as response:
-                async with AsyncTimer(f"Request total count from {url}"):
-                    if response.status == 200:
-                        data = await response.json()
-                        total = data.get("count", 0)
-                        return int(total)
-                    else:
-                        response_text = await response.text()
-                        raise Exception(
-                            f"Error getting count for {url}: {response.status} - {response_text}"
-                        )
+            async with (
+                session.get(url, params=params) as response,
+                AsyncTimer(f"Request total count from {url}"),
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    total = data.get("count", 0)
+                    return int(total)
+                else:
+                    response_text = await response.text()
+                    raise Exception(
+                        f"Error getting count for {url}: {response.status} - {response_text}"
+                    )
         except Exception as e:
             raise Exception(f"Error getting total count for {url}: {str(e)}")
 
@@ -178,23 +196,50 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
             "resultRecordCount": str(self.config.batch_size),
         }
 
-        async with self.config.request_semaphore:
-            async with AsyncTimer(f"Request chunk at index {start_index}"):
-                self.log.debug(f"Fetching from URL: {url} with params: {params}")
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return json.dumps(data)
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(
+                f"Request chunk at index {start_index} to {start_index + self.config.batch_size}"
+            ),
+        ):
+            self.log.debug(f"Fetching from URL: {url} with params: {params}")
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return json.dumps(data)
 
-                    response_text = await response.text()
-                    err_msg = (
-                        f"Error response {response.status} at index {start_index}. "
-                        f"Response: {response_text[:500]}..."
-                    )
-                    self.log.error(err_msg)
-                    raise Exception(err_msg)
+                response_text = await response.text()
+                err_msg = (
+                    f"Error response {response.status} at index {start_index}. "
+                    f"Response: {response_text[:500]}..."
+                )
+                self.log.error(err_msg)
+                raise Exception(err_msg)
 
-    async def _process_data(self, url: str, dataset: str) -> None:
+    def create_dataframe(self, raw_data: list[str], year: int) -> pd.DataFrame:
+        """
+        Create a DataFrame from the raw data.
+        This method takes a list of strings and converts it into a pandas DataFrame.
+
+        Args:
+            raw_data (list[str]): List of strings.
+            year (int): The year this data represents.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the raw data with metadata.
+        """
+        df = pd.DataFrame(
+            {
+                "payload": raw_data,
+            }
+        )
+        df["source"] = self.config.name
+        df["year"] = year
+        df["created_at"] = pd.Timestamp.now()
+        df["updated_at"] = pd.Timestamp.now()
+        return df
+
+    async def _process_data(self, url: str, dataset: str, year: int) -> list[str]:
         """
         Process data from the specified URL and save it to Google Cloud Storage.
 
@@ -203,13 +248,15 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
         2. Gets the total count of available features from the API
         3. Fetches data in parallel chunks using _fetch_chunk method
         4. Combines results and saves them to Google Cloud Storage
+        5. Returns the raw data for potential in-memory passing
 
         Args:
             url (str): The URL of the ArcGIS endpoint to fetch data from
             dataset (str): The name of the dataset, used for logging and storage path
+            year (int): The year this data represents
 
         Returns:
-            None
+            list[str]: Raw data that was processed
 
         Raises:
             Exception: If there are issues with data fetching or processing
@@ -224,48 +271,79 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig]):
         ssl_context.verify_mode = ssl.CERT_NONE
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(
-            timeout=self.config.timeout_config, connector=connector
-        ) as session:
-            async with AsyncTimer(f"Processing data for {dataset}"):
-                total_count = await self._get_total_count(session, url)
-                self.log.info(f"Total count: {total_count}")
+        async with (
+            aiohttp.ClientSession(
+                timeout=self.config.timeout_config, connector=connector
+            ) as session,
+            AsyncTimer(f"Processing data for {dataset}"),
+        ):
+            total_count = await self._get_total_count(session, url)
+            self.log.info(f"Total count: {total_count}")
 
-                if total_count == 0:
-                    self.log.warning("No data to process.")
-                    return
+            if total_count == 0:
+                self.log.warning("No data to process.")
+                return []
 
-                tasks = []
-                for start_index in range(0, total_count, self.config.batch_size):
-                    tasks.append(self._fetch_chunk(session, url, start_index))
+            tasks = []
+            for start_index in range(0, total_count, self.config.batch_size):
+                tasks.append(self._fetch_chunk(session, url, start_index))
 
-                raw_data = await asyncio.gather(*tasks)
-                self.log.info(f"Saving data to GCS for {dataset}")
-                self._save_raw_data(raw_data, dataset, self.config.name, self.config.bucket)
-                self.log.info(f"Data processing completed for {dataset}")
+            raw_data = await asyncio.gather(*tasks)
+            if not raw_data:
+                self.log.error("No raw data fetched")
+                return []
+            self.log.info("Fetched raw data successfully")
 
-    async def run(self) -> None:
+            df = self.create_dataframe(raw_data, year)
+            dataset_with_year = f"{dataset}_{year}"
+            self.log.info(f"Saving data to GCS for {dataset_with_year}")
+
+            # Save using new unified method
+            self._save_data(df, dataset_with_year, self.config.bucket, stage="bronze")
+            self.log.info(f"Data processing completed for {dataset}")
+
+            return raw_data
+
+    async def run(self) -> Optional[dict]:
         """
-        Run the data source processing pipeline.
+        Run the data source processing pipeline for all available years.
 
         This method orchestrates the entire data retrieval process:
-        1. First processes agricultural fields data from the fields endpoint
-        2. Then processes agricultural blocks data from the blocks endpoint
+        1. Processes agricultural fields data for all available years (2020-2025)
+        2. Processes agricultural blocks data for all available years (2020-2024)
         3. Tracks overall execution time for performance monitoring
+        4. Returns all processed data for potential in-memory passing
 
-        The method uses the configured URLs and dataset names from the configuration object,
-        and delegates the actual processing to the _process_data method for each dataset.
+        Each year's data is stored separately with year information to enable
+        historical analysis and trend identification.
 
         Returns:
-            None
+            Optional[dict]: Dictionary containing all processed data organized by dataset and year,
+                           or None if processing fails
 
         Note:
             This is the main entry point for the bronze layer processing of
-            agricultural fields data.
+            multi-year agricultural fields data.
         """
-        self.log.info("Running Agricultural Fields bronze job")
+        self.log.info("Running Agricultural Fields bronze job for all available years")
         async with AsyncTimer("Total run time"):
-            await self._process_data(self.config.fields_url, self.config.fields_dataset)
-            await self._process_data(self.config.blocks_url, self.config.blocks_dataset)
+            all_data = {"fields": {}, "blocks": {}}
 
-            self.log.info("Run completed successfully.")
+            # Process agricultural fields for all available years
+            self.log.info("Processing agricultural fields data for all years")
+            for year, url in self.config.fields_urls.items():
+                self.log.info(f"Processing fields data for year {year}")
+                fields_data = await self._process_data(url, self.config.fields_dataset, year)
+                all_data["fields"][year] = fields_data
+
+            # Process agricultural blocks for all available years
+            self.log.info("Processing agricultural blocks data for all years")
+            for year, url in self.config.blocks_urls.items():
+                self.log.info(f"Processing blocks data for year {year}")
+                blocks_data = await self._process_data(url, self.config.blocks_dataset, year)
+                all_data["blocks"][year] = blocks_data
+
+            self.log.info("Agricultural Fields bronze job completed successfully for all years")
+
+            # Return data for in-memory passing
+            return all_data

@@ -123,3 +123,7 @@ cloud-sql-proxy
 backend/test_wfs.py
 *.egg-info
 
+# Local testing secrets (for act and other local testing)
+.secrets
+.secrets.*
+*.secrets

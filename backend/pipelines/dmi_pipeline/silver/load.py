@@ -5,16 +5,18 @@ Manages file system operations and data persistence.
 """
 
 import logging
-import duckdb
 from pathlib import Path
-from typing import Optional, Dict, Any
-import pandas as pd
+from typing import Optional
+
+import duckdb
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
 class DataLoader:
     """Manages storage of processed climate data in Parquet format"""
+
     def __init__(self):
         pass
 
@@ -32,7 +34,7 @@ class DataLoader:
             df = result.df()
 
             # Create a temporary view for the result
-            con = duckdb.connect(':memory:')
+            con = duckdb.connect(":memory:")
             con.execute("INSTALL spatial;")
             con.execute("LOAD spatial;")
             con.register("result_view", df)
@@ -55,7 +57,7 @@ class DataLoader:
                 return None
 
             # Create DuckDB connection and enable spatial extension
-            con = duckdb.connect(':memory:')
+            con = duckdb.connect(":memory:")
             con.execute("INSTALL spatial;")
             con.execute("LOAD spatial;")
 
