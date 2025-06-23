@@ -507,7 +507,8 @@ class FieldAnalysisSilver:
                 .apply(
                     lambda x: json.dumps(
                         dict(zip(x["bfe_number"].astype(str), x["area_share"], strict=False))
-                    )
+                    ),
+                    include_groups=False,
                 )
                 .reset_index()
             )
@@ -528,7 +529,8 @@ class FieldAnalysisSilver:
                 .apply(
                     lambda x: json.dumps(
                         dict(zip(x["soil_code"].astype(str), x["area_share"], strict=False))
-                    )
+                    ),
+                    include_groups=False,
                 )
                 .reset_index()
             )
@@ -549,7 +551,8 @@ class FieldAnalysisSilver:
                 .apply(
                     lambda x: json.dumps(
                         dict(zip(x["status_category"], x["area_share"], strict=False))
-                    )
+                    ),
+                    include_groups=False,
                 )
                 .reset_index()
             )
@@ -572,7 +575,8 @@ class FieldAnalysisSilver:
                         dict(
                             zip(x["status_category"], x["bnbo_water_projects_share"], strict=False)
                         )
-                    )
+                    ),
+                    include_groups=False,
                 )
                 .reset_index()
             )
