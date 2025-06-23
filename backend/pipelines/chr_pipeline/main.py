@@ -81,7 +81,7 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument(
         "--steps",
         type=str,
-        default="all",
+        default="herds",
         choices=[
             "all",
             "stamdata",
