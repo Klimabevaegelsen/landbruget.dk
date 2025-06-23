@@ -51,6 +51,7 @@ class SilverProcessor:
 
         # Initialize specialized managers
         self.parquet_manager = ParquetManager(
+            storage_manager=storage_manager,
             compression="snappy",
             partition_by=["source_subfolder"],
         )
@@ -393,10 +394,13 @@ class SilverProcessor:
                 saved_files = []
                 for sheet_name, df in transformed_data.items():
                     if df is not None and not df.empty:
-                        output_filename = f"{Path(original_filename).stem}_{sheet_name}.parquet"
-                        output_path = (
-                            silver_run_path / metadata.original_subfolder / output_filename
+                        # Create output directory for the subfolder
+                        output_dir = self.silver_storage.create_output_directory(
+                            silver_run_path, metadata.original_subfolder
                         )
+                        # Use original filename with sheet name for multi-sheet files
+                        output_filename = f"{Path(original_filename).stem}_{sheet_name}.parquet"
+                        output_path = output_dir / output_filename
 
                         try:
                             self.parquet_manager.save_dataframe_to_parquet(df, output_path)
@@ -425,10 +429,13 @@ class SilverProcessor:
                 saved_files = []
                 for i, df in enumerate(transformed_data):
                     if df is not None and not df.empty:
-                        output_filename = f"{Path(original_filename).stem}_{i}.parquet"
-                        output_path = (
-                            silver_run_path / metadata.original_subfolder / output_filename
+                        # Create output directory for the subfolder
+                        output_dir = self.silver_storage.create_output_directory(
+                            silver_run_path, metadata.original_subfolder
                         )
+                        # Use original filename with part number for multi-part files
+                        output_filename = f"{Path(original_filename).stem}_{i}.parquet"
+                        output_path = output_dir / output_filename
 
                         try:
                             self.parquet_manager.save_dataframe_to_parquet(df, output_path)
@@ -455,9 +462,13 @@ class SilverProcessor:
                     logger.warning(f"No valid data extracted from {original_filename}")
                     return False
 
-                # Create output filename and path
+                # Create output directory for the subfolder
+                output_dir = self.silver_storage.create_output_directory(
+                    silver_run_path, metadata.original_subfolder
+                )
+                # Use original filename for single files
                 output_filename = f"{Path(original_filename).stem}.parquet"
-                output_path = silver_run_path / metadata.original_subfolder / output_filename
+                output_path = output_dir / output_filename
 
                 # Save the transformed data
                 try:
