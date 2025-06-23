@@ -229,7 +229,7 @@ def process_chr_data(
             "file_key": "besaetning_details.json",
         },
         "diko_flyt": {"mem_key": "diko_flytninger", "file_key": "diko_flytninger.json"},
-        "cattle_movements": {"mem_key": "cattle_movement_summaries", "file_key": "cattle_movement_summaries.json"},
+        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries.json"},
         "ejendom_oplys": {
             "mem_key": "ejendom_oplysninger",
             "file_key": "ejendom_oplysninger.json",
