@@ -79,15 +79,26 @@ class FieldAnalysisSilver:
         """Find the most recent property cadastral data file"""
         try:
             base_path = "landbrugsdata-raw-data/silver/property_cadastral_merged"
-            # Property files are named like "2025-06-22.parquet"
-            paths = self.gcs.glob(f"{base_path}/*.parquet")
 
-            if not paths:
-                raise FileNotFoundError(f"No property files found in {base_path}")
+            # First try the new timestamped directory structure: property_cadastral_merged/YYYYMMDD_HHMMSS/data.parquet
+            timestamped_paths = self.gcs.glob(f"{base_path}/*/data.parquet")
 
-            # Sort by filename (date format sorts correctly)
-            latest_path = sorted(paths)[-1]
-            return f"gs://{latest_path}"
+            if timestamped_paths:
+                # Sort by directory name (timestamp format sorts correctly)
+                latest_path = sorted(timestamped_paths)[-1]
+                return f"gs://{latest_path}"
+
+            # Fallback to old structure: property_cadastral_merged/YYYY-MM-DD.parquet
+            direct_paths = self.gcs.glob(f"{base_path}/*.parquet")
+
+            if direct_paths:
+                # Sort by filename (date format sorts correctly)
+                latest_path = sorted(direct_paths)[-1]
+                return f"gs://{latest_path}"
+
+            raise FileNotFoundError(
+                f"No property files found in {base_path} (tried both timestamped and direct structures)"
+            )
 
         except Exception as e:
             print(f"⚠️  Error finding latest property data: {e}")
@@ -646,25 +657,49 @@ class FieldAnalysisSilver:
         print(f"\n🔗 Combining {len(all_results)} batches...")
         final_results = pd.concat(all_results, ignore_index=True)
 
-        # Save results to GCS-compatible path
+        # Save results locally first
         output_dir = Path("silver")
         output_dir.mkdir(exist_ok=True)
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output_file = output_dir / f"field_spatial_analysis_{year}_{timestamp}.parquet"
+        local_output_file = output_dir / f"field_spatial_analysis_{year}_{timestamp}.parquet"
 
-        print(f"\n💾 Saving results to {output_file}")
-        final_results.to_parquet(output_file, index=False)
+        print(f"\n💾 Saving results locally to {local_output_file}")
+        final_results.to_parquet(local_output_file, index=False)
+
+        # Upload to GCS if in production environment
+        gcs_output_path = None
+        if os.getenv("ENVIRONMENT") == "production":
+            try:
+                gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+                gcs_path = f"silver/field_area_analysis/{timestamp}/field_spatial_analysis_{year}_{timestamp}.parquet"
+                gcs_output_path = f"gs://{gcs_bucket}/{gcs_path}"
+
+                print(f"🌐 Uploading results to GCS: {gcs_output_path}")
+
+                # Upload using gcsfs
+                full_gcs_path = f"{gcs_bucket}/{gcs_path}"
+                self.gcs.put(str(local_output_file), full_gcs_path)
+
+                print("✅ Successfully uploaded to GCS")
+
+            except Exception as e:
+                print(f"⚠️ Failed to upload to GCS: {e}")
+                print("   Continuing with local file only")
+        else:
+            print("🏠 Running in development mode - skipping GCS upload")
 
         # Display summary
-        self.display_results_summary(final_results, str(output_file))
+        self.display_results_summary(final_results, str(local_output_file))
 
         total_time = time.time() - start_time
         print(f"\n🎉 Analysis completed in {total_time / 60:.1f} minutes")
         print(f"   Processed {processed_fields:,} fields")
-        print(f"   Results saved to: {output_file}")
+        print(f"   Results saved locally to: {local_output_file}")
+        if gcs_output_path:
+            print(f"   Results uploaded to GCS: {gcs_output_path}")
 
-        return str(output_file)
+        return str(local_output_file)
 
     def display_results_summary(self, results: pd.DataFrame, output_file: str):
         """Display comprehensive results summary"""
