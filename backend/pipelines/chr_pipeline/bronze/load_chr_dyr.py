@@ -7,15 +7,18 @@ from datetime import date, timedelta
 from typing import Any, Dict, Optional
 
 import certifi
+from dotenv import load_dotenv
 from requests import Session
 from zeep import Client
 from zeep.exceptions import Fault
-from zeep.helpers import serialize_object
 from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
 from .export import save_raw_data
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_chr_dyr")
@@ -135,15 +138,39 @@ def load_animal_movements(
             logger.warning(f"No response received for herd {herd_number}")
             return None
 
-        # Process and save the response
-        serialized_response = serialize_object(response, dict)
+        # Process and aggregate the response instead of saving raw individual records
+        movement_summaries = _aggregate_cattle_movements(response, herd_number)
 
-        # Save raw data
-        save_raw_data(
-            data_type="chr_dyr_animal_movements",
-            identifier=f"{herd_number}{date_suffix}",
-            raw_response=serialized_response,
-        )
+        # Log memory savings - show what we would have saved vs what we actually save
+        if hasattr(response, "Response") and response.Response:
+            resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+            animals = getattr(resp, "Enkeltdyrsoplysninger", [])
+            individual_record_count = len(animals) if animals else 0
+            summary_record_count = len(movement_summaries.get("movements", []))
+
+            if individual_record_count > 0:
+                reduction_ratio = (individual_record_count - summary_record_count) / individual_record_count * 100
+                logger.info(
+                    f"Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
+                )
+
+        # Save aggregated movement summaries instead of massive individual animal records
+        if movement_summaries and movement_summaries.get("movements"):
+            save_raw_data(
+                data_type="chr_dyr_movement_summaries",
+                identifier=f"{herd_number}{date_suffix}",
+                raw_response=movement_summaries,
+            )
+            logger.info(
+                f"Herd {herd_number}: Saved {len(movement_summaries['movements'])} movement summaries instead of individual animal records"
+            )
+        else:
+            # Still save a minimal record indicating we processed this herd
+            save_raw_data(
+                data_type="chr_dyr_movement_summaries",
+                identifier=f"{herd_number}{date_suffix}",
+                raw_response={"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True},
+            )
 
         # Log statistics
         if hasattr(response, "Response") and response.Response:
