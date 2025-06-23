@@ -964,7 +964,7 @@ def main():
     # Initialize the optimized production estimator
     logging.info("Initializing optimized production estimator with DuckDB Spatial v1.2.2...")
     try:
-        estimator = FieldProductionEstimator(gcs_storage=gcs_storage)
+    estimator = FieldProductionEstimator(gcs_storage=gcs_storage)
     except Exception as e:
         logging.error(f"Failed to initialize production estimator: {e}")
         sys.exit(1)
@@ -1025,9 +1025,9 @@ def main():
         logging.error("No years were successfully processed")
         sys.exit(1)
     else:
-        logging.info("Optimized field production pipeline complete!")
-        logging.info("Leveraged DuckDB Spatial v1.2.2 SPATIAL_JOIN operator for maximum performance")
-        logging.info(f"{'=' * 60}")
+    logging.info("Optimized field production pipeline complete!")
+    logging.info("Leveraged DuckDB Spatial v1.2.2 SPATIAL_JOIN operator for maximum performance")
+    logging.info(f"{'=' * 60}")
 
 
 if __name__ == "__main__":
