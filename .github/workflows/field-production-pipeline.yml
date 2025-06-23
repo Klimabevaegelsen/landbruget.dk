@@ -1,0 +1,141 @@
+name: Field Production Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Year to process (2020-2025), leave empty for all years'
+        required: false
+        type: string
+      environment:
+        description: 'Environment to run in'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - test
+      log_level:
+        description: 'Log level'
+        required: true
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+
+  schedule:
+    # Run monthly on the 1st at 2 AM UTC
+    - cron: '0 2 1 * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+  WORKING_DIRECTORY: backend/pipelines/field_production_pipeline
+
+jobs:
+  field-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hours for large datasets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gdal-bin \
+            libgdal-dev \
+            libspatialindex-dev \
+            build-essential
+
+      - name: Set GDAL environment variables
+        run: |
+          echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
+          echo "CPLUS_INCLUDE_PATH=/usr/include/gdal" >> $GITHUB_ENV
+          echo "C_INCLUDE_PATH=/usr/include/gdal" >> $GITHUB_ENV
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          uv pip install --system -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set environment variables
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/backend:${{ github.workspace }}/backend/pipelines" >> $GITHUB_ENV
+          echo "LOG_LEVEL=${{ github.event.inputs.log_level || 'INFO' }}" >> $GITHUB_ENV
+
+      - name: Determine bucket name
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "test" ]]; then
+            echo "GCS_BUCKET=landbrugsdata-test" >> $GITHUB_ENV
+          else
+            echo "GCS_BUCKET=landbrugsdata-1" >> $GITHUB_ENV
+          fi
+
+      - name: Download required data cache
+        run: |
+          # Download DST data and zone mapping to local cache
+          mkdir -p data_cache/dst_pipeline
+          mkdir -p data_cache/dst_zone_mapping
+          
+          # Download DST processed data
+          gsutil -m cp gs://${{ env.GCS_BUCKET }}/silver/dst_pipeline/*.parquet data_cache/dst_pipeline/ || echo "DST data not found, continuing..."
+          
+          # Download DST zone mapping
+          gsutil -m cp gs://${{ env.GCS_BUCKET }}/silver/dst_zone_mapping/data.parquet data_cache/dst_zone_mapping/ || echo "DST zone mapping not found, continuing..."
+
+      - name: Run field production pipeline (specific year)
+        if: ${{ github.event.inputs.year != '' }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python main.py \
+            --year ${{ github.event.inputs.year }} \
+            --bucket ${{ env.GCS_BUCKET }} \
+            --log-level ${{ env.LOG_LEVEL }}
+
+      - name: Run field production pipeline (all years)
+        if: ${{ github.event.inputs.year == '' }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          python main.py \
+            --all-years \
+            --bucket ${{ env.GCS_BUCKET }} \
+            --log-level ${{ env.LOG_LEVEL }}
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: field-production-logs-${{ github.run_id }}
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/*.log
+            /tmp/*.log
+          retention-days: 7
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          # Clean up any temporary files
+          rm -rf /tmp/agricultural_fields_*.parquet
+          rm -rf /tmp/field_production_*.parquet
+          rm -rf data_cache/ 
