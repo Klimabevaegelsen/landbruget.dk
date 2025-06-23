@@ -620,7 +620,7 @@ class FieldAnalysisSilver:
         output_dir.mkdir(exist_ok=True)
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        local_output_file = output_dir / f"field_spatial_analysis_{year}_{timestamp}.parquet"
+        local_output_file = output_dir / "data.parquet"
 
         print(f"\n💾 Saving results locally to {local_output_file}")
         final_results.to_parquet(local_output_file, index=False)
@@ -630,7 +630,7 @@ class FieldAnalysisSilver:
         if os.getenv("ENVIRONMENT") == "production":
             try:
                 gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-                gcs_path = f"silver/field_area_analysis/{timestamp}/field_spatial_analysis_{year}_{timestamp}.parquet"
+                gcs_path = f"silver/field_area_analysis/{timestamp}/data.parquet"
                 gcs_output_path = f"gs://{gcs_bucket}/{gcs_path}"
 
                 print(f"🌐 Uploading results to GCS: {gcs_output_path}")
