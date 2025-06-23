@@ -60,6 +60,11 @@ on:
         type: string
         default: ''
 
+env:
+  # Set a shared timestamp for all bronze jobs in this workflow run
+  # Use run_number and run_id to create a unique but shared timestamp
+  BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
+
 jobs:
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
@@ -555,22 +560,28 @@ jobs:
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
-        # Download all bronze data from GCS
+        # Download all bronze data from the shared timestamp folder
         echo "Downloading bronze data from GCS..."
         
-        # Get the latest timestamp folder (corrected path: bronze/chr not chr/bronze)
-        LATEST_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/bronze/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+        # Use the same shared timestamp that all bronze jobs used
+        SHARED_TIMESTAMP="${{ env.BRONZE_EXPORT_TIMESTAMP }}"
+        echo "Using shared bronze timestamp: $SHARED_TIMESTAMP"
         
-        if [[ -n "$LATEST_TIMESTAMP" ]]; then
-          echo "Found latest bronze data timestamp: $LATEST_TIMESTAMP"
-          gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$LATEST_TIMESTAMP/* /tmp/data/bronze/chr/ || echo "No bronze data found to download"
-          
-          # Set the timestamp for silver processing
-          echo "BRONZE_DATE_FOLDER_OVERRIDE=$LATEST_TIMESTAMP" >> .env
-        else
-          echo "No bronze data timestamp found in GCS"
+        # Download all files from the shared timestamp folder
+        echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/"
+        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/* /tmp/data/bronze/chr/ || {
+          echo "Failed to download bronze data from shared timestamp folder"
+          echo "Checking what timestamp folders exist..."
+          gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
           exit 1
-        fi
+        }
+        
+        # Set the timestamp for silver processing
+        echo "BRONZE_DATE_FOLDER_OVERRIDE=$SHARED_TIMESTAMP" >> .env
+        
+        # List what we downloaded
+        echo "=== Downloaded bronze files ==="
+        ls -la /tmp/data/bronze/chr/
 
     - name: Run Silver Processing
       working-directory: backend/pipelines/chr_pipeline
