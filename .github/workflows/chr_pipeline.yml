@@ -64,7 +64,7 @@ jobs:
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -122,12 +122,13 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Determine which foundation step to run
-        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "bronze_foundation" || "${{ inputs.step }}" == "bronze_data_collection" || "${{ inputs.step }}" == "herd_details" || "${{ inputs.step }}" == "diko" || "${{ inputs.step }}" == "animal_movements" || "${{ inputs.step }}" == "ejendom" || "${{ inputs.step }}" == "vetstat" ]]; then
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
           STEP="herds"  # This will run stamdata -> herds
-        elif [[ "${{ inputs.step }}" == "stamdata" || "${{ inputs.step }}" == "herds" ]]; then
-          STEP="${{ inputs.step }}"
+        elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
+          STEP="$INPUT_STEP"
         else
-          echo "Invalid step for bronze-foundation job: ${{ inputs.step }}"
+          echo "Invalid step for bronze-foundation job: $INPUT_STEP"
           exit 1
         fi
         
@@ -171,7 +172,7 @@ jobs:
   bronze-parallel-group-1:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -239,7 +240,8 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Skip if this specific step is not requested
-        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "${{ matrix.data_type }}" ]]; then
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
           echo "Skipping ${{ matrix.data_type }} step for this configuration"
           exit 0
         fi
@@ -286,7 +288,7 @@ jobs:
   bronze-herd-details:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -381,7 +383,7 @@ jobs:
   bronze-parallel-group-2:
     runs-on: ubuntu-latest
     needs: bronze-herd-details
-    if: ${{ inputs.step == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -459,7 +461,8 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Skip if this specific step is not requested
-        if [[ "${{ inputs.step }}" != "all" && "${{ inputs.step }}" != "bronze_data_collection" && "${{ inputs.step }}" != "${{ matrix.data_type }}" ]]; then
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
           echo "Skipping ${{ matrix.data_type }} step for this configuration"
           exit 0
         fi
@@ -495,7 +498,7 @@ jobs:
   silver-processing:
     runs-on: ubuntu-latest
     needs: [bronze-foundation, bronze-parallel-group-1, bronze-herd-details, bronze-parallel-group-2]
-    if: ${{ inputs.step == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
     
     permissions:
       contents: 'read'
@@ -570,10 +573,11 @@ jobs:
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Determine which silver step to run
-        if [[ "${{ inputs.step }}" == "all" || "${{ inputs.step }}" == "silver_processing" ]]; then
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "silver_processing" ]]; then
           STEP="silver_all"
         else
-          STEP="${{ inputs.step }}"
+          STEP="$INPUT_STEP"
         fi
         
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
@@ -608,7 +612,7 @@ jobs:
   # Job 6: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
     
     permissions:
       contents: 'read'
