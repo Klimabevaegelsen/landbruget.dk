@@ -69,7 +69,7 @@ jobs:
       - name: Install Python dependencies
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
-          uv pip install --system -r requirements.txt
+          uv pip install --system .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
