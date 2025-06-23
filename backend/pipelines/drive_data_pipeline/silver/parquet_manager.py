@@ -1,6 +1,8 @@
 """Parquet and GeoParquet output management for Silver layer."""
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -10,6 +12,7 @@ import pyarrow.parquet as pq
 from shapely.geometry import Point
 
 from ..utils.logging import get_logger
+from ..utils.storage import DriveStorageManager
 
 # Get logger
 logger = get_logger()
@@ -20,15 +23,18 @@ class ParquetManager:
 
     def __init__(
         self,
+        storage_manager: DriveStorageManager,
         compression: str = "snappy",
         partition_by: list[str] | None = None,
     ):
         """Initialize the Parquet manager.
 
         Args:
+            storage_manager: Storage manager for file operations
             compression: Compression algorithm to use
             partition_by: List of columns to partition by
         """
+        self.storage_manager = storage_manager
         self.compression = compression
         self.partition_by = partition_by
         logger.info(f"Initialized ParquetManager with compression={compression}")
@@ -77,46 +83,114 @@ class ParquetManager:
                 # Set new metadata
                 table = table.replace_schema_metadata(new_metadata)
 
-            # Create parent directory if it doesn't exist
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Check if we're using GCS storage
+            if hasattr(self.storage_manager.storage, "bucket"):
+                # GCS storage - write to temp file first, then upload
+                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
+                    temp_path = temp_file.name
 
-            # Write with partitioning if specified
-            if self.partition_by and all(col in df.columns for col in self.partition_by):
-                # Create partition directory
-                root_path = output_path.parent
+                try:
+                    # Write with partitioning if specified
+                    if self.partition_by and all(col in df.columns for col in self.partition_by):
+                        # For partitioned datasets, we'll create a temp directory
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            temp_root = Path(temp_dir)
 
-                # Write partitioned dataset
-                pq.write_to_dataset(
-                    table,
-                    root_path=str(root_path),
-                    partition_cols=self.partition_by,
-                    basename_template=f"{output_path.stem}_{{i}}.parquet",
-                    filesystem=None,  # Use local filesystem
-                    use_dictionary=True,
-                    compression=self.compression,
-                    write_statistics=True,
-                    writer_version="2.0",
-                    data_page_size=1024 * 1024,  # 1MB page size
-                    row_group_size=row_group_size,
-                )
+                            # Write partitioned dataset
+                            pq.write_to_dataset(
+                                table,
+                                root_path=str(temp_root),
+                                partition_cols=self.partition_by,
+                                basename_template=f"{output_path.stem}_{{i}}.parquet",
+                                filesystem=None,  # Use local filesystem for temp
+                                use_dictionary=True,
+                                compression=self.compression,
+                                write_statistics=True,
+                                writer_version="2.0",
+                                data_page_size=1024 * 1024,  # 1MB page size
+                                row_group_size=row_group_size,
+                            )
 
-                logger.info(
-                    f"Saved partitioned Parquet to {root_path} "
-                    f"(partitioned by {', '.join(self.partition_by)})"
-                )
-                return root_path
+                            # Upload all files in the partitioned dataset
+                            for root, dirs, files in os.walk(temp_root):
+                                for file in files:
+                                    if file.endswith(".parquet"):
+                                        local_file_path = Path(root) / file
+                                        # Create relative path structure
+                                        rel_path = local_file_path.relative_to(temp_root)
+                                        gcs_path = output_path.parent / rel_path
+
+                                        with open(local_file_path, "rb") as f:
+                                            self.storage_manager.save_file(f.read(), gcs_path)
+
+                            logger.info(
+                                f"Saved partitioned Parquet to GCS: {output_path.parent} "
+                                f"(partitioned by {', '.join(self.partition_by)})"
+                            )
+                            return output_path.parent
+                    else:
+                        # Standard write to a single file
+                        pq.write_table(
+                            table,
+                            temp_path,
+                            compression=self.compression,
+                            write_statistics=True,
+                            row_group_size=row_group_size,
+                        )
+
+                        # Upload to GCS
+                        with open(temp_path, "rb") as f:
+                            self.storage_manager.save_file(f.read(), output_path)
+
+                        logger.info(f"Saved Parquet file to GCS: {output_path}")
+                        return output_path
+
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
             else:
-                # Standard write to a single file
-                pq.write_table(
-                    table,
-                    output_path,
-                    compression=self.compression,
-                    write_statistics=True,
-                    row_group_size=row_group_size,
-                )
+                # Local storage - use original logic
+                # Create parent directory if it doesn't exist
+                output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                logger.info(f"Saved Parquet file to {output_path}")
-                return output_path
+                # Write with partitioning if specified
+                if self.partition_by and all(col in df.columns for col in self.partition_by):
+                    # Create partition directory
+                    root_path = output_path.parent
+
+                    # Write partitioned dataset
+                    pq.write_to_dataset(
+                        table,
+                        root_path=str(root_path),
+                        partition_cols=self.partition_by,
+                        basename_template=f"{output_path.stem}_{{i}}.parquet",
+                        filesystem=None,  # Use local filesystem
+                        use_dictionary=True,
+                        compression=self.compression,
+                        write_statistics=True,
+                        writer_version="2.0",
+                        data_page_size=1024 * 1024,  # 1MB page size
+                        row_group_size=row_group_size,
+                    )
+
+                    logger.info(
+                        f"Saved partitioned Parquet to {root_path} "
+                        f"(partitioned by {', '.join(self.partition_by)})"
+                    )
+                    return root_path
+                else:
+                    # Standard write to a single file
+                    pq.write_table(
+                        table,
+                        output_path,
+                        compression=self.compression,
+                        write_statistics=True,
+                        row_group_size=row_group_size,
+                    )
+
+                    logger.info(f"Saved Parquet file to {output_path}")
+                    return output_path
 
         except Exception as e:
             error_msg = f"Failed to save DataFrame to Parquet: {str(e)}"
@@ -167,29 +241,67 @@ class ParquetManager:
                 logger.warning("CRS not set in GeoDataFrame, assuming EPSG:4326")
                 gdf.crs = "EPSG:4326"
 
-            # Create parent directory if it doesn't exist
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Check if we're using GCS storage
+            if hasattr(self.storage_manager.storage, "bucket"):
+                # GCS storage - write to temp file first, then upload
+                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
+                    temp_path = temp_file.name
 
-            # Add schema metadata if provided
-            if schema_metadata:
-                # Convert metadata to dictionary format used by geopandas
-                metadata = {"schema": schema_metadata}
+                try:
+                    # Add schema metadata if provided
+                    if schema_metadata:
+                        # Convert metadata to dictionary format used by geopandas
+                        metadata = {"schema": schema_metadata}
 
-                # Save with metadata
-                gdf.to_parquet(
-                    output_path,
-                    compression=self.compression,
-                    metadata=metadata,
-                )
+                        # Save with metadata
+                        gdf.to_parquet(
+                            temp_path,
+                            compression=self.compression,
+                            metadata=metadata,
+                        )
+                    else:
+                        # Standard save
+                        gdf.to_parquet(
+                            temp_path,
+                            compression=self.compression,
+                        )
+
+                    # Upload to GCS
+                    with open(temp_path, "rb") as f:
+                        self.storage_manager.save_file(f.read(), output_path)
+
+                    logger.info(f"Saved GeoParquet file to GCS: {output_path}")
+                    return output_path
+
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
             else:
-                # Standard save
-                gdf.to_parquet(
-                    output_path,
-                    compression=self.compression,
-                )
+                # Local storage - use original logic
+                # Create parent directory if it doesn't exist
+                output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            logger.info(f"Saved GeoParquet file to {output_path}")
-            return output_path
+                # Add schema metadata if provided
+                if schema_metadata:
+                    # Convert metadata to dictionary format used by geopandas
+                    metadata = {"schema": schema_metadata}
+
+                    # Save with metadata
+                    gdf.to_parquet(
+                        output_path,
+                        compression=self.compression,
+                        metadata=metadata,
+                    )
+                else:
+                    # Standard save
+                    gdf.to_parquet(
+                        output_path,
+                        compression=self.compression,
+                    )
+
+                logger.info(f"Saved GeoParquet file to {output_path}")
+                return output_path
 
         except Exception as e:
             error_msg = f"Failed to save GeoDataFrame to GeoParquet: {str(e)}"
