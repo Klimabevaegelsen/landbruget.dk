@@ -15,6 +15,15 @@ def generate_timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
+def generate_date() -> str:
+    """Generate a date string in the format YYYY-MM-DD.
+
+    Returns:
+        Date string
+    """
+    return datetime.datetime.now().strftime("%Y-%m-%d")
+
+
 def calculate_file_checksum(file_path: str | Path, algorithm: str = "sha256") -> str:
     """Calculate a checksum for a file.
 
