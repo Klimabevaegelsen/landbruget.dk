@@ -577,9 +577,31 @@ def main():
             # Check if we have bronze data files available
             bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
             has_bronze_files = False
+
+            # List of potential bronze directories to check
+            bronze_paths_to_check = []
+
             if bronze_dir_override:
-                bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
-                has_bronze_files = bronze_path.exists() and any(bronze_path.glob("*.json"))
+                # Check override directory
+                bronze_paths_to_check.append(config.BRONZE_BASE_DIR / bronze_dir_override)
+
+            # Always also check default bronze directory with EXPORT_TIMESTAMP
+            bronze_paths_to_check.append(config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP)
+
+            # Check each potential bronze directory
+            for bronze_path in bronze_paths_to_check:
+                if bronze_path.exists() and any(bronze_path.glob("*.json")):
+                    has_bronze_files = True
+                    logging.warning(f"Found bronze files in directory: {bronze_path}")
+                    break
+
+            # If still no files found, check if there are any timestamped subdirectories with JSON files
+            if not has_bronze_files and config.BRONZE_BASE_DIR.exists():
+                for subdir in config.BRONZE_BASE_DIR.iterdir():
+                    if subdir.is_dir() and any(subdir.glob("*.json")):
+                        has_bronze_files = True
+                        logging.warning(f"Found bronze files in directory: {subdir}")
+                        break
 
             if has_buffer_data or has_context_import or has_bronze_files:
                 logging.warning(

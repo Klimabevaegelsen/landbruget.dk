@@ -567,9 +567,12 @@ jobs:
         SHARED_TIMESTAMP="${{ env.BRONZE_EXPORT_TIMESTAMP }}"
         echo "Using shared bronze timestamp: $SHARED_TIMESTAMP"
         
-        # Download all files from the shared timestamp folder
+        # Create the target directory with the timestamp
+        mkdir -p /tmp/data/bronze/chr/$SHARED_TIMESTAMP
+        
+        # Download all files from the shared timestamp folder to the timestamped directory
         echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/"
-        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/* /tmp/data/bronze/chr/ || {
+        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/* /tmp/data/bronze/chr/$SHARED_TIMESTAMP/ || {
           echo "Failed to download bronze data from shared timestamp folder"
           echo "Checking what timestamp folders exist..."
           gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
@@ -581,7 +584,7 @@ jobs:
         
         # List what we downloaded
         echo "=== Downloaded bronze files ==="
-        ls -la /tmp/data/bronze/chr/
+        ls -la /tmp/data/bronze/chr/$SHARED_TIMESTAMP/
 
     - name: Run Silver Processing
       working-directory: backend/pipelines/chr_pipeline
