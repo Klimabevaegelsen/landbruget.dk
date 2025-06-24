@@ -45,27 +45,28 @@ class BronzeStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use required structure: bronze/static_data/drive/{timestamp}
+        # Use standard structure: bronze/{pipeline_name}/{timestamp}
+        # Note: pipeline_name will be added in create_folder_structure
         # For local storage, this will be relative to base_path
         # For GCS, this will be the full path in the bucket
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use required structure
-            run_dir = Path(f"bronze/static_data/drive/{timestamp}")
+            # GCS storage - use bronze as base
+            run_dir = Path("bronze")
         else:
-            # Local storage - use base_path with required structure
-            run_dir = self.base_path / "static_data" / "drive" / timestamp
+            # Local storage - use base_path/bronze
+            run_dir = self.base_path / "bronze"
 
-        # Ensure the directory exists
-        self.storage_manager.ensure_directory_exists(run_dir)
+        # Store timestamp for later use
+        self.current_timestamp = timestamp
 
-        logger.info(f"Created run directory: {run_dir}")
+        logger.info(f"Created run directory base: {run_dir} (timestamp: {timestamp})")
         return run_dir
 
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
-        """Create a folder structure mirroring the source with subfolder organization.
+        """Create a folder structure following the standard path: bronze/{pipeline_name}/{timestamp}.
 
         Args:
-            run_dir: Base run directory (already includes bronze/static_data/drive/{timestamp})
+            run_dir: Base run directory (bronze)
             folder_path: Path of the folder in the source (e.g., Google Drive)
 
         Returns:
@@ -74,28 +75,18 @@ class BronzeStorageManager:
         # Normalize folder path (remove leading/trailing slashes)
         folder_path = folder_path.strip("/")
 
-        # For the required structure, we need to organize by subfolder name
-        # The run_dir is already bronze/static_data/drive/{timestamp}
-        # We need to add the subfolder name as the next level
+        # Use the standard structure: bronze/{pipeline_name}/{timestamp}
+        # For drive data pipeline, we use the pipeline name as the main folder
+        target_path = run_dir / self.pipeline_name / self.current_timestamp
+
+        # Add subfolder structure based on source folder path
         if folder_path:
-            # Split the path and sanitize each component
+            # Split the path and sanitize each part
             path_parts = folder_path.split("/")
-            sanitized_parts = []
-
             for part in path_parts:
-                # Sanitize each folder name for storage
                 sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
-                # Remove any other problematic characters
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
-                sanitized_parts.append(sanitized_part)
-
-            # For the required structure, the first part becomes the subfolder name
-            # Additional parts preserve the hierarchy within that subfolder
-            target_path = run_dir
-            for part in sanitized_parts:
-                target_path = target_path / part
-        else:
-            target_path = run_dir
+                target_path = target_path / sanitized_part
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(target_path)
@@ -196,7 +187,7 @@ class BronzeStorageManager:
         """Check if a file exists in the Bronze layer.
 
         Args:
-            run_dir: Base run directory
+            run_dir: Base run directory (bronze)
             source_path: Path of the file in the source (e.g., Google Drive)
             filename: Name of the file
 
@@ -210,9 +201,13 @@ class BronzeStorageManager:
         else:
             folder_path = os.path.dirname(source_path) if source_path else ""
 
-        target_dir = run_dir
+        # Use the same logic as create_folder_structure to build the path
+        # Standard structure: bronze/{pipeline_name}/{timestamp}
+        target_dir = run_dir / self.pipeline_name / self.current_timestamp
+
+        # Add subfolder structure based on source folder path
         if folder_path:
-            # Split the path and sanitize each component (same as create_folder_structure)
+            # Split the path and sanitize each part
             path_parts = folder_path.split("/")
             for part in path_parts:
                 sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
