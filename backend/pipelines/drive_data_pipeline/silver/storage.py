@@ -46,15 +46,15 @@ class SilverStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use required structure: silver/static_data/drive/{timestamp}
+        # Use pattern: silver/{timestamp} (subfolder organization handled in create_output_directory)
         # For local storage, this will be relative to base_path
         # For GCS, this will be the full path in the bucket
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use required structure
-            run_dir = Path(f"silver/static_data/drive/{timestamp}")
+            # GCS storage - use silver/{timestamp}
+            run_dir = Path(f"silver/{timestamp}")
         else:
-            # Local storage - use base_path with required structure
-            run_dir = self.base_path / "static_data" / "drive" / timestamp
+            # Local storage - use base_path/silver/{timestamp}
+            run_dir = self.base_path / "silver" / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(run_dir)
@@ -65,20 +65,17 @@ class SilverStorageManager:
     def create_output_directory(
         self, run_dir: Path, source_subfolder: str | None = None, content_type: str | None = None
     ) -> Path:
-        """Create output directory for a specific file or content type following required structure.
+        """Create output directory for a specific file or content type following the new structure.
 
         Args:
-            run_dir: Run directory path (already includes silver/static_data/drive/{timestamp})
-            source_subfolder: Optional subfolder name (will be added to path)
+            run_dir: Run directory path (silver/{timestamp})
+            source_subfolder: Optional subfolder name (will be reorganized to silver/{subfolder_name}/{timestamp})
             content_type: Optional content type descriptor
 
         Returns:
             Path to the created output directory
         """
-        # Start with the run directory (already silver/static_data/drive/{timestamp})
-        output_dir = run_dir
-
-        # Add source subfolder if provided - this becomes the subfolder name in the required structure
+        # New structure: silver/{subfolder_name}/{timestamp}/{content_type}
         if source_subfolder:
             # Sanitize subfolder name
             sanitized_subfolder = (
@@ -87,7 +84,20 @@ class SilverStorageManager:
             sanitized_subfolder = "".join(
                 c for c in sanitized_subfolder if c.isalnum() or c in "_-"
             )
-            output_dir = output_dir / sanitized_subfolder
+
+            # Get timestamp from run_dir (last part of the path)
+            timestamp = run_dir.name if run_dir.name else str(run_dir).split("/")[-1]
+
+            # Create new path: silver/{subfolder_name}/{timestamp}
+            if hasattr(self.storage_manager.storage, "bucket"):
+                # GCS storage
+                output_dir = Path("silver") / sanitized_subfolder / timestamp
+            else:
+                # Local storage - use base_path
+                output_dir = self.base_path / "silver" / sanitized_subfolder / timestamp
+        else:
+            # No subfolder provided, use run_dir as is
+            output_dir = run_dir
 
         # Add content type subfolder if provided
         if content_type:

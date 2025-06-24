@@ -45,15 +45,15 @@ class BronzeStorageManager:
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use required structure: bronze/static_data/drive/{timestamp}
+        # Use pattern: bronze/{timestamp} (subfolder organization handled in create_folder_structure)
         # For local storage, this will be relative to base_path
         # For GCS, this will be the full path in the bucket
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use required structure
-            run_dir = Path(f"bronze/static_data/drive/{timestamp}")
+            # GCS storage - use bronze/{timestamp}
+            run_dir = Path(f"bronze/{timestamp}")
         else:
-            # Local storage - use base_path with required structure
-            run_dir = self.base_path / "static_data" / "drive" / timestamp
+            # Local storage - use base_path/bronze/{timestamp}
+            run_dir = self.base_path / "bronze" / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(run_dir)
@@ -62,10 +62,10 @@ class BronzeStorageManager:
         return run_dir
 
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
-        """Create a folder structure mirroring the source with subfolder organization.
+        """Create a folder structure using the new path organization.
 
         Args:
-            run_dir: Base run directory (already includes bronze/static_data/drive/{timestamp})
+            run_dir: Base run directory (bronze/{timestamp})
             folder_path: Path of the folder in the source (e.g., Google Drive)
 
         Returns:
@@ -74,9 +74,7 @@ class BronzeStorageManager:
         # Normalize folder path (remove leading/trailing slashes)
         folder_path = folder_path.strip("/")
 
-        # For the required structure, we need to organize by subfolder name
-        # The run_dir is already bronze/static_data/drive/{timestamp}
-        # We need to add the subfolder name as the next level
+        # New structure: bronze/{subfolder_name}/{timestamp}/{remaining_path}
         if folder_path:
             # Split the path and sanitize each component
             path_parts = folder_path.split("/")
@@ -89,12 +87,30 @@ class BronzeStorageManager:
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
                 sanitized_parts.append(sanitized_part)
 
-            # For the required structure, the first part becomes the subfolder name
-            # Additional parts preserve the hierarchy within that subfolder
-            target_path = run_dir
-            for part in sanitized_parts:
-                target_path = target_path / part
+            # New structure: bronze/{subfolder_name}/{timestamp}/{remaining_path}
+            # Extract timestamp from run_dir (last part of the path)
+            if sanitized_parts:
+                subfolder_name = sanitized_parts[0]
+
+                # Get timestamp from run_dir (last part of the path)
+                timestamp = run_dir.name if run_dir.name else str(run_dir).split("/")[-1]
+
+                # Create new path: bronze/{subfolder_name}/{timestamp}
+                if hasattr(self.storage_manager.storage, "bucket"):
+                    # GCS storage
+                    target_path = Path("bronze") / subfolder_name / timestamp
+                else:
+                    # Local storage - use base_path
+                    target_path = self.base_path / "bronze" / subfolder_name / timestamp
+
+                # Add remaining path parts if any
+                for part in sanitized_parts[1:]:
+                    target_path = target_path / part
+            else:
+                # Fallback if no path parts
+                target_path = run_dir
         else:
+            # No folder path provided, use run_dir as is
             target_path = run_dir
 
         # Ensure the directory exists
@@ -196,7 +212,7 @@ class BronzeStorageManager:
         """Check if a file exists in the Bronze layer.
 
         Args:
-            run_dir: Base run directory
+            run_dir: Base run directory (bronze/{timestamp})
             source_path: Path of the file in the source (e.g., Google Drive)
             filename: Name of the file
 
@@ -210,14 +226,35 @@ class BronzeStorageManager:
         else:
             folder_path = os.path.dirname(source_path) if source_path else ""
 
-        target_dir = run_dir
+        # Use the same logic as create_folder_structure to build the path
         if folder_path:
             # Split the path and sanitize each component (same as create_folder_structure)
             path_parts = folder_path.split("/")
+            sanitized_parts = []
+
             for part in path_parts:
                 sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
-                target_dir = target_dir / sanitized_part
+                sanitized_parts.append(sanitized_part)
+
+            if sanitized_parts:
+                subfolder_name = sanitized_parts[0]
+                timestamp = run_dir.name if run_dir.name else str(run_dir).split("/")[-1]
+
+                if hasattr(self.storage_manager.storage, "bucket"):
+                    # GCS storage
+                    target_dir = Path("bronze") / subfolder_name / timestamp
+                else:
+                    # Local storage - use base_path
+                    target_dir = self.base_path / "bronze" / subfolder_name / timestamp
+
+                # Add remaining path parts if any
+                for part in sanitized_parts[1:]:
+                    target_dir = target_dir / part
+            else:
+                target_dir = run_dir
+        else:
+            target_dir = run_dir
 
         # Check if the file exists
         file_path = target_dir / filename
