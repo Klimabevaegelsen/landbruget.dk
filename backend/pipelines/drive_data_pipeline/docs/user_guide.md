@@ -127,8 +127,8 @@ docker-compose run --rm pipeline python -m drive_data_pipeline.main --verbose --
 
 The pipeline stores data in the following locations:
 
-- **Bronze data**: `data/bronze/YYYYMMDD_HHMMSS/`
-- **Silver data**: `data/silver/YYYYMMDD_HHMMSS/`
+- **Bronze data**: `data/bronze/{subfolder_name}/{YYYYMMDD_HHMMSS}/`
+- **Silver data**: `data/silver/{subfolder_name}/{YYYYMMDD_HHMMSS}/`
 
 Each run creates a timestamped directory to ensure data is preserved across runs.
 
