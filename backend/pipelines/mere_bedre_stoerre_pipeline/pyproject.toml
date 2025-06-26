@@ -1,0 +1,15 @@
+[project]
+name = "Mere_bedre_stoerre_natur_data"
+version = "0.1.0"
+description = "Ingests spatial data related to the Mere Bedre Stoerre Nature report"
+authors = [{ name = "Chresten", email = "your@email.com" }]
+requires-python = ">=3.9"
+
+dependencies = [
+    "aiohttp>=3.10.0",
+    "pandas",
+    "python-dotenv>=1.1.0",
+    "geopandas",
+    "matplotlib",
+    "requests",
+]
