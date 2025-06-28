@@ -1,5 +1,6 @@
 """Silver layer storage management."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -40,65 +41,69 @@ class SilverStorageManager:
             timestamp: Optional timestamp string (if not provided, one will be generated)
 
         Returns:
-            Path to the created run directory
+            Path to the created run directory (just stores timestamp for later use)
         """
         # Generate timestamp if not provided
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use required structure: silver/static_data/drive/{timestamp}
-        # For local storage, this will be relative to base_path
-        # For GCS, this will be the full path in the bucket
+        # Store timestamp for use in create_output_directory
+        # The actual directory creation happens in create_output_directory based on subfolder
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use required structure
-            run_dir = Path(f"silver/static_data/drive/{timestamp}")
+            # GCS storage - use silver as base
+            run_dir = Path("silver")
         else:
-            # Local storage - use base_path with required structure
-            run_dir = self.base_path / "static_data" / "drive" / timestamp
+            # Local storage - use base_path/silver
+            run_dir = self.base_path / "silver"
 
-        # Ensure the directory exists
-        self.storage_manager.ensure_directory_exists(run_dir)
+        # Store the timestamp for later use
+        self._current_timestamp = timestamp
 
-        logger.info(f"Created Silver run directory: {run_dir}")
+        logger.info(f"Created run directory base: {run_dir} with timestamp: {timestamp}")
         return run_dir
 
     def create_output_directory(
         self, run_dir: Path, source_subfolder: str | None = None, content_type: str | None = None
     ) -> Path:
-        """Create output directory for a specific file or content type following required structure.
+        """Create output directory for a specific file or content type following the new structure.
 
         Args:
-            run_dir: Run directory path (already includes silver/static_data/drive/{timestamp})
-            source_subfolder: Optional subfolder name (will be added to path)
+            run_dir: Run directory path (silver/)
+            source_subfolder: Optional subfolder name (will be reorganized to silver/{subfolder_name}/{timestamp})
             content_type: Optional content type descriptor
 
         Returns:
             Path to the created output directory
         """
-        # Start with the run directory (already silver/static_data/drive/{timestamp})
-        output_dir = run_dir
+        # Get the timestamp from the stored value
+        timestamp = getattr(self, "_current_timestamp", generate_timestamp())
 
-        # Add source subfolder if provided - this becomes the subfolder name in the required structure
+        # New structure: silver/{subfolder_name}/{timestamp}/{content_type}
         if source_subfolder:
             # Sanitize subfolder name
-            sanitized_subfolder = (
-                source_subfolder.replace(" ", "_").replace(".", "_").replace(":", "_")
-            )
-            sanitized_subfolder = "".join(
-                c for c in sanitized_subfolder if c.isalnum() or c in "_-"
-            )
-            # Convert to lowercase
-            sanitized_subfolder = sanitized_subfolder.lower()
-            output_dir = output_dir / sanitized_subfolder
+            sanitized_subfolder = re.sub(r'[<>:"/\\|?*]', "_", source_subfolder)
+            sanitized_subfolder = sanitized_subfolder.strip(". ").lower()
 
-        # Add content type subfolder if provided
-        if content_type:
-            output_dir = output_dir / content_type.lower()
+            # Create path: silver/{subfolder_name}/{timestamp}
+            output_dir = run_dir / sanitized_subfolder / timestamp
+
+            # Add content type if provided
+            if content_type:
+                sanitized_content_type = re.sub(r'[<>:"/\\|?*]', "_", content_type)
+                sanitized_content_type = sanitized_content_type.strip(". ")
+                output_dir = output_dir / sanitized_content_type
+        else:
+            # No subfolder provided, use 'root' as default
+            output_dir = run_dir / "root" / timestamp
+            if content_type:
+                sanitized_content_type = re.sub(r'[<>:"/\\|?*]', "_", content_type)
+                sanitized_content_type = sanitized_content_type.strip(". ")
+                output_dir = output_dir / sanitized_content_type
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(output_dir)
 
-        logger.debug(f"Created output directory: {output_dir}")
+        logger.info(f"Created Silver output directory: {output_dir}")
         return output_dir
 
     def save_parquet(self, df: Any, output_dir: Path, filename: str) -> Path:
