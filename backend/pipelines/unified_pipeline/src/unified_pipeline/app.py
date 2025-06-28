@@ -36,6 +36,10 @@ from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
 )
+from unified_pipeline.gold.pesticide_disaggregation import (
+    PesticideDisaggregationGold,
+    PesticideDisaggregationGoldConfig,
+)
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
@@ -252,6 +256,14 @@ def execute(cli_config: cli.CliConfig) -> None:
                 # agricultural_fields, property_cadastral_merged, soil_types, bnbo_status_dissolved,
                 # wetlands_dissolved, water_projects_dissolved
                 (FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig),
+            ],
+        },
+        cli.Source.pesticide_disaggregation: {
+            cli.Stage.gold: [(PesticideDisaggregationGold, PesticideDisaggregationGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # agricultural_fields, pesticides
+                (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
     }

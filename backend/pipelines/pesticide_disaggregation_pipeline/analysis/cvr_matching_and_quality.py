@@ -260,168 +260,17 @@ class FieldDatasetAnalyzer:
         """Initialize with database manager."""
         self.db = db_manager
 
-    def compare_marker_jordbrugsanalyser(self) -> Dict:
-        """Compare Marker and Jordbrugsanalyser datasets."""
-        try:
-            metrics = self.db.execute_query("""
-                WITH field_matches AS (
-                    SELECT 
-                        COUNT(DISTINCT m.field_id) as marker_fields,
-                        COUNT(DISTINCT j.field_id) as jord_fields,
-                        COUNT(DISTINCT CASE 
-                            WHEN m.field_id = j.field_id 
-                            THEN m.field_id 
-                        END) as matching_fields
-                    FROM marker m
-                    FULL JOIN jordbrugsanalyser j 
-                    ON m.field_id = j.field_id
-                ),
-                area_stats AS (
-                    SELECT 
-                        AVG(ABS(m.area_ha - j.area_ha) / NULLIF(j.area_ha, 0) * 100) as avg_area_diff_pct,
-                        COUNT(CASE WHEN ABS(m.area_ha - j.area_ha) > 0.01 THEN 1 END) as records_with_diff
-                    FROM marker m
-                    INNER JOIN jordbrugsanalyser j 
-                    ON m.field_id = j.field_id
-                )
-                SELECT 
-                    fm.*,
-                    area_stats.avg_area_diff_pct,
-                    area_stats.records_with_diff
-                FROM field_matches fm
-                CROSS JOIN area_stats
-            """)[0]
+    # REMOVED: compare_marker_jordbrugsanalyser method
+    # Jordbrugsanalyser dataset was removed as it provided only validation (99.98% match with marker)
+    # and added unnecessary processing overhead without functional value.
 
-            comparison = {
-                "marker_fields": metrics[0],
-                "jord_fields": metrics[1],
-                "matching_fields": metrics[2],
-                "match_rate": metrics[2] / max(metrics[0], metrics[1]) * 100 if max(metrics[0], metrics[1]) > 0 else 0,
-                "avg_area_diff_pct": metrics[3],
-                "records_with_diff": metrics[4],
-            }
-            logger.info(f"Generated field dataset comparison: {comparison}")
-            return comparison
-        except Exception as e:
-            logger.error(f"Error comparing field datasets: {str(e)}")
-            # Return None or an empty dict or re-raise, depending on desired error handling
-            # For now, let's re-raise to make it visible
-            raise
+    # REMOVED: analyze_area_differences method
+    # This method compared marker vs jordbrugsanalyser datasets
+    # Since jordbrugsanalyser was removed, this analysis is no longer relevant
 
-    def analyze_area_differences(self) -> Dict:
-        """Analyze area differences between datasets."""
-        try:
-            area_stats = self.db.execute_query("""
-                WITH area_comparison AS (
-                    SELECT 
-                        m.field_id,
-                        m.area_ha as marker_area,
-                        m.reported_area_ha as marker_reported_area,
-                        j.area_ha as jord_area,
-                        ABS(m.area_ha - j.area_ha) as area_diff,
-                        ABS(m.reported_area_ha - j.area_ha) as reported_area_diff
-                    FROM marker m
-                    INNER JOIN jordbrugsanalyser j 
-                    ON m.field_id = j.field_id
-                )
-                SELECT 
-                    COUNT(*) as total_records,
-                    COUNT(CASE WHEN area_diff > 0.01 THEN 1 END) as area_diff_records,
-                    COUNT(CASE WHEN reported_area_diff > 0.01 THEN 1 END) as reported_diff_records,
-                    SUM(area_diff) as total_area_diff,
-                    SUM(reported_area_diff) as total_reported_diff,
-                    AVG(area_diff) as avg_area_diff,
-                    AVG(reported_area_diff) as avg_reported_diff,
-                    MAX(area_diff) as max_area_diff,
-                    MAX(reported_area_diff) as max_reported_diff
-                FROM area_comparison
-            """)[0]
-
-            analysis = {
-                "total_records": area_stats[0],
-                "area_differences": {
-                    "records_with_diff": area_stats[1],
-                    "diff_percentage": area_stats[1] / area_stats[0] * 100 if area_stats[0] > 0 else 0,
-                    "total_diff": area_stats[3],
-                    "avg_diff": area_stats[5],
-                    "max_diff": area_stats[7],
-                },
-                "reported_area_differences": {
-                    "records_with_diff": area_stats[2],
-                    "diff_percentage": area_stats[2] / area_stats[0] * 100 if area_stats[0] > 0 else 0,
-                    "total_diff": area_stats[4],
-                    "avg_diff": area_stats[6],
-                    "max_diff": area_stats[8],
-                },
-            }
-            logger.info(f"Total records: {area_stats[0]}")
-            logger.info(
-                f"Records with area differences: {area_stats[1]} ({area_stats[1] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
-            )
-            logger.info(
-                f"Records with reported area differences: {area_stats[2]} ({area_stats[2] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
-            )
-            logger.info(f"Total area difference: {area_stats[3]:.2f} ha")
-            logger.info(f"Total reported area difference: {area_stats[4]:.2f} ha")
-            return analysis
-        except Exception as e:
-            logger.error(f"Error analyzing area differences: {str(e)}")
-            raise
-
-    def validate_field_identifiers(self) -> Dict:
-        """Validate field identifiers across datasets."""
-        try:
-            validation = self.db.execute_query("""
-                WITH field_validation AS (
-                    SELECT 
-                        m.field_id,
-                        m.cvr_number as marker_cvr,
-                        j.cvr_number as jord_cvr,
-                        CASE 
-                            WHEN NULLIF(TRIM(m.cvr_number), '') IS NULL OR NULLIF(TRIM(j.cvr_number), '') IS NULL THEN 'missing'
-                            WHEN CAST(m.cvr_number AS VARCHAR) = CAST(j.cvr_number AS VARCHAR) THEN 'match'
-                            ELSE 'mismatch'
-                        END as cvr_status,
-                        CASE 
-                            WHEN m.crop_code IS NULL OR j.crop_code IS NULL THEN 'missing'
-                            WHEN CAST(m.crop_code AS VARCHAR) = CAST(j.crop_code AS VARCHAR) THEN 'match'
-                            ELSE 'mismatch'
-                        END as crop_status
-                    FROM marker m
-                    FULL JOIN jordbrugsanalyser j 
-                    ON m.field_id = j.field_id
-                )
-                SELECT 
-                    COUNT(*) as total_fields,
-                    COUNT(CASE WHEN cvr_status = 'match' THEN 1 END) as matching_cvrs,
-                    COUNT(CASE WHEN cvr_status = 'mismatch' THEN 1 END) as mismatched_cvrs,
-                    COUNT(CASE WHEN cvr_status = 'missing' THEN 1 END) as missing_cvrs,
-                    COUNT(CASE WHEN crop_status = 'match' THEN 1 END) as matching_crops,
-                    COUNT(CASE WHEN crop_status = 'mismatch' THEN 1 END) as mismatched_crops,
-                    COUNT(CASE WHEN crop_status = 'missing' THEN 1 END) as missing_crops
-                FROM field_validation
-            """)[0]
-
-            results = {
-                "total_fields": validation[0],
-                "cvr_validation": {
-                    "matching": validation[1],
-                    "mismatched": validation[2],
-                    "missing": validation[3],
-                    "match_rate": validation[1] / validation[0] * 100 if validation[0] > 0 else 0,
-                },
-                "crop_validation": {
-                    "matching": validation[4],
-                    "mismatched": validation[5],
-                    "missing": validation[6],
-                    "match_rate": validation[4] / validation[0] * 100 if validation[0] > 0 else 0,
-                },
-            }
-            logger.info(f"Generated field identifier validation: {results}")
-            return results
-        except Exception as e:
-            logger.error(f"Error validating field identifiers: {str(e)}")
-            raise
+    # REMOVED: validate_field_identifiers method
+    # This method validated field identifiers between marker and jordbrugsanalyser datasets
+    # Since jordbrugsanalyser was removed, this validation is no longer relevant
 
 
 # For brevity, the full SQL queries and logic within CVRMatcher methods

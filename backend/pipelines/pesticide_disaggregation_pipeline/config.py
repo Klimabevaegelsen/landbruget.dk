@@ -15,7 +15,7 @@ class Config:
     OUTPUT_DIR: Path = Path("outputs")  # Relative path name for the output directory
     RESOLVED_OUTPUT_DIR: Optional[Path] = None
     AREA_TOLERANCE_PCT: float = 2.0
-    MAX_FIELDS_FOR_SUBSET_SUM: int = 20  # Maximum number of fields to consider for subset sum
+    MAX_FIELDS_FOR_SUBSET_SUM: int = 20  # DEPRECATED: No longer used (subset sum matching removed)
 
     # GCS Configuration
     GCS_BUCKET: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
@@ -43,9 +43,9 @@ class Config:
 
         return {
             "marker": f"silver/agricultural_fields_{field_year}",
-            "jordbrugsanalyser": f"silver/agricultural_fields_{field_year}",  # Same as marker
             "pesticide": "silver/Pesticides",  # Pesticide data is in Pesticides directory
-            "gkea": "silver/Fertiliser",  # GKEA data is in Fertiliser directory
+            # REMOVED: "jordbrugsanalyser" - redundant validation dataset (99.98% match with marker)
+            # REMOVED: "gkea": "silver/Fertiliser" - GKEA data removed from pipeline
         }
 
 
