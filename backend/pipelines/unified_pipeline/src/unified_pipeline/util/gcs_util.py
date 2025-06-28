@@ -458,3 +458,27 @@ class GCSUtil(metaclass=Singleton):
         blob = self.get_blob(bucket_name, blob_name)
         json_str = blob.download_as_text(encoding="utf-8")
         return json.loads(json_str)
+
+    def read_dataframe_from_gcs(self, bucket_name: str, blob_name: str) -> str:
+        """
+        Download a parquet file from GCS and return the local path for DuckDB to read directly.
+
+        Args:
+            bucket_name (str): Name of the GCS bucket
+            blob_name (str): Path to the parquet file in the bucket
+
+        Returns:
+            str: Path to the downloaded parquet file that DuckDB can read directly
+        """
+        import os
+        import tempfile
+
+        # Create temporary file that persists for DuckDB to read
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, f"data_{hash(blob_name)}.parquet")
+
+        # Download file to temporary location
+        self.download_file(bucket_name, blob_name, temp_path)
+
+        self.log.info(f"Downloaded {blob_name} to {temp_path} for DuckDB processing")
+        return temp_path
