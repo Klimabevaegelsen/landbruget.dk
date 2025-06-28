@@ -454,19 +454,21 @@ class InspireBBRFetcher:
             f"Querying GraphQL API for {category_name} BBR codes ({total_batches} batches)"
         )
 
+        # Use current timestamp for temporal filtering (required by API)
+        current_timestamp = datetime.now().isoformat() + "Z"
+
         for batch_idx in range(0, len(uuids), batch_size):
             batch_uuids = uuids[batch_idx : batch_idx + batch_size]
             batch_num = (batch_idx // batch_size) + 1
 
             self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
 
-            # Create GraphQL query
+            # Create GraphQL query with required temporal filter
             uuid_list = ", ".join(f'"{uuid}"' for uuid in batch_uuids)
             query = f"""
             {{
               BBR_Bygning(
-                virkningstid: "2025-06-18T16:35:33.727Z", 
-                registreringstid: "2025-06-18T16:35:33.727Z", 
+                registreringstid: "{current_timestamp}",
                 where: {{id_lokalId: {{in: [{uuid_list}]}}}}, 
                 first: 1000
               ) {{
@@ -492,6 +494,7 @@ class InspireBBRFetcher:
                     continue
 
                 data = response.json()
+
                 if "errors" in data:
                     self.logger.warning(f"    GraphQL Errors: {data['errors']}")
                     continue
