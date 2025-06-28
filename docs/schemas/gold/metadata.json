@@ -1,12 +1,16 @@
 {
-  "pipeline": "test_mixin_pipeline",
+  "pipeline": "chr_pipeline",
   "stage": "gold",
-  "generated_at": "2025-06-28T12:55:46.359401",
+  "generated_at": "2025-06-28T12:57:51.085145",
   "tables": [
-    "mixin_test_summary"
+    "animal_lifecycle_analysis",
+    "movement_patterns",
+    "antibiotic_usage_summary"
   ],
   "files_generated": [
-    "docs/schemas/gold/mixin_test_summary.md",
+    "docs/schemas/gold/animal_lifecycle_analysis.md",
+    "docs/schemas/gold/movement_patterns.md",
+    "docs/schemas/gold/antibiotic_usage_summary.md",
     "docs/schemas/gold/overview.md"
   ]
 }
