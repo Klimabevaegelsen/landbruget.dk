@@ -42,7 +42,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     batch_size: int = 10000
     max_concurrent: int = 5
     request_timeout: int = 300
-    storage_batch_size: int = 5000
+    storage_batch_size: int = 10000  # Increased for better performance with 16GB RAM
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )

@@ -84,7 +84,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     batch_size: int = 2000
     max_concurrent: int = 5
-    storage_batch_size: int = 10000
+    storage_batch_size: int = 15000  # Increased for better performance with 16GB RAM
 
     timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=1200, connect=60, sock_read=540

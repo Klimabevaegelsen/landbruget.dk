@@ -9,6 +9,7 @@ Migrated from the standalone field_area_analysis_pipeline to the unified pipelin
 """
 
 import os
+import tempfile
 from typing import Any, Dict, Optional
 
 import duckdb
@@ -39,9 +40,9 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Processing configuration
-    batch_size: int = 1000
-    memory_limit: str = "14GB"
-    thread_count: int = 4
+    batch_size: int = 2500  # Increased batch size for better performance with 16GB RAM
+    memory_limit: str = "12GB"  # Use 75% of available 16GB RAM for optimal performance
+    thread_count: int = 4  # Use all available CPU cores
 
     # Quality thresholds
     min_area_threshold: float = 0.01  # Minimum area share to include (1%)
@@ -80,10 +81,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             f"   Memory: {self.config.memory_limit}, Threads: {self.config.thread_count}, Batch size: {self.config.batch_size:,}"
         )
 
-    def _load_silver_data(self, silver_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """Load all required silver datasets."""
+    def _load_silver_data_streaming(self, silver_data: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        """Load silver data paths for streaming processing, avoiding memory loading of large datasets."""
 
-        datasets = {}
+        dataset_paths = {}
         required_datasets = [
             self.config.agricultural_fields_dataset,
             self.config.properties_dataset,
@@ -93,53 +94,193 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.config.water_projects_dataset,
         ]
 
+        # Large datasets that should be streamed directly to DuckDB
+        large_datasets = {self.config.properties_dataset}
+
         for dataset_name in required_datasets:
-            if silver_data and dataset_name in silver_data:
+            if silver_data and dataset_name in silver_data and dataset_name not in large_datasets:
+                # Use in-memory data for smaller datasets only
                 self.log.info(f"Using in-memory silver data for {dataset_name}")
-                datasets[dataset_name] = silver_data[dataset_name]
+                dataset_paths[dataset_name] = silver_data[dataset_name]
             else:
-                self.log.info(f"Reading {dataset_name} from GCS storage")
-                data = self._read_data_from_storage(
-                    dataset_name, self.config.bucket, stage="silver"
-                )
-                if data is not None:
-                    datasets[dataset_name] = data
-                    self.log.info(f"Successfully loaded {dataset_name}: {len(data)} records")
-                else:
-                    self.log.warning(f"No data found for {dataset_name}")
-                    datasets[dataset_name] = None
+                # Get file paths for streaming processing
+                self.log.info(f"Setting up streaming for {dataset_name}")
+                try:
+                    files = self.gcs_util.list_files(
+                        bucket_name=self.config.bucket,
+                        prefix=f"silver/{dataset_name}/",
+                    )
+                    if files:
+                        latest_file = max(files, key=lambda x: x.time_created)
+                        dataset_paths[dataset_name] = (
+                            f"gs://{self.config.bucket}/{latest_file.name}"
+                        )
+                        self.log.info(f"Found {dataset_name}: {latest_file.name}")
+                    else:
+                        self.log.warning(f"No data found for {dataset_name}")
+                        dataset_paths[dataset_name] = None
+                except Exception as e:
+                    self.log.error(f"Error finding {dataset_name}: {e}")
+                    dataset_paths[dataset_name] = None
 
-        return datasets
+        return dataset_paths
 
-    def _load_reference_data_into_duckdb(self, datasets: Dict[str, Any]):
-        """Load reference datasets into DuckDB tables for spatial analysis."""
+    def _load_reference_data_into_duckdb_streaming(self, dataset_paths: Dict[str, Any]):
+        """Load reference datasets into DuckDB tables using streaming for large datasets."""
 
-        self.log.info("Loading reference datasets into DuckDB...")
+        self.log.info("Loading reference datasets into DuckDB with streaming...")
 
-        # Load properties - only essential fields
-        if datasets[self.config.properties_dataset] is not None:
-            properties_df = datasets[self.config.properties_dataset]
-            self.log.info(f"🏠 Loading property cadastral data ({len(properties_df)} records)...")
+        # Load properties - STREAM LARGE DATASET DIRECTLY
+        properties_path = dataset_paths.get(self.config.properties_dataset)
+        if (
+            properties_path
+            and isinstance(properties_path, str)
+            and properties_path.startswith("gs://")
+        ):
+            self.log.info("🏠 Streaming property cadastral data from GCS...")
 
-            # Register DataFrame with DuckDB
-            self.conn.register("properties_df", properties_df)
+            # Download to temporary file
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                temp_path = tmp_file.name
+
+            try:
+                bucket_name = properties_path.split("/")[2]
+                blob_name = "/".join(properties_path.split("/")[3:])
+                self.gcs_util.download_file(bucket_name, blob_name, temp_path)
+
+                # Load directly into DuckDB without pandas
+                self.conn.execute(f"""
+                    CREATE TABLE properties AS
+                    SELECT 
+                        bfe_number,
+                        ST_GeomFromWKB(geometry) as geom
+                    FROM read_parquet('{temp_path}')
+                    WHERE bfe_number IS NOT NULL
+                """)
+
+                property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
+                self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
+
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+
+        elif properties_path is not None:
+            # Handle in-memory data
+            self.log.info(
+                f"🏠 Loading property cadastral data from memory ({len(properties_path)} records)..."
+            )
+            self.conn.register("properties_df", properties_path)
             self.conn.execute("""
                 CREATE TABLE properties AS
                 SELECT 
-                    bestemtFastEjendomBFENr as bfe_number,
+                    bfe_number,
                     geometry as geom
                 FROM properties_df
+                WHERE bfe_number IS NOT NULL
             """)
         else:
             self.log.warning("No property data available - creating empty table")
             self.conn.execute("CREATE TABLE properties (bfe_number VARCHAR, geom GEOMETRY)")
 
-        # Load soil types
-        if datasets[self.config.soil_types_dataset] is not None:
-            soil_df = datasets[self.config.soil_types_dataset]
-            self.log.info(f"🌱 Loading soil types ({len(soil_df)} records)...")
+        # Load other datasets - these are typically smaller and can be loaded normally
+        for dataset_name, dataset_data in dataset_paths.items():
+            if dataset_name == self.config.properties_dataset:
+                continue  # Already handled above
 
-            self.conn.register("soil_df", soil_df)
+            if dataset_data is None:
+                self._create_empty_table_for_dataset(dataset_name)
+                continue
+
+            if isinstance(dataset_data, str) and dataset_data.startswith("gs://"):
+                # Stream smaller datasets if needed
+                self._load_dataset_from_gcs(dataset_name, dataset_data)
+            else:
+                # Load from memory
+                self._load_dataset_from_memory(dataset_name, dataset_data)
+
+    def _create_empty_table_for_dataset(self, dataset_name: str):
+        """Create empty tables for missing datasets."""
+        if dataset_name == self.config.soil_types_dataset:
+            self.log.warning("No soil data available - creating empty table")
+            self.conn.execute(
+                "CREATE TABLE soil_types (soil_description VARCHAR, soil_code VARCHAR, geom GEOMETRY)"
+            )
+        elif dataset_name == self.config.bnbo_status_dataset:
+            self.log.warning("No BNBO data available - creating empty table")
+            self.conn.execute("CREATE TABLE bnbo_areas (status_category VARCHAR, geom GEOMETRY)")
+        elif dataset_name == self.config.wetlands_dataset:
+            self.log.warning("No wetlands data available - creating empty table")
+            self.conn.execute("CREATE TABLE wetlands (wetland_id VARCHAR, geom GEOMETRY)")
+        elif dataset_name == self.config.water_projects_dataset:
+            self.log.warning("No water projects data available - creating empty table")
+            self.conn.execute("CREATE TABLE water_projects (project_id VARCHAR, geom GEOMETRY)")
+
+    def _load_dataset_from_gcs(self, dataset_name: str, gcs_path: str):
+        """Load dataset from GCS path into DuckDB."""
+
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+            temp_path = tmp_file.name
+
+        try:
+            bucket_name = gcs_path.split("/")[2]
+            blob_name = "/".join(gcs_path.split("/")[3:])
+            self.gcs_util.download_file(bucket_name, blob_name, temp_path)
+
+            if dataset_name == self.config.soil_types_dataset:
+                self.conn.execute(f"""
+                    CREATE TABLE soil_types AS
+                    SELECT 
+                        soil_description,
+                        soil_code,
+                        ST_GeomFromWKB(geometry) as geom
+                    FROM read_parquet('{temp_path}')
+                """)
+                count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+                self.log.info(f"    ✅ Loaded {count:,} soil areas from GCS")
+
+            elif dataset_name == self.config.bnbo_status_dataset:
+                self.conn.execute(f"""
+                    CREATE TABLE bnbo_areas AS
+                    SELECT 
+                        status_category,
+                        ST_GeomFromWKB(geometry) as geom
+                    FROM read_parquet('{temp_path}')
+                """)
+                count = self.conn.execute("SELECT COUNT(*) FROM bnbo_areas").fetchone()[0]
+                self.log.info(f"    ✅ Loaded {count:,} BNBO areas from GCS")
+
+            elif dataset_name == self.config.wetlands_dataset:
+                self.conn.execute(f"""
+                    CREATE TABLE wetlands AS
+                    SELECT 
+                        wetland_id,
+                        ST_GeomFromWKB(geometry) as geom
+                    FROM read_parquet('{temp_path}')
+                """)
+                count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
+                self.log.info(f"    ✅ Loaded {count:,} wetlands from GCS")
+
+            elif dataset_name == self.config.water_projects_dataset:
+                self.conn.execute(f"""
+                    CREATE TABLE water_projects AS
+                    SELECT 
+                        project_id,
+                        ST_GeomFromWKB(geometry) as geom
+                    FROM read_parquet('{temp_path}')
+                """)
+                count = self.conn.execute("SELECT COUNT(*) FROM water_projects").fetchone()[0]
+                self.log.info(f"    ✅ Loaded {count:,} water projects from GCS")
+
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def _load_dataset_from_memory(self, dataset_name: str, dataset_data):
+        """Load dataset from memory into DuckDB."""
+        if dataset_name == self.config.soil_types_dataset:
+            self.log.info(f"🌱 Loading soil types from memory ({len(dataset_data)} records)...")
+            self.conn.register("soil_df", dataset_data)
             self.conn.execute("""
                 CREATE TABLE soil_types AS
                 SELECT 
@@ -148,18 +289,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     geometry as geom
                 FROM soil_df
             """)
-        else:
-            self.log.warning("No soil data available - creating empty table")
-            self.conn.execute(
-                "CREATE TABLE soil_types (soil_description VARCHAR, soil_code VARCHAR, geom GEOMETRY)"
+        elif dataset_name == self.config.bnbo_status_dataset:
+            self.log.info(
+                f"🛡️ Loading BNBO status areas from memory ({len(dataset_data)} records)..."
             )
-
-        # Load BNBO status areas
-        if datasets[self.config.bnbo_status_dataset] is not None:
-            bnbo_df = datasets[self.config.bnbo_status_dataset]
-            self.log.info(f"🛡️ Loading BNBO status areas ({len(bnbo_df)} records)...")
-
-            self.conn.register("bnbo_df", bnbo_df)
+            self.conn.register("bnbo_df", dataset_data)
             self.conn.execute("""
                 CREATE TABLE bnbo_areas AS
                 SELECT 
@@ -167,16 +301,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     geometry as geom
                 FROM bnbo_df
             """)
-        else:
-            self.log.warning("No BNBO data available - creating empty table")
-            self.conn.execute("CREATE TABLE bnbo_areas (status_category VARCHAR, geom GEOMETRY)")
-
-        # Load wetlands
-        if datasets[self.config.wetlands_dataset] is not None:
-            wetlands_df = datasets[self.config.wetlands_dataset]
-            self.log.info(f"🌊 Loading wetlands ({len(wetlands_df)} records)...")
-
-            self.conn.register("wetlands_df", wetlands_df)
+        elif dataset_name == self.config.wetlands_dataset:
+            self.log.info(f"🌊 Loading wetlands from memory ({len(dataset_data)} records)...")
+            self.conn.register("wetlands_df", dataset_data)
             self.conn.execute("""
                 CREATE TABLE wetlands AS
                 SELECT 
@@ -184,16 +311,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     geometry as geom
                 FROM wetlands_df
             """)
-        else:
-            self.log.warning("No wetlands data available - creating empty table")
-            self.conn.execute("CREATE TABLE wetlands (wetland_id VARCHAR, geom GEOMETRY)")
-
-        # Load water projects
-        if datasets[self.config.water_projects_dataset] is not None:
-            water_df = datasets[self.config.water_projects_dataset]
-            self.log.info(f"💧 Loading water projects ({len(water_df)} records)...")
-
-            self.conn.register("water_df", water_df)
+        elif dataset_name == self.config.water_projects_dataset:
+            self.log.info(f"💧 Loading water projects from memory ({len(dataset_data)} records)...")
+            self.conn.register("water_df", dataset_data)
             self.conn.execute("""
                 CREATE TABLE water_projects AS
                 SELECT 
@@ -201,22 +321,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     geometry as geom
                 FROM water_df
             """)
-        else:
-            self.log.warning("No water projects data available - creating empty table")
-            self.conn.execute("CREATE TABLE water_projects (project_id VARCHAR, geom GEOMETRY)")
-
-        # Log loaded counts
-        property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
-        soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
-        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_areas").fetchone()[0]
-        wetland_count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
-        water_count = self.conn.execute("SELECT COUNT(*) FROM water_projects").fetchone()[0]
-
-        self.log.info(f"    ✅ Loaded {property_count:,} properties")
-        self.log.info(f"    ✅ Loaded {soil_count:,} soil areas")
-        self.log.info(f"    ✅ Loaded {bnbo_count:,} BNBO areas")
-        self.log.info(f"    ✅ Loaded {wetland_count:,} wetlands")
-        self.log.info(f"    ✅ Loaded {water_count:,} water projects")
 
     def _process_field_batch_spatial(self, fields_batch: pd.DataFrame) -> pd.DataFrame:
         """Process field batch with spatial analysis using unified pipeline data."""
@@ -508,21 +612,41 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("Starting Field Area Analysis Gold processing")
 
         try:
-            # Load silver data from GCS storage or in-memory
-            datasets = self._load_silver_data(silver_data)
+            # Load silver data paths for streaming processing
+            dataset_paths = self._load_silver_data_streaming(silver_data)
 
             # Check if we have the required agricultural fields data
-            agricultural_fields = datasets.get(self.config.agricultural_fields_dataset)
-            if agricultural_fields is None:
+            agricultural_fields_path = dataset_paths.get(self.config.agricultural_fields_dataset)
+            if agricultural_fields_path is None:
                 self.log.error(
                     "No agricultural fields data available - cannot proceed with analysis"
                 )
                 return
 
+            # Load agricultural fields data (smaller dataset, can be loaded into memory)
+            if isinstance(agricultural_fields_path, str) and agricultural_fields_path.startswith(
+                "gs://"
+            ):
+                # Load from GCS
+                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                    temp_path = tmp_file.name
+
+                try:
+                    bucket_name = agricultural_fields_path.split("/")[2]
+                    blob_name = "/".join(agricultural_fields_path.split("/")[3:])
+                    self.gcs_util.download_file(bucket_name, blob_name, temp_path)
+                    agricultural_fields = pd.read_parquet(temp_path)
+                finally:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+            else:
+                # Use in-memory data
+                agricultural_fields = agricultural_fields_path
+
             self.log.info(f"Loaded {len(agricultural_fields):,} agricultural fields")
 
-            # Load reference data into DuckDB
-            self._load_reference_data_into_duckdb(datasets)
+            # Load reference data into DuckDB using streaming approach
+            self._load_reference_data_into_duckdb_streaming(dataset_paths)
 
             # Process fields in batches
             all_results = []

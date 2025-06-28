@@ -50,7 +50,7 @@ class WaterProjectsSilverConfig(BaseJobConfig):
 
     dataset: str = "water_projects"
     bucket: str = "landbrugsdata-raw-data"
-    storage_batch_size: int = 5000
+    storage_batch_size: int = 8000  # Increased for better performance with 16GB RAM
     namespaces: dict[str, str] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "natur": "http://wfs2-miljoegis.mim.dk/natur",

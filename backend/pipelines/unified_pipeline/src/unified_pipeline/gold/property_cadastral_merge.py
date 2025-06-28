@@ -1,7 +1,7 @@
 import os
+import tempfile
 from typing import Any, Dict, Optional
 
-import geopandas as gpd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -44,9 +44,9 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
     def __init__(self, config: PropertyCadastralMergeGoldConfig, gcs_util: GCSUtil):
         super().__init__(config, gcs_util)
 
-        # Configure DuckDB for large dataset processing with more conservative memory settings
-        self.conn.execute("SET memory_limit = '8GB'")  # Reduced from 12GB
-        self.conn.execute("SET threads = 2")  # Reduced from 4 to save memory
+        # Configure DuckDB for large dataset processing with optimal settings for 16GB RAM
+        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        self.conn.execute("SET threads = 4")  # Use all available CPU cores
         self.conn.execute("SET temp_directory = '/tmp'")  # Use disk for temp storage
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
@@ -105,16 +105,10 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
         return property_path, cadastral_path
 
-    def _perform_streaming_bfe_merge(
-        self, property_path: str, cadastral_path: str
-    ) -> gpd.GeoDataFrame:
-        """Perform streaming BFE-based merge using DuckDB for large datasets."""
+    def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> Dict[str, Any]:
+        """Perform streaming BFE-based merge and save directly to GCS without loading into memory."""
 
         # Download files locally first for DuckDB processing
-        import os
-        import tempfile
-
-        # Download property owners file
         self.log.info("Downloading property owners data locally...")
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_prop:
             property_local_path = tmp_prop.name
@@ -131,6 +125,10 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         bucket_name = cadastral_path.split("/")[2]
         blob_name = "/".join(cadastral_path.split("/")[3:])
         self.gcs_util.download_file(bucket_name, blob_name, cadastral_local_path)
+
+        # Create temporary output file
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_out:
+            output_local_path = tmp_out.name
 
         try:
             self.log.info("Creating property_owners table from local parquet file...")
@@ -184,47 +182,75 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 self.log.error(f"Failed to access BFE from nested structure: {e}")
                 raise ValueError(f"Cannot access BFE number from property data structure: {e}")
 
-            # Perform the merge using DuckDB with the nested BFE access
-            self.log.info("Performing BFE-based merge...")
-            merge_query = f"""
-            CREATE OR REPLACE TABLE merged_data AS
-            SELECT 
-                p.{bfe_column} as bfe_number,
-                p.properties.ejendePerson as person_data,
-                p.properties.ejendeVirksomhed as company_data,
-                p.properties.ejerforholdskode as ownership_code,
-                p.properties.faktiskEjerandel_naevner as ownership_denominator,
-                p.properties.faktiskEjerandel_taeller as ownership_numerator,
-                c.business_event,
-                c.business_process,
-                c.authority,
-                c.is_worker_housing,
-                c.is_common_lot,
-                c.has_owner_apartments,
-                c.registration_from as cadastral_registration_from,
-                c.effect_from as cadastral_effect_from
-            FROM property_owners p
-            INNER JOIN cadastral c ON p.{bfe_column} = c.bfe_number
-            WHERE p.{bfe_column} IS NOT NULL
+            # Perform the merge and save directly to parquet using DuckDB COPY
+            self.log.info("Performing BFE-based merge and streaming to local parquet...")
+            merge_and_copy_query = f"""
+            COPY (
+                SELECT 
+                    p.{bfe_column} as bfe_number,
+                    p.properties.ejendePerson as person_data,
+                    p.properties.ejendeVirksomhed as company_data,
+                    p.properties.ejerforholdskode as ownership_code,
+                    p.properties.faktiskEjerandel_naevner as ownership_denominator,
+                    p.properties.faktiskEjerandel_taeller as ownership_numerator,
+                    c.business_event,
+                    c.business_process,
+                    c.authority,
+                    c.is_worker_housing,
+                    c.is_common_lot,
+                    c.has_owner_apartments,
+                    c.registration_from as cadastral_registration_from,
+                    c.effect_from as cadastral_effect_from
+                FROM property_owners p
+                INNER JOIN cadastral c ON p.{bfe_column} = c.bfe_number
+                WHERE p.{bfe_column} IS NOT NULL
+            ) TO '{output_local_path}' (FORMAT PARQUET)
             """
 
-            self.conn.execute(merge_query)
+            self.conn.execute(merge_and_copy_query)
 
-            merged_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
+            # Get merge statistics without loading data into memory
+            merged_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM (
+                    SELECT 1
+                    FROM property_owners p
+                    INNER JOIN cadastral c ON p.{bfe_column} = c.bfe_number
+                    WHERE p.{bfe_column} IS NOT NULL
+                )
+            """).fetchone()[0]
+
             self.log.info(f"Merge completed with {merged_count:,} records")
 
             if merged_count == 0:
                 raise ValueError("Merge resulted in 0 records - check BFE number alignment")
 
-            # Convert to pandas DataFrame
-            merged_df = self.conn.execute("SELECT * FROM merged_data").df()
+            # Calculate match rate
+            match_rate = (merged_count / prop_count) if prop_count > 0 else 0
+            quality_stats = {
+                "total_properties": prop_count,
+                "merged_records": merged_count,
+                "match_rate": match_rate,
+                "match_rate_percent": match_rate * 100,
+            }
 
-            self.log.info(f"Successfully created merged dataset with {len(merged_df):,} records")
-            self.log.info(f"Merged columns: {list(merged_df.columns)}")
+            self.log.info(f"Merge quality: {quality_stats['match_rate_percent']:.1f}% match rate")
 
-            # Since this is property ownership data (not geographic), return as DataFrame
-            # The cadastral data has geometry, but this merge focuses on ownership relationships
-            return merged_df
+            # Upload the parquet file directly to GCS
+            timestamp = self.date_pattern
+            gcs_path = f"gold/{self.config.dataset}/{timestamp}/{self.config.dataset}.parquet"
+
+            self.log.info(f"Uploading merged data to GCS: gs://{self.config.bucket}/{gcs_path}")
+            self.gcs_util.upload_file(
+                bucket_name=self.config.bucket,
+                source_file_path=output_local_path,
+                destination_blob_name=gcs_path,
+            )
+
+            self.log.info(
+                f"Successfully uploaded merged dataset to GCS with {merged_count:,} records"
+            )
+
+            return quality_stats
 
         finally:
             # Clean up temporary files
@@ -233,34 +259,15 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                     os.unlink(property_local_path)
                 if os.path.exists(cadastral_local_path):
                     os.unlink(cadastral_local_path)
+                if os.path.exists(output_local_path):
+                    os.unlink(output_local_path)
             except Exception:
                 pass
 
-    def _validate_merge_quality(
-        self, merged_gdf: gpd.GeoDataFrame, property_count: int = None
-    ) -> Dict[str, Any]:
-        """Validate merge quality and return statistics."""
+    def _validate_merge_quality(self, quality_stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate merge quality using pre-calculated statistics."""
 
-        # Get property count from DuckDB if not provided
-        if property_count is None:
-            try:
-                property_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM property_owners"
-                ).fetchone()[0]
-            except Exception:
-                property_count = 0
-
-        merged_records = len(merged_gdf)
-        match_rate = (merged_records / property_count) if property_count > 0 else 0
-
-        quality_stats = {
-            "total_properties": property_count,
-            "merged_records": merged_records,
-            "match_rate": match_rate,
-            "match_rate_percent": match_rate * 100,
-        }
-
-        self.log.info(f"Merge quality: {quality_stats['match_rate_percent']:.1f}% match rate")
+        match_rate = quality_stats["match_rate"]
 
         if match_rate < self.config.min_match_rate:
             self.log.warning(
@@ -291,20 +298,17 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 self.log.error("No property owners data available - cannot proceed with merge")
                 return
 
-            self.log.info(f"Loaded {property_path} property records")
-            self.log.info(f"Loaded {cadastral_path} cadastral records")
+            self.log.info(f"Using property data: {property_path}")
+            self.log.info(f"Using cadastral data: {cadastral_path}")
 
-            # Perform merge
-            merged_gdf = self._perform_streaming_bfe_merge(property_path, cadastral_path)
+            # Perform streaming merge directly to GCS
+            quality_stats = self._stream_merge_to_gcs(property_path, cadastral_path)
 
             # Validate quality
-            quality_stats = self._validate_merge_quality(merged_gdf)
-
-            # Save to gold layer
-            self._save_data(merged_gdf, self.config.dataset, self.config.bucket, stage="gold")
+            self._validate_merge_quality(quality_stats)
 
             self.log.info(
-                f"Property-Cadastral merge completed: {len(merged_gdf):,} records "
+                f"Property-Cadastral merge completed: {quality_stats['merged_records']:,} records "
                 f"with {quality_stats['match_rate_percent']:.1f}% match rate"
             )
 
