@@ -72,14 +72,15 @@ class SilverPipeline:
         self.end_date = end_date
         self.gcs_bucket = gcs_bucket
 
-        # Constants and paths
-        self.now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Constants and paths - use pipeline start time consistently
+        self.pipeline_start_time = datetime.now()
+        self.timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+        self.now = self.timestamp  # Use same timestamp for consistency
         self.pipeline_root = os.path.dirname(os.path.abspath(__file__))
         self.data_root = os.path.join(self.pipeline_root, "..", "bronze", "data")
         self.silver_dir = os.path.join(self.pipeline_root, "..", "silver", "data")
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_dir = os.path.join(self.silver_dir, self.timestamp)
-        self.output_parquet = os.path.join(self.output_dir, "processed_data.parquet")
+        self.output_parquet = os.path.join(self.output_dir, "workplace_inspections.parquet")
         self.temp_dir = None
 
         # Column renaming and conventions
@@ -372,7 +373,7 @@ class SilverPipeline:
         """Save the transformed data to parquet."""
         try:
             # Save to temp location first
-            temp_output = os.path.join(self.temp_dir, "processed_data.parquet")
+            temp_output = os.path.join(self.temp_dir, "workplace_inspections.parquet")
             self.df.to_parquet(temp_output, index=False)
 
             # Move to final location
@@ -411,6 +412,55 @@ class SilverPipeline:
             self.logger.error(f"Error uploading to GCS: {str(e)}")
             return False
 
+    def generate_schema_documentation(self):
+        """Generate schema documentation for the processed data."""
+        try:
+            self.logger.info("Generating schema documentation for arbejdstilsynet inspections")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            backend_path = Path(__file__).parent.parent.parent.parent
+            if str(backend_path) not in sys.path:
+                sys.path.insert(0, str(backend_path))
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            # Use the pipeline start time we already have
+            pipeline_start_time = self.pipeline_start_time
+
+            # Load the parquet file into DuckDB for schema documentation
+            import duckdb
+
+            doc_conn = duckdb.connect()
+
+            table_name = "arbejdstilsynet_processed"
+            doc_conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{self.output_parquet}')")
+
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=doc_conn,
+                pipeline_name="arbejdstilsynet_inspections",
+                pipeline_start_time=pipeline_start_time,
+                logger=self.logger,
+            )
+
+            # Generate documentation for the table
+            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            self.logger.info("Generated schema documentation for arbejdstilsynet inspections")
+
+            # Commit to GitHub
+            schema_manager.commit_to_github()
+            self.logger.info("Arbejdstilsynet schema documentation committed to GitHub")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
+            return True
+
     def cleanup(self):
         """Clean up temporary resources."""
         try:
@@ -439,6 +489,7 @@ class SilverPipeline:
                 self.filter_by_date,
                 self.check_for_pii,
                 self.save_output,
+                self.generate_schema_documentation,
             ]
 
             for step in steps:

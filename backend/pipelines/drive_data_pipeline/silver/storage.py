@@ -82,7 +82,7 @@ class SilverStorageManager:
         if source_subfolder:
             # Sanitize subfolder name
             sanitized_subfolder = re.sub(r'[<>:"/\\|?*]', "_", source_subfolder)
-            sanitized_subfolder = sanitized_subfolder.strip(". ")
+            sanitized_subfolder = sanitized_subfolder.strip(". ").lower()
 
             # Create path: silver/{subfolder_name}/{timestamp}
             output_dir = run_dir / sanitized_subfolder / timestamp

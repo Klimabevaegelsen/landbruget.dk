@@ -40,6 +40,9 @@ class Source(Enum):
         jordbrugsanalyser: Danish Jordbrugsanalyser Markers from WFS
         wetlands: Wetlands data source
         water_projects: Water projects data source
+        property_cadastral_merge: Property-Cadastral merge gold layer
+        field_production: Field production estimates gold layer
+        field_area_analysis: Field area analysis gold layer
     """
 
     bnbo = "bnbo"
@@ -51,6 +54,9 @@ class Source(Enum):
     jordbrugsanalyser = "jordbrugsanalyser"
     wetlands = "wetlands"
     water_projects = "water_projects"
+    property_cadastral_merge = "property_cadastral_merge"
+    field_production = "field_production"
+    field_area_analysis = "field_area_analysis"
 
 
 class Stage(Enum):
@@ -63,11 +69,13 @@ class Stage(Enum):
     Attributes:
         bronze: Initial data ingestion stage with minimal transformations
         silver: Cleaned and transformed data stage
-        all: Process both bronze and silver stages sequentially
+        gold: Business-ready combined datasets stage
+        all: Process bronze, silver, and gold stages sequentially
     """
 
     bronze = "bronze"
     silver = "silver"
+    gold = "gold"
     all = "all"
 
 
@@ -81,7 +89,7 @@ class CliConfig(BaseModel):
     Attributes:
         env: The environment to use (local, dev, prod)
         source: The data source to process
-        stage: The processing stage (bronze, silver, all)
+        stage: The processing stage (bronze, silver, gold, all)
 
     Example:
         >>> config = CliConfig(source=Source.bnbo, stage=Stage.bronze)
