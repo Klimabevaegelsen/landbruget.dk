@@ -260,7 +260,7 @@ def fetch_all_movements(
         export_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
         # Export the data using the optimized export function
-        export_result = export_movements_optimized(temp_files, export_timestamp, len(date_chunks))
+        export_result = export_movements_optimized(temp_files, export_timestamp, len(date_chunks), output_dir)
 
         result = {
             "export_timestamp": export_timestamp,
