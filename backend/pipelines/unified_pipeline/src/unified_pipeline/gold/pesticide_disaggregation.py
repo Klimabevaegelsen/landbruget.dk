@@ -42,7 +42,9 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     area_tolerance_pct: float = Field(
         default=2.0, description="Area tolerance percentage - PRESERVE ORIGINAL VALUE"
     )
-    batch_size: int = Field(default=1000, description="Batch size for processing")
+    batch_size: int = Field(
+        default=2500, description="Batch size for processing - optimized for 16GB RAM"
+    )
 
     # Temporal configuration (Y+1 pattern from original)
     pesticide_year: int = Field(default=2021, description="Year of pesticide data to process")
@@ -175,6 +177,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     ):
         """Setup DuckDB connection with spatial extensions and register data."""
         self.duckdb_conn = duckdb.connect(":memory:")
+
+        # Configure DuckDB for optimal performance with 16GB RAM
+        self.duckdb_conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        self.duckdb_conn.execute("SET threads = 4")  # Use all available CPU cores
+        self.duckdb_conn.execute("SET temp_directory = '/tmp'")  # Use disk for temp storage
 
         # Install and load spatial extension
         self.duckdb_conn.execute("INSTALL spatial")

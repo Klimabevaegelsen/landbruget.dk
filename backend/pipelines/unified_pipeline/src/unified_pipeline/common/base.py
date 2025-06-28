@@ -438,7 +438,20 @@ class BaseSource(Generic[T], ABC):
                 )
 
                 if latest_blob.name.endswith(".parquet"):
-                    return self.gcs_util.read_dataframe_from_gcs(bucket_name, latest_blob.name)
+                    # Get the file path and read with DuckDB
+                    parquet_path = self.gcs_util.read_dataframe_from_gcs(
+                        bucket_name, latest_blob.name
+                    )
+                    # Read parquet file using DuckDB and convert to pandas DataFrame for compatibility
+                    df = self.conn.execute(f"SELECT * FROM read_parquet('{parquet_path}')").df()
+                    # Clean up temporary file
+                    import os
+                    import shutil
+
+                    temp_dir = os.path.dirname(parquet_path)
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
+                    return df
                 elif latest_blob.name.endswith(".json"):
                     # Download JSON file and parse
                     temp_file = f"/tmp/bronze_temp_{dataset}.json"

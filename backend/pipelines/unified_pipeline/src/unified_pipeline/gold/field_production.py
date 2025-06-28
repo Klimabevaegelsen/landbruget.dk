@@ -78,8 +78,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
     def _configure_duckdb(self):
         """Configure DuckDB for optimal spatial operations."""
-        self.conn.execute("SET memory_limit = '8GB'")
-        self.conn.execute("SET threads = 4")
+        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        self.conn.execute("SET threads = 4")  # Use all available CPU cores
         self.conn.execute("SET enable_progress_bar = true")
         self.conn.execute("SET preserve_insertion_order = false")
         self.conn.execute("INSTALL spatial")

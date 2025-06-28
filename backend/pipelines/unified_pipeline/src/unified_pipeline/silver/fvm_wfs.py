@@ -39,8 +39,12 @@ class FVMWFSSilverConfig(BaseJobConfig):
     storage parameters, and column mappings.
 
     Attributes:
+        name (str): Human-readable name of the data processing
+        type (str): Type of the data processing
+        dataset (str): Primary dataset name for silver data collection
         dataset_markblokke (str): Name of the markblokke dataset
         dataset_marker (str): Name of the marker dataset
+        dataset_smaabiotoper (str): Name of the smaabiotoper dataset
         bucket (str): GCS bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         markblokke_years (List[int]): Years to process for Markblokke (2005-2026)
@@ -49,8 +53,19 @@ class FVMWFSSilverConfig(BaseJobConfig):
         column_mapping (Dict): Dictionary mapping raw field names to standardized names
     """
 
-    dataset_markblokke: str = "fvm_markblokke"
-    dataset_marker: str = "fvm_marker"
+    name: str = "Danish FVM WFS Agricultural Data - Silver"
+    type: str = "transformation"
+    dataset: str = "fvm_wfs"  # Primary dataset name for app.py silver data collection
+
+    # Bronze dataset names (for reading from bronze storage)
+    bronze_dataset_markblokke: str = "fvm_markblokke"
+    bronze_dataset_marker: str = "fvm_marker"
+
+    # Silver dataset names (for saving to silver storage and test expectations)
+    dataset_markblokke: str = "fvm_markblokke_silver"
+    dataset_marker: str = "fvm_marker_silver"
+    dataset_smaabiotoper: str = "fvm_smaabiotoper_silver"
+
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
 
@@ -250,7 +265,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         self,
         layer_type: str,
         years: List[int],
-        dataset_name: str,
+        bronze_dataset_name: str,
+        silver_dataset_name: str,
         bronze_data: Optional[Any] = None,
     ) -> None:
         """
@@ -259,14 +275,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Args:
             layer_type: Type of layer to process (Markblokke, Marker, Smaabiotoper)
             years: List of years to process
-            dataset_name: Base dataset name for storage
+            bronze_dataset_name: Base dataset name for reading from bronze storage
+            silver_dataset_name: Base dataset name for saving to silver storage
             bronze_data: Optional in-memory data from bronze stage
         """
         self.log.info(f"Processing {layer_type} silver data for {len(years)} years")
 
         for year in years:
             try:
-                dataset_with_year = f"{dataset_name}_{year}"
+                bronze_dataset_with_year = f"{bronze_dataset_name}_{year}"
+                silver_dataset_with_year = f"{silver_dataset_name}_{year}"
                 self.log.info(f"Processing {layer_type} for year {year}")
 
                 # Read data with support for in-memory passing
@@ -285,31 +303,35 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 else:
                     # Fallback to reading from storage
                     self.log.info("Reading bronze data from storage (fallback)")
-                    raw_data = self._read_bronze_data(dataset_with_year, self.config.bucket)
+                    raw_data = self._read_bronze_data(bronze_dataset_with_year, self.config.bucket)
                     if raw_data is None:
-                        self.log.warning(f"No raw data found for {dataset_with_year}, skipping")
+                        self.log.warning(
+                            f"No raw data found for {bronze_dataset_with_year}, skipping"
+                        )
                         continue
 
-                self.log.info(f"Read raw data successfully for {dataset_with_year}")
+                self.log.info(f"Read raw data successfully for {bronze_dataset_with_year}")
 
                 # Process the data
                 geo_df = await self._process_data(raw_data, layer_type, year)
 
                 if geo_df is None or geo_df.empty:
-                    self.log.warning(f"No processed data for {dataset_with_year}, skipping")
+                    self.log.warning(f"No processed data for {silver_dataset_with_year}, skipping")
                     continue
 
-                self.log.info(f"Processed {len(geo_df):,} features for {dataset_with_year}")
+                self.log.info(f"Processed {len(geo_df):,} features for {silver_dataset_with_year}")
 
                 # Save processed data
-                self._save_data(geo_df, dataset_with_year, self.config.bucket, stage="silver")
-                self.log.info(f"Saved processed data successfully for {dataset_with_year}")
+                self._save_data(
+                    geo_df, silver_dataset_with_year, self.config.bucket, stage="silver"
+                )
+                self.log.info(f"Saved processed data successfully for {silver_dataset_with_year}")
 
             except Exception as e:
                 self.log.error(f"Error processing {layer_type} for year {year}: {e}")
                 continue
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """
         Execute the silver processing job for all FVM WFS data.
 
@@ -329,7 +351,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         5. Save processed data back to GCS with year information
 
         Returns:
-            None
+            Optional[Dict[str, Any]]: Summary information about processed datasets
+                                    for potential gold layer usage, or None if processing fails
         """
         self.log.info("Running FVM WFS silver job for all available data")
         async with AsyncTimer("FVM WFS Silver Job"):
@@ -337,21 +360,37 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             await self._process_layer_type(
                 "Markblokke",
                 self.config.markblokke_years,
+                self.config.bronze_dataset_markblokke,
                 self.config.dataset_markblokke,
                 bronze_data,
             )
 
             # Process Marker data (field markers) 2008-2025
             await self._process_layer_type(
-                "Marker", self.config.marker_years, self.config.dataset_marker, bronze_data
+                "Marker",
+                self.config.marker_years,
+                self.config.bronze_dataset_marker,
+                self.config.dataset_marker,
+                bronze_data,
             )
 
             # Process Smaabiotoper data (small biotopes) 2023-2025
             await self._process_layer_type(
                 "Smaabiotoper",
                 self.config.smaabiotoper_years,
-                f"{self.config.dataset_marker}_smaabiotoper",
+                f"{self.config.bronze_dataset_marker}_smaabiotoper",
+                self.config.dataset_smaabiotoper,
                 bronze_data,
             )
 
             self.log.info("FVM WFS silver job completed for all available data")
+
+            # Return summary information for potential gold layer usage
+            return {
+                "dataset": self.config.dataset,
+                "markblokke_years": self.config.markblokke_years,
+                "marker_years": self.config.marker_years,
+                "smaabiotoper_years": self.config.smaabiotoper_years,
+                "processed_at": pd.Timestamp.now().isoformat(),
+                "status": "completed",
+            }
