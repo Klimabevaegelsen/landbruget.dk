@@ -10,7 +10,8 @@ dependencies = [
     "pandas>=2.1.0",
     "fastapi>=0.104.0",
     "pyarrow>=14.0.0",
-    "tqdm>=4.66.0"
+    "tqdm>=4.66.0",
+    "google-cloud-storage>=2.10.0"
 ]
 
 [build-system]
