@@ -28,6 +28,10 @@ from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.field_area_analysis import (
+    FieldAreaAnalysisGold,
+    FieldAreaAnalysisGoldConfig,
+)
 from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
