@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 import sys
 from datetime import date, datetime
 from typing import Any, Dict
@@ -118,13 +119,16 @@ def main():
         username, password = get_fvm_credentials()
         client = create_client(ENDPOINTS[args["environment"]], username, password)
 
+        # Use environment variable for output directory, with fallback to relative path
+        output_dir = os.getenv("SVINEFLYTNING_OUTPUT_DIR", "./data/raw/svineflytning")
+
         # Fetch and stream all movements
         with logging_redirect_tqdm():
             result = fetch_all_movements(
                 client=client,
                 start_date=args["start_date"],
                 end_date=args["end_date"],
-                output_dir="/data/raw/svineflytning",
+                output_dir=output_dir,
                 max_concurrent_fetches=args["max_concurrent_fetches"],
                 buffer_size=args["buffer_size"],
                 show_progress=args["progress"],
