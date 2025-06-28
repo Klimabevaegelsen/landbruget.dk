@@ -91,10 +91,11 @@ jobs:
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "DMI_GOV_CLOUD_API_KEY=$DMI_GOV_CLOUD_API_KEY" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "DATA_PATH=/tmp/data" >> .env
 
-        # Create data directories
-        mkdir -p /data/bronze/dmi
-        mkdir -p /data/silver/dmi
+        # Create data directories (using /tmp/data like CHR pipeline)
+        mkdir -p /tmp/data/bronze/dmi
+        mkdir -p /tmp/data/silver/dmi
 
     - name: Run Pipeline
       working-directory: backend/pipelines/dmi_pipeline
@@ -146,6 +147,6 @@ jobs:
       with:
         name: dmi-pipeline-output
         path: |
-          backend/pipelines/dmi_pipeline/data/bronze/dmi
-          backend/pipelines/dmi_pipeline/data/silver/dmi
+          /tmp/data/bronze/dmi
+          /tmp/data/silver/dmi
         retention-days: 7

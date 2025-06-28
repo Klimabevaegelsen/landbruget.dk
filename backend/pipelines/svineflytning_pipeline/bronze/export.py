@@ -50,7 +50,7 @@ if USE_GCS:
         USE_GCS = False
 
 if not USE_GCS:
-    logger.warning("Using local storage in /data/raw/svineflytning/")
+    logger.warning("Using local storage (path will be determined by SVINEFLYTNING_OUTPUT_DIR environment variable)")
 
 
 def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
@@ -118,7 +118,9 @@ def _save_locally(filepath: Path, data_iterator: Iterator[Dict]) -> str:
     return str(filepath.absolute())
 
 
-def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filename: str) -> Dict[str, Any]:
+def export_movements(
+    data_iterator: Iterator[Dict], export_timestamp: str, filename: str, output_dir: str = "/data/raw/svineflytning"
+) -> Dict[str, Any]:
     """
     Export pig movement data to either GCS or local storage using streaming.
 
@@ -126,6 +128,7 @@ def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filen
         data_iterator: Iterator yielding data to export
         export_timestamp: Timestamp string for the export
         filename: Name of the file to export
+        output_dir: Base directory for local storage (default: /data/raw/svineflytning)
 
     Returns:
         Dict containing export metadata
@@ -139,11 +142,11 @@ def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filen
         except Exception as e:
             logger.error(f"Error writing to GCS: {e}")
             logger.warning("Falling back to local storage")
-            filepath = Path("/data/raw/svineflytning") / export_timestamp / filename
+            filepath = Path(output_dir) / export_timestamp / filename
             destination = _save_locally(filepath, data_iterator)
             logger.debug(f"Successfully saved locally: {destination}")
     else:
-        filepath = Path("/data/raw/svineflytning") / export_timestamp / filename
+        filepath = Path(output_dir) / export_timestamp / filename
         destination = _save_locally(filepath, data_iterator)
         logger.debug(f"Successfully saved locally: {destination}")
 
@@ -155,7 +158,9 @@ def export_movements(data_iterator: Iterator[Dict], export_timestamp: str, filen
     }
 
 
-def export_movements_optimized(temp_files: List[Path], export_timestamp: str, total_chunks: int) -> Dict[str, Any]:
+def export_movements_optimized(
+    temp_files: List[Path], export_timestamp: str, total_chunks: int, output_dir: str = "/data/raw/svineflytning"
+) -> Dict[str, Any]:
     """
     Export pig movement data using streaming to minimize memory usage.
 
@@ -163,6 +168,7 @@ def export_movements_optimized(temp_files: List[Path], export_timestamp: str, to
         temp_files: List of temporary files containing the movement data
         export_timestamp: Timestamp string for the export
         total_chunks: Total number of chunks processed
+        output_dir: Base directory for local storage (default: /data/raw/svineflytning)
 
     Returns:
         Dict containing export metadata
@@ -206,7 +212,7 @@ def export_movements_optimized(temp_files: List[Path], export_timestamp: str, to
             logger.warning("Falling back to local storage")
 
             # Fallback to local storage
-            local_dir = Path("/data/raw/svineflytning") / export_timestamp
+            local_dir = Path(output_dir) / export_timestamp
             local_dir.mkdir(parents=True, exist_ok=True)
             output_file = local_dir / "svineflytning.json"
 
@@ -229,7 +235,7 @@ def export_movements_optimized(temp_files: List[Path], export_timestamp: str, to
             logger.debug(f"Successfully saved locally: {destination}")
     else:
         # Direct local storage
-        local_dir = Path("/data/raw/svineflytning") / export_timestamp
+        local_dir = Path(output_dir) / export_timestamp
         local_dir.mkdir(parents=True, exist_ok=True)
         output_file = local_dir / "svineflytning.json"
 

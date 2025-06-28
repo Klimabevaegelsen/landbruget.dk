@@ -7,6 +7,7 @@ Transforms raw grid data into a structured format for analysis and storage.
 import argparse
 import asyncio
 import logging
+import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -160,8 +161,11 @@ async def main():
         # Create timestamped output directories for data storage using pipeline start time
         pipeline_start_time = datetime.now()
         timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-        bronze_dir = Path(f"data/bronze/{timestamp}")
-        silver_dir = Path(f"data/silver/{timestamp}")
+
+        # Use environment variable for base data path, with fallback to relative path for local development
+        base_data_path = os.getenv("DATA_PATH", "./data")
+        bronze_dir = Path(base_data_path) / "bronze" / "dmi" / timestamp
+        silver_dir = Path(base_data_path) / "silver" / "dmi" / timestamp
         bronze_dir.mkdir(parents=True, exist_ok=True)
         silver_dir.mkdir(parents=True, exist_ok=True)
 
@@ -194,15 +198,30 @@ async def main():
                 import sys
                 from pathlib import Path
 
-                backend_path = Path(__file__).parent.parent.parent
-                if str(backend_path) not in sys.path:
-                    sys.path.insert(0, str(backend_path))
+                # Find the project root (directory containing 'backend' folder)
+                current_file = Path(__file__).resolve()
+                project_root = None
+
+                # Go up the directory tree to find the project root
+                for parent in current_file.parents:
+                    if (parent / "backend").is_dir():
+                        project_root = parent
+                        break
+
+                if project_root and str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
 
                 # Use the pipeline start time we already have
                 # Create DuckDB connection and load processed parquet files
                 import duckdb
 
-                from backend.common.schema_documentation import SchemaDocumentationManager
+                try:
+                    from backend.common.schema_documentation import SchemaDocumentationManager
+                except ImportError as e:
+                    import warnings
+
+                    warnings.warn(f"Schema documentation not available: {e}")
+                    SchemaDocumentationManager = None
 
                 conn = duckdb.connect()
 
@@ -215,7 +234,7 @@ async def main():
                     conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')")
                     table_names.append(table_name)
 
-                if table_names:
+                if table_names and SchemaDocumentationManager is not None:
                     # Initialize schema documentation manager
                     schema_manager = SchemaDocumentationManager(
                         connection=conn,
@@ -231,6 +250,8 @@ async def main():
                     # Commit to GitHub
                     schema_manager.commit_to_github()
                     logger.info("DMI schema documentation committed to GitHub")
+                elif SchemaDocumentationManager is None:
+                    logger.warning("Schema documentation disabled due to import error")
 
             except Exception as e:
                 logger.error(f"Failed to generate DMI schema documentation: {e}", exc_info=True)

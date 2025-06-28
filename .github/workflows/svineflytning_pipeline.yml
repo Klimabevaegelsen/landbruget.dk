@@ -90,6 +90,10 @@ jobs:
         echo "FVM_USERNAME=$FVM_USERNAME" >> .env
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
+        
+        # Create data directories (using /tmp/data like other pipelines)
+        mkdir -p /tmp/data/raw/svineflytning
 
     - name: Run Pipeline
       working-directory: backend/pipelines/svineflytning_pipeline
@@ -144,5 +148,5 @@ jobs:
       if: always()  # Upload even if the pipeline fails
       with:
         name: pipeline-output
-        path: backend/pipelines/svineflytning_pipeline/data
+        path: /tmp/data/raw/svineflytning
         retention-days: 7 
