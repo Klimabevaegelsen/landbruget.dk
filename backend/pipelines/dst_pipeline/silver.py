@@ -758,15 +758,30 @@ def main_with_args(args: argparse.Namespace) -> bool:
             import sys
             from pathlib import Path
 
-            backend_path = Path(__file__).parent.parent.parent
-            if str(backend_path) not in sys.path:
-                sys.path.insert(0, str(backend_path))
+            # Find the project root (directory containing 'backend' folder)
+            current_file = Path(__file__).resolve()
+            project_root = None
+
+            # Go up the directory tree to find the project root
+            for parent in current_file.parents:
+                if (parent / "backend").is_dir():
+                    project_root = parent
+                    break
+
+            if project_root and str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
 
             # Use the pipeline start time we already have
             # Get DuckDB connection (create new one for schema documentation)
             import ibis
 
-            from backend.common.schema_documentation import SchemaDocumentationManager
+            try:
+                from backend.common.schema_documentation import SchemaDocumentationManager
+            except ImportError as e:
+                import warnings
+
+                warnings.warn(f"Schema documentation not available: {e}")
+                SchemaDocumentationManager = None
 
             con = ibis.duckdb.connect()
 
@@ -784,7 +799,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
                         silver_tables.append(table_name)
                         logging.info(f"Loaded {table_name} for schema documentation")
 
-            if silver_tables:
+            if silver_tables and SchemaDocumentationManager is not None:
                 # Initialize schema documentation manager
                 schema_manager = SchemaDocumentationManager(
                     connection=con.con,  # Use the DuckDB connection
@@ -800,6 +815,8 @@ def main_with_args(args: argparse.Namespace) -> bool:
                 # Commit to GitHub
                 schema_manager.commit_to_github()
                 logging.info("DST schema documentation committed to GitHub")
+            elif SchemaDocumentationManager is None:
+                logging.warning("Schema documentation disabled due to import error")
             else:
                 logging.warning("No silver tables found for schema documentation")
 

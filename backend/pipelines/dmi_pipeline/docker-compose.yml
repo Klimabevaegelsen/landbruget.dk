@@ -4,6 +4,8 @@ services:
     build: .
     volumes:
       - ./data:/app/data
+    environment:
+      - DATA_PATH=/app/data
     env_file:
       - .env
     command: python main.py --log-level INFO --progress --environment prod
