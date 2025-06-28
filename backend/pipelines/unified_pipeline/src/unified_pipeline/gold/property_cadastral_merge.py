@@ -1,9 +1,7 @@
 import os
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 import geopandas as gpd
-import pandas as pd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -46,147 +44,217 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
     def __init__(self, config: PropertyCadastralMergeGoldConfig, gcs_util: GCSUtil):
         super().__init__(config, gcs_util)
 
-        # Configure DuckDB for large dataset processing
-        self.conn.execute("SET memory_limit = '12GB'")
-        self.conn.execute("SET threads = 4")
+        # Configure DuckDB for large dataset processing with more conservative memory settings
+        self.conn.execute("SET memory_limit = '8GB'")  # Reduced from 12GB
+        self.conn.execute("SET threads = 2")  # Reduced from 4 to save memory
+        self.conn.execute("SET temp_directory = '/tmp'")  # Use disk for temp storage
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
 
-    def _load_silver_data(
+    def _load_silver_data_streaming(
         self, silver_data: Optional[Dict[str, Any]]
-    ) -> tuple[Optional[pd.DataFrame], Optional[gpd.GeoDataFrame]]:
-        """Load property owners and cadastral data from silver layer."""
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Load property owners and cadastral data paths for streaming processing."""
 
-        property_df = None
-        cadastral_gdf = None
+        property_path = None
+        cadastral_path = None
 
         if silver_data:
-            # Use in-memory data
-            self.log.info("Using silver data from memory (in-memory data passing)")
-            property_df = silver_data.get(self.config.property_owners_dataset)
-            cadastral_gdf = silver_data.get(self.config.cadastral_dataset)
-
-            self.log.info(
-                f"In-memory silver data available: property_owners={property_df is not None}, cadastral={cadastral_gdf is not None}"
+            # Use in-memory data - but this is not recommended for large datasets
+            self.log.warning(
+                "In-memory data passing not recommended for large datasets - using streaming"
             )
+            return None, None
         else:
-            # Fallback to storage - this is the main path for gold layer
-            self.log.info("Reading silver data from GCS storage")
+            # Get file paths for streaming processing
+            self.log.info("Setting up streaming data processing from GCS storage")
 
-            # Read property owners data from storage
+            # Get property owners data path
             self.log.info(
                 f"Looking for property owners data in silver/{self.config.property_owners_dataset}/"
             )
-            property_df = self._read_data_from_storage(
-                self.config.property_owners_dataset, self.config.bucket, stage="silver"
-            )
-            if property_df is not None:
-                self.log.info(
-                    f"Successfully loaded property owners data: {len(property_df)} records"
+            try:
+                files = self.gcs_util.list_files(
+                    bucket_name=self.config.bucket,
+                    prefix=f"silver/{self.config.property_owners_dataset}/",
                 )
-            else:
-                self.log.warning("No property owners data found in silver layer")
+                if files:
+                    latest_file = max(files, key=lambda x: x.time_created)
+                    property_path = f"gs://{self.config.bucket}/{latest_file.name}"
+                    self.log.info(f"Found property owners data: {latest_file.name}")
+                else:
+                    self.log.warning("No property owners data found in silver layer")
+            except Exception as e:
+                self.log.error(f"Error finding property owners data: {e}")
 
-            # Read cadastral data from storage
+            # Get cadastral data path
             self.log.info(f"Looking for cadastral data in silver/{self.config.cadastral_dataset}/")
-            cadastral_gdf = self._read_data_from_storage(
-                self.config.cadastral_dataset, self.config.bucket, stage="silver"
-            )
-            if cadastral_gdf is not None:
-                self.log.info(f"Successfully loaded cadastral data: {len(cadastral_gdf)} records")
-            else:
-                self.log.warning("No cadastral data found in silver layer")
+            try:
+                files = self.gcs_util.list_files(
+                    bucket_name=self.config.bucket,
+                    prefix=f"silver/{self.config.cadastral_dataset}/",
+                )
+                if files:
+                    latest_file = max(files, key=lambda x: x.time_created)
+                    cadastral_path = f"gs://{self.config.bucket}/{latest_file.name}"
+                    self.log.info(f"Found cadastral data: {latest_file.name}")
+                else:
+                    self.log.warning("No cadastral data found in silver layer")
+            except Exception as e:
+                self.log.error(f"Error finding cadastral data: {e}")
 
-        return property_df, cadastral_gdf
+        return property_path, cadastral_path
 
-    def _perform_bfe_merge(
-        self, property_df: pd.DataFrame, cadastral_gdf: gpd.GeoDataFrame
+    def _perform_streaming_bfe_merge(
+        self, property_path: str, cadastral_path: str
     ) -> gpd.GeoDataFrame:
-        """Perform BFE-based merge using DuckDB."""
+        """Perform streaming BFE-based merge using DuckDB for large datasets."""
 
-        self.log.info("Performing BFE-based merge with DuckDB...")
+        # Download files locally first for DuckDB processing
+        import os
+        import tempfile
 
-        # Load data into DuckDB
-        self.conn.register("property_owners", property_df)
-        self.conn.register("cadastral", cadastral_gdf)
+        # Download property owners file
+        self.log.info("Downloading property owners data locally...")
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_prop:
+            property_local_path = tmp_prop.name
 
-        # Perform merge
-        join_type = self.config.join_method.upper()
+        bucket_name = property_path.split("/")[2]
+        blob_name = "/".join(property_path.split("/")[3:])
+        self.gcs_util.download_file(bucket_name, blob_name, property_local_path)
 
-        # Build the merge query based on available columns
-        property_bfe_col = "bestemtFastEjendomBFENr"
-        cadastral_bfe_col = "bfe_number"
+        # Download cadastral file
+        self.log.info("Downloading cadastral data locally...")
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_cad:
+            cadastral_local_path = tmp_cad.name
 
-        # Check if BFE columns exist and find alternatives if needed
-        if property_bfe_col not in property_df.columns:
-            self.log.warning(
-                f"Property BFE column '{property_bfe_col}' not found. Available columns: {list(property_df.columns)}"
-            )
-            # Try to find alternative BFE column
-            bfe_cols = [
-                col
-                for col in property_df.columns
-                if "bfe" in col.lower() or "ejendom" in col.lower()
+        bucket_name = cadastral_path.split("/")[2]
+        blob_name = "/".join(cadastral_path.split("/")[3:])
+        self.gcs_util.download_file(bucket_name, blob_name, cadastral_local_path)
+
+        try:
+            self.log.info("Creating property_owners table from local parquet file...")
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE property_owners AS 
+                SELECT * FROM read_parquet('{property_local_path}')
+            """)
+
+            prop_count = self.conn.execute("SELECT COUNT(*) FROM property_owners").fetchone()[0]
+            self.log.info(f"Property owners table created with {prop_count:,} records")
+
+            self.log.info("Creating cadastral table from local parquet file...")
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE cadastral AS 
+                SELECT * FROM read_parquet('{cadastral_local_path}')
+            """)
+
+            cadastral_count = self.conn.execute("SELECT COUNT(*) FROM cadastral").fetchone()[0]
+            self.log.info(f"Cadastral table created with {cadastral_count:,} records")
+
+            # Check available columns
+            prop_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE property_owners").fetchall()
             ]
-            if bfe_cols:
-                property_bfe_col = bfe_cols[0]
-                self.log.info(f"Using alternative property BFE column: {property_bfe_col}")
-            else:
-                raise ValueError("No BFE column found in property data")
+            cadastral_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE cadastral").fetchall()
+            ]
 
-        if cadastral_bfe_col not in cadastral_gdf.columns:
-            self.log.warning(
-                f"Cadastral BFE column '{cadastral_bfe_col}' not found. Available columns: {list(cadastral_gdf.columns)}"
-            )
-            # Try to find alternative BFE column
-            bfe_cols = [col for col in cadastral_gdf.columns if "bfe" in col.lower()]
-            if bfe_cols:
-                cadastral_bfe_col = bfe_cols[0]
-                self.log.info(f"Using alternative cadastral BFE column: {cadastral_bfe_col}")
-            else:
-                raise ValueError("No BFE column found in cadastral data")
+            self.log.info(f"Property columns available: {prop_columns[:10]}...")
+            self.log.info(f"Cadastral columns available: {cadastral_columns[:10]}...")
 
-        merge_query = f"""
-        SELECT 
-            p.*,
-            c.* EXCLUDE ({cadastral_bfe_col}),
-            c.{cadastral_bfe_col} as cadastral_bfe_number,
-            '{datetime.utcnow().isoformat()}'::TIMESTAMP as merge_timestamp,
-            'bfe_join' as merge_method,
-            '{self.config.join_method}' as join_type,
-            (c.{cadastral_bfe_col} IS NOT NULL) as has_cadastral_match
-        FROM property_owners p
-        {join_type} JOIN cadastral c 
-        ON p.{property_bfe_col} = c.{cadastral_bfe_col}
-        """
+            # DuckDB automatically parses the nested JSON structure
+            # We can access BFE number directly from the properties struct
+            try:
+                # Test if we can access the BFE number from the nested structure
+                test_result = self.conn.execute("""
+                    SELECT properties.bestemtFastEjendomBFENr as bfe_number 
+                    FROM property_owners 
+                    LIMIT 1
+                """).fetchone()
 
-        merged_df = self.conn.execute(merge_query).df()
+                if test_result and test_result[0] is not None:
+                    self.log.info(
+                        f"Successfully accessed BFE number from nested structure: {test_result[0]}"
+                    )
+                    bfe_column = "properties.bestemtFastEjendomBFENr"
+                else:
+                    raise ValueError("BFE number is null in test query")
 
-        # Convert to GeoDataFrame if geometry column exists
-        if "geometry" in merged_df.columns:
-            merged_gdf = gpd.GeoDataFrame(merged_df, geometry="geometry", crs="EPSG:4326")
-        else:
-            # Create a simple GeoDataFrame with point geometries
-            self.log.warning("No geometry column found, creating point geometries")
-            merged_gdf = gpd.GeoDataFrame(merged_df, crs="EPSG:4326")
-            # Create dummy point geometries
-            merged_gdf["geometry"] = gpd.points_from_xy(
-                [12.5] * len(merged_df), [55.7] * len(merged_df)
-            )
+            except Exception as e:
+                self.log.error(f"Failed to access BFE from nested structure: {e}")
+                raise ValueError(f"Cannot access BFE number from property data structure: {e}")
 
-        return merged_gdf
+            # Perform the merge using DuckDB with the nested BFE access
+            self.log.info("Performing BFE-based merge...")
+            merge_query = f"""
+            CREATE OR REPLACE TABLE merged_data AS
+            SELECT 
+                p.{bfe_column} as bfe_number,
+                p.properties.ejendePerson as person_data,
+                p.properties.ejendeVirksomhed as company_data,
+                p.properties.ejerforholdskode as ownership_code,
+                p.properties.faktiskEjerandel_naevner as ownership_denominator,
+                p.properties.faktiskEjerandel_taeller as ownership_numerator,
+                c.business_event,
+                c.business_process,
+                c.authority,
+                c.is_worker_housing,
+                c.is_common_lot,
+                c.has_owner_apartments,
+                c.registration_from as cadastral_registration_from,
+                c.effect_from as cadastral_effect_from
+            FROM property_owners p
+            INNER JOIN cadastral c ON p.{bfe_column} = c.bfe_number
+            WHERE p.{bfe_column} IS NOT NULL
+            """
+
+            self.conn.execute(merge_query)
+
+            merged_count = self.conn.execute("SELECT COUNT(*) FROM merged_data").fetchone()[0]
+            self.log.info(f"Merge completed with {merged_count:,} records")
+
+            if merged_count == 0:
+                raise ValueError("Merge resulted in 0 records - check BFE number alignment")
+
+            # Convert to pandas DataFrame
+            merged_df = self.conn.execute("SELECT * FROM merged_data").df()
+
+            self.log.info(f"Successfully created merged dataset with {len(merged_df):,} records")
+            self.log.info(f"Merged columns: {list(merged_df.columns)}")
+
+            # Since this is property ownership data (not geographic), return as DataFrame
+            # The cadastral data has geometry, but this merge focuses on ownership relationships
+            return merged_df
+
+        finally:
+            # Clean up temporary files
+            try:
+                if os.path.exists(property_local_path):
+                    os.unlink(property_local_path)
+                if os.path.exists(cadastral_local_path):
+                    os.unlink(cadastral_local_path)
+            except Exception:
+                pass
 
     def _validate_merge_quality(
-        self, merged_gdf: gpd.GeoDataFrame, property_df: pd.DataFrame
+        self, merged_gdf: gpd.GeoDataFrame, property_count: int = None
     ) -> Dict[str, Any]:
         """Validate merge quality and return statistics."""
 
-        total_properties = len(property_df)
+        # Get property count from DuckDB if not provided
+        if property_count is None:
+            try:
+                property_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM property_owners"
+                ).fetchone()[0]
+            except Exception:
+                property_count = 0
+
         merged_records = len(merged_gdf)
-        match_rate = (merged_records / total_properties) if total_properties > 0 else 0
+        match_rate = (merged_records / property_count) if property_count > 0 else 0
 
         quality_stats = {
-            "total_properties": total_properties,
+            "total_properties": property_count,
             "merged_records": merged_records,
             "match_rate": match_rate,
             "match_rate_percent": match_rate * 100,
@@ -212,25 +280,25 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
         try:
             # Load silver data from GCS storage or in-memory
-            property_df, cadastral_gdf = self._load_silver_data(silver_data)
+            property_path, cadastral_path = self._load_silver_data_streaming(silver_data)
 
             # Check if we have the required data
-            if cadastral_gdf is None:
+            if cadastral_path is None:
                 self.log.error("No cadastral data available - cannot proceed with merge")
                 return
 
-            if property_df is None:
+            if property_path is None:
                 self.log.error("No property owners data available - cannot proceed with merge")
                 return
 
-            self.log.info(f"Loaded {len(property_df):,} property records")
-            self.log.info(f"Loaded {len(cadastral_gdf):,} cadastral records")
+            self.log.info(f"Loaded {property_path} property records")
+            self.log.info(f"Loaded {cadastral_path} cadastral records")
 
             # Perform merge
-            merged_gdf = self._perform_bfe_merge(property_df, cadastral_gdf)
+            merged_gdf = self._perform_streaming_bfe_merge(property_path, cadastral_path)
 
             # Validate quality
-            quality_stats = self._validate_merge_quality(merged_gdf, property_df)
+            quality_stats = self._validate_merge_quality(merged_gdf)
 
             # Save to gold layer
             self._save_data(merged_gdf, self.config.dataset, self.config.bucket, stage="gold")
