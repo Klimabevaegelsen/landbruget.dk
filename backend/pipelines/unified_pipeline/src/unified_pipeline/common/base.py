@@ -300,6 +300,7 @@ class BaseSource(Generic[T], ABC):
                                 os.unlink(temp_path)
                     else:
                         raise geo_error
+
             elif latest_file.name.endswith(".json"):
                 return self.gcs_util.download_json_from_gcs(
                     bucket_name=bucket, blob_name=latest_file.name

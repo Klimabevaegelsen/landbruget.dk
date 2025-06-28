@@ -47,7 +47,7 @@ jobs:
             (github.event_name == 'schedule' &&
              fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
@@ -85,6 +85,15 @@ jobs:
             # FVM WFS matrix job with specific layer and year
             echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
             python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+          elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+            # FVM WFS from "all" - trigger the dedicated matrix workflow with all stages
+            echo "FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
+            echo "FVM WFS matrix workflow triggered successfully with stage=all"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }}"
