@@ -20,17 +20,12 @@ def _find_area_subsets_recursive_impl_static(
     upper_bound: float,
     suffix_sums: list[float],
 ):
-    sum_of_remaining = (
-        suffix_sums[current_index] if current_index < len(fields) else 0.0
-    )
+    sum_of_remaining = suffix_sums[current_index] if current_index < len(fields) else 0.0
     if current_sum + sum_of_remaining < lower_bound - 1e-9:
         return
     if current_sum > upper_bound + 1e-9:
         return
-    if (
-        lower_bound - 1e-9 <= current_sum <= upper_bound + 1e-9
-        and current_subset_details
-    ):
+    if lower_bound - 1e-9 <= current_sum <= upper_bound + 1e-9 and current_subset_details:
         solutions.append(list(current_subset_details))
     if current_index == len(fields):
         return
@@ -93,9 +88,7 @@ def _find_area_subsets_static(
     return solutions
 
 
-def _get_closest_subset_static(
-    subsets: list[list[tuple[str, float]]], target_val: float
-) -> list[tuple[str, float]]:
+def _get_closest_subset_static(subsets: list[list[tuple[str, float]]], target_val: float) -> list[tuple[str, float]]:
     if not subsets:
         return []
     if len(subsets) == 1:
@@ -135,9 +128,7 @@ class PesticideDisaggregator:
             logger.debug("Returning cached organic marker field IDs.")
             return self._organic_marker_field_ids
 
-        logger.info(
-            "Identifying organic marker fields by spatial join with oekologiske_arealer..."
-        )
+        logger.info("Identifying organic marker fields by spatial join with oekologiske_arealer...")
         query = """
         SELECT DISTINCT m.id 
         FROM marker m
@@ -147,9 +138,7 @@ class PesticideDisaggregator:
         try:
             result_tuples = self.db.execute_query(query)
             self._organic_marker_field_ids = {row[0] for row in result_tuples}
-            logger.info(
-                f"Identified {len(self._organic_marker_field_ids)} organic marker field IDs."
-            )
+            logger.info(f"Identified {len(self._organic_marker_field_ids)} organic marker field IDs.")
         except Exception as e:
             logger.error(
                 f"Error identifying organic marker fields: {e}. Proceeding without organic field exclusion for this run."
@@ -188,18 +177,12 @@ class PesticideDisaggregator:
                     DisaggregationDate TIMESTAMP
                 )
             """)
-            logger.info(
-                "Table 'disaggregated_pesticide_applications' created or already exists."
-            )
+            logger.info("Table 'disaggregated_pesticide_applications' created or already exists.")
         except Exception as e:
-            logger.error(
-                f"Error creating disaggregated_pesticide_applications table: {str(e)}"
-            )
+            logger.error(f"Error creating disaggregated_pesticide_applications table: {str(e)}")
             raise
 
-    def analyze_potential_gkea_matches(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ) -> List[int]:
+    def analyze_potential_gkea_matches(self, pending_rows_table: str = "pending_pesticide_rows") -> List[int]:
         """
         Disaggregates individual pesticide rows if their AcreageSize matches the
         total GKEA field area for that CVR & Crop.
@@ -209,12 +192,12 @@ class PesticideDisaggregator:
             insert_query = f"""
                 WITH GKEAFieldCVRCropTotals AS (
                     SELECT 
-                        CAST(g."CVR" AS VARCHAR) as CVR,
-                        TRY_CAST(g."Hovedafgrøde" AS BIGINT) as CropCode,
-                        SUM(g."Areal") as TotalGKEAAreaForCVRCrop
+                        CAST(g.unnamed__1 AS VARCHAR) as CVR,
+                        TRY_CAST(g.unnamed__12 AS BIGINT) as CropCode,
+                        SUM(TRY_CAST(g.unnamed__4 AS DOUBLE)) as TotalGKEAAreaForCVRCrop
                     FROM gkea g
-                    WHERE g."CVR" IS NOT NULL AND REGEXP_MATCHES(CAST(g."CVR" AS VARCHAR), '^[0-9]+$')
-                          AND g."Hovedafgrøde" IS NOT NULL AND g."Areal" > 0
+                    WHERE g.unnamed__1 IS NOT NULL AND g.unnamed__1 != 'CVR' AND REGEXP_MATCHES(CAST(g.unnamed__1 AS VARCHAR), '^[0-9]+$')
+                          AND g.unnamed__12 IS NOT NULL AND TRY_CAST(g.unnamed__4 AS DOUBLE) > 0
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications (
@@ -228,9 +211,9 @@ class PesticideDisaggregator:
                     p.OriginalPesticideRowID,
                     p.CompanyName, CAST(p.CompanyRegistrationNumber AS VARCHAR), p.StreetName, p.StreetBuildingIdentifier, p.FloorIdentifier, p.PostCodeIdentifier, p.City,
                     p.AcreageSize, p.AcreageUnit, p.Name, p.Code, p.PesticideName, p.PesticideRegistrationNumber, p.DosageQuantity, p.DosageUnit, p.NoPesticides,
-                    'gkea_' || CAST(g_fields."Marknummer" AS VARCHAR) as MatchedFieldID,
+                    'gkea_' || CAST(g_fields.unnamed__3 AS VARCHAR) as MatchedFieldID,
                     'gkea' as MatchedDataset,
-                    p.AcreageSize * (g_fields."Areal" / gkea_totals.TotalGKEAAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (TRY_CAST(g_fields.unnamed__4 AS DOUBLE) / gkea_totals.TotalGKEAAreaForCVRCrop) as AllocatedArea,
                     'GKEA_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
                     GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - gkea_totals.TotalGKEAAreaForCVRCrop) / p.AcreageSize / ({self.config.AREA_TOLERANCE_PCT}/100.0))) as MatchConfidence, 
                     NOW() as DisaggregationDate
@@ -239,12 +222,12 @@ class PesticideDisaggregator:
                     ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = gkea_totals.CVR
                     AND TRY_CAST(p.Code AS BIGINT) = gkea_totals.CropCode
                 JOIN gkea g_fields 
-                    ON gkea_totals.CVR = CAST(g_fields."CVR" AS VARCHAR) 
-                    AND gkea_totals.CropCode = TRY_CAST(g_fields."Hovedafgrøde" AS BIGINT)
+                    ON gkea_totals.CVR = CAST(g_fields.unnamed__1 AS VARCHAR) 
+                    AND gkea_totals.CropCode = TRY_CAST(g_fields.unnamed__12 AS BIGINT)
                 WHERE 
                     p.AcreageSize > 0 AND gkea_totals.TotalGKEAAreaForCVRCrop > 0
                     AND ABS(p.AcreageSize - gkea_totals.TotalGKEAAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.AREA_TOLERANCE_PCT}
-                    AND g_fields."Areal" > 0;
+                    AND TRY_CAST(g_fields.unnamed__4 AS DOUBLE) > 0;
             """
             self.db.execute_query(insert_query)
             select_processed_ids_query = f"""
@@ -252,12 +235,12 @@ class PesticideDisaggregator:
                 FROM {pending_rows_table} p
                 JOIN (
                     SELECT 
-                        CAST(g."CVR" AS VARCHAR) as CVR,
-                        TRY_CAST(g."Hovedafgrøde" AS BIGINT) as CropCode,
-                        SUM(g."Areal") as TotalGKEAAreaForCVRCrop
+                        CAST(g.unnamed__1 AS VARCHAR) as CVR,
+                        TRY_CAST(g.unnamed__12 AS BIGINT) as CropCode,
+                        SUM(TRY_CAST(g.unnamed__4 AS DOUBLE)) as TotalGKEAAreaForCVRCrop
                     FROM gkea g
-                    WHERE g."CVR" IS NOT NULL AND REGEXP_MATCHES(CAST(g."CVR" AS VARCHAR), '^[0-9]+$')
-                          AND g."Hovedafgrøde" IS NOT NULL AND g."Areal" > 0
+                    WHERE g.unnamed__1 IS NOT NULL AND g.unnamed__1 != 'CVR' AND REGEXP_MATCHES(CAST(g.unnamed__1 AS VARCHAR), '^[0-9]+$')
+                          AND g.unnamed__12 IS NOT NULL AND TRY_CAST(g.unnamed__4 AS DOUBLE) > 0
                     GROUP BY CVR, CropCode
                 ) gkea_totals
                     ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = gkea_totals.CVR
@@ -277,14 +260,10 @@ class PesticideDisaggregator:
                     "GKEA (PesticideRowArea vs TotalFieldArea): No pesticide rows met the area criteria for disaggregation."
                 )
         except Exception as e:
-            logger.error(
-                f"Error in GKEA (PesticideRowArea vs TotalFieldArea) matching: {str(e)}"
-            )
+            logger.error(f"Error in GKEA (PesticideRowArea vs TotalFieldArea) matching: {str(e)}")
         return processed_row_ids
 
-    def disaggregate_by_marker_match(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ) -> List[int]:
+    def disaggregate_by_marker_match(self, pending_rows_table: str = "pending_pesticide_rows") -> List[int]:
         """
         Disaggregates individual pesticide rows if their AcreageSize matches the
         total Marker field area for that CVR & Crop.
@@ -294,14 +273,14 @@ class PesticideDisaggregator:
             insert_query = f"""
                 WITH MarkerFieldCVRCropTotals AS (
                     SELECT
-                        TRIM(CAST(m.CVR AS VARCHAR)) as CVR,
-                        TRY_CAST(m.Afgkode AS BIGINT) as CropCode,
-                        SUM(m.IMK_areal) as TotalMarkerAreaForCVRCrop
+                        TRIM(CAST(m.cvr_number AS VARCHAR)) as CVR,
+                        TRY_CAST(m.crop_code AS BIGINT) as CropCode,
+                        SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.CVR IS NOT NULL 
-                          AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-                          AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-                          AND m.Afgkode IS NOT NULL AND m.IMK_areal > 0
+                    WHERE m.cvr_number IS NOT NULL 
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                          AND m.crop_code IS NOT NULL AND m.area_ha > 0
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications (
@@ -315,9 +294,9 @@ class PesticideDisaggregator:
                     p.OriginalPesticideRowID,
                     p.CompanyName, CAST(p.CompanyRegistrationNumber AS VARCHAR), p.StreetName, p.StreetBuildingIdentifier, p.FloorIdentifier, p.PostCodeIdentifier, p.City,
                     p.AcreageSize, p.AcreageUnit, p.Name, p.Code, p.PesticideName, p.PesticideRegistrationNumber, p.DosageQuantity, p.DosageUnit, p.NoPesticides,
-                    'marker_' || CAST(m_fields.Markblok AS VARCHAR) || '_' || CAST(m_fields.Marknr AS VARCHAR) as MatchedFieldID,
+                    'marker_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'marker' as MatchedDataset,
-                    p.AcreageSize * (m_fields.IMK_areal / marker_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
                     'Marker_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
                     GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.AREA_TOLERANCE_PCT}/100.0))) as MatchConfidence,
                     NOW() as DisaggregationDate
@@ -326,15 +305,15 @@ class PesticideDisaggregator:
                     ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = marker_totals.CVR 
                     AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
                 JOIN marker m_fields 
-                    ON marker_totals.CVR = TRIM(CAST(m_fields.CVR AS VARCHAR))
-                    AND marker_totals.CropCode = TRY_CAST(m_fields.Afgkode AS BIGINT)
+                    ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
+                    AND marker_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE 
                     p.AcreageSize > 0 AND marker_totals.TotalMarkerAreaForCVRCrop > 0
                     AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.AREA_TOLERANCE_PCT}
-                    AND m_fields.CVR IS NOT NULL 
-                    AND TRIM(CAST(m_fields.CVR AS VARCHAR)) != '' 
-                    AND REGEXP_MATCHES(TRIM(CAST(m_fields.CVR AS VARCHAR)), '^[0-9]+$')
-                    AND m_fields.IMK_areal > 0;
+                    AND m_fields.cvr_number IS NOT NULL 
+                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                    AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
+                    AND m_fields.area_ha > 0;
             """
             self.db.execute_query(insert_query)
 
@@ -343,14 +322,14 @@ class PesticideDisaggregator:
                 FROM {pending_rows_table} p
                 JOIN (
                     SELECT
-                        TRIM(CAST(m.CVR AS VARCHAR)) as CVR,
-                        TRY_CAST(m.Afgkode AS BIGINT) as CropCode,
-                        SUM(m.IMK_areal) as TotalMarkerAreaForCVRCrop
+                        TRIM(CAST(m.cvr_number AS VARCHAR)) as CVR,
+                        TRY_CAST(m.crop_code AS BIGINT) as CropCode,
+                        SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.CVR IS NOT NULL 
-                          AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-                          AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-                          AND m.Afgkode IS NOT NULL AND m.IMK_areal > 0
+                    WHERE m.cvr_number IS NOT NULL 
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                          AND m.crop_code IS NOT NULL AND m.area_ha > 0
                     GROUP BY CVR, CropCode
                 ) marker_totals
                     ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = marker_totals.CVR 
@@ -371,14 +350,10 @@ class PesticideDisaggregator:
                     "Marker (PesticideRowArea vs TotalFieldArea): No pesticide rows met the area criteria for disaggregation."
                 )
         except Exception as e:
-            logger.error(
-                f"Error in Marker (PesticideRowArea vs TotalFieldArea) matching: {str(e)}"
-            )
+            logger.error(f"Error in Marker (PesticideRowArea vs TotalFieldArea) matching: {str(e)}")
         return processed_row_ids
 
-    def disaggregate_by_marker_non_organic_match(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ) -> List[int]:
+    def disaggregate_by_marker_non_organic_match(self, pending_rows_table: str = "pending_pesticide_rows") -> List[int]:
         """
         Disaggregates individual pesticide rows if their AcreageSize matches the
         total *non-organic* Marker field area (IMK_areal) for that CVR & Crop.
@@ -401,14 +376,14 @@ class PesticideDisaggregator:
             insert_query = f"""
                 WITH NonOrganicMarkerFieldCVRCropTotals AS (
                     SELECT
-                        TRIM(CAST(m.CVR AS VARCHAR)) as CVR,
-                        TRY_CAST(m.Afgkode AS BIGINT) as CropCode,
-                        SUM(m.IMK_areal) as TotalNonOrganicMarkerAreaForCVRCrop
+                        TRIM(CAST(m.cvr_number AS VARCHAR)) as CVR,
+                        TRY_CAST(m.crop_code AS BIGINT) as CropCode,
+                        SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.CVR IS NOT NULL 
-                          AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-                          AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-                          AND m.Afgkode IS NOT NULL AND m.IMK_areal > 0
+                    WHERE m.cvr_number IS NOT NULL 
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                          AND m.crop_code IS NOT NULL AND m.area_ha > 0
                           AND m.id NOT IN {organic_ids_sql_tuple} 
                     GROUP BY CVR, CropCode
                 )
@@ -486,16 +461,12 @@ class PesticideDisaggregator:
             )
         return processed_row_ids
 
-    def save_cvr_crop_totals_for_debugging(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ):
+    def save_cvr_crop_totals_for_debugging(self, pending_rows_table: str = "pending_pesticide_rows"):
         """Calculates and saves CVR-Crop total areas from pesticide, GKEA, and Marker for debugging."""
         try:
             output_path = self.config.RESOLVED_OUTPUT_DIR
             if output_path is None:
-                logger.error(
-                    "RESOLVED_OUTPUT_DIR not set in config! Attempting fallback."
-                )
+                logger.error("RESOLVED_OUTPUT_DIR not set in config! Attempting fallback.")
                 output_path = self.config.DATA_DIR / self.config.OUTPUT_DIR  # Fallback
 
             output_path.mkdir(parents=True, exist_ok=True)
@@ -517,44 +488,38 @@ class PesticideDisaggregator:
             self.db.execute_query(
                 f"COPY ({pesticide_totals_query}) TO '{str(pesticide_totals_csv)}' (HEADER, DELIMITER ',')"
             )
-            logger.info(
-                f"Saved pesticide CVR-Crop totals (debug) to {pesticide_totals_csv}"
-            )
+            logger.info(f"Saved pesticide CVR-Crop totals (debug) to {pesticide_totals_csv}")
 
             gkea_totals_query = """
                 SELECT
-                    g."CVR" as CVR, 
-                    TRY_CAST(g."Hovedafgrøde" AS BIGINT) as CropCode,
-                    SUM(g."Areal") as TotalGKEAArea,
-                    COUNT(DISTINCT g."Marknummer") as GKEAFieldCount
+                    g.unnamed__1 as CVR, 
+                    TRY_CAST(g.unnamed__12 AS BIGINT) as CropCode,
+                    SUM(TRY_CAST(g.unnamed__4 AS DOUBLE)) as TotalGKEAArea,
+                    COUNT(DISTINCT g.unnamed__3) as GKEAFieldCount
                 FROM gkea g
-                WHERE g."CVR" IS NOT NULL AND TRIM(g."CVR") != '' AND REGEXP_MATCHES(g."CVR", '^[0-9]+$')
-                      AND g."Hovedafgrøde" IS NOT NULL AND g."Areal" > 0
+                WHERE g.unnamed__1 IS NOT NULL AND TRIM(g.unnamed__1) != '' AND g.unnamed__1 != 'CVR' AND REGEXP_MATCHES(g.unnamed__1, '^[0-9]+$')
+                      AND g.unnamed__12 IS NOT NULL AND TRY_CAST(g.unnamed__4 AS DOUBLE) > 0
                 GROUP BY CVR, CropCode
                 ORDER BY CVR, CropCode
             """
             gkea_totals_csv = output_path / "debug_gkea_cvr_crop_totals.csv"
-            self.db.execute_query(
-                f"COPY ({gkea_totals_query}) TO '{str(gkea_totals_csv)}' (HEADER, DELIMITER ',')"
-            )
+            self.db.execute_query(f"COPY ({gkea_totals_query}) TO '{str(gkea_totals_csv)}' (HEADER, DELIMITER ',')")
             logger.info(f"Saved GKEA CVR-Crop totals (debug) to {gkea_totals_csv}")
 
             marker_totals_query = """
                 SELECT
-                    m.CVR as CVR, 
-                    TRY_CAST(m.Afgkode AS BIGINT) as CropCode,
-                    SUM(m.IMK_areal) as TotalMarkerArea,
-                    COUNT(DISTINCT m.Markblok || '_' || m.Marknr) as MarkerFieldCount
+                    m.cvr_number as CVR, 
+                    TRY_CAST(m.crop_code AS BIGINT) as CropCode,
+                    SUM(m.area_ha) as TotalMarkerArea,
+                    COUNT(DISTINCT m.field_id) as MarkerFieldCount
                 FROM marker m
-                WHERE m.CVR IS NOT NULL AND TRIM(m.CVR) != '' AND REGEXP_MATCHES(m.CVR, '^[0-9]+$')
-                      AND m.Afgkode IS NOT NULL AND m.IMK_areal > 0
+                WHERE m.cvr_number IS NOT NULL AND TRIM(m.cvr_number) != '' AND REGEXP_MATCHES(m.cvr_number, '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL AND m.area_ha > 0
                 GROUP BY CVR, CropCode
                 ORDER BY CVR, CropCode
             """
             marker_totals_csv = output_path / "debug_marker_cvr_crop_totals.csv"
-            self.db.execute_query(
-                f"COPY ({marker_totals_query}) TO '{str(marker_totals_csv)}' (HEADER, DELIMITER ',')"
-            )
+            self.db.execute_query(f"COPY ({marker_totals_query}) TO '{str(marker_totals_csv)}' (HEADER, DELIMITER ',')")
             logger.info(f"Saved Marker CVR-Crop totals (debug) to {marker_totals_csv}")
 
         except Exception as e:
@@ -562,9 +527,7 @@ class PesticideDisaggregator:
             # No raise here, allow main script to continue if debugging fails
 
     # New disaggregation strategy using subset sum
-    def disaggregate_by_subset_sum(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ) -> Set[int]:
+    def disaggregate_by_subset_sum(self, pending_rows_table: str = "pending_pesticide_rows") -> Set[int]:
         logger.info("Running Subset Sum disaggregation strategy...")
         processed_original_pesticide_row_ids: Set[int] = set()
 
@@ -583,9 +546,7 @@ class PesticideDisaggregator:
             logger.info("SubsetSum: No CVR/Crop candidates found in pending rows.")
             return processed_original_pesticide_row_ids
 
-        logger.info(
-            f"SubsetSum: Found {len(candidates)} CVR/Crop candidates to analyze."
-        )
+        logger.info(f"SubsetSum: Found {len(candidates)} CVR/Crop candidates to analyze.")
 
         # For collecting rows to insert in bulk (list of tuples)
         rows_to_insert_into_disaggregated = []
@@ -611,19 +572,17 @@ class PesticideDisaggregator:
             ORDER BY AcreageSize;
             """
 
-            pending_acreages_for_cvr_crop = self.db.execute_query(
-                pending_acreages_query
-            )
+            pending_acreages_for_cvr_crop = self.db.execute_query(pending_acreages_query)
             if not pending_acreages_for_cvr_crop:
                 continue
 
             # 2. GKEA Field Areas for this CVR/Crop
             gkea_fields_query = f"""
-            SELECT CAST("Marknummer" AS VARCHAR) as FieldID, "Areal" as Area
+            SELECT CAST(unnamed__3 AS VARCHAR) as FieldID, TRY_CAST(unnamed__4 AS DOUBLE) as Area
             FROM gkea 
-            WHERE TRIM(CAST("CVR" AS VARCHAR)) = '{target_cvr}' 
-              AND TRY_CAST("Hovedafgrøde" AS BIGINT) = {target_cropcode} AND "Areal" > 0
-            ORDER BY "Areal";
+            WHERE TRIM(CAST(unnamed__1 AS VARCHAR)) = '{target_cvr}' 
+              AND TRY_CAST(unnamed__12 AS BIGINT) = {target_cropcode} AND TRY_CAST(unnamed__4 AS DOUBLE) > 0
+            ORDER BY Area;
             """
             gkea_fields_raw = self.db.execute_query(gkea_fields_query)
             gkea_fields_with_ids = []
@@ -639,16 +598,14 @@ class PesticideDisaggregator:
 
             # 3. Marker Field Areas for this CVR/Crop (ALL marker fields, not just non-organic)
             marker_fields_query = f"""
-            SELECT CAST(id AS VARCHAR) as FieldID, IMK_areal as Area
+            SELECT CAST(field_id AS VARCHAR) as FieldID, area_ha as Area
             FROM marker 
-            WHERE TRIM(CAST(CVR AS VARCHAR)) = '{target_cvr}' 
-              AND TRY_CAST(Afgkode AS BIGINT) = {target_cropcode} AND IMK_areal > 0
-            ORDER BY IMK_areal;
+            WHERE TRIM(CAST(cvr_number AS VARCHAR)) = '{target_cvr}' 
+              AND TRY_CAST(crop_code AS BIGINT) = {target_cropcode} AND area_ha > 0
+            ORDER BY area_ha;
             """
             marker_fields_raw = self.db.execute_query(marker_fields_query)
-            marker_fields_with_ids = [
-                (str(fid), area) for fid, area in marker_fields_raw
-            ]
+            marker_fields_with_ids = [(str(fid), area) for fid, area in marker_fields_raw]
 
             for p_row_id, target_area in pending_acreages_for_cvr_crop:
                 if (
@@ -661,9 +618,7 @@ class PesticideDisaggregator:
                 dataset_source = ""
 
                 # --- Try Marker First ---
-                if (
-                    len(marker_fields_with_ids) > 1
-                ):  # Subset sum needs at least 2 fields
+                if len(marker_fields_with_ids) > 1:  # Subset sum needs at least 2 fields
                     marker_subsets = _find_area_subsets_static(
                         marker_fields_with_ids,
                         target_area,
@@ -675,18 +630,14 @@ class PesticideDisaggregator:
                         dataset_source = "marker"
                         matched_this_acreage = True
                     elif len(marker_subsets) > 1:
-                        closest_marker_subset = _get_closest_subset_static(
-                            marker_subsets, target_area
-                        )
+                        closest_marker_subset = _get_closest_subset_static(marker_subsets, target_area)
                         if closest_marker_subset:
                             best_subset = closest_marker_subset
                             dataset_source = "marker"
                             matched_this_acreage = True
 
                 # --- If Marker didn't match, Try GKEA ---
-                if (
-                    not matched_this_acreage and len(gkea_fields_with_ids) > 1
-                ):  # Subset sum needs at least 2 fields
+                if not matched_this_acreage and len(gkea_fields_with_ids) > 1:  # Subset sum needs at least 2 fields
                     gkea_subsets = _find_area_subsets_static(
                         gkea_fields_with_ids,
                         target_area,
@@ -698,9 +649,7 @@ class PesticideDisaggregator:
                         dataset_source = "gkea"
                         matched_this_acreage = True
                     elif len(gkea_subsets) > 1:
-                        closest_gkea_subset = _get_closest_subset_static(
-                            gkea_subsets, target_area
-                        )
+                        closest_gkea_subset = _get_closest_subset_static(gkea_subsets, target_area)
                         if closest_gkea_subset:
                             best_subset = closest_gkea_subset
                             dataset_source = "gkea"
@@ -708,10 +657,10 @@ class PesticideDisaggregator:
 
                 if matched_this_acreage and best_subset:
                     # Fetch original pesticide row details
-                    original_pesticide_row_details_query = f"SELECT * FROM {pending_rows_table} WHERE OriginalPesticideRowID = {p_row_id}"
-                    original_row_data = self.db.execute_query(
-                        original_pesticide_row_details_query
+                    original_pesticide_row_details_query = (
+                        f"SELECT * FROM {pending_rows_table} WHERE OriginalPesticideRowID = {p_row_id}"
                     )
+                    original_row_data = self.db.execute_query(original_pesticide_row_details_query)
 
                     if not original_row_data:
                         logger.warning(
@@ -733,27 +682,19 @@ class PesticideDisaggregator:
                     match_confidence = max(
                         0.0,
                         1.0
-                        - (
-                            abs(target_area - subset_sum_area)
-                            / target_area
-                            / (self.config.AREA_TOLERANCE_PCT / 100.0)
-                        ),
+                        - (abs(target_area - subset_sum_area) / target_area / (self.config.AREA_TOLERANCE_PCT / 100.0)),
                     )
 
                     for field_id_in_subset, field_area_in_subset in best_subset:
                         allocated_area = (
-                            target_area * (field_area_in_subset / subset_sum_area)
-                            if subset_sum_area > 0
-                            else 0
+                            target_area * (field_area_in_subset / subset_sum_area) if subset_sum_area > 0 else 0
                         )
 
                         disaggregated_row = (
                             str(uuid.uuid4()),  # DisaggregatedID
                             original_row_dict.get("OriginalPesticideRowID"),
                             original_row_dict.get("CompanyName"),
-                            str(
-                                original_row_dict.get("CompanyRegistrationNumber")
-                            ),  # Ensure string
+                            str(original_row_dict.get("CompanyRegistrationNumber")),  # Ensure string
                             original_row_dict.get("StreetName"),
                             original_row_dict.get("StreetBuildingIdentifier"),
                             original_row_dict.get("FloorIdentifier"),
@@ -801,15 +742,11 @@ class PesticideDisaggregator:
                 f"SubsetSum: Inserted {len(rows_to_insert_into_disaggregated)} disaggregated field parts from {len(processed_original_pesticide_row_ids)} original pesticide rows."
             )
         else:
-            logger.info(
-                "SubsetSum: No pesticide rows were disaggregated by this strategy."
-            )
+            logger.info("SubsetSum: No pesticide rows were disaggregated by this strategy.")
 
         return processed_original_pesticide_row_ids
 
-    def disaggregate_by_partial_field_coverage(
-        self, pending_rows_table: str = "pending_pesticide_rows"
-    ) -> List[int]:
+    def disaggregate_by_partial_field_coverage(self, pending_rows_table: str = "pending_pesticide_rows") -> List[int]:
         """
         Strategy: Partial Field Coverage for single-field CVR/crop combinations.
 
@@ -832,18 +769,18 @@ class PesticideDisaggregator:
         query = f"""
         WITH MarkerSingleFieldCVRCrop AS (
             SELECT 
-                CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) as CVR_Str,
-                CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) as Crop_Str,
+                CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                 COUNT(*) as FieldCount,
-                m.id as FieldID,
-                m.IMK_areal as FieldArea,
-                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier
+                m.field_id as FieldID,
+                m.area_ha as FieldArea,
+                m.field_id as FieldIdentifier
             FROM marker m
-            WHERE m.CVR IS NOT NULL 
-              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-              AND m.Afgkode IS NOT NULL 
-              AND m.IMK_areal > 0
+            WHERE m.cvr_number IS NOT NULL 
+              AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+              AND m.crop_code IS NOT NULL 
+              AND m.area_ha > 0
             GROUP BY 1, 2, 4, 5, 6
             HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
         ),
@@ -885,9 +822,7 @@ class PesticideDisaggregator:
             logger.info("Partial Field Coverage: No single-field candidates found.")
             return processed_ids
 
-        logger.info(
-            f"Partial Field Coverage: Found {len(candidates)} single-field candidates to process."
-        )
+        logger.info(f"Partial Field Coverage: Found {len(candidates)} single-field candidates to process.")
 
         for (
             original_id,
@@ -911,14 +846,10 @@ class PesticideDisaggregator:
                 "CropName": crop_name,
                 "CompanyName": company_name,
                 "FieldArea": float(field_area),
-                "AllocatedPesticideArea": float(
-                    acreage_size
-                ),  # Use actual pesticide area, not field area
+                "AllocatedPesticideArea": float(acreage_size),  # Use actual pesticide area, not field area
                 "AllocationMethod": "Partial_Field_Coverage_SingleField",
                 "AreaDifference": float(field_area - acreage_size),
-                "AreaDifferencePercent": float(
-                    ((field_area - acreage_size) / acreage_size) * 100
-                ),
+                "AreaDifferencePercent": float(((field_area - acreage_size) / acreage_size) * 100),
                 "Confidence": 0.8,  # High confidence in field assignment, but spatial uncertainty
                 "Notes": f"Partial field coverage: {coverage_percent:.1f}% of field area. Spatial location within field unknown.",
             }
@@ -948,42 +879,22 @@ class PesticideDisaggregator:
                     company_name,  # CompanyName
                     cvr_str,  # CompanyRegistrationNumber
                     original_data[4] if len(original_data) > 4 else None,  # StreetName
-                    original_data[5]
-                    if len(original_data) > 5
-                    else None,  # StreetBuildingIdentifier
-                    original_data[6]
-                    if len(original_data) > 6
-                    else None,  # FloorIdentifier
-                    original_data[7]
-                    if len(original_data) > 7
-                    else None,  # PostCodeIdentifier
+                    original_data[5] if len(original_data) > 5 else None,  # StreetBuildingIdentifier
+                    original_data[6] if len(original_data) > 6 else None,  # FloorIdentifier
+                    original_data[7] if len(original_data) > 7 else None,  # PostCodeIdentifier
                     original_data[8] if len(original_data) > 8 else None,  # City
                     acreage_size,  # AcreageSize
-                    original_data[10]
-                    if len(original_data) > 10
-                    else None,  # AcreageUnit
+                    original_data[10] if len(original_data) > 10 else None,  # AcreageUnit
                     crop_name,  # Name
                     crop_str,  # Code
-                    original_data[13]
-                    if len(original_data) > 13
-                    else None,  # PesticideName
-                    original_data[14]
-                    if len(original_data) > 14
-                    else None,  # PesticideRegistrationNumber
-                    original_data[15]
-                    if len(original_data) > 15
-                    else None,  # DosageQuantity
-                    original_data[16]
-                    if len(original_data) > 16
-                    else None,  # DosageUnit
-                    original_data[17]
-                    if len(original_data) > 17
-                    else None,  # NoPesticides
+                    original_data[13] if len(original_data) > 13 else None,  # PesticideName
+                    original_data[14] if len(original_data) > 14 else None,  # PesticideRegistrationNumber
+                    original_data[15] if len(original_data) > 15 else None,  # DosageQuantity
+                    original_data[16] if len(original_data) > 16 else None,  # DosageUnit
+                    original_data[17] if len(original_data) > 17 else None,  # NoPesticides
                     f"marker_{field_identifier}",  # MatchedFieldID
                     "marker",  # MatchedDataset
-                    float(
-                        acreage_size
-                    ),  # AllocatedArea (use pesticide area, not field area)
+                    float(acreage_size),  # AllocatedArea (use pesticide area, not field area)
                     "Partial_Field_Coverage_SingleField",  # AllocationMethod
                     0.8,  # MatchConfidence
                 ],
@@ -1027,18 +938,18 @@ class PesticideDisaggregator:
         query = f"""
         WITH MarkerFieldsWithGeometry AS (
             SELECT 
-                CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) as CVR_Str,
-                CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) as Crop_Str,
-                m.id as FieldID,
-                m.IMK_areal as FieldArea,
-                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier,
+                CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
+                m.field_id as FieldID,
+                m.area_ha as FieldArea,
+                m.field_id as FieldIdentifier,
                 m.geometry as FieldGeometry
             FROM marker m
-            WHERE m.CVR IS NOT NULL 
-              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-              AND m.Afgkode IS NOT NULL 
-              AND m.IMK_areal > 0
+            WHERE m.cvr_number IS NOT NULL 
+              AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+              AND m.crop_code IS NOT NULL 
+              AND m.area_ha > 0
               AND m.geometry IS NOT NULL
         ),
         CVRCropFieldCounts AS (
@@ -1138,14 +1049,10 @@ class PesticideDisaggregator:
         candidates = self.db.execute_query(query)
 
         if not candidates:
-            logger.info(
-                "Adjacent Fields Single Cluster: No single-cluster candidates found."
-            )
+            logger.info("Adjacent Fields Single Cluster: No single-cluster candidates found.")
             return processed_ids
 
-        logger.info(
-            f"Adjacent Fields Single Cluster: Found {len(candidates)} single-cluster candidates to process."
-        )
+        logger.info(f"Adjacent Fields Single Cluster: Found {len(candidates)} single-cluster candidates to process.")
 
         # Process each candidate by allocating proportionally to all fields in the cluster
         for (
@@ -1162,18 +1069,18 @@ class PesticideDisaggregator:
             # Get all fields in this cluster
             fields_query = """
             SELECT 
-                m.id as FieldID,
-                m.IMK_areal as FieldArea,
-                CAST(m.Markblok AS VARCHAR) || '_' || CAST(m.Marknr AS VARCHAR) as FieldIdentifier
+                m.field_id as FieldID,
+                m.area_ha as FieldArea,
+                m.field_id as FieldIdentifier
             FROM marker m
-            WHERE CAST(CAST(m.CVR AS BIGINT) AS VARCHAR) = ?
-              AND CAST(CAST(m.Afgkode AS BIGINT) AS VARCHAR) = ?
-              AND m.CVR IS NOT NULL 
-              AND TRIM(CAST(m.CVR AS VARCHAR)) != '' 
-              AND REGEXP_MATCHES(TRIM(CAST(m.CVR AS VARCHAR)), '^[0-9]+$')
-              AND m.Afgkode IS NOT NULL 
-              AND m.IMK_areal > 0
-            ORDER BY m.IMK_areal DESC
+            WHERE CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = ?
+              AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = ?
+              AND m.cvr_number IS NOT NULL 
+              AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+              AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+              AND m.crop_code IS NOT NULL 
+              AND m.area_ha > 0
+            ORDER BY m.area_ha DESC
             """
 
             fields = self.db.execute_query(fields_query, [cvr_str, crop_str])
@@ -1212,40 +1119,20 @@ class PesticideDisaggregator:
                         original_id,  # OriginalPesticideRowID
                         company_name,  # CompanyName
                         cvr_str,  # CompanyRegistrationNumber
-                        original_data[4]
-                        if len(original_data) > 4
-                        else None,  # StreetName
-                        original_data[5]
-                        if len(original_data) > 5
-                        else None,  # StreetBuildingIdentifier
-                        original_data[6]
-                        if len(original_data) > 6
-                        else None,  # FloorIdentifier
-                        original_data[7]
-                        if len(original_data) > 7
-                        else None,  # PostCodeIdentifier
+                        original_data[4] if len(original_data) > 4 else None,  # StreetName
+                        original_data[5] if len(original_data) > 5 else None,  # StreetBuildingIdentifier
+                        original_data[6] if len(original_data) > 6 else None,  # FloorIdentifier
+                        original_data[7] if len(original_data) > 7 else None,  # PostCodeIdentifier
                         original_data[8] if len(original_data) > 8 else None,  # City
                         allocated_area,  # AcreageSize (proportional allocation)
-                        original_data[10]
-                        if len(original_data) > 10
-                        else None,  # AcreageUnit
+                        original_data[10] if len(original_data) > 10 else None,  # AcreageUnit
                         crop_name,  # Name
                         crop_str,  # Code
-                        original_data[13]
-                        if len(original_data) > 13
-                        else None,  # PesticideName
-                        original_data[14]
-                        if len(original_data) > 14
-                        else None,  # PesticideRegistrationNumber
-                        original_data[15]
-                        if len(original_data) > 15
-                        else None,  # DosageQuantity
-                        original_data[16]
-                        if len(original_data) > 16
-                        else None,  # DosageUnit
-                        original_data[17]
-                        if len(original_data) > 17
-                        else None,  # NoPesticides
+                        original_data[13] if len(original_data) > 13 else None,  # PesticideName
+                        original_data[14] if len(original_data) > 14 else None,  # PesticideRegistrationNumber
+                        original_data[15] if len(original_data) > 15 else None,  # DosageQuantity
+                        original_data[16] if len(original_data) > 16 else None,  # DosageUnit
+                        original_data[17] if len(original_data) > 17 else None,  # NoPesticides
                         f"marker_{field_identifier}",  # MatchedFieldID
                         "marker",  # MatchedDataset
                         allocated_area,  # AllocatedArea

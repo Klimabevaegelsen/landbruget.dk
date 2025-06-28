@@ -48,7 +48,11 @@ class InspireBBRFetcher:
         )
 
     def fetch_data(
-        self, output_dir: Path, sample_size: int | None = None, return_data: bool = False
+        self,
+        output_dir: Path,
+        sample_size: int | None = None,
+        return_data: bool = False,
+        pipeline_start_time: datetime = None,
     ):
         """
         Fetch INSPIRE BBR data and enrich with GraphQL API.
@@ -65,7 +69,9 @@ class InspireBBRFetcher:
             sample_size: Optional sample size for testing
             return_data: Whether to return data for silver layer processing
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if pipeline_start_time is None:
+            pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +108,7 @@ class InspireBBRFetcher:
                     self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB)")
 
             # Save metadata
-            self._save_metadata(run_dir, file_info, download_url, sample_size)
+            self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
 
             self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
 
@@ -523,7 +529,12 @@ class InspireBBRFetcher:
         return all_results
 
     def _save_metadata(
-        self, output_dir: Path, file_info: dict, download_url: str, sample_size: int | None
+        self,
+        output_dir: Path,
+        file_info: dict,
+        download_url: str,
+        sample_size: int | None,
+        pipeline_start_time: datetime,
     ) -> None:
         """
         Save metadata about the fetched data.
@@ -535,7 +546,7 @@ class InspireBBRFetcher:
             sample_size: Sample size if used for testing
         """
         metadata = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": pipeline_start_time.isoformat(),
             "source_url": self.settings.sdfe_ftp_base_url,
             "download_url": download_url,
             "file_info": file_info,

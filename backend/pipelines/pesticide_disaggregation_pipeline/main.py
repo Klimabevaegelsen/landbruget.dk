@@ -1,3 +1,4 @@
+import argparse
 import logging
 
 # import sys # Removed as it's no longer used
@@ -9,11 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 # if str(PROJECT_ROOT) not in sys.path:
 #     sys.path.append(str(PROJECT_ROOT))
 
-from .analysis.cvr_matching_and_quality import CVRMatcher, FieldDatasetAnalyzer
-from .analysis.disaggregation import PesticideDisaggregator
-from .config import Config
-from .database import DatabaseManager
-from .loader import DatasetLoader
+from analysis.cvr_matching_and_quality import CVRMatcher, FieldDatasetAnalyzer
+from analysis.disaggregation import PesticideDisaggregator
+from config import Config
+from database import DatabaseManager
+from loader import DatasetLoader
 
 # Configure logging
 logging.basicConfig(
@@ -28,57 +29,51 @@ logger = logging.getLogger(__name__)
 
 
 def setup_and_load_data(
-    config: Config, db_manager: DatabaseManager, dataset_loader: DatasetLoader
+    config: Config, db_manager: DatabaseManager, dataset_loader: DatasetLoader, pesticide_year: int = None
 ) -> int:
     """Loads datasets and initializes the pending pesticide rows table."""
-    logger.info("Step 1: Loading datasets and setting up initial tables...")
-    dataset_loader.load_datasets()
-    disaggregator = PesticideDisaggregator(
-        db_manager, config
-    )  # Needed for create_disaggregated_table
+    logger.info(f"Step 1: Loading datasets for pesticide year {pesticide_year or config.PESTICIDE_YEAR}...")
+    dataset_loader.load_datasets(pesticide_year)
+
+    disaggregator = PesticideDisaggregator(db_manager, config)  # Needed for create_disaggregated_table
     disaggregator.create_disaggregated_table()
 
-    db_manager.execute_query(
-        "CREATE OR REPLACE TABLE pending_pesticide_rows AS SELECT * FROM pesticide"
+    # Filter out nopesticides=1 rows since they represent areas with no pesticide applications
+    db_manager.execute_query("""
+        CREATE OR REPLACE TABLE pending_pesticide_rows AS 
+        SELECT * FROM pesticide 
+        WHERE nopesticides IS NULL OR nopesticides != 1
+    """)
+    initial_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
+
+    # Log filtering statistics
+    total_pesticide_count = db_manager.execute_query("SELECT COUNT(*) FROM pesticide")[0][0]
+    nopesticides_count = total_pesticide_count - initial_pending_count
+    logger.info(f"Total pesticide records: {total_pesticide_count}")
+    logger.info(
+        f"Excluded nopesticides=1 records: {nopesticides_count} ({nopesticides_count / total_pesticide_count * 100:.2f}%)"
     )
-    initial_pending_count = db_manager.execute_query(
-        "SELECT COUNT(*) FROM pending_pesticide_rows"
-    )[0][0]
-    logger.info(f"Initial pending pesticide rows: {initial_pending_count}")
+    logger.info(f"Initial pending pesticide rows (for disaggregation): {initial_pending_count}")
 
     # Save debug totals early, after pending_pesticide_rows is created
-    disaggregator.save_cvr_crop_totals_for_debugging(
-        pending_rows_table="pending_pesticide_rows"
-    )
+    disaggregator.save_cvr_crop_totals_for_debugging(pending_rows_table="pending_pesticide_rows")
     logger.info("Initial CVR-Crop totals saved for debugging.")
     return initial_pending_count
 
 
-def perform_initial_analysis(
-    cvr_matcher: CVRMatcher, field_analyzer: FieldDatasetAnalyzer
-):
+def perform_initial_analysis(cvr_matcher: CVRMatcher, field_analyzer: FieldDatasetAnalyzer):
     """Runs initial CVR matching and field dataset quality analysis."""
     logger.info("Step 2: Performing initial CVR matching and quality analysis...")
     matching_report = cvr_matcher.generate_matching_report()
     logger.info("CVR Matching Report Summary:")
-    logger.info(
-        f"  Total unmatched pesticide CVRs: {matching_report['unmatched_pesticide']['total_unmatched']}"
-    )
-    logger.info(
-        f"  Total non-numeric GKEA CVRs: {matching_report['gkea_non_numeric']['total_non_numeric']}"
-    )
-    logger.info(
-        f"  Total empty marker CVRs: {matching_report['empty_marker_cvrs']['total_empty']}"
-    )
+    logger.info(f"  Total unmatched pesticide CVRs: {matching_report['unmatched_pesticide']['total_unmatched']}")
+    logger.info(f"  Total non-numeric GKEA CVRs: {matching_report['gkea_non_numeric']['total_non_numeric']}")
+    logger.info(f"  Total empty marker CVRs: {matching_report['empty_marker_cvrs']['total_empty']}")
 
     field_comparison = field_analyzer.compare_marker_jordbrugsanalyser()
     logger.info("Field Dataset Comparison Summary:")
-    logger.info(
-        f"  Field identification match rate: {field_comparison['match_rate']:.2f}%"
-    )
-    logger.info(
-        f"  Average area difference: {field_comparison['avg_area_diff_pct']:.2f}%"
-    )
+    logger.info(f"  Field identification match rate: {field_comparison['match_rate']:.2f}%")
+    logger.info(f"  Average area difference: {field_comparison['avg_area_diff_pct']:.2f}%")
     logger.info(f"  Records with differences: {field_comparison['records_with_diff']}")
 
 
@@ -93,9 +88,7 @@ def run_disaggregation_strategies(
 
     # Strategy 1: Marker CVR-Area Match
     logger.info("Running Marker CVR-Area Match strategy...")
-    marker_processed_ids = disaggregator.disaggregate_by_marker_match(
-        pending_rows_table="pending_pesticide_rows"
-    )
+    marker_processed_ids = disaggregator.disaggregate_by_marker_match(pending_rows_table="pending_pesticide_rows")
     if marker_processed_ids:
         ids_tuple = tuple(marker_processed_ids)
         if ids_tuple:
@@ -107,9 +100,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After Marker Match, {len(marker_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -118,9 +109,7 @@ def run_disaggregation_strategies(
 
     # Strategy 2: GKEA CVR-Area Match
     logger.info("Running GKEA CVR-Area Match strategy...")
-    gkea_processed_ids = disaggregator.analyze_potential_gkea_matches(
-        pending_rows_table="pending_pesticide_rows"
-    )
+    gkea_processed_ids = disaggregator.analyze_potential_gkea_matches(pending_rows_table="pending_pesticide_rows")
     if gkea_processed_ids:
         ids_tuple = tuple(gkea_processed_ids)
         if ids_tuple:
@@ -132,9 +121,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After GKEA Match, {len(gkea_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -146,10 +133,8 @@ def run_disaggregation_strategies(
     # Ensure the disaggregator instance has the spatial extension loaded if _get_organic_marker_field_ids is called for the first time here.
     # This depends on how DatabaseManager handles connections and if it pre-loads spatial.
     # The disaggregator._get_organic_marker_field_ids method itself does not load spatial; it assumes the db connection can handle it.
-    marker_non_organic_processed_ids = (
-        disaggregator.disaggregate_by_marker_non_organic_match(
-            pending_rows_table="pending_pesticide_rows"
-        )
+    marker_non_organic_processed_ids = disaggregator.disaggregate_by_marker_non_organic_match(
+        pending_rows_table="pending_pesticide_rows"
     )
     if marker_non_organic_processed_ids:
         ids_tuple = tuple(marker_non_organic_processed_ids)
@@ -162,9 +147,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After Marker Non-Organic Match, {len(marker_non_organic_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -173,9 +156,7 @@ def run_disaggregation_strategies(
 
     # Strategy 4: Subset Sum Match (Marker then GKEA)
     logger.info("Running Subset Sum (Marker then GKEA) Match strategy...")
-    subset_sum_processed_ids = disaggregator.disaggregate_by_subset_sum(
-        pending_rows_table="pending_pesticide_rows"
-    )
+    subset_sum_processed_ids = disaggregator.disaggregate_by_subset_sum(pending_rows_table="pending_pesticide_rows")
     if subset_sum_processed_ids:
         ids_tuple = tuple(subset_sum_processed_ids)
         if ids_tuple:
@@ -187,9 +168,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After Subset Sum Match, {len(subset_sum_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -198,10 +177,8 @@ def run_disaggregation_strategies(
 
     # Strategy 5: Partial Field Coverage (Single Field)
     logger.info("Running Partial Field Coverage (Single Field) strategy...")
-    partial_coverage_processed_ids = (
-        disaggregator.disaggregate_by_partial_field_coverage(
-            pending_rows_table="pending_pesticide_rows"
-        )
+    partial_coverage_processed_ids = disaggregator.disaggregate_by_partial_field_coverage(
+        pending_rows_table="pending_pesticide_rows"
     )
     if partial_coverage_processed_ids:
         ids_tuple = tuple(partial_coverage_processed_ids)
@@ -214,9 +191,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After Partial Field Coverage, {len(partial_coverage_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -225,10 +200,8 @@ def run_disaggregation_strategies(
 
     # Strategy 6: Adjacent Fields Single Cluster
     logger.info("Running Adjacent Fields Single Cluster strategy...")
-    adjacent_cluster_processed_ids = (
-        disaggregator.disaggregate_by_adjacent_fields_single_cluster(
-            pending_rows_table="pending_pesticide_rows"
-        )
+    adjacent_cluster_processed_ids = disaggregator.disaggregate_by_adjacent_fields_single_cluster(
+        pending_rows_table="pending_pesticide_rows"
     )
     if adjacent_cluster_processed_ids:
         ids_tuple = tuple(adjacent_cluster_processed_ids)
@@ -241,9 +214,7 @@ def run_disaggregation_strategies(
                 db_manager.execute_query(
                     f"DELETE FROM pending_pesticide_rows WHERE OriginalPesticideRowID IN {ids_tuple}"
                 )
-        current_pending_count = db_manager.execute_query(
-            "SELECT COUNT(*) FROM pending_pesticide_rows"
-        )[0][0]
+        current_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
         logger.info(
             f"After Adjacent Fields Single Cluster, {len(adjacent_cluster_processed_ids)} distinct pesticide rows processed. Pending: {current_pending_count}"
         )
@@ -256,32 +227,30 @@ def run_disaggregation_strategies(
 def finalize_and_save_results(db_manager: DatabaseManager, config: Config):
     """Calculates final counts and saves results to Parquet files."""
     logger.info("Step 4: Finalizing and saving results...")
-    final_disaggregated_count = db_manager.execute_query(
-        "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
-    )[0][0]
-    final_pending_count = db_manager.execute_query(
-        "SELECT COUNT(*) FROM pending_pesticide_rows"
-    )[0][0]
+    final_disaggregated_count = db_manager.execute_query("SELECT COUNT(*) FROM disaggregated_pesticide_applications")[
+        0
+    ][0]
+    final_pending_count = db_manager.execute_query("SELECT COUNT(*) FROM pending_pesticide_rows")[0][0]
 
     logger.info(
         f"Disaggregation complete. Total rows in 'disaggregated_pesticide_applications': {final_disaggregated_count}"
     )
     logger.info(f"Final remaining pending pesticide rows: {final_pending_count}")
 
-    # Calculate and log total and unallocated acreage
+    # Calculate and log total and unallocated acreage (excluding nopesticides=1 records)
     # Ensure 'AcreageSize' is the correct column name and it's numeric.
     # Using TRY_CAST to be safe with potential non-numeric or NULL values.
-    total_original_acreage_query = (
-        'SELECT COALESCE(SUM(TRY_CAST("AcreageSize" AS DOUBLE)), 0) FROM pesticide'
-    )
-    total_original_acreage = db_manager.execute_query(total_original_acreage_query)[0][
-        0
-    ]
+    total_original_acreage_query = """
+        SELECT COALESCE(SUM(TRY_CAST("AcreageSize" AS DOUBLE)), 0) 
+        FROM pesticide 
+        WHERE nopesticides IS NULL OR nopesticides != 1
+    """
+    total_original_acreage = db_manager.execute_query(total_original_acreage_query)[0][0]
     logger.info(
-        f"Total original AcreageSize from 'pesticide' table (direct sum): {total_original_acreage:.2f}"
+        f"Total original AcreageSize (excluding nopesticides=1) from 'pesticide' table (direct sum): {total_original_acreage:.2f}"
     )
 
-    # Calculate total original acreage based on MAX(AcreageSize) per CVR/Crop combination
+    # Calculate total original acreage based on MAX(AcreageSize) per CVR/Crop combination (excluding nopesticides=1)
     total_original_acreage_max_per_cvr_crop_query = """
     WITH MaxAreaPerCVRCrop AS (
         SELECT
@@ -290,24 +259,23 @@ def finalize_and_save_results(db_manager: DatabaseManager, config: Config):
             MAX(TRY_CAST(\"AcreageSize\" AS DOUBLE)) AS MaxAcreageSize
         FROM pesticide
         WHERE \"CompanyRegistrationNumber\" IS NOT NULL AND \"Code\" IS NOT NULL
+            AND (nopesticides IS NULL OR nopesticides != 1)
         GROUP BY CAST(CAST(\"CompanyRegistrationNumber\" AS BIGINT) AS VARCHAR), CAST(CAST(\"Code\" AS BIGINT) AS VARCHAR)
     )
     SELECT COALESCE(SUM(MaxAcreageSize), 0) FROM MaxAreaPerCVRCrop;
     """
-    total_original_acreage_max_per_cvr_crop = db_manager.execute_query(
-        total_original_acreage_max_per_cvr_crop_query
-    )[0][0]
+    total_original_acreage_max_per_cvr_crop = db_manager.execute_query(total_original_acreage_max_per_cvr_crop_query)[
+        0
+    ][0]
     logger.info(
-        f"Total original AcreageSize from 'pesticide' table (SUM of MAX(AcreageSize) per CVR/Crop): {total_original_acreage_max_per_cvr_crop:.2f}"
+        f"Total original AcreageSize (excluding nopesticides=1) from 'pesticide' table (SUM of MAX(AcreageSize) per CVR/Crop): {total_original_acreage_max_per_cvr_crop:.2f}"
     )
 
-    total_unallocated_acreage_query = 'SELECT COALESCE(SUM(TRY_CAST("AcreageSize" AS DOUBLE)), 0) FROM pending_pesticide_rows'
-    total_unallocated_acreage = db_manager.execute_query(
-        total_unallocated_acreage_query
-    )[0][0]
-    logger.info(
-        f"Total unallocated AcreageSize from 'pending_pesticide_rows': {total_unallocated_acreage:.2f}"
+    total_unallocated_acreage_query = (
+        'SELECT COALESCE(SUM(TRY_CAST("AcreageSize" AS DOUBLE)), 0) FROM pending_pesticide_rows'
     )
+    total_unallocated_acreage = db_manager.execute_query(total_unallocated_acreage_query)[0][0]
+    logger.info(f"Total unallocated AcreageSize from 'pending_pesticide_rows': {total_unallocated_acreage:.2f}")
 
     # Calculate unallocated acreage based on MAX(AcreageSize) per CVR/Crop from pending_pesticide_rows
     unallocated_acreage_max_per_cvr_crop_pending_query = """
@@ -332,12 +300,10 @@ def finalize_and_save_results(db_manager: DatabaseManager, config: Config):
     # Calculate disaggregated area and percentage based on the "SUM of MAX" figures for total and unallocated
     if total_original_acreage_max_per_cvr_crop > 0:
         disaggregated_acreage_sum_max_basis = (
-            total_original_acreage_max_per_cvr_crop
-            - unallocated_acreage_max_per_cvr_crop_pending
+            total_original_acreage_max_per_cvr_crop - unallocated_acreage_max_per_cvr_crop_pending
         )
         percentage_area_disaggregated_sum_max_basis = (
-            disaggregated_acreage_sum_max_basis
-            / total_original_acreage_max_per_cvr_crop
+            disaggregated_acreage_sum_max_basis / total_original_acreage_max_per_cvr_crop
         ) * 100
         logger.info(
             f"Total disaggregated AcreageSize (based on SUM of MAX per CVR/Crop for original and pending): {disaggregated_acreage_sum_max_basis:.2f}"
@@ -353,31 +319,21 @@ def finalize_and_save_results(db_manager: DatabaseManager, config: Config):
     # Existing calculations based on direct sum (for comparison or if still needed)
     if total_original_acreage > 0:
         disaggregated_acreage = total_original_acreage - total_unallocated_acreage
-        percentage_area_disaggregated = (
-            disaggregated_acreage / total_original_acreage
-        ) * 100
+        percentage_area_disaggregated = (disaggregated_acreage / total_original_acreage) * 100
         logger.info(f"Total disaggregated AcreageSize: {disaggregated_acreage:.2f}")
-        logger.info(
-            f"Percentage of total area disaggregated: {percentage_area_disaggregated:.2f}%"
-        )
+        logger.info(f"Percentage of total area disaggregated: {percentage_area_disaggregated:.2f}%")
     else:
-        logger.info(
-            "Total original acreage is zero, cannot calculate area disaggregation percentage."
-        )
+        logger.info("Total original acreage is zero, cannot calculate area disaggregation percentage.")
 
     # Use RESOLVED_OUTPUT_DIR from config
     output_dir = config.RESOLVED_OUTPUT_DIR
-    disaggregated_output_path = (
-        output_dir / "disaggregated_pesticide_applications.parquet"
-    )
+    disaggregated_output_path = output_dir / "disaggregated_pesticide_applications.parquet"
     pending_output_path = output_dir / "unallocated_pesticide_rows.parquet"
 
     db_manager.execute_query(
         f"COPY (SELECT * FROM disaggregated_pesticide_applications) TO '{str(disaggregated_output_path)}' (FORMAT PARQUET)"
     )
-    logger.info(
-        f"Saved disaggregated pesticide applications to {disaggregated_output_path}"
-    )
+    logger.info(f"Saved disaggregated pesticide applications to {disaggregated_output_path}")
 
     db_manager.execute_query(
         f"COPY (SELECT * FROM pending_pesticide_rows) TO '{str(pending_output_path)}' (FORMAT PARQUET)"
@@ -395,9 +351,7 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
 
     # Total pending rows and area for context
     total_pending_query = 'SELECT COUNT(DISTINCT "OriginalPesticideRowID"), COALESCE(SUM(TRY_CAST("AcreageSize" AS DOUBLE)), 0) FROM pending_pesticide_rows'
-    total_pending_count, total_pending_direct_sum_area = db_manager.execute_query(
-        total_pending_query
-    )[0]
+    total_pending_count, total_pending_direct_sum_area = db_manager.execute_query(total_pending_query)[0]
 
     sum_max_total_pending_query = """
     WITH MaxAcreagePerCVRCropInPending_Overall AS (
@@ -409,9 +363,7 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
     )
     SELECT COALESCE(SUM(MaxAcreage), 0) FROM MaxAcreagePerCVRCropInPending_Overall;
     """
-    total_pending_sum_max_area = db_manager.execute_query(sum_max_total_pending_query)[
-        0
-    ][0]
+    total_pending_sum_max_area = db_manager.execute_query(sum_max_total_pending_query)[0][0]
     logger.info(
         f"Total pending rows for analysis: {total_pending_count}, Total Direct Sum Area: {total_pending_direct_sum_area:.2f}, Total Sum(Max) Area: {total_pending_sum_max_area:.2f}"
     )
@@ -428,9 +380,7 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         GROUP BY 1, 2
     """
     # Full CTE definition for cases where it's the only CTE
-    max_acreage_cte_definition_standalone = (
-        f"WITH MaxAcreagePerCVRCropInPending AS ({max_acreage_select_sql})\n"
-    )
+    max_acreage_cte_definition_standalone = f"WITH MaxAcreagePerCVRCropInPending AS ({max_acreage_select_sql})\n"
 
     # 1. Unmatched CVRs (CVR in pending_pesticide_rows not in marker OR gkea)
     unmatched_cvr_query = """
@@ -442,8 +392,8 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         ppr."CompanyRegistrationNumber" IS NOT NULL
         AND NOT EXISTS (
             SELECT 1 FROM marker m
-            WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-              AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m."CVR" AS VARCHAR)
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m.cvr_number AS VARCHAR)
         )
         AND NOT EXISTS (
             SELECT 1 FROM gkea g
@@ -461,13 +411,13 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
     WHERE
         NOT EXISTS (
             SELECT 1 FROM marker m
-            WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-              AND mapc.CVR_Str = CAST(m."CVR" AS VARCHAR)
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND mapc.CVR_Str = CAST(m.cvr_number AS VARCHAR)
         )
         AND NOT EXISTS (
             SELECT 1 FROM gkea g
-            WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-              AND mapc.CVR_Str = CAST(g."CVR" AS VARCHAR)
+            WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+              AND mapc.CVR_Str = CAST(g.unnamed__2 AS VARCHAR)
         );
     """
     )
@@ -496,16 +446,12 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
             )
         ORDER BY ppr."CompanyRegistrationNumber", ppr."OriginalPesticideRowID"
         """
-        unmatched_cvr_output_path = (
-            config.RESOLVED_OUTPUT_DIR / "debug_unmatched_cvr_details.csv"
-        )
+        unmatched_cvr_output_path = config.RESOLVED_OUTPUT_DIR / "debug_unmatched_cvr_details.csv"
         try:
             db_manager.execute_query(
                 f"COPY ({details_unmatched_cvr_query}) TO '{str(unmatched_cvr_output_path)}' (HEADER, DELIMITER ',');"
             )
-            logger.info(
-                f"    Details for unmatched CVRs saved to: {unmatched_cvr_output_path}"
-            )
+            logger.info(f"    Details for unmatched CVRs saved to: {unmatched_cvr_output_path}")
         except Exception as e:
             logger.error(f"    Could not save details for unmatched CVRs to CSV: {e}")
 
@@ -517,12 +463,12 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         WHERE ppr."CompanyRegistrationNumber" IS NOT NULL AND (
             EXISTS (
                 SELECT 1 FROM marker m
-                WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m."CVR" AS VARCHAR)
+                WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m.cvr_number AS VARCHAR)
             ) OR EXISTS (
                 SELECT 1 FROM gkea g
-                WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g."CVR" AS VARCHAR)
+                WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g.unnamed__2 AS VARCHAR)
             )
         )
     )
@@ -534,17 +480,17 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         mcpr."Code" IS NOT NULL -- Ensure pesticide crop code is valid (is DOUBLE)
         AND NOT EXISTS ( -- Not in marker with CVR/Crop
             SELECT 1 FROM marker m
-            WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-              AND m."Afgkode" IS NOT NULL -- Marker Afgkode is DOUBLE
-              AND CAST(CAST(mcpr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m."CVR" AS VARCHAR)
-              AND CAST(CAST(mcpr."Code" AS BIGINT) AS VARCHAR) = CAST(CAST(m."Afgkode" AS BIGINT) AS VARCHAR)
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND m.crop_code IS NOT NULL -- Marker crop_code is DOUBLE
+              AND CAST(CAST(mcpr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m.cvr_number AS VARCHAR)
+              AND CAST(CAST(mcpr."Code" AS BIGINT) AS VARCHAR) = CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR)
         )
         AND NOT EXISTS ( -- Not in GKEA with CVR/Crop
             SELECT 1 FROM gkea g
-            WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-              AND g."Hovedafgrøde" IS NOT NULL -- GKEA Hovedafgrøde is DOUBLE
-              AND CAST(CAST(mcpr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g."CVR" AS VARCHAR)
-              AND CAST(CAST(mcpr."Code" AS BIGINT) AS VARCHAR) = CAST(CAST(g."Hovedafgrøde" AS BIGINT) AS VARCHAR)
+            WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+              AND g.unnamed__13 IS NOT NULL -- GKEA Hovedafgrøde is DOUBLE
+              AND CAST(CAST(mcpr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g.unnamed__2 AS VARCHAR)
+              AND CAST(CAST(mcpr."Code" AS BIGINT) AS VARCHAR) = CAST(CAST(g.unnamed__13 AS BIGINT) AS VARCHAR)
         );
     """
     row_count, direct_sum_area = db_manager.execute_query(unmatched_cvr_crop_query)[0]
@@ -558,27 +504,27 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         ( -- CVR is matched in marker or GKEA
             EXISTS (
                 SELECT 1 FROM marker m
-                WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-                  AND mapc.CVR_Str = CAST(m."CVR" AS VARCHAR)
+                WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+                  AND mapc.CVR_Str = CAST(m.cvr_number AS VARCHAR)
             ) OR EXISTS (
                 SELECT 1 FROM gkea g
-                WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-                  AND mapc.CVR_Str = CAST(g."CVR" AS VARCHAR)
+                WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+                  AND mapc.CVR_Str = CAST(g.unnamed__2 AS VARCHAR)
             )
         )
         AND NOT EXISTS ( -- CVR/Crop not in marker
             SELECT 1 FROM marker m
-            WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-              AND m."Afgkode" IS NOT NULL
-              AND mapc.CVR_Str = CAST(m."CVR" AS VARCHAR)
-              AND mapc.Crop_Str = CAST(CAST(m."Afgkode" AS BIGINT) AS VARCHAR)
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND m.crop_code IS NOT NULL
+              AND mapc.CVR_Str = CAST(m.cvr_number AS VARCHAR)
+              AND mapc.Crop_Str = CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR)
         )
         AND NOT EXISTS ( -- CVR/Crop not in GKEA
             SELECT 1 FROM gkea g
-            WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-              AND g."Hovedafgrøde" IS NOT NULL
-              AND mapc.CVR_Str = CAST(g."CVR" AS VARCHAR)
-              AND mapc.Crop_Str = CAST(CAST(g."Hovedafgrøde" AS BIGINT) AS VARCHAR)
+            WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+              AND g.unnamed__13 IS NOT NULL
+              AND mapc.CVR_Str = CAST(g.unnamed__2 AS VARCHAR)
+              AND mapc.Crop_Str = CAST(CAST(g.unnamed__13 AS BIGINT) AS VARCHAR)
         );
     """
     )
@@ -599,42 +545,38 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
             ppr."CompanyRegistrationNumber" IS NOT NULL
             AND NOT EXISTS (
                 SELECT 1 FROM marker m
-                WHERE m."CVR" IS NOT NULL AND CAST(m."CVR" AS VARCHAR) != ''
-                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m."CVR" AS VARCHAR)
+                WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(m.cvr_number AS VARCHAR)
             )
             AND NOT EXISTS (
                 SELECT 1 FROM gkea g
-                WHERE g."CVR" IS NOT NULL AND CAST(g."CVR" AS VARCHAR) != ''
-                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g."CVR" AS VARCHAR)
+                WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+                  AND CAST(CAST(ppr."CompanyRegistrationNumber" AS BIGINT) AS VARCHAR) = CAST(g.unnamed__2 AS VARCHAR)
             )
         ORDER BY ppr."CompanyRegistrationNumber", ppr."OriginalPesticideRowID"
         """
-        details_output_path = (
-            config.RESOLVED_OUTPUT_DIR / "debug_unmatched_cvr_crop_details.csv"
-        )
+        details_output_path = config.RESOLVED_OUTPUT_DIR / "debug_unmatched_cvr_crop_details.csv"
         try:
             db_manager.execute_query(
                 f"COPY ({details_unmatched_cvr_crop_query}) TO '{str(details_output_path)}' (HEADER, DELIMITER ',');"
             )
             logger.info(f"    Details saved to: {details_output_path}")
         except Exception as e:
-            logger.error(
-                f"    Could not save details for unmatched CVR/Crop to CSV: {e}"
-            )
+            logger.error(f"    Could not save details for unmatched CVR/Crop to CSV: {e}")
 
     # 3. AcreageSize > Total Marker Area (for matched CVR/Crop in Marker)
     # Corrected direct sum query with explicit CTE naming
     acreage_gt_marker_direct_sum_query = """
     WITH MarkerCVRCropTotals_ForDirectSum AS (
         SELECT
-            CAST(m.\"CVR\" AS VARCHAR) AS \"CVR_VARCHAR\", 
-            CAST(CAST(m.\"Afgkode\" AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
-            SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) AS \"TotalMarkerArea\"
+            CAST(m.cvr_number AS VARCHAR) AS \"CVR_VARCHAR\", 
+            CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
+            SUM(TRY_CAST(m.area_ha AS DOUBLE)) AS \"TotalMarkerArea\"
         FROM marker m
-        WHERE m.\"CVR\" IS NOT NULL AND CAST(m.\"CVR\" AS VARCHAR) != ''
-          AND m.\"Afgkode\" IS NOT NULL
+        WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+          AND m.crop_code IS NOT NULL
         GROUP BY 1, 2
-        HAVING SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) > 0
+        HAVING SUM(TRY_CAST(m.area_ha AS DOUBLE)) > 0
     )
     SELECT
         COUNT(DISTINCT ppr.\"OriginalPesticideRowID\") AS AcreageTooLargeMarker_RowCount,
@@ -646,23 +588,21 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
     WHERE ppr.\"CompanyRegistrationNumber\" IS NOT NULL AND ppr.\"Code\" IS NOT NULL
       AND TRY_CAST(ppr.\"AcreageSize\" AS DOUBLE) > m_totals.\"TotalMarkerArea\";
     """
-    row_count, direct_sum_area = db_manager.execute_query(
-        acreage_gt_marker_direct_sum_query
-    )[0]
+    row_count, direct_sum_area = db_manager.execute_query(acreage_gt_marker_direct_sum_query)[0]
 
     acreage_gt_marker_sum_max_query = f"""
     WITH 
         MaxAcreagePerCVRCropInPending AS ({max_acreage_select_sql}),
         MarkerCVRCropTotals_ForSumMax AS (
             SELECT
-                CAST(m.\"CVR\" AS VARCHAR) AS \"CVR_VARCHAR\",
-                CAST(CAST(m.\"Afgkode\" AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
-                SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) AS \"TotalMarkerArea\"
+                CAST(m.cvr_number AS VARCHAR) AS \"CVR_VARCHAR\",
+                CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
+                SUM(TRY_CAST(m.area_ha AS DOUBLE)) AS \"TotalMarkerArea\"
             FROM marker m
-            WHERE m.\"CVR\" IS NOT NULL AND CAST(m.\"CVR\" AS VARCHAR) != ''
-              AND m.\"Afgkode\" IS NOT NULL
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND m.crop_code IS NOT NULL
             GROUP BY 1, 2
-            HAVING SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) > 0
+            HAVING SUM(TRY_CAST(m.area_ha AS DOUBLE)) > 0
         )
     SELECT COALESCE(SUM(mapc.MaxAcreage), 0)
     FROM MaxAcreagePerCVRCropInPending mapc
@@ -678,31 +618,29 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
 
     # Save details for rows where AcreageSize > total Marker area
     if row_count > 0:
-        logger.info(
-            f"  Saving details for {row_count} rows where Pesticide.AcreageSize > total Marker area..."
-        )
+        logger.info(f"  Saving details for {row_count} rows where Pesticide.AcreageSize > total Marker area...")
         details_acreage_gt_marker_query = """
         WITH MarkerCVRCropTotals AS (
             SELECT
-                CAST(m.\"CVR\" AS VARCHAR) AS \"CVR_VARCHAR\",
-                CAST(CAST(m.\"Afgkode\" AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
-                SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) AS \"TotalMarkerArea\"
+                CAST(m.cvr_number AS VARCHAR) AS \"CVR_VARCHAR\",
+                CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
+                SUM(TRY_CAST(m.area_ha AS DOUBLE)) AS \"TotalMarkerArea\"
             FROM marker m
-            WHERE m.\"CVR\" IS NOT NULL AND CAST(m.\"CVR\" AS VARCHAR) != ''
-              AND m.\"Afgkode\" IS NOT NULL
+            WHERE m.cvr_number IS NOT NULL AND CAST(m.cvr_number AS VARCHAR) != ''
+              AND m.crop_code IS NOT NULL
             GROUP BY 1, 2
-            HAVING SUM(TRY_CAST(m.\"IMK_areal\" AS DOUBLE)) > 0
+            HAVING SUM(TRY_CAST(m.area_ha AS DOUBLE)) > 0
         ),
         GKEACVRCropTotals AS (
             SELECT
-                CAST(g.\"CVR\" AS VARCHAR) AS \"CVR_VARCHAR\",
-                CAST(CAST(g.\"Hovedafgrøde\" AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
-                SUM(TRY_CAST(g.\"Areal\" AS DOUBLE)) AS \"TotalGKEAArea\"
+                CAST(g.unnamed__2 AS VARCHAR) AS \"CVR_VARCHAR\",
+                CAST(CAST(g.unnamed__13 AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
+                SUM(TRY_CAST(g.unnamed__5 AS DOUBLE)) AS \"TotalGKEAArea\"
             FROM gkea g
-            WHERE g.\"CVR\" IS NOT NULL AND CAST(g.\"CVR\" AS VARCHAR) != ''
-              AND g.\"Hovedafgrøde\" IS NOT NULL
+            WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+              AND g.unnamed__13 IS NOT NULL
             GROUP BY 1, 2
-            HAVING SUM(TRY_CAST(g.\"Areal\" AS DOUBLE)) > 0
+            HAVING SUM(TRY_CAST(g.unnamed__5 AS DOUBLE)) > 0
         )
         SELECT
             ppr.*, -- Selects all columns from pending_pesticide_rows
@@ -732,32 +670,28 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
           AND TRY_CAST(ppr.\"AcreageSize\" AS DOUBLE) > m_totals.\"TotalMarkerArea\" -- The primary filter for this debug file
         ORDER BY \"Difference_PesticideArea_MarkerArea\" DESC
         """
-        details_output_path = (
-            config.RESOLVED_OUTPUT_DIR / "debug_acreage_gt_marker_details.csv"
-        )
+        details_output_path = config.RESOLVED_OUTPUT_DIR / "debug_acreage_gt_marker_details.csv"
         try:
             db_manager.execute_query(
                 f"COPY ({details_acreage_gt_marker_query}) TO '{str(details_output_path)}' (HEADER, DELIMITER ',');"
             )
             logger.info(f"    Details saved to: {details_output_path}")
         except Exception as e:
-            logger.error(
-                f"    Could not save details for AcreageSize > Marker area to CSV: {e}"
-            )
+            logger.error(f"    Could not save details for AcreageSize > Marker area to CSV: {e}")
 
     # 4. AcreageSize > Total GKEA Area (for matched CVR/Crop in GKEA)
     # Corrected direct sum query with explicit CTE naming
     acreage_gt_gkea_direct_sum_query = """
     WITH GKEACVRCropTotals_ForDirectSum AS (
         SELECT
-            CAST(g.\"CVR\" AS VARCHAR) AS \"CVR_VARCHAR\",
-            CAST(CAST(g.\"Hovedafgrøde\" AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
-            SUM(TRY_CAST(g.\"Areal\" AS DOUBLE)) AS \"TotalGKEAArea\"
+            CAST(g.unnamed__2 AS VARCHAR) AS \"CVR_VARCHAR\",
+            CAST(CAST(g.unnamed__13 AS BIGINT) AS VARCHAR) AS \"CropCode_VARCHAR\",
+            SUM(TRY_CAST(g.unnamed__5 AS DOUBLE)) AS \"TotalGKEAArea\"
         FROM gkea g
-        WHERE g.\"CVR\" IS NOT NULL AND CAST(g.\"CVR\" AS VARCHAR) != ''
-          AND g.\"Hovedafgrøde\" IS NOT NULL
+        WHERE g.unnamed__2 IS NOT NULL AND CAST(g.unnamed__2 AS VARCHAR) != ''
+          AND g.unnamed__13 IS NOT NULL
         GROUP BY 1, 2
-        HAVING SUM(TRY_CAST(g.\"Areal\" AS DOUBLE)) > 0
+        HAVING SUM(TRY_CAST(g.unnamed__5 AS DOUBLE)) > 0
     )
     SELECT
         COUNT(DISTINCT ppr.\"OriginalPesticideRowID\") AS AcreageTooLargeGKEA_RowCount,
@@ -769,9 +703,7 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
     WHERE ppr.\"CompanyRegistrationNumber\" IS NOT NULL AND ppr.\"Code\" IS NOT NULL
       AND TRY_CAST(ppr.\"AcreageSize\" AS DOUBLE) > g_totals.\"TotalGKEAArea\";
     """
-    row_count, direct_sum_area = db_manager.execute_query(
-        acreage_gt_gkea_direct_sum_query
-    )[0]
+    row_count, direct_sum_area = db_manager.execute_query(acreage_gt_gkea_direct_sum_query)[0]
 
     acreage_gt_gkea_sum_max_query = f"""
     WITH 
@@ -802,11 +734,16 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
     logger.info("Analysis of pending rows complete.")
 
 
-def main_orchestrator():
+def main_orchestrator(pesticide_year: int = None):
     """Main function to orchestrate the analysis pipeline."""
     try:
-        logger.info("Starting pesticide analysis pipeline orchestration...")
+        logger.info(f"Starting pesticide analysis pipeline orchestration for year {pesticide_year or 'default'}...")
         config = Config()
+
+        # Override pesticide year if provided
+        if pesticide_year:
+            config.PESTICIDE_YEAR = pesticide_year
+            logger.info(f"Using pesticide year: {pesticide_year} (field year: {pesticide_year + 1})")
 
         # Resolve and set the output directory on the config object
         actual_output_dir = PROJECT_ROOT / config.OUTPUT_DIR
@@ -824,24 +761,111 @@ def main_orchestrator():
         disaggregator_for_strategies = PesticideDisaggregator(db_manager, config)
 
         # Run pipeline steps
-        initial_pending_count = setup_and_load_data(config, db_manager, dataset_loader)
+        initial_pending_count = setup_and_load_data(config, db_manager, dataset_loader, pesticide_year)
         perform_initial_analysis(cvr_matcher, field_analyzer)
-        run_disaggregation_strategies(
-            disaggregator_for_strategies, db_manager, initial_pending_count
-        )
+        run_disaggregation_strategies(disaggregator_for_strategies, db_manager, initial_pending_count)
         finalize_and_save_results(db_manager, config)
         analyze_pending_rows(db_manager, config)
+
+        # Generate schema documentation for pesticide analysis results
+        try:
+            logger.info("Generating schema documentation for pesticide disaggregation results")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            backend_path = Path(__file__).parent.parent.parent
+            if str(backend_path) not in sys.path:
+                sys.path.insert(0, str(backend_path))
+
+            from datetime import datetime
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            # Use current time as pipeline start time
+            pipeline_start_time = datetime.now()
+
+            # Get the DuckDB connection from the database manager
+            conn = db_manager.conn
+
+            # Get list of tables that contain results
+            tables_query = "SHOW TABLES"
+            tables_result = db_manager.execute_query(tables_query)
+            all_tables = [row[0] for row in tables_result]
+
+            # Filter for result tables (excluding temporary/input tables)
+            result_tables = []
+            for table in all_tables:
+                if any(keyword in table.lower() for keyword in ["disaggregated", "pesticide", "analysis", "result"]):
+                    if not any(exclude in table.lower() for exclude in ["pending", "temp", "raw"]):
+                        result_tables.append(table)
+
+            if result_tables:
+                # Initialize schema documentation manager
+                schema_manager = SchemaDocumentationManager(
+                    connection=conn,
+                    pipeline_name="pesticide_disaggregation_pipeline",
+                    pipeline_start_time=pipeline_start_time,
+                    logger=logger,
+                )
+
+                # Generate documentation for result tables
+                schema_files = schema_manager.generate_all_documentation(result_tables, stage="gold")
+                logger.info(f"Generated schema documentation for pesticide analysis tables: {result_tables}")
+
+                # Commit to GitHub
+                schema_manager.commit_to_github()
+                logger.info("Pesticide analysis schema documentation committed to GitHub")
+            else:
+                logger.info("No result tables found for schema documentation")
+
+        except Exception as e:
+            logger.error(f"Failed to generate pesticide schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
 
         logger.info("Analysis pipeline completed successfully")
 
     except FileNotFoundError as e:
         logger.error(f"A dataset file was not found: {str(e)}")
-        logger.error(
-            "Please check the DATA_DIR path in config.py and ensure all Parquet files are present."
-        )
+        logger.error("Please check the DATA_DIR path in config.py and ensure all Parquet files are present.")
     except Exception as e:
         logger.error(f"Error in main analysis pipeline: {str(e)}", exc_info=True)
 
 
+def main():
+    """Command-line interface for the pesticide disaggregation pipeline."""
+    parser = argparse.ArgumentParser(
+        description="Pesticide Spatial Disaggregation Pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py --year 2021          # Process 2021 pesticides with 2022 fields
+  python main.py --year 2022          # Process 2022 pesticides with 2023 fields
+  python main.py                      # Use default year from config (2021)
+
+The pipeline implements the Y+1 temporal pattern discovered through analysis:
+pesticide year X uses field boundaries from year X+1 for optimal accuracy.
+
+Data is automatically loaded from GCS silver layer. Ensure GCS_BUCKET environment
+variable is set to access the data.
+        """,
+    )
+
+    parser.add_argument("--year", type=int, help="Pesticide year to process (will use field boundaries from year+1)")
+
+    args = parser.parse_args()
+
+    # Verify GCS configuration
+    import os
+
+    if not os.getenv("GCS_BUCKET"):
+        logger.error("GCS_BUCKET environment variable must be set to access silver data")
+        logger.error("Example: export GCS_BUCKET=landbrugsdata-raw-data")
+        raise EnvironmentError("GCS_BUCKET environment variable not set")
+
+    main_orchestrator(args.year)
+
+
 if __name__ == "__main__":
-    main_orchestrator()
+    main()

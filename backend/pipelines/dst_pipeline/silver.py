@@ -288,7 +288,7 @@ def load_dst_json_into_duckdb(json_data: Dict[str, Any], table_name: str):
             os.unlink(temp_path)
 
 
-def process_hst77_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
+def process_hst77_data(json_data: Dict[str, Any], metadata: Dict[str, Any], pipeline_start_time: datetime = None):
     """Process HST77 harvest results data"""
     logging.info("Processing HST77 harvest results data")
 
@@ -364,7 +364,7 @@ def process_hst77_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
             ),
             year=_.year.cast("int32"),
             table_source=ibis.literal("HST77"),
-            processed_at=ibis.literal(datetime.now().isoformat()),
+            processed_at=ibis.literal((pipeline_start_time or datetime.now()).isoformat()),
             source_system=ibis.literal("Danmarks Statistik API"),
         )
         logging.info(f"Final columns: {df_clean.columns}")
@@ -375,7 +375,7 @@ def process_hst77_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
     return df_clean
 
 
-def process_gartn1_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
+def process_gartn1_data(json_data: Dict[str, Any], metadata: Dict[str, Any], pipeline_start_time: datetime = None):
     """Process GARTN1 fruit and vegetable production data"""
     logging.info("Processing GARTN1 fruit and vegetable production data")
 
@@ -431,14 +431,14 @@ def process_gartn1_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
         ),
         year=_.year.cast("int32"),
         table_source=ibis.literal("GARTN1"),
-        processed_at=ibis.literal(datetime.now().isoformat()),
+        processed_at=ibis.literal((pipeline_start_time or datetime.now()).isoformat()),
         source_system=ibis.literal("Danmarks Statistik API"),
     )
 
     return df_clean
 
 
-def process_fro_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
+def process_fro_data(json_data: Dict[str, Any], metadata: Dict[str, Any], pipeline_start_time: datetime = None):
     """Process FRO seed production data"""
     logging.info("Processing FRO seed production data")
 
@@ -482,14 +482,14 @@ def process_fro_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
         ),
         year=_.year.cast("int32"),
         table_source=ibis.literal("FRO"),
-        processed_at=ibis.literal(datetime.now().isoformat()),
+        processed_at=ibis.literal((pipeline_start_time or datetime.now()).isoformat()),
         source_system=ibis.literal("Danmarks Statistik API"),
     )
 
     return df_clean
 
 
-def process_halm1_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
+def process_halm1_data(json_data: Dict[str, Any], metadata: Dict[str, Any], pipeline_start_time: datetime = None):
     """Process HALM1 straw yield and usage data"""
     logging.info("Processing HALM1 straw yield and usage data")
 
@@ -537,7 +537,7 @@ def process_halm1_data(json_data: Dict[str, Any], metadata: Dict[str, Any]):
         ),
         year=_.year.cast("int32"),
         table_source=ibis.literal("HALM1"),
-        processed_at=ibis.literal(datetime.now().isoformat()),
+        processed_at=ibis.literal((pipeline_start_time or datetime.now()).isoformat()),
         source_system=ibis.literal("Danmarks Statistik API"),
     )
 
@@ -550,6 +550,7 @@ def save_silver_data(
     table_id: str,
     timestamp: str,
     silver_dir: str = "silver/dst",
+    pipeline_start_time: datetime = None,
 ) -> None:
     """Save processed data to silver layer in Parquet format using DuckDB native export"""
 
@@ -626,7 +627,7 @@ def save_silver_data(
     # Save metadata
     metadata = {
         "table_id": table_id,
-        "processed_at": datetime.now().isoformat(),
+        "processed_at": (pipeline_start_time or datetime.now()).isoformat(),
         "columns": columns,
         "record_count": record_count,
         "file_path": f"{timestamp}/{parquet_filename}",
@@ -667,8 +668,9 @@ def main_with_args(args: argparse.Namespace) -> bool:
         "HALM1": process_halm1_data,
     }
 
-    # Create timestamped output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create timestamped output directory using pipeline start time
+    pipeline_start_time = datetime.now()
+    timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
     processed_tables = []
 
@@ -695,7 +697,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
             if table_id in processors:
                 logging.info(f"Calling processor for {table_id}")
                 try:
-                    df_processed = processors[table_id](table_bronze_data, metadata)
+                    df_processed = processors[table_id](table_bronze_data, metadata, pipeline_start_time)
                     logging.info(f"Processor completed for {table_id}")
                 except Exception as e:
                     logging.error(f"Error in processor for {table_id}: {e}")
@@ -703,7 +705,7 @@ def main_with_args(args: argparse.Namespace) -> bool:
 
                 # Save to silver layer
                 try:
-                    save_silver_data(df_processed, storage, table_id, timestamp, args.silver_dir)
+                    save_silver_data(df_processed, storage, table_id, timestamp, args.silver_dir, pipeline_start_time)
                     processed_tables.append(table_id)
                     logging.info(f"Successfully processed {table_id}")
                 except Exception as e:
@@ -746,6 +748,64 @@ def main_with_args(args: argparse.Namespace) -> bool:
     logging.info("Silver layer processing completed successfully")
     logging.info(f"Processed {len(processed_tables)} tables: {', '.join(processed_tables)}")
     logging.info(f"Output saved with timestamp: {timestamp}")
+
+    # Generate schema documentation for processed tables
+    if processed_tables:
+        try:
+            logging.info("Generating schema documentation for DST silver tables...")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            backend_path = Path(__file__).parent.parent.parent
+            if str(backend_path) not in sys.path:
+                sys.path.insert(0, str(backend_path))
+
+            # Use the pipeline start time we already have
+            # Get DuckDB connection (create new one for schema documentation)
+            import ibis
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            con = ibis.duckdb.connect()
+
+            # Load the processed tables back into DuckDB for schema documentation
+            silver_tables = []
+            if isinstance(storage, LocalStorage):
+                silver_base = Path(args.silver_dir)
+                silver_dir_path = silver_base / timestamp
+
+                for table_id in processed_tables:
+                    parquet_file = silver_dir_path / f"{table_id.lower()}_processed.parquet"
+                    if parquet_file.exists():
+                        table_name = f"dst_{table_id.lower()}"
+                        con.raw_sql(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{parquet_file}')")
+                        silver_tables.append(table_name)
+                        logging.info(f"Loaded {table_name} for schema documentation")
+
+            if silver_tables:
+                # Initialize schema documentation manager
+                schema_manager = SchemaDocumentationManager(
+                    connection=con.con,  # Use the DuckDB connection
+                    pipeline_name="dst_pipeline",
+                    pipeline_start_time=pipeline_start_time,
+                    logger=logging.getLogger(__name__),
+                )
+
+                # Generate documentation for all DST silver tables
+                schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
+                logging.info(f"Generated schema documentation for {len(silver_tables)} DST tables")
+
+                # Commit to GitHub
+                schema_manager.commit_to_github()
+                logging.info("DST schema documentation committed to GitHub")
+            else:
+                logging.warning("No silver tables found for schema documentation")
+
+        except Exception as e:
+            logging.error(f"Failed to generate DST schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
 
     return len(processed_tables) > 0
 

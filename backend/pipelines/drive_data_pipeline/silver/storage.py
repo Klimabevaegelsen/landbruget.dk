@@ -87,6 +87,8 @@ class SilverStorageManager:
             sanitized_subfolder = "".join(
                 c for c in sanitized_subfolder if c.isalnum() or c in "_-"
             )
+            # Convert to lowercase
+            sanitized_subfolder = sanitized_subfolder.lower()
             output_dir = output_dir / sanitized_subfolder
 
         # Add content type subfolder if provided

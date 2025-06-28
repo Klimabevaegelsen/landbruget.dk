@@ -24,6 +24,29 @@ Broad ideas (open for input!):
 
 Have fun!
 
+## 📁 Project Structure
+
+The project is organized into the following main directories:
+
+- **`frontend/`** - React frontend application
+- **`backend/`** - Python backend with data pipelines and API
+- **`src/`** - .NET DACT API and emission calculation engine
+- **`scripts/`** - Utility scripts organized by purpose:
+  - `analysis/` - Data analysis and research scripts
+  - `testing/` - API testing and debugging scripts  
+  - `discovery/` - Data discovery and exploration tools
+- **`docs/`** - Project documentation:
+  - `architecture/` - System design and migration plans
+  - `troubleshooting/` - Problem resolution guides
+  - `analysis/` - Research findings and analysis documentation
+  - `data/` - Data catalog and usage documentation
+- **`data/`** - Data files organized by type:
+  - `samples/` - Sample datasets for testing
+  - `reference/` - Lookup tables and static references
+  - `generated/` - Files created by scripts and pipelines
+- **`data_cache/`** - Cached datasets from various pipelines
+- **`cvr_analysis_31373077/`** - Specific CVR analysis project
+
 ## 📊 Data Sources
 
 Data should have one or more of the following attributes to be useful:

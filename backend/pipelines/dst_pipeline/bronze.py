@@ -257,11 +257,14 @@ def save_raw_data(
     table_id: str,
     data_type: str,
     timestamp: str,
+    pipeline_start_time: datetime = None,
 ) -> None:
     """Save raw data exactly as received from API with metadata"""
 
     # Create paths following bronze layer structure - simplified
-    date_str = datetime.now().strftime("%Y%m%d")
+    if pipeline_start_time is None:
+        pipeline_start_time = datetime.now()
+    date_str = pipeline_start_time.strftime("%Y%m%d")
 
     # Add bronze/dst prefix for GCS storage
     if isinstance(storage, GCSStorage):
@@ -277,7 +280,7 @@ def save_raw_data(
     # Create metadata following established patterns
     metadata = {
         "source_url": "https://api.statbank.dk/v1",
-        "fetch_timestamp_utc_iso": datetime.now().isoformat(),
+        "fetch_timestamp_utc_iso": pipeline_start_time.isoformat(),
         "fetch_timestamp_dirname": date_str,
         "description": f"Raw {data_type} data from Danmarks Statistik API for table {table_id}",
         "pipeline_name": "dst_pipeline",
@@ -306,12 +309,16 @@ def save_raw_data(
     logging.info(f"Saved {data_type} metadata to {metadata_path}")
 
 
-def main_with_args(args: argparse.Namespace):
+def main_with_args(args: argparse.Namespace, pipeline_start_time: datetime = None):
     """Main pipeline execution with provided arguments"""
     setup_logging(args.log_level)
 
     logging.info("Starting DST API Bronze Layer pipeline")
     logging.info(f"Fetching data for table: {args.table_id}")
+
+    # Track pipeline start time for consistent timestamping
+    if pipeline_start_time is None:
+        pipeline_start_time = datetime.now()
 
     # Initialize storage interface
     storage = get_storage_interface()
@@ -320,7 +327,7 @@ def main_with_args(args: argparse.Namespace):
     client = DSTApiClient(lang=args.lang)
 
     # Create date-based directory structure following bronze layer guidelines
-    date_str = datetime.now().strftime("%Y%m%d")
+    date_str = pipeline_start_time.strftime("%Y%m%d")
 
     try:
         # Fetch table data
@@ -332,7 +339,7 @@ def main_with_args(args: argparse.Namespace):
         )
 
         if table_data:
-            save_raw_data(table_data, storage, args.table_id, "data", date_str)
+            save_raw_data(table_data, storage, args.table_id, "data", date_str, pipeline_start_time)
 
             # Log summary statistics
             if "data" in table_data:
