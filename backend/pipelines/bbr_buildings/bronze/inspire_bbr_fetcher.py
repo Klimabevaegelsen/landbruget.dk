@@ -226,8 +226,8 @@ class InspireBBRFetcher:
 
             query = f"""
             SELECT 
-                externalReference_reference1 as building_uuid,
-                inspireId_localId as inspire_id,
+                inspireId_localId as building_uuid,
+                externalReference_reference1 as external_ref,
                 currentUse,
                 buildingNature,
                 dateOfConstruction_dateOfEvent_anyPoint as construction_year,
@@ -248,7 +248,7 @@ class InspireBBRFetcher:
                 all_buildings.append(
                     {
                         "building_uuid": row[0],
-                        "inspire_id": row[1],
+                        "external_ref": row[1],
                         "current_use": row[2],
                         "building_nature": row[3],
                         "construction_year": row[4],
@@ -270,8 +270,8 @@ class InspireBBRFetcher:
         # Extract all residential, agriculture, and publicServices buildings
         query = f"""
         SELECT 
-            externalReference_reference1 as building_uuid,
-            inspireId_localId as inspire_id,
+            inspireId_localId as building_uuid,
+            externalReference_reference1 as external_ref,
             currentUse,
             buildingNature,
             dateOfConstruction_dateOfEvent_anyPoint as construction_year,
@@ -296,7 +296,7 @@ class InspireBBRFetcher:
             buildings.append(
                 {
                     "building_uuid": row[0],
-                    "inspire_id": row[1],
+                    "external_ref": row[1],
                     "current_use": row[2],
                     "building_nature": row[3],
                     "construction_year": row[4],
@@ -395,18 +395,27 @@ class InspireBBRFetcher:
 
         self.logger.info(f"Enriching {len(buildings)} {category_name} buildings with GraphQL API")
 
-        # Extract UUIDs for GraphQL queries
-        uuids = [b["building_uuid"] for b in buildings if b["building_uuid"]]
+        # Extract UUIDs for GraphQL queries (now using actual BBR UUIDs from inspireId_localId)
+        valid_uuids = [
+            b["building_uuid"]
+            for b in buildings
+            if b["building_uuid"] and b["building_uuid"] != "other:unpopulated"
+        ]
 
-        if not uuids:
+        if not valid_uuids:
             self.logger.warning(f"No valid UUIDs found for {category_name} buildings")
             return buildings
 
-        # Query GraphQL API in batches
-        bbr_codes_data = self._query_graphql_for_bbr_codes(uuids, category_name)
+        self.logger.info(f"Found {len(valid_uuids)} valid BBR UUIDs for GraphQL queries")
 
-        # Create lookup dictionary
-        bbr_lookup = {item["building_uuid"]: item["bbr_code"] for item in bbr_codes_data}
+        # Query GraphQL API in batches
+        bbr_codes_data = self._query_graphql_for_bbr_codes(valid_uuids, category_name)
+
+        # Create lookup dictionary mapping UUIDs to BBR codes
+        bbr_lookup = {}
+        for item in bbr_codes_data:
+            uuid = item["building_uuid"]
+            bbr_lookup[uuid] = item["bbr_code"]
 
         # Enrich buildings with BBR codes
         enriched_buildings = []
@@ -467,90 +476,105 @@ class InspireBBRFetcher:
 
             self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
 
-            # Create GraphQL query with required temporal filter
-            uuid_list = ", ".join(f'"{uuid}"' for uuid in batch_uuids)
-            query = f"""
-            {{
-              BBR_Bygning(
-                registreringstid: "{current_timestamp}",
-                where: {{id_lokalId: {{in: [{uuid_list}]}}}}, 
-                first: 1000
-              ) {{
-                pageInfo {{ hasNextPage }}
-                nodes {{ 
-                  id_lokalId 
-                  byg021BygningensAnvendelse 
+            # Create GraphQL query with required temporal filter and correct syntax
+            # Process UUIDs one by one since the 'in' operator may not work correctly
+            batch_results = []
+
+            for uuid in batch_uuids:
+                single_query = f"""
+                {{
+                  BBR_Bygning(
+                    registreringstid: "{current_timestamp}",
+                    where: {{
+                      id_lokalId: {{ eq: "{uuid}" }}
+                    }}
+                  ) {{
+                    nodes {{ 
+                      id_lokalId 
+                      byg021BygningensAnvendelse 
+                    }}
+                  }}
                 }}
-              }}
-            }}
-            """
+                """
 
-            # Debug: Log query and sample UUIDs for first few batches
-            if batch_num <= 3:
-                self.logger.info(f"    Sample UUIDs: {batch_uuids[:3]}")
-                self.logger.info(f"    GraphQL query: {query}")
+                # Debug: Log query for first few UUIDs in first few batches
+                if batch_num <= 2 and len(batch_results) < 3:
+                    self.logger.info(f"    Testing UUID: {uuid}")
+                    self.logger.info(f"    GraphQL query: {single_query}")
 
-            try:
-                response = requests.post(
-                    graphql_url,
-                    headers={"Content-Type": "application/json"},
-                    json={"query": query},
-                    timeout=30,
-                )
-
-                # Debug: Log response details for first few batches
-                if batch_num <= 3:
-                    self.logger.info(f"    HTTP Status: {response.status_code}")
-                    self.logger.info(f"    Response: {response.text[:1000]}")
-
-                if response.status_code != 200:
-                    self.logger.warning(f"    HTTP Error: {response.status_code}")
-                    continue
-
-                data = response.json()
-
-                if "errors" in data:
-                    self.logger.warning(f"    GraphQL Errors: {data['errors']}")
-                    continue
-
-                if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
-                    self.logger.warning("    No data returned")
-                    continue
-
-                batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
-                buildings_with_codes = [
-                    {
-                        "building_uuid": b["id_lokalId"],
-                        "bbr_code": b.get("byg021BygningensAnvendelse"),
-                    }
-                    for b in batch_buildings
-                    if b.get("byg021BygningensAnvendelse")
-                ]
-
-                all_results.extend(buildings_with_codes)
-
-                self.logger.info(
-                    f"    ✅ {len(batch_buildings)} total, {len(buildings_with_codes)} with BBR codes"
-                )
-
-                # Rate limiting
-                time.sleep(0.5)
-
-                # Early exit for debugging in CI - stop after 5 batches if no results
-                if batch_num >= 5 and len(all_results) == 0:
-                    self.logger.warning(
-                        f"    No results after {batch_num} batches - stopping early for debugging"
+                try:
+                    response = requests.post(
+                        graphql_url,
+                        headers={"Content-Type": "application/json"},
+                        json={"query": single_query},
+                        timeout=30,
                     )
-                    break
 
-            except Exception as e:
-                self.logger.warning(f"    Error: {e}")
-                # Debug: Log full error for first few batches
-                if batch_num <= 3:
-                    import traceback
+                    # Debug: Log response details for first few UUIDs in first few batches
+                    if batch_num <= 2 and len(batch_results) < 3:
+                        self.logger.info(f"    HTTP Status: {response.status_code}")
+                        self.logger.info(f"    Response: {response.text[:500]}")
 
-                    self.logger.warning(f"    Full error: {traceback.format_exc()}")
-                continue
+                    if response.status_code != 200:
+                        if batch_num <= 2:
+                            self.logger.warning(
+                                f"    HTTP Error for {uuid}: {response.status_code}"
+                            )
+                        continue
+
+                    data = response.json()
+
+                    if "errors" in data:
+                        if batch_num <= 2:
+                            self.logger.warning(f"    GraphQL Errors for {uuid}: {data['errors']}")
+                        continue
+
+                    if (
+                        "data" not in data
+                        or not data["data"]
+                        or not data["data"].get("BBR_Bygning")
+                    ):
+                        # This is normal - UUID not found in BBR
+                        continue
+
+                    uuid_buildings = data["data"]["BBR_Bygning"]["nodes"]
+                    uuid_buildings_with_codes = [
+                        {
+                            "building_uuid": b["id_lokalId"],
+                            "bbr_code": b.get("byg021BygningensAnvendelse"),
+                        }
+                        for b in uuid_buildings
+                        if b.get("byg021BygningensAnvendelse")
+                    ]
+
+                    batch_results.extend(uuid_buildings_with_codes)
+
+                    if uuid_buildings_with_codes and batch_num <= 2:
+                        self.logger.info(
+                            f"    ✅ {uuid}: Found {len(uuid_buildings_with_codes)} building(s)"
+                        )
+
+                    # Rate limiting between individual requests
+                    time.sleep(0.1)
+
+                except Exception as e:
+                    if batch_num <= 2:
+                        self.logger.warning(f"    Error for {uuid}: {e}")
+                    continue
+
+            # Add batch results to overall results
+            all_results.extend(batch_results)
+
+            self.logger.info(
+                f"    ✅ Batch {batch_num}: {len(batch_results)} buildings with BBR codes"
+            )
+
+            # Early exit for debugging in CI - stop after 5 batches if no results
+            if batch_num >= 5 and len(all_results) == 0:
+                self.logger.warning(
+                    f"    No results after {batch_num} batches - stopping early for debugging"
+                )
+                break
 
         self.logger.info(
             f"GraphQL API results for {category_name}: {len(all_results)} buildings with BBR codes"
