@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import logging
 import os
+import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -193,10 +194,6 @@ async def main():
         if total_records > 0:
             try:
                 logger.info("Generating schema documentation for DMI climate data")
-
-                # Import schema documentation (with path adjustment)
-                import sys
-                from pathlib import Path
 
                 # Find the project root (directory containing 'backend' folder)
                 current_file = Path(__file__).resolve()
