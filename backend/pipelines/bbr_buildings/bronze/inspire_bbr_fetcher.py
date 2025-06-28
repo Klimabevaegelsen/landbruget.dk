@@ -452,7 +452,7 @@ class InspireBBRFetcher:
 
     def _query_graphql_for_bbr_codes(self, uuids, category_name, batch_size=50):
         """
-        Query GraphQL API to get BBR usage codes for building UUIDs.
+        Query GraphQL API to get BBR usage codes for building UUIDs using proper batch queries.
         """
         graphql_url = f"https://graphql.datafordeler.dk/BBR/v1?apikey={self.settings.datafordeler_graphql_api_key}"
 
@@ -476,105 +476,81 @@ class InspireBBRFetcher:
 
             self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
 
-            # Create GraphQL query with required temporal filter and correct syntax
-            # Process UUIDs one by one since the 'in' operator may not work correctly
-            batch_results = []
-
-            for uuid in batch_uuids:
-                single_query = f"""
-                {{
-                  BBR_Bygning(
-                    registreringstid: "{current_timestamp}",
-                    where: {{
-                      id_lokalId: {{ eq: "{uuid}" }}
-                    }}
-                  ) {{
-                    nodes {{ 
-                      id_lokalId 
-                      byg021BygningensAnvendelse 
-                    }}
-                  }}
+            # Create GraphQL query with IN operator for efficient batching
+            uuids_list = '["' + '","'.join(batch_uuids) + '"]'
+            batch_query = f"""
+            {{
+              BBR_Bygning(
+                registreringstid: "{current_timestamp}",
+                where: {{
+                  id_lokalId: {{ in: {uuids_list} }}
                 }}
-                """
+              ) {{
+                nodes {{ 
+                  id_lokalId 
+                  byg021BygningensAnvendelse 
+                }}
+              }}
+            }}
+            """
 
-                # Debug: Log query for first few UUIDs in first few batches
-                if batch_num <= 2 and len(batch_results) < 3:
-                    self.logger.info(f"    Testing UUID: {uuid}")
-                    self.logger.info(f"    GraphQL query: {single_query}")
+            # Debug: Log query for first few batches
+            if batch_num <= 2:
+                self.logger.info(f"    GraphQL batch query: {batch_query}")
 
-                try:
-                    response = requests.post(
-                        graphql_url,
-                        headers={"Content-Type": "application/json"},
-                        json={"query": single_query},
-                        timeout=30,
+            try:
+                response = requests.post(
+                    graphql_url,
+                    headers={"Content-Type": "application/json"},
+                    json={"query": batch_query},
+                    timeout=60,  # Longer timeout for batch queries
+                )
+
+                # Debug: Log response details for first few batches
+                if batch_num <= 2:
+                    self.logger.info(f"    HTTP Status: {response.status_code}")
+                    self.logger.info(f"    Response: {response.text[:500]}")
+
+                if response.status_code != 200:
+                    self.logger.warning(
+                        f"    HTTP Error for batch {batch_num}: {response.status_code}"
                     )
-
-                    # Debug: Log response details for first few UUIDs in first few batches
-                    if batch_num <= 2 and len(batch_results) < 3:
-                        self.logger.info(f"    HTTP Status: {response.status_code}")
-                        self.logger.info(f"    Response: {response.text[:500]}")
-
-                    if response.status_code != 200:
-                        if batch_num <= 2:
-                            self.logger.warning(
-                                f"    HTTP Error for {uuid}: {response.status_code}"
-                            )
-                        continue
-
-                    data = response.json()
-
-                    if "errors" in data:
-                        if batch_num <= 2:
-                            self.logger.warning(f"    GraphQL Errors for {uuid}: {data['errors']}")
-                        continue
-
-                    if (
-                        "data" not in data
-                        or not data["data"]
-                        or not data["data"].get("BBR_Bygning")
-                    ):
-                        # This is normal - UUID not found in BBR
-                        continue
-
-                    uuid_buildings = data["data"]["BBR_Bygning"]["nodes"]
-                    uuid_buildings_with_codes = [
-                        {
-                            "building_uuid": b["id_lokalId"],
-                            "bbr_code": b.get("byg021BygningensAnvendelse"),
-                        }
-                        for b in uuid_buildings
-                        if b.get("byg021BygningensAnvendelse")
-                    ]
-
-                    batch_results.extend(uuid_buildings_with_codes)
-
-                    if uuid_buildings_with_codes and batch_num <= 2:
-                        self.logger.info(
-                            f"    ✅ {uuid}: Found {len(uuid_buildings_with_codes)} building(s)"
-                        )
-
-                    # Rate limiting between individual requests
-                    time.sleep(0.1)
-
-                except Exception as e:
-                    if batch_num <= 2:
-                        self.logger.warning(f"    Error for {uuid}: {e}")
                     continue
 
-            # Add batch results to overall results
-            all_results.extend(batch_results)
+                data = response.json()
 
-            self.logger.info(
-                f"    ✅ Batch {batch_num}: {len(batch_results)} buildings with BBR codes"
-            )
+                if "errors" in data:
+                    self.logger.warning(
+                        f"    GraphQL Errors for batch {batch_num}: {data['errors']}"
+                    )
+                    continue
 
-            # Early exit for debugging in CI - stop after 5 batches if no results
-            if batch_num >= 5 and len(all_results) == 0:
-                self.logger.warning(
-                    f"    No results after {batch_num} batches - stopping early for debugging"
+                if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
+                    self.logger.info(f"    No buildings found for batch {batch_num}")
+                    continue
+
+                batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
+                batch_results = [
+                    {
+                        "building_uuid": b["id_lokalId"],
+                        "bbr_code": b.get("byg021BygningensAnvendelse"),
+                    }
+                    for b in batch_buildings
+                    if b.get("byg021BygningensAnvendelse")
+                ]
+
+                all_results.extend(batch_results)
+
+                self.logger.info(
+                    f"    ✅ Batch {batch_num}: {len(batch_results)} buildings with BBR codes"
                 )
-                break
+
+                # Rate limiting between batch requests (much less frequent now)
+                time.sleep(0.5)
+
+            except Exception as e:
+                self.logger.warning(f"    Error for batch {batch_num}: {e}")
+                continue
 
         self.logger.info(
             f"GraphQL API results for {category_name}: {len(all_results)} buildings with BBR codes"
