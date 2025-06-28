@@ -259,6 +259,24 @@ async def main():
 
     except Exception as e:
         logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
+
+        # Provide specific guidance for common errors
+        error_message = str(e).lower()
+        if "dmi_gov_cloud_api_key" in error_message:
+            logger.error("=" * 60)
+            logger.error("CONFIGURATION ERROR: Missing DMI API Key")
+            logger.error("=" * 60)
+            logger.error("The DMI_GOV_CLOUD_API_KEY environment variable is not set.")
+            logger.error("")
+            logger.error("To fix this issue:")
+            logger.error("1. For GitHub Actions: Add DMI_GOV_CLOUD_API_KEY to repository secrets")
+            logger.error("2. For local development: Create a .env file with your API key")
+            logger.error("3. For Docker: Pass the environment variable to the container")
+            logger.error("")
+            logger.error("Example .env file content:")
+            logger.error("DMI_GOV_CLOUD_API_KEY=your_actual_api_key_here")
+            logger.error("=" * 60)
+
         sys.exit(1)
 
 
