@@ -1,6 +1,7 @@
 """Bronze layer storage management."""
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -39,33 +40,32 @@ class BronzeStorageManager:
             timestamp: Optional timestamp string (if not provided, one will be generated)
 
         Returns:
-            Path to the created run directory
+            Path to the created run directory (just stores timestamp for later use)
         """
         # Generate timestamp if not provided
         if timestamp is None:
             timestamp = generate_timestamp()
 
-        # Use required structure: bronze/static_data/drive/{timestamp}
-        # For local storage, this will be relative to base_path
-        # For GCS, this will be the full path in the bucket
+        # Store timestamp for use in create_folder_structure
+        # The actual directory creation happens in create_folder_structure based on subfolder
         if hasattr(self.storage_manager.storage, "bucket"):
-            # GCS storage - use required structure
-            run_dir = Path(f"bronze/static_data/drive/{timestamp}")
+            # GCS storage - use bronze as base
+            run_dir = Path("bronze")
         else:
-            # Local storage - use base_path with required structure
-            run_dir = self.base_path / "static_data" / "drive" / timestamp
+            # Local storage - use base_path/bronze
+            run_dir = self.base_path / "bronze"
 
-        # Ensure the directory exists
-        self.storage_manager.ensure_directory_exists(run_dir)
+        # Store the timestamp for later use
+        self._current_timestamp = timestamp
 
-        logger.info(f"Created run directory: {run_dir}")
+        logger.info(f"Created run directory base: {run_dir} with timestamp: {timestamp}")
         return run_dir
 
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
-        """Create a folder structure mirroring the source with subfolder organization.
+        """Create a folder structure using the new path organization.
 
         Args:
-            run_dir: Base run directory (already includes bronze/static_data/drive/{timestamp})
+            run_dir: Base run directory (bronze/)
             folder_path: Path of the folder in the source (e.g., Google Drive)
 
         Returns:
@@ -74,36 +74,43 @@ class BronzeStorageManager:
         # Normalize folder path (remove leading/trailing slashes)
         folder_path = folder_path.strip("/")
 
-        # For the required structure, we need to organize by subfolder name
-        # The run_dir is already bronze/static_data/drive/{timestamp}
-        # We need to add the subfolder name as the next level
+        # Get the timestamp from the stored value
+        timestamp = getattr(self, "_current_timestamp", generate_timestamp())
+
+        # Structure: bronze/{subfolder_name}/{timestamp}/{remaining_path}
         if folder_path:
             # Split the path and sanitize each component
             path_parts = folder_path.split("/")
             sanitized_parts = []
 
             for part in path_parts:
-                # Sanitize each folder name for storage
-                sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
-                # Remove any other problematic characters
-                sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
-                # Convert to lowercase
-                sanitized_part = sanitized_part.lower()
-                sanitized_parts.append(sanitized_part)
+                # Sanitize each part of the path
+                sanitized_part = re.sub(r'[<>:"/\\|?*]', "_", part)
+                sanitized_part = sanitized_part.strip(". ")
+                if sanitized_part:
+                    sanitized_parts.append(sanitized_part)
 
-            # For the required structure, the first part becomes the subfolder name
-            # Additional parts preserve the hierarchy within that subfolder
-            target_path = run_dir
-            for part in sanitized_parts:
-                target_path = target_path / part
+            if sanitized_parts:
+                # First part is the subfolder name, rest is remaining path
+                subfolder_name = sanitized_parts[0]
+                remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
+
+                # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
+                folder_structure = run_dir / subfolder_name.lower() / timestamp
+                if remaining_path:
+                    folder_structure = folder_structure / remaining_path
+            else:
+                # Fallback if no valid parts
+                folder_structure = run_dir / "unknown" / timestamp
         else:
-            target_path = run_dir
+            # No folder path provided
+            folder_structure = run_dir / "root" / timestamp
 
         # Ensure the directory exists
-        self.storage_manager.ensure_directory_exists(target_path)
+        self.storage_manager.ensure_directory_exists(folder_structure)
 
-        logger.debug(f"Created folder structure: {target_path} (from: {folder_path})")
-        return target_path
+        logger.info(f"Created folder structure: {folder_structure}")
+        return folder_structure
 
     def save_file(self, content: bytes, run_dir: Path, source_path: str, filename: str) -> Path:
         """Save a file to the Bronze layer.
@@ -198,13 +205,16 @@ class BronzeStorageManager:
         """Check if a file exists in the Bronze layer.
 
         Args:
-            run_dir: Base run directory
+            run_dir: Base run directory (bronze/)
             source_path: Path of the file in the source (e.g., Google Drive)
             filename: Name of the file
 
         Returns:
             True if the file exists, False otherwise
         """
+        # Get the timestamp from the stored value
+        timestamp = getattr(self, "_current_timestamp", generate_timestamp())
+
         # Create folder structure path using the same logic as create_folder_structure
         # If source_path is a folder name (not a full path), use it directly
         if source_path and "/" not in source_path:
@@ -212,19 +222,33 @@ class BronzeStorageManager:
         else:
             folder_path = os.path.dirname(source_path) if source_path else ""
 
-        target_dir = run_dir
+        # Use the same logic as create_folder_structure to build the path
         if folder_path:
-            # Split the path and sanitize each component (same as create_folder_structure)
+            folder_path = folder_path.strip("/")
             path_parts = folder_path.split("/")
-            for part in path_parts:
-                sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
-                sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
-                # Convert to lowercase
-                sanitized_part = sanitized_part.lower()
-                target_dir = target_dir / sanitized_part
+            sanitized_parts = []
 
-        # Check if the file exists
-        file_path = target_dir / filename
+            for part in path_parts:
+                sanitized_part = re.sub(r'[<>:"/\\|?*]', "_", part)
+                sanitized_part = sanitized_part.strip(". ")
+                if sanitized_part:
+                    sanitized_parts.append(sanitized_part)
+
+            if sanitized_parts:
+                subfolder_name = sanitized_parts[0]
+                remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
+
+                # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
+                folder_structure = run_dir / subfolder_name.lower() / timestamp
+                if remaining_path:
+                    folder_structure = folder_structure / remaining_path
+            else:
+                folder_structure = run_dir / "unknown" / timestamp
+        else:
+            folder_structure = run_dir / "root" / timestamp
+
+        # Check if file exists in this structure
+        file_path = folder_structure / filename
         return self.storage_manager.file_exists(file_path)
 
     def list_files_in_run(self, run_dir: Path, pattern: str | None = None) -> dict[str, Path]:

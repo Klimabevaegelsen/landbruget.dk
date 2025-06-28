@@ -125,29 +125,21 @@ The pipeline organizes data in the following structure:
 ### Bronze Layer
 
 ```
-data/bronze/YYYYMMDD_HHMMSS/
-├── [subfolder1]/
-│   ├── file1.xlsx
-│   ├── file1.xlsx.metadata.json
-│   └── ...
-├── [subfolder2]/
-│   ├── file2.pdf
-│   ├── file2.pdf.metadata.json
-│   └── ...
-└── metadata.json            # Run metadata
+data/bronze/{subfolder_name}/{YYYYMMDD_HHMMSS}/
+├── file1.xlsx
+├── file1.xlsx.metadata.json
+├── file2.pdf
+├── file2.pdf.metadata.json
+└── ...
 ```
 
 ### Silver Layer
 
 ```
-data/silver/YYYYMMDD_HHMMSS/
-├── [subfolder1]/
-│   ├── file1.parquet
-│   └── ...
-├── [subfolder2]/
-│   ├── file2.parquet
-│   └── ...
-└── metadata.json            # Run metadata
+data/silver/{subfolder_name}/{YYYYMMDD_HHMMSS}/
+├── file1.parquet
+├── file2.parquet
+└── ...
 ```
 
 ## Verification
