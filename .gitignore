@@ -129,8 +129,8 @@ backend/test_wfs.py
 *.secrets
 
 # Analysis directories and generated content
-src/
-docs/
-data_cache/
-cvr_analysis_31373077/
-scripts/
+/src/
+/docs/
+/data_cache/
+/cvr_analysis_31373077/
+/scripts/

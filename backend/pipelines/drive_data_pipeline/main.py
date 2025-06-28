@@ -434,14 +434,30 @@ def main() -> int:
                 import sys
                 from pathlib import Path
 
-                backend_path = Path(__file__).parent.parent.parent
-                if str(backend_path) not in sys.path:
-                    sys.path.insert(0, str(backend_path))
+                # Find the project root (directory containing 'backend' folder)
+                current_file = Path(__file__).resolve()
+                project_root = None
+
+                # Go up the directory tree to find the project root
+                for parent in current_file.parents:
+                    if (parent / "backend").is_dir():
+                        project_root = parent
+                        break
+
+                if project_root and str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
 
                 # Use the pipeline start time we already have
                 # Create DuckDB connection and look for silver parquet files
                 import duckdb
-                from backend.common.schema_documentation import SchemaDocumentationManager
+
+                try:
+                    from backend.common.schema_documentation import SchemaDocumentationManager
+                except ImportError as e:
+                    import warnings
+
+                    warnings.warn(f"Schema documentation not available: {e}")
+                    SchemaDocumentationManager = None
 
                 conn = duckdb.connect()
 
@@ -465,7 +481,7 @@ def main() -> int:
                                 f"Could not load {file_path} for schema documentation: {e}"
                             )
 
-                    if table_names:
+                    if table_names and SchemaDocumentationManager is not None:
                         # Initialize schema documentation manager
                         schema_manager = SchemaDocumentationManager(
                             connection=conn,
@@ -483,6 +499,8 @@ def main() -> int:
                         # Commit to GitHub
                         schema_manager.commit_to_github()
                         logger.info("Drive data schema documentation committed to GitHub")
+                    elif SchemaDocumentationManager is None:
+                        logger.warning("Schema documentation disabled due to import error")
                     else:
                         logger.info("No processable parquet files found for schema documentation")
                 else:
