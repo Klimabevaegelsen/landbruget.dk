@@ -24,7 +24,12 @@ class DMIConfig:
     def __init__(self):
         self.api_key = os.getenv("DMI_GOV_CLOUD_API_KEY")
         if not self.api_key:
-            raise ValueError("DMI_GOV_CLOUD_API_KEY environment variable is required")
+            raise ValueError(
+                "DMI_GOV_CLOUD_API_KEY environment variable is required. "
+                "Please set this environment variable with your DMI GovCloud API key. "
+                "For GitHub Actions, ensure the secret is configured in repository settings. "
+                "For local development, add it to your .env file."
+            )
 
         self.base_url = "https://dmigw.govcloud.dk/v2/climateData"
         self.max_retries = int(os.getenv("MAX_RETRIES", 3))

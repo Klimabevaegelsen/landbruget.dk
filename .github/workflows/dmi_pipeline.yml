@@ -86,6 +86,7 @@ jobs:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        DATA_PATH: /tmp/data
       run: |
         cd backend/pipelines/dmi_pipeline
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -99,6 +100,11 @@ jobs:
 
     - name: Run Pipeline
       working-directory: backend/pipelines/dmi_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        DATA_PATH: /tmp/data
       run: |
         # Build base command
         CMD="python main.py"
