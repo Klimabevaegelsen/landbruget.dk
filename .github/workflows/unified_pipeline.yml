@@ -31,20 +31,63 @@ on:
           - pesticide_disaggregation
 
 jobs:
+  # Generate matrix for FVM WFS if needed
+  generate-fvm-matrix:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.source == 'fvm_wfs' || (github.event.inputs.source == 'all' && contains(github.event.inputs.source, 'fvm_wfs'))
+    outputs:
+      fvm_matrix: ${{ steps.set-fvm-matrix.outputs.matrix }}
+      use_fvm_matrix: ${{ steps.set-fvm-matrix.outputs.use_matrix }}
+    steps:
+      - name: Generate FVM WFS matrix
+        id: set-fvm-matrix
+        run: |
+          # Matrix for ALL available years - throttled for GitHub free runners
+          # Total: 43 jobs (22 Markblokke + 18 Marker + 3 Smaabiotoper)
+          # Must run slower due to 20 concurrent job limit
+          
+          matrix_items=()
+          
+          # Markblokke: ALL years (2005-2026) - 22 layers
+          for year in $(seq 2005 2026); do
+            matrix_items+=("{\"layer_type\":\"markblokke\",\"year\":$year}")
+          done
+          
+          # Marker: ALL years (2008-2025) - 18 layers
+          for year in $(seq 2008 2025); do
+            matrix_items+=("{\"layer_type\":\"marker\",\"year\":$year}")
+          done
+          
+          # Smaabiotoper: ALL years (2023-2025) - 3 layers
+          for year in 2023 2024 2025; do
+            matrix_items+=("{\"layer_type\":\"smaabiotoper\",\"year\":$year}")
+          done
+          
+          matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "use_matrix=true" >> $GITHUB_OUTPUT
+          echo "Generated FVM matrix (43 jobs total - GitHub will auto-queue): $matrix_json"
+
   run-unified-pipeline:
     name: Run Unified Pipeline
     runs-on: ubuntu-latest
+    needs: [generate-fvm-matrix]
+    if: always() && !cancelled()
     strategy:
       matrix:
-        source: >-
+        # Use FVM matrix if available, otherwise use regular source matrix
+        include: >-
           ${{
-            github.event_name == 'schedule' &&
-            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "fvm_wfs", "soil_types", "wetlands", "water_projects"]') ||
+            (needs.generate-fvm-matrix.outputs.use_fvm_matrix == 'true' && 
+             fromJson(needs.generate-fvm-matrix.outputs.fvm_matrix)) ||
+            (github.event_name == 'schedule' &&
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"}]')) ||
             (github.event.inputs.source == 'all' &&
-            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "fvm_wfs", "soil_types", "wetlands", "water_projects", "property_cadastral_merge", "field_production", "field_area_analysis", "pesticide_disaggregation"]')) ||
-            fromJson(format('["{0}"]', github.event.inputs.source))
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"}]')) ||
+            fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
+      max-parallel: 10  # GitHub will auto-queue within 20 job limit, this helps with server load
     env:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
@@ -72,5 +115,14 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Run Unified Pipeline for ${{ matrix.source }}
-        run: python -m unified_pipeline -s ${{ matrix.source }} -j all
+      - name: Run Unified Pipeline for ${{ matrix.source || matrix.layer_type }}
+        run: |
+          if [ -n "${{ matrix.layer_type }}" ]; then
+            # FVM WFS matrix job with specific layer and year
+            echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
+            python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+          else
+            # Regular source job
+            echo "Running regular pipeline job: ${{ matrix.source }}"
+            python -m unified_pipeline -s ${{ matrix.source }} -j all
+          fi
