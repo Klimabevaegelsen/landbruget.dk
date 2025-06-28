@@ -1,0 +1,12 @@
+{
+  "pipeline": "test_mixin_pipeline",
+  "stage": "gold",
+  "generated_at": "2025-06-28T12:55:46.359401",
+  "tables": [
+    "mixin_test_summary"
+  ],
+  "files_generated": [
+    "docs/schemas/gold/mixin_test_summary.md",
+    "docs/schemas/gold/overview.md"
+  ]
+}
