@@ -1,0 +1,16 @@
+{
+  "pipeline": "chr_pipeline",
+  "stage": "silver",
+  "generated_at": "2025-06-28T12:57:51.085145",
+  "tables": [
+    "chr_animals",
+    "chr_movements",
+    "chr_antibiotic_usage"
+  ],
+  "files_generated": [
+    "docs/schemas/silver/chr_animals.md",
+    "docs/schemas/silver/chr_movements.md",
+    "docs/schemas/silver/chr_antibiotic_usage.md",
+    "docs/schemas/silver/overview.md"
+  ]
+}

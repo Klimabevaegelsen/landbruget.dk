@@ -39,6 +39,12 @@ class BMDTransformer:
         self.input_file = input_file
         self.output_dir = output_dir
         self.timestamp = input_file.parent.name
+        # Get pipeline start time from timestamp directory name
+        try:
+            self.pipeline_start_time = datetime.strptime(self.timestamp, "%Y%m%d_%H%M%S")
+        except ValueError:
+            # Fallback if timestamp format is unexpected
+            self.pipeline_start_time = datetime.now()
         self.metadata = {}
         self.conn = None
 
@@ -96,7 +102,7 @@ class BMDTransformer:
 
             # Store column information in metadata
             self.silver_metadata = {
-                "transform_timestamp": datetime.now().isoformat(),
+                "transform_timestamp": self.pipeline_start_time.isoformat(),
                 "source_file": str(self.input_file),
                 "bronze_timestamp": self.timestamp,
                 "row_count": row_count,
@@ -150,7 +156,7 @@ class BMDTransformer:
             # Create a new table with cleaned column names
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE cleaned_columns AS
-                SELECT {', '.join(column_selects)}
+                SELECT {", ".join(column_selects)}
                 FROM {table_name};
             """)
 
@@ -229,7 +235,7 @@ class BMDTransformer:
             # Create a table with array conversions
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE array_converted AS
-                SELECT {', '.join(array_conversions)}
+                SELECT {", ".join(array_conversions)}
                 FROM {table_name};
             """)
 
@@ -280,7 +286,7 @@ class BMDTransformer:
             # Create a table with trimmed text
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE trimmed_data AS
-                SELECT {', '.join(trims)}
+                SELECT {", ".join(trims)}
                 FROM {table_name};
             """)
 
@@ -348,7 +354,7 @@ class BMDTransformer:
                 # Create a table with parsed dates
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE date_parsed AS
-                    SELECT {', '.join(date_casts)}
+                    SELECT {", ".join(date_casts)}
                     FROM {table_name};
                 """)
 
@@ -396,8 +402,8 @@ class BMDTransformer:
                 """).fetchone()[0]
 
                 if null_count > 0:
-                    missing_values.append(f"{col}: {null_count} missing values ({null_count/row_count:.1%})")
-                    logger.warning(f"Column {col} has {null_count} missing values ({null_count/row_count:.1%})")
+                    missing_values.append(f"{col}: {null_count} missing values ({null_count / row_count:.1%})")
+                    logger.warning(f"Column {col} has {null_count} missing values ({null_count / row_count:.1%})")
 
             if missing_values:
                 validation_issues["missing_values"] = missing_values
@@ -423,8 +429,8 @@ class BMDTransformer:
         Returns:
             Path to the saved Parquet file
         """
-        # Create the output filename with timestamp
-        output_filename = f"bmd_data_{self.timestamp}.parquet"
+        # Create the output filename with descriptive name (no timestamp - that's in the folder)
+        output_filename = "pesticide_products.parquet"
         output_path = self.output_dir / output_filename
 
         logger.info(f"Saving Parquet file to {output_path}")
@@ -438,7 +444,7 @@ class BMDTransformer:
 
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})
-                TO '{self.output_dir/f"bmd_data_{self.timestamp}.xlsx"}' (FORMAT 'xlsx')
+                TO '{self.output_dir / "pesticide_products.xlsx"}' (FORMAT 'xlsx')
             """)
             # Save metadata file
             metadata_path = self.output_dir / "metadata.json"

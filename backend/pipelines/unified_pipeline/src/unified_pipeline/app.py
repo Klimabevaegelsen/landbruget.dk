@@ -3,7 +3,7 @@ Main application module for the unified pipeline.
 
 This module contains the main entry point and CLI interface for the unified
 data pipeline application. It orchestrates different data processing stages
-(bronze, silver) for various data sources.
+(bronze, silver, gold) for various data sources.
 """
 
 import asyncio
@@ -26,7 +26,15 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
-from unified_pipeline.common.base import BronzeJobInterface, SilverJobInterface
+from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.field_production import (
+    FieldProductionGold,
+    FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.property_cadastral_merge import (
+    PropertyCadastralMergeGold,
+    PropertyCadastralMergeGoldConfig,
+)
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.silver.agricultural_fields import (
@@ -53,9 +61,9 @@ load_dotenv()
 
 async def execute_pipeline_jobs(jobs: list, gcs_util: GCSUtil, stage: cli.Stage) -> None:
     """
-    Execute pipeline jobs with support for in-memory data passing.
+    Execute pipeline jobs with support for gold layer and in-memory data passing.
 
-    This function handles the execution of bronze and silver jobs, implementing
+    This function handles the execution of bronze, silver, and gold jobs, implementing
     in-memory data passing when Stage.all is used. When bronze and silver jobs
     are run together, bronze data is passed directly to silver jobs without
     disk I/O for improved performance.
@@ -67,24 +75,31 @@ async def execute_pipeline_jobs(jobs: list, gcs_util: GCSUtil, stage: cli.Stage)
     """
     log = Logger.get_logger()
     bronze_data = None
+    silver_data = {}
 
     for job_cls, config_cls in jobs:
         log.info(f"Running {job_cls.__name__} for stage {stage}")
         instance = job_cls(config=config_cls(), gcs_util=gcs_util)
 
-        # Check if this is a bronze job that supports in-memory data passing
         if issubclass(job_cls, BronzeJobInterface):
             # Bronze stage - get data for memory passing
             bronze_data = await instance.run()
             log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
 
-        # Check if this is a silver job that supports in-memory data passing
         elif issubclass(job_cls, SilverJobInterface):
-            # Silver stage - pass in-memory data if available
-            await instance.run(bronze_data=bronze_data)
+            # Silver stage - pass in-memory data if available and collect results
+            result = await instance.run(bronze_data=bronze_data)
+            # Collect silver data for gold stage
+            dataset_name = instance.config.dataset
+            silver_data[dataset_name] = result
             log.info(
                 f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
             )
+
+        elif issubclass(job_cls, GoldJobInterface):
+            # Gold stage - pass collected silver data
+            await instance.run(silver_data=silver_data)
+            log.info(f"Gold job {job_cls.__name__} completed using silver data")
 
         else:
             # Legacy support - jobs that don't implement the new interfaces
@@ -189,6 +204,31 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (WaterProjectsBronze, WaterProjectsBronzeConfig),
                 (WaterProjectsSilver, WaterProjectsSilverConfig),
+            ],
+        },
+        cli.Source.property_cadastral_merge: {
+            cli.Stage.gold: [(PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires property_owners and cadastral silver data to be available
+                # These should be run separately first or through dependent pipelines
+                (PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig),
+            ],
+        },
+        cli.Source.field_production: {
+            cli.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires agricultural_fields and dst_zone_mapping silver data to be available
+                # These should be run separately first or through dependent pipelines
+                (FieldProductionGold, FieldProductionGoldConfig),
+            ],
+        },
+        cli.Source.field_area_analysis: {
+            cli.Stage.gold: [(FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires multiple silver datasets to be available:
+                # agricultural_fields, property_cadastral_merged, soil_types, bnbo_status_dissolved,
+                # wetlands_dissolved, water_projects_dissolved
+                (FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig),
             ],
         },
     }

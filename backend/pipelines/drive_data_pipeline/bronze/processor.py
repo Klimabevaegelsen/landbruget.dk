@@ -1,10 +1,10 @@
 """Bronze layer processor for Google Drive data pipeline."""
 
+import datetime
 from collections.abc import Callable
 from pathlib import Path
 
 from ..config.settings import Settings
-from ..utils.helpers import generate_timestamp
 from ..utils.logging import get_logger, set_context
 from ..utils.storage import DriveStorageManager
 from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
@@ -24,6 +24,7 @@ class BronzeProcessor:
         drive_fetcher: GoogleDriveFetcher,
         storage_manager: DriveStorageManager,
         progress_callback: Callable[[int, bool, int], None] | None = None,
+        pipeline_start_time: datetime.datetime | None = None,
     ):
         """Initialize the Bronze processor.
 
@@ -46,8 +47,14 @@ class BronzeProcessor:
         # Initialize metadata manager
         self.metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
 
+        # Use provided pipeline start time or generate one
+        if pipeline_start_time is not None:
+            self.pipeline_start_time = pipeline_start_time
+        else:
+            self.pipeline_start_time = datetime.datetime.now()
+
         # Generate a timestamp for this run and create run directory
-        self.run_timestamp = generate_timestamp()
+        self.run_timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         self.run_path = self.bronze_storage.create_run_directory(self.run_timestamp)
 
         logger.info(f"Initialized Bronze processor with run timestamp: {self.run_timestamp}")
