@@ -270,9 +270,36 @@ class BaseSource(Generic[T], ABC):
 
             # Determine file type and read accordingly
             if latest_file.name.endswith(".parquet"):
-                return self.gcs_util.download_geopandas_from_gcs(
-                    bucket_name=bucket, blob_name=latest_file.name
-                )
+                # Try reading as GeoDataFrame first, fallback to regular DataFrame
+                try:
+                    return self.gcs_util.download_geopandas_from_gcs(
+                        bucket_name=bucket, blob_name=latest_file.name
+                    )
+                except Exception as geo_error:
+                    if "Missing geo metadata" in str(geo_error):
+                        # Fallback to regular pandas DataFrame for non-geo data
+                        import os
+                        import tempfile
+
+                        import pandas as pd
+
+                        with tempfile.NamedTemporaryFile(
+                            suffix=".parquet", delete=False
+                        ) as tmp_file:
+                            temp_path = tmp_file.name
+
+                        try:
+                            self.gcs_util.download_file(bucket, latest_file.name, temp_path)
+                            df = pd.read_parquet(temp_path)
+                            self.log.info(
+                                f"Successfully loaded {len(df)} records from {latest_file.name} as regular DataFrame"
+                            )
+                            return df
+                        finally:
+                            if os.path.exists(temp_path):
+                                os.unlink(temp_path)
+                    else:
+                        raise geo_error
             elif latest_file.name.endswith(".json"):
                 return self.gcs_util.download_json_from_gcs(
                     bucket_name=bucket, blob_name=latest_file.name
