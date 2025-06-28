@@ -87,6 +87,8 @@ class BronzeStorageManager:
                 sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
                 # Remove any other problematic characters
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
+                # Convert to lowercase
+                sanitized_part = sanitized_part.lower()
                 sanitized_parts.append(sanitized_part)
 
             # For the required structure, the first part becomes the subfolder name
@@ -217,6 +219,8 @@ class BronzeStorageManager:
             for part in path_parts:
                 sanitized_part = part.replace(" ", "_").replace(".", "_").replace(":", "_")
                 sanitized_part = "".join(c for c in sanitized_part if c.isalnum() or c in "_-")
+                # Convert to lowercase
+                sanitized_part = sanitized_part.lower()
                 target_dir = target_dir / sanitized_part
 
         # Check if the file exists

@@ -25,11 +25,11 @@ class CVRMatcher:
             self.db.execute_query("""
                 CREATE OR REPLACE TEMPORARY VIEW field_data AS
                 SELECT DISTINCT 
-                    CAST(m.CVR AS VARCHAR) as cvr,
-                    m.Markblok,
-                    m.Marknr
+                    CAST(m.cvr_number AS VARCHAR) as cvr,
+                    CAST(SUBSTRING(m.field_id, 1, POSITION('-' IN m.field_id) - 1) AS VARCHAR) as Markblok,
+                    CAST(SUBSTRING(m.field_id, POSITION('-' IN m.field_id) + 1) AS VARCHAR) as Marknr
                 FROM marker m
-                WHERE m.CVR IS NOT NULL AND TRIM(m.CVR) != ''
+                WHERE m.cvr_number IS NOT NULL AND TRIM(m.cvr_number) != ''
             """)
 
             unmatched_query = """
@@ -43,9 +43,9 @@ class CVRMatcher:
                 ),
                 cleaned_gkea AS (
                     SELECT 
-                        CAST("CVR" AS VARCHAR) as cvr
+                        CAST(unnamed__1 AS VARCHAR) as cvr
                     FROM gkea
-                    WHERE "CVR" IS NOT NULL AND TRIM("CVR") != ''
+                    WHERE unnamed__1 IS NOT NULL AND TRIM(unnamed__1) != '' AND unnamed__1 != 'CVR'
                 ),
                 unmatched_cvrs AS (
                     SELECT DISTINCT p.cvr
@@ -76,9 +76,9 @@ class CVRMatcher:
                 ),
                 cleaned_gkea AS (
                     SELECT 
-                        CAST("CVR" AS VARCHAR) as cvr
+                        CAST(unnamed__1 AS VARCHAR) as cvr
                     FROM gkea
-                    WHERE "CVR" IS NOT NULL AND TRIM("CVR") != ''
+                    WHERE unnamed__1 IS NOT NULL AND TRIM(unnamed__1) != '' AND unnamed__1 != 'CVR'
                 ),
                 unmatched_cvrs AS (
                     SELECT DISTINCT p.cvr
@@ -109,14 +109,15 @@ class CVRMatcher:
         try:
             non_numeric_query = """
                 SELECT DISTINCT 
-                    "CVR" as original_cvr,
+                    unnamed__1 as original_cvr,
                     COUNT(*) as record_count,
-                    STRING_AGG(DISTINCT "Marknummer", ', ') as field_ids
+                    STRING_AGG(DISTINCT unnamed__3, ', ') as field_ids
                 FROM gkea
-                WHERE "CVR" IS NOT NULL 
-                AND "CVR" != ''
-                AND NOT REGEXP_MATCHES("CVR", '^[0-9]+$')
-                GROUP BY "CVR"
+                WHERE unnamed__1 IS NOT NULL 
+                AND unnamed__1 != ''
+                AND unnamed__1 != 'CVR'
+                AND NOT REGEXP_MATCHES(unnamed__1, '^[0-9]+$')
+                GROUP BY unnamed__1
             """
             non_numeric_results = self.db.execute_query(non_numeric_query)
             return {
@@ -135,12 +136,12 @@ class CVRMatcher:
         try:
             empty_cvr_query = """
                 SELECT 
-                    m.Markblok,
-                    m.Marknr,
+                    CAST(SUBSTRING(m.field_id, 1, POSITION('-' IN m.field_id) - 1) AS VARCHAR) as Markblok,
+                    CAST(SUBSTRING(m.field_id, POSITION('-' IN m.field_id) + 1) AS VARCHAR) as Marknr,
                     COUNT(*) as record_count
                 FROM marker m
-                WHERE m.CVR IS NULL OR TRIM(m.CVR) = ''
-                GROUP BY m.Markblok, m.Marknr
+                WHERE m.cvr_number IS NULL OR TRIM(m.cvr_number) = ''
+                GROUP BY 1, 2
             """
             empty_cvr_results = self.db.execute_query(empty_cvr_query)
             return {
@@ -175,9 +176,7 @@ class CVRMatcher:
                 # This path is critical for saving debug files.
                 # Defaulting to previous logic if RESOLVED_OUTPUT_DIR is None
                 # THIS IS A SAFETY FALLBACK AND SHOULD IDEALLY NOT BE REACHED
-                logger.warning(
-                    "RESOLVED_OUTPUT_DIR not set, attempting fallback path construction."
-                )
+                logger.warning("RESOLVED_OUTPUT_DIR not set, attempting fallback path construction.")
                 output_path = self.config.DATA_DIR / self.config.OUTPUT_DIR
 
             output_path.mkdir(parents=True, exist_ok=True)
@@ -235,9 +234,7 @@ class CVRMatcher:
             logger.info(f"- {ambiguous_matches_csv.name}")
             return summary
         except Exception as e:
-            logger.error(
-                f"Error in match_empty_marker_cvrs_by_journalnr_afgkode_area: {str(e)}"
-            )
+            logger.error(f"Error in match_empty_marker_cvrs_by_journalnr_afgkode_area: {str(e)}")
             raise
 
     def generate_matching_report(self) -> Dict:
@@ -269,23 +266,23 @@ class FieldDatasetAnalyzer:
             metrics = self.db.execute_query("""
                 WITH field_matches AS (
                     SELECT 
-                        COUNT(DISTINCT m.Markblok || '-' || m.Marknr) as marker_fields,
-                        COUNT(DISTINCT j.MarkBlok || '-' || j.MarkNr) as jord_fields,
+                        COUNT(DISTINCT m.field_id) as marker_fields,
+                        COUNT(DISTINCT j.field_id) as jord_fields,
                         COUNT(DISTINCT CASE 
-                            WHEN m.Markblok = j.MarkBlok AND m.Marknr = j.MarkNr 
-                            THEN m.Markblok || '-' || m.Marknr 
+                            WHEN m.field_id = j.field_id 
+                            THEN m.field_id 
                         END) as matching_fields
                     FROM marker m
                     FULL JOIN jordbrugsanalyser j 
-                    ON m.Markblok = j.MarkBlok AND m.Marknr = j.MarkNr
+                    ON m.field_id = j.field_id
                 ),
                 area_stats AS (
                     SELECT 
-                        AVG(ABS(m.IMK_areal - j.Ha) / NULLIF(j.Ha, 0) * 100) as avg_area_diff_pct,
-                        COUNT(CASE WHEN ABS(m.IMK_areal - j.Ha) > 0.01 THEN 1 END) as records_with_diff
+                        AVG(ABS(m.area_ha - j.area_ha) / NULLIF(j.area_ha, 0) * 100) as avg_area_diff_pct,
+                        COUNT(CASE WHEN ABS(m.area_ha - j.area_ha) > 0.01 THEN 1 END) as records_with_diff
                     FROM marker m
                     INNER JOIN jordbrugsanalyser j 
-                    ON m.Markblok = j.MarkBlok AND m.Marknr = j.MarkNr
+                    ON m.field_id = j.field_id
                 )
                 SELECT 
                     fm.*,
@@ -299,9 +296,7 @@ class FieldDatasetAnalyzer:
                 "marker_fields": metrics[0],
                 "jord_fields": metrics[1],
                 "matching_fields": metrics[2],
-                "match_rate": metrics[2] / max(metrics[0], metrics[1]) * 100
-                if max(metrics[0], metrics[1]) > 0
-                else 0,
+                "match_rate": metrics[2] / max(metrics[0], metrics[1]) * 100 if max(metrics[0], metrics[1]) > 0 else 0,
                 "avg_area_diff_pct": metrics[3],
                 "records_with_diff": metrics[4],
             }
@@ -319,46 +314,41 @@ class FieldDatasetAnalyzer:
             area_stats = self.db.execute_query("""
                 WITH area_comparison AS (
                     SELECT 
-                        m.Markblok,
-                        m.Marknr,
-                        m.IMK_areal as marker_area,
-                        m.GBanmeldt as marker_gb_area,
-                        j.Ha as jord_area,
-                        ABS(m.IMK_areal - j.Ha) as imk_ha_diff,
-                        ABS(m.GBanmeldt - j.Ha) as gb_ha_diff
+                        m.field_id,
+                        m.area_ha as marker_area,
+                        m.reported_area_ha as marker_reported_area,
+                        j.area_ha as jord_area,
+                        ABS(m.area_ha - j.area_ha) as area_diff,
+                        ABS(m.reported_area_ha - j.area_ha) as reported_area_diff
                     FROM marker m
                     INNER JOIN jordbrugsanalyser j 
-                    ON m.Markblok = j.MarkBlok AND m.Marknr = j.MarkNr
+                    ON m.field_id = j.field_id
                 )
                 SELECT 
                     COUNT(*) as total_records,
-                    COUNT(CASE WHEN imk_ha_diff > 0.01 THEN 1 END) as imk_diff_records,
-                    COUNT(CASE WHEN gb_ha_diff > 0.01 THEN 1 END) as gb_diff_records,
-                    SUM(imk_ha_diff) as total_imk_diff,
-                    SUM(gb_ha_diff) as total_gb_diff,
-                    AVG(imk_ha_diff) as avg_imk_diff,
-                    AVG(gb_ha_diff) as avg_gb_diff,
-                    MAX(imk_ha_diff) as max_imk_diff,
-                    MAX(gb_ha_diff) as max_gb_diff
+                    COUNT(CASE WHEN area_diff > 0.01 THEN 1 END) as area_diff_records,
+                    COUNT(CASE WHEN reported_area_diff > 0.01 THEN 1 END) as reported_diff_records,
+                    SUM(area_diff) as total_area_diff,
+                    SUM(reported_area_diff) as total_reported_diff,
+                    AVG(area_diff) as avg_area_diff,
+                    AVG(reported_area_diff) as avg_reported_diff,
+                    MAX(area_diff) as max_area_diff,
+                    MAX(reported_area_diff) as max_reported_diff
                 FROM area_comparison
             """)[0]
 
             analysis = {
                 "total_records": area_stats[0],
-                "imk_differences": {
+                "area_differences": {
                     "records_with_diff": area_stats[1],
-                    "diff_percentage": area_stats[1] / area_stats[0] * 100
-                    if area_stats[0] > 0
-                    else 0,
+                    "diff_percentage": area_stats[1] / area_stats[0] * 100 if area_stats[0] > 0 else 0,
                     "total_diff": area_stats[3],
                     "avg_diff": area_stats[5],
                     "max_diff": area_stats[7],
                 },
-                "gb_differences": {
+                "reported_area_differences": {
                     "records_with_diff": area_stats[2],
-                    "diff_percentage": area_stats[2] / area_stats[0] * 100
-                    if area_stats[0] > 0
-                    else 0,
+                    "diff_percentage": area_stats[2] / area_stats[0] * 100 if area_stats[0] > 0 else 0,
                     "total_diff": area_stats[4],
                     "avg_diff": area_stats[6],
                     "max_diff": area_stats[8],
@@ -366,13 +356,13 @@ class FieldDatasetAnalyzer:
             }
             logger.info(f"Total records: {area_stats[0]}")
             logger.info(
-                f"Records with IMK area differences: {area_stats[1]} ({area_stats[1] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
+                f"Records with area differences: {area_stats[1]} ({area_stats[1] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
             )
             logger.info(
-                f"Records with GB area differences: {area_stats[2]} ({area_stats[2] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
+                f"Records with reported area differences: {area_stats[2]} ({area_stats[2] / area_stats[0] * 100:.2f}% if area_stats[0] > 0 else 0)"
             )
-            logger.info(f"Total IMK area difference: {area_stats[3]:.2f} ha")
-            logger.info(f"Total GB area difference: {area_stats[4]:.2f} ha")
+            logger.info(f"Total area difference: {area_stats[3]:.2f} ha")
+            logger.info(f"Total reported area difference: {area_stats[4]:.2f} ha")
             return analysis
         except Exception as e:
             logger.error(f"Error analyzing area differences: {str(e)}")
@@ -384,23 +374,22 @@ class FieldDatasetAnalyzer:
             validation = self.db.execute_query("""
                 WITH field_validation AS (
                     SELECT 
-                        m.Markblok,
-                        m.Marknr,
-                        m.CVR as marker_cvr,
-                        j.EjerNr as jord_cvr,
+                        m.field_id,
+                        m.cvr_number as marker_cvr,
+                        j.cvr_number as jord_cvr,
                         CASE 
-                            WHEN NULLIF(TRIM(m.CVR), '') IS NULL OR j.EjerNr IS NULL THEN 'missing'
-                            WHEN CAST(m.CVR AS VARCHAR) = CAST(j.EjerNr AS VARCHAR) THEN 'match'
+                            WHEN NULLIF(TRIM(m.cvr_number), '') IS NULL OR NULLIF(TRIM(j.cvr_number), '') IS NULL THEN 'missing'
+                            WHEN CAST(m.cvr_number AS VARCHAR) = CAST(j.cvr_number AS VARCHAR) THEN 'match'
                             ELSE 'mismatch'
                         END as cvr_status,
                         CASE 
-                            WHEN m.Afgkode IS NULL OR j.AfgNr IS NULL THEN 'missing'
-                            WHEN CAST(m.Afgkode AS VARCHAR) = CAST(j.AfgNr AS VARCHAR) THEN 'match'
+                            WHEN m.crop_code IS NULL OR j.crop_code IS NULL THEN 'missing'
+                            WHEN CAST(m.crop_code AS VARCHAR) = CAST(j.crop_code AS VARCHAR) THEN 'match'
                             ELSE 'mismatch'
                         END as crop_status
                     FROM marker m
                     FULL JOIN jordbrugsanalyser j 
-                    ON m.Markblok = j.MarkBlok AND m.Marknr = j.MarkNr
+                    ON m.field_id = j.field_id
                 )
                 SELECT 
                     COUNT(*) as total_fields,
@@ -419,17 +408,13 @@ class FieldDatasetAnalyzer:
                     "matching": validation[1],
                     "mismatched": validation[2],
                     "missing": validation[3],
-                    "match_rate": validation[1] / validation[0] * 100
-                    if validation[0] > 0
-                    else 0,
+                    "match_rate": validation[1] / validation[0] * 100 if validation[0] > 0 else 0,
                 },
                 "crop_validation": {
                     "matching": validation[4],
                     "mismatched": validation[5],
                     "missing": validation[6],
-                    "match_rate": validation[4] / validation[0] * 100
-                    if validation[0] > 0
-                    else 0,
+                    "match_rate": validation[4] / validation[0] * 100 if validation[0] > 0 else 0,
                 },
             }
             logger.info(f"Generated field identifier validation: {results}")

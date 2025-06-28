@@ -31,6 +31,9 @@ class BuildingProcessor:
         self.settings = settings
         self.logger = logger
 
+        # Track pipeline start time for consistent timestamping
+        self.pipeline_start_time = datetime.now()
+
         # Initialize Ibis with DuckDB backend with spatial extensions
         self.ibis_conn = ibis.duckdb.connect(":memory:", extensions=["spatial"])
 
@@ -48,7 +51,8 @@ class BuildingProcessor:
             output_dir: Output directory for silver data
             enhance_classification: Whether to enhance classification using WFS data
         """
-        timestamp = datetime.now().strftime("%Y%m%d")
+        # Use pipeline start time for consistent timestamping
+        timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -79,7 +83,7 @@ class BuildingProcessor:
             final_buildings = self._add_derived_fields(clean_buildings)
 
             # Save to GeoParquet
-            output_path = run_dir / "buildings_filtered.parquet"
+            output_path = run_dir / "bbr_buildings_processed.parquet"
             self._save_to_geoparquet(final_buildings, output_path)
 
             # Generate summary statistics
@@ -87,6 +91,9 @@ class BuildingProcessor:
 
             # Save processing metadata
             self._save_processing_metadata_from_data(run_dir, bronze_data, enhance_classification)
+
+            # Generate schema documentation
+            self._generate_schema_documentation(final_buildings, timestamp)
 
             self.logger.info(f"Successfully processed buildings to {output_path}")
 
@@ -109,7 +116,8 @@ class BuildingProcessor:
             output_dir: Output directory for silver data
             enhance_classification: Whether to enhance classification using WFS data
         """
-        timestamp = datetime.now().strftime("%Y%m%d")
+        # Use pipeline start time for consistent timestamping
+        timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,7 +149,7 @@ class BuildingProcessor:
             final_buildings = self._add_derived_fields(clean_buildings)
 
             # Save to GeoParquet
-            output_path = run_dir / "buildings_filtered.parquet"
+            output_path = run_dir / "bbr_buildings_processed.parquet"
             self._save_to_geoparquet(final_buildings, output_path)
 
             # Generate summary statistics
@@ -149,6 +157,9 @@ class BuildingProcessor:
 
             # Save processing metadata
             self._save_processing_metadata(run_dir, gpkg_path, enhance_classification)
+
+            # Generate schema documentation
+            self._generate_schema_documentation(final_buildings, timestamp)
 
             self.logger.info(f"Successfully processed buildings to {output_path}")
 
@@ -1134,3 +1145,54 @@ class BuildingProcessor:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
         self.logger.info(f"Saved processing metadata to {metadata_path}")
+
+    def _generate_schema_documentation(self, buildings_table: ibis.Table, timestamp: str) -> None:
+        """
+        Generate schema documentation for the processed buildings.
+
+        Args:
+            buildings_table: Buildings table
+            timestamp: Timestamp of the processing run
+        """
+        self.logger.info("Generating schema documentation for BBR buildings")
+
+        try:
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            backend_path = Path(__file__).parent.parent.parent.parent
+            if str(backend_path) not in sys.path:
+                sys.path.insert(0, str(backend_path))
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            # Get pipeline start time from timestamp
+            pipeline_start_time = datetime.strptime(timestamp, "%Y%m%d")
+
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=self.conn,  # Use the DuckDB connection
+                pipeline_name="bbr_buildings",
+                pipeline_start_time=pipeline_start_time,
+                logger=self.logger,
+            )
+
+            # The table is already in memory, so we need to create it in DuckDB for schema documentation
+            table_name = "bbr_buildings_processed"
+
+            # Create table in DuckDB from the Ibis table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.conn.execute(f"CREATE TABLE {table_name} AS ({buildings_table.compile()})")
+
+            # Generate documentation for the buildings table
+            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            self.logger.info("Generated schema documentation for BBR buildings")
+
+            # Commit to GitHub
+            schema_manager.commit_to_github()
+            self.logger.info("BBR buildings schema documentation committed to GitHub")
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate BBR schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails

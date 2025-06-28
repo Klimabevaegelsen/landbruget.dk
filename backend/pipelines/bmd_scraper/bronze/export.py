@@ -14,7 +14,8 @@ class BMDScraper:
         self.base_url = base_url
         self.output_dir = output_dir
         self.session = requests.Session()
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.pipeline_start_time = datetime.now()
+        self.timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
@@ -145,7 +146,7 @@ class BMDScraper:
     def save_metadata(self, download_url, full_url, file_path):
         """Save metadata about the downloaded file."""
         metadata = {
-            "fetch_timestamp": datetime.now().isoformat(),
+            "fetch_timestamp": self.pipeline_start_time.isoformat(),
             "source_url": full_url,
             "download_url_path": download_url,
             "base_url": self.base_url,
