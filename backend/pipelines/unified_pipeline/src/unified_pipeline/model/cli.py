@@ -60,6 +60,7 @@ class Source(Enum):
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"
+    pesticide_disaggregation = "pesticide_disaggregation"
 
 
 class Stage(Enum):

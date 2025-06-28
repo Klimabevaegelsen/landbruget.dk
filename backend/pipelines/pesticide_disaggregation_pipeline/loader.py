@@ -44,7 +44,7 @@ class DatasetLoader:
             raise
 
     def find_specific_file(self, base_path: str, filename: str) -> str:
-        """Find a specific file in a GCS directory structure (for pesticide and GKEA data)"""
+        """Find a specific file in a GCS directory structure (for pesticide data)"""
         try:
             # Look for the file in timestamped subdirectories
             paths = self.gcs.glob(f"{base_path}/*/{filename}")
@@ -52,15 +52,7 @@ class DatasetLoader:
                 # Try direct pattern match
                 paths = self.gcs.glob(f"{base_path}/{filename}")
 
-            # For GKEA files, try alternative naming patterns if not found
-            if not paths and "GKEA" in filename:
-                # Try with _Aktindsigt suffix for some years
-                alt_filename = filename.replace(".parquet", "_Aktindsigt.parquet")
-                paths = self.gcs.glob(f"{base_path}/*/{alt_filename}")
-                if not paths:
-                    paths = self.gcs.glob(f"{base_path}/{alt_filename}")
-                if paths:
-                    logger.info(f"📋 Found GKEA file with alternative naming: {alt_filename}")
+            # REMOVED: GKEA alternative naming logic - GKEA data no longer used
 
             if not paths:
                 raise FileNotFoundError(f"No files found matching {base_path}/*/{filename} or alternative patterns")
@@ -116,9 +108,9 @@ class DatasetLoader:
         field_year = pesticide_year + 1
         file_patterns = {
             "marker": "data.parquet",
-            "jordbrugsanalyser": "data.parquet",
             "pesticide": f"pesticiddata_{pesticide_year}_{pesticide_year + 1}.parquet",
-            "gkea": f"GKEA{field_year}_Markplan_med_Gødningsoplysninger.parquet",
+            # REMOVED: "jordbrugsanalyser": "data.parquet" - redundant validation dataset
+            # REMOVED: "gkea": f"GKEA{field_year}_Markplan_med_Gødningsoplysninger.parquet" - GKEA data removed
         }
 
         for dataset_name, gcs_base_path in gcs_sources.items():
@@ -127,7 +119,7 @@ class DatasetLoader:
                 pattern = file_patterns.get(dataset_name, "data.parquet")
 
                 # Use appropriate method based on dataset type
-                if dataset_name in ["pesticide", "gkea"]:
+                if dataset_name in ["pesticide"]:  # REMOVED: "gkea" - GKEA data no longer used
                     gcs_file_path = self.find_specific_file(full_gcs_path, pattern)
                 else:
                     gcs_file_path = self.find_latest_data_path(full_gcs_path, pattern)
