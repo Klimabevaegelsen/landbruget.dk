@@ -68,6 +68,7 @@ class BronzePipeline:
         self.bronze_data_dir = self.pipeline_root_dir / "bronze" / "data"
         self.gcs_bucket = gcs_bucket
         self.log_level = log_level
+        self.pipeline_start_time = datetime.datetime.now()  # Track pipeline start time
 
         # Set logging level
         logging.basicConfig(
@@ -224,7 +225,7 @@ class BronzePipeline:
 
     def save_raw_data(self, data: bytes, filter_name: str = None) -> tuple[Path | None, str | None]:
         """Saves raw data to a timestamped directory in the bronze layer."""
-        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp_str = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         storage_dir = self.bronze_data_dir / timestamp_str
         try:
             storage_dir.mkdir(parents=True, exist_ok=True)
@@ -376,7 +377,7 @@ class BronzePipeline:
 
         merged_df = pd.concat(dfs, ignore_index=True)
 
-        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp_str = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         storage_dir = self.bronze_data_dir / timestamp_str
         storage_dir.mkdir(parents=True, exist_ok=True)
 

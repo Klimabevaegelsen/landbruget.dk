@@ -135,12 +135,58 @@ class ExcelTransformer(BaseTransformer):
 
             for sheet_name in excel_file.sheet_names:
                 try:
-                    # Read the sheet
-                    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+                    # First, read the sheet without any header processing to detect structure
+                    df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
 
                     # Skip empty sheets
-                    if df.empty:
+                    if df_raw.empty:
                         logger.debug(f"Skipping empty sheet: {sheet_name}")
+                        continue
+
+                    # Auto-detect header row by finding the first row that isn't mostly empty/NaN
+                    header_row = 0
+                    for i in range(min(5, len(df_raw))):  # Check first 5 rows max
+                        row = df_raw.iloc[i]
+                        # Count non-null, non-empty values
+                        valid_values = row.dropna()
+                        valid_values = valid_values[valid_values.astype(str).str.strip() != ""]
+
+                        # If row has at least 3 valid values, consider it a potential header
+                        if len(valid_values) >= 3:
+                            # Check if this looks like a header row (contains text, not mostly numbers)
+                            text_count = sum(
+                                1
+                                for val in valid_values
+                                if isinstance(val, str)
+                                or (
+                                    pd.notna(val)
+                                    and not str(val).replace(".", "").replace("-", "").isdigit()
+                                )
+                            )
+
+                            if text_count >= len(valid_values) * 0.6:  # At least 60% text values
+                                header_row = i
+                                break
+
+                    # Now read with the detected header row
+                    if header_row > 0:
+                        logger.debug(
+                            f"Auto-detected header row at position {header_row} for sheet {sheet_name}"
+                        )
+                        # Skip rows before header and use the detected row as header
+                        df = pd.read_excel(
+                            excel_file,
+                            sheet_name=sheet_name,
+                            header=header_row,
+                            skiprows=list(range(header_row)),
+                        )
+                    else:
+                        # Standard parsing if header is in row 0
+                        df = pd.read_excel(excel_file, sheet_name=sheet_name)
+
+                    # Skip empty sheets after processing
+                    if df.empty:
+                        logger.debug(f"Skipping empty sheet after processing: {sheet_name}")
                         continue
 
                     # Clean sheet name for filename

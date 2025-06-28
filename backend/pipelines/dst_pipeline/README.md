@@ -344,7 +344,7 @@ Danmarks Statistik API has limitations:
 
 ## DST-Field Crop Mapping Integration
 
-The DST pipeline data can be integrated with agricultural field data using the comprehensive crop mapping table located at `../../dst_field_crop_mapping_table.py`. This mapping enables field-level production estimation by linking field crop types to DST statistical categories.
+The DST pipeline data can be integrated with agricultural field data using the comprehensive crop mapping table located at `dst_field_crop_mapping_table.py`. This mapping enables field-level production estimation by linking field crop types to DST statistical categories.
 
 ### Key Integration Features:
 - **180 mapped crop types** covering 74.5% of agricultural field records
@@ -355,7 +355,7 @@ The DST pipeline data can be integrated with agricultural field data using the c
 ### Usage Example:
 ```python
 # Load the mapping table
-exec(open('../../dst_field_crop_mapping_table.py').read())
+exec(open('dst_field_crop_mapping_table.py').read())
 
 # Load DST data and field data
 dst_data = pd.read_parquet('silver/dst/latest/hst77_processed.parquet')
@@ -397,7 +397,7 @@ After data is collected and processed through bronze and silver layers:
 - [Danmarks Statistik API Documentation](https://www.dst.dk/da/Statistik/hjaelp-til-statistikbanken/api)
 - [API Console](https://www.dst.dk/da/Statistik/hjaelp-til-statistikbanken/api#konsol)
 - [Pipeline Architecture Documentation](../README.md)
-- [DST-Field Crop Mapping Table](../../dst_field_crop_mapping_table.py)
+- [DST-Field Crop Mapping Table](dst_field_crop_mapping_table.py)
 - [Data Cache Catalog](../../DATA_CACHE_CATALOG.md)
 
 ## Silver Layer Processing
