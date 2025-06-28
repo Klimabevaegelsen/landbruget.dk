@@ -444,6 +444,31 @@ class GCSUtil(metaclass=Singleton):
         blob.upload_from_string(json_str, content_type="application/json")
         self.log.info(f"Uploaded JSON data to gs://{bucket_name}/{blob_name}")
 
+    def upload_file(
+        self, bucket_name: str, source_file_path: str, destination_blob_name: str
+    ) -> None:
+        """
+        Upload a local file to GCS.
+
+        Args:
+            bucket_name: Name of the GCS bucket
+            source_file_path: Path to the local file to upload
+            destination_blob_name: Path to save the file in the bucket
+        """
+        bucket = self.get_bucket(bucket_name)
+        blob = bucket.blob(destination_blob_name)
+
+        # Get file size for logging
+        file_size = os.path.getsize(source_file_path)
+        file_size_mb = file_size / (1024 * 1024)
+
+        self.log.info(
+            f"Uploading {source_file_path} ({file_size_mb:.1f} MB) to gs://{bucket_name}/{destination_blob_name}"
+        )
+
+        blob.upload_from_filename(source_file_path)
+        self.log.info(f"Successfully uploaded file to gs://{bucket_name}/{destination_blob_name}")
+
     def download_json_from_gcs(self, bucket_name: str, blob_name: str) -> Union[dict, list]:
         """
         Download JSON data from GCS.
