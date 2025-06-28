@@ -6,8 +6,13 @@ retrieving files, accessing buckets and working with blobs. It implements
 a singleton pattern to ensure only one GCS client exists throughout the application.
 """
 
-from typing import Optional
+import json
+import os
+import tempfile
+from typing import Optional, Union
 
+import geopandas as gpd
+import pandas as pd
 from google.auth import exceptions
 from google.cloud import storage
 from google.cloud.storage import Blob, Client
@@ -320,3 +325,136 @@ class GCSUtil(metaclass=Singleton):
                 except Exception as cleanup_e:
                     self.log.warning(f"Failed to clean up partial download: {cleanup_e}")
             raise
+
+    def download_geopandas_from_gcs(self, bucket_name: str, blob_name: str):
+        """
+        Download a parquet file from GCS and return as GeoDataFrame.
+
+        Args:
+            bucket_name (str): Name of the GCS bucket
+            blob_name (str): Path to the parquet file in the bucket
+
+        Returns:
+            GeoDataFrame: The downloaded data as a GeoPandas DataFrame
+        """
+        import os
+        import tempfile
+
+        import geopandas as gpd
+
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+            temp_path = tmp_file.name
+
+        try:
+            # Download file to temporary location
+            self.download_file(bucket_name, blob_name, temp_path)
+
+            # Read as GeoDataFrame
+            gdf = gpd.read_parquet(temp_path)
+            self.log.info(f"Successfully loaded {len(gdf)} records from {blob_name}")
+            return gdf
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def upload_pandas_to_gcs(
+        self, df: pd.DataFrame, bucket_name: str, blob_name: str, file_format: str = "parquet"
+    ) -> None:
+        """
+        Upload a pandas DataFrame to GCS.
+
+        Args:
+            df: DataFrame to upload
+            bucket_name: Name of the GCS bucket
+            blob_name: Path to save the file in the bucket
+            file_format: Format to save the file ('parquet' or 'csv')
+        """
+        bucket = self.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_format}", delete=False) as tmp_file:
+            temp_path = tmp_file.name
+
+        try:
+            if file_format == "parquet":
+                df.to_parquet(temp_path, index=False)
+            elif file_format == "csv":
+                df.to_csv(temp_path, index=False)
+            else:
+                raise ValueError(f"Unsupported file format: {file_format}")
+
+            blob.upload_from_filename(temp_path)
+            self.log.info(f"Uploaded DataFrame ({len(df)} rows) to gs://{bucket_name}/{blob_name}")
+
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def upload_geopandas_to_gcs(
+        self, gdf: gpd.GeoDataFrame, bucket_name: str, blob_name: str, file_format: str = "parquet"
+    ) -> None:
+        """
+        Upload a GeoPandas GeoDataFrame to GCS.
+
+        Args:
+            gdf: GeoDataFrame to upload
+            bucket_name: Name of the GCS bucket
+            blob_name: Path to save the file in the bucket
+            file_format: Format to save the file ('parquet' or 'geojson')
+        """
+        bucket = self.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_format}", delete=False) as tmp_file:
+            temp_path = tmp_file.name
+
+        try:
+            if file_format == "parquet":
+                gdf.to_parquet(temp_path, index=False)
+            elif file_format == "geojson":
+                gdf.to_file(temp_path, driver="GeoJSON")
+            else:
+                raise ValueError(f"Unsupported file format: {file_format}")
+
+            blob.upload_from_filename(temp_path)
+            self.log.info(
+                f"Uploaded GeoDataFrame ({len(gdf)} rows) to gs://{bucket_name}/{blob_name}"
+            )
+
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def upload_json_to_gcs(self, data: Union[dict, list], bucket_name: str, blob_name: str) -> None:
+        """
+        Upload JSON data to GCS.
+
+        Args:
+            data: Data to upload (dict or list)
+            bucket_name: Name of the GCS bucket
+            blob_name: Path to save the file in the bucket
+        """
+        bucket = self.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+
+        json_str = json.dumps(data, indent=2, default=str)
+        blob.upload_from_string(json_str, content_type="application/json")
+        self.log.info(f"Uploaded JSON data to gs://{bucket_name}/{blob_name}")
+
+    def download_json_from_gcs(self, bucket_name: str, blob_name: str) -> Union[dict, list]:
+        """
+        Download JSON data from GCS.
+
+        Args:
+            bucket_name: Name of the GCS bucket
+            blob_name: Path to the file in the bucket
+
+        Returns:
+            The JSON data as a dict or list
+        """
+        blob = self.get_blob(bucket_name, blob_name)
+        json_str = blob.download_as_text(encoding="utf-8")
+        return json.loads(json_str)
