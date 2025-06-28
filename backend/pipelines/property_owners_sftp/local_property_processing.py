@@ -21,7 +21,13 @@ from shapely.geometry import shape
 try:
     import duckdb
 
-    from backend.common.schema_documentation import SchemaDocumentationManager
+    try:
+        from backend.common.schema_documentation import SchemaDocumentationManager
+    except ImportError as e:
+        import warnings
+
+        warnings.warn(f"Schema documentation not available: {e}")
+        SchemaDocumentationManager = None
 except ImportError:
     # Fallback for when running standalone
     duckdb = None

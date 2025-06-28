@@ -46,11 +46,29 @@ logging.info("--- Script execution started ---")
 load_dotenv()
 
 # Add the backend directory to sys.path for imports
-backend_path = Path(__file__).parent.parent.parent.parent
-if str(backend_path) not in sys.path:
-    sys.path.insert(0, str(backend_path))
+from pathlib import Path
 
-from backend.common.schema_documentation import SchemaDocumentationManager
+# Find the project root (directory containing 'backend' folder)
+current_file = Path(__file__).resolve()
+project_root = None
+
+# Go up the directory tree to find the project root
+for parent in current_file.parents:
+    if (parent / "backend").is_dir():
+        project_root = parent
+        break
+
+if project_root and str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from backend.common.schema_documentation import SchemaDocumentationManager
+except ImportError as e:
+    # If import fails, disable schema documentation
+    import warnings
+
+    warnings.warn(f"Schema documentation not available: {e}")
+    SchemaDocumentationManager = None
 
 
 # --- Main Processing Logic ---
@@ -592,46 +610,51 @@ def process_chr_data(
             continue
 
     # --- 13. Generate Schema Documentation ---
-    logging.info("Generating schema documentation for CHR silver tables...")
-    try:
-        # Get the pipeline start time from the silver_dir timestamp
-        dir_name = silver_dir.name
-        if len(dir_name) == 15 and dir_name[8] == "_":  # Format: YYYYMMDD_HHMMSS
-            pipeline_start_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
-        else:
-            pipeline_start_time = datetime.now()
+    if SchemaDocumentationManager is not None:
+        logging.info("Generating schema documentation for CHR silver tables...")
+        try:
+            # Get the pipeline start time from the silver_dir timestamp
+            dir_name = silver_dir.name
+            if len(dir_name) == 15 and dir_name[8] == "_":  # Format: YYYYMMDD_HHMMSS
+                pipeline_start_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
+            else:
+                pipeline_start_time = datetime.now()
 
-        # Initialize schema documentation manager
-        schema_manager = SchemaDocumentationManager(
-            connection=con.con,  # Use the DuckDB connection
-            pipeline_name="chr_pipeline",
-            pipeline_start_time=pipeline_start_time,
-            logger=logging.getLogger(__name__),
-        )
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=con.con,  # Use the DuckDB connection
+                pipeline_name="chr_pipeline",
+                pipeline_start_time=pipeline_start_time,
+                logger=logging.getLogger(__name__),
+            )
 
-        # Get list of tables that were actually created
-        tables_query = "SHOW TABLES"
-        tables_result = con.con.execute(tables_query).fetchall()
-        silver_tables = [
-            table[0]
-            for table in tables_result
-            if table[0] not in ["bes_details", "diko_flyt", "ejendom_oplys", "ejendom_vet", "vetstat"]
-        ]
+            # Get list of tables that were actually created
+            tables_query = "SHOW TABLES"
+            tables_result = con.con.execute(tables_query).fetchall()
+            silver_tables = [
+                table[0]
+                for table in tables_result
+                if table[0] not in ["bes_details", "diko_flyt", "ejendom_oplys", "ejendom_vet", "vetstat"]
+            ]
 
-        if silver_tables:
-            # Generate documentation for all silver tables
-            schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
-            logging.info(f"Generated schema documentation for {len(silver_tables)} tables: {', '.join(silver_tables)}")
+            if silver_tables:
+                # Generate documentation for all silver tables
+                schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
+                logging.info(
+                    f"Generated schema documentation for {len(silver_tables)} tables: {', '.join(silver_tables)}"
+                )
 
-            # Commit to GitHub
-            schema_manager.commit_to_github()
-            logging.info("Schema documentation committed to GitHub")
-        else:
-            logging.warning("No silver tables found for schema documentation")
+                # Commit to GitHub
+                schema_manager.commit_to_github()
+                logging.info("Schema documentation committed to GitHub")
+            else:
+                logging.warning("No silver tables found for schema documentation")
 
-    except Exception as e:
-        logging.error(f"Failed to generate schema documentation: {e}", exc_info=True)
-        # Don't fail the pipeline if schema documentation fails
+        except Exception as e:
+            logging.error(f"Failed to generate schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
+    else:
+        logging.warning("Schema documentation disabled due to import error")
 
     # --- 14. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():
