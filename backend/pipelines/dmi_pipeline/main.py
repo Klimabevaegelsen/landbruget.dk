@@ -17,6 +17,9 @@ from silver.load import DataLoader
 from silver.transform import DataTransformer
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+# Import GCS storage interface
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -104,32 +107,41 @@ async def process_parameter(
     extractor: DMIApiClient,
     transformer: DataTransformer,
     loader: DataLoader,
+    storage_backend,
     parameter_id: str,
     start_time: datetime,
     end_time: datetime,
-    bronze_dir: Path,
-    silver_dir: Path,
+    bronze_path: str,
+    silver_path: str,
 ) -> int:
     """Process a single parameter and return the count of processed records"""
     logger.info(f"Fetching {parameter_id} data from {start_time} to {end_time}")
 
-    # Fetch and save raw data in bronze layer
-    data = await extractor.fetch_grid_data(parameter_id, start_time, end_time, bronze_dir / "raw")
+    # Fetch raw data from DMI API
+    data = await extractor.fetch_grid_data(parameter_id, start_time, end_time)
 
     if data and data["features"]:
+        # Save raw data to bronze layer
+        bronze_file_path = f"{bronze_path}/raw/{parameter_id}_raw.json"
+        storage_backend.save_json(data, bronze_file_path)
+        logger.info(f"Saved raw data to {bronze_file_path}")
+
         # Transform raw grid data into structured format using DuckDB
         processed_result = transformer.transform_data(data)
 
         if processed_result:
-            # Save processed data in silver layer
-            if loader.save_data(processed_result, silver_dir / "processed", f"{parameter_id}_processed"):
-                # Get count of processed records
-                count = processed_result.execute("SELECT COUNT(*) as count").fetchone()[0]
-                logger.info(f"Successfully processed {count} records for {parameter_id}")
-                return count
-            else:
-                logger.error(f"Failed to save processed data for {parameter_id}")
-                return 0
+            # Convert DuckDB result to DataFrame for storage
+            df = processed_result.df()
+
+            # Save processed data to silver layer
+            silver_file_path = f"{silver_path}/processed/{parameter_id}_processed.parquet"
+            storage_backend.save_parquet(df, silver_file_path)
+
+            # Get count of processed records
+            count = len(df)
+            logger.info(f"Successfully processed {count} records for {parameter_id}")
+            logger.info(f"Saved processed data to {silver_file_path}")
+            return count
         else:
             logger.error(f"Failed to transform data for {parameter_id}")
             return 0
@@ -163,12 +175,20 @@ async def main():
         pipeline_start_time = datetime.now()
         timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
-        # Use environment variable for base data path, with fallback to relative path for local development
-        base_data_path = os.getenv("DATA_PATH", "./data")
-        bronze_dir = Path(base_data_path) / "bronze" / "dmi" / timestamp
-        silver_dir = Path(base_data_path) / "silver" / "dmi" / timestamp
-        bronze_dir.mkdir(parents=True, exist_ok=True)
-        silver_dir.mkdir(parents=True, exist_ok=True)
+        # Initialize storage backend (GCS or local based on environment)
+        gcs_bucket = os.getenv("GCS_BUCKET")
+        if gcs_bucket:
+            logger.info(f"Using GCS storage: {gcs_bucket}")
+            storage_backend = GCSStorage(gcs_bucket)
+            # For GCS, we use string paths instead of Path objects
+            bronze_path = f"bronze/dmi/{timestamp}"
+            silver_path = f"silver/dmi/{timestamp}"
+        else:
+            logger.info("Using local storage")
+            base_data_path = os.getenv("DATA_PATH", "./data")
+            storage_backend = LocalStorage(base_data_path)
+            bronze_path = f"bronze/dmi/{timestamp}"
+            silver_path = f"silver/dmi/{timestamp}"
 
         # Process both parameters
         parameters = {"pot_evaporation_makkink": "Potential Evaporation", "acc_precip": "Precipitation"}
@@ -178,7 +198,15 @@ async def main():
             for param_id, param_name in parameters.items():
                 try:
                     count = await process_parameter(
-                        extractor, transformer, loader, param_id, start_time, end_time, bronze_dir, silver_dir
+                        extractor,
+                        transformer,
+                        loader,
+                        storage_backend,
+                        param_id,
+                        start_time,
+                        end_time,
+                        bronze_path,
+                        silver_path,
                     )
                     total_records += count
                 except Exception as e:
@@ -188,7 +216,12 @@ async def main():
         logger.warning("Pipeline completed successfully")
         if args.progress:
             logger.warning(f"Total records processed: {total_records}")
-            logger.warning(f"Data exported to: {bronze_dir} and {silver_dir}")
+            if gcs_bucket:
+                logger.warning(f"Data exported to GCS bucket: {gcs_bucket}")
+                logger.warning(f"Bronze path: {bronze_path}")
+                logger.warning(f"Silver path: {silver_path}")
+            else:
+                logger.warning(f"Data exported to local storage: {bronze_path} and {silver_path}")
 
         # Generate schema documentation for processed data
         if total_records > 0:
@@ -222,14 +255,21 @@ async def main():
 
                 conn = duckdb.connect()
 
-                # Find all processed parquet files in silver directory
-                processed_files = list((silver_dir / "processed").glob("*.parquet"))
-                table_names = []
+                # For GCS storage, we'll skip the detailed schema documentation for now
+                # as it requires downloading files from GCS
+                if gcs_bucket:
+                    logger.info("Schema documentation for GCS files not yet implemented")
+                    table_names = []
+                else:
+                    # Find all processed parquet files in silver directory
+                    silver_local_dir = Path(base_data_path) / silver_path / "processed"
+                    processed_files = list(silver_local_dir.glob("*.parquet"))
+                    table_names = []
 
-                for file_path in processed_files:
-                    table_name = file_path.stem  # filename without extension
-                    conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')")
-                    table_names.append(table_name)
+                    for file_path in processed_files:
+                        table_name = file_path.stem  # filename without extension
+                        conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')")
+                        table_names.append(table_name)
 
                 if table_names and SchemaDocumentationManager is not None:
                     # Initialize schema documentation manager
