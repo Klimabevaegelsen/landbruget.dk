@@ -469,7 +469,7 @@ class BaseSource(Generic[T], ABC):
         This method is kept for backward compatibility during the refactoring transition.
         """
         self.log.warning("_save_raw_data is deprecated. Use _save_data() instead.")
-        self._save_data(df, dataset, bucket_name, stage="bronze")
+        self._save_data(df, dataset, bucket=bucket_name, stage="bronze")
 
     def _save_raw_json(
         self, raw_data: list[str], dataset: str, bucket_name: str, filename="data"
@@ -481,7 +481,7 @@ class BaseSource(Generic[T], ABC):
         This method is kept for backward compatibility during the refactoring transition.
         """
         self.log.warning("_save_raw_json is deprecated. Use _save_data() instead.")
-        self._save_data(raw_data, dataset, bucket_name, stage="bronze")
+        self._save_data(raw_data, dataset, bucket=bucket_name, stage="bronze")
 
     # Legacy path methods - keeping for backward compatibility
     def _get_bronze_path(self, dataset: str, bucket_name: str, path: str) -> Optional[str]:

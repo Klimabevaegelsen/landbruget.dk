@@ -275,7 +275,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             self._save_data(
                 data=processed_data,
                 dataset=self.config.dataset,
-                bucket_name=self.config.bucket,
+                bucket=self.config.bucket,
                 stage="silver",
             )
 
