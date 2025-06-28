@@ -457,6 +457,10 @@ class InspireBBRFetcher:
         # Use current timestamp for temporal filtering (required by API)
         current_timestamp = datetime.now().isoformat() + "Z"
 
+        # Debug: Log API key status and timestamp
+        api_key_status = "SET" if self.settings.datafordeler_graphql_api_key else "MISSING"
+        self.logger.info(f"API Key status: {api_key_status}, Using timestamp: {current_timestamp}")
+
         for batch_idx in range(0, len(uuids), batch_size):
             batch_uuids = uuids[batch_idx : batch_idx + batch_size]
             batch_num = (batch_idx // batch_size) + 1
@@ -481,6 +485,11 @@ class InspireBBRFetcher:
             }}
             """
 
+            # Debug: Log query and sample UUIDs for first few batches
+            if batch_num <= 3:
+                self.logger.info(f"    Sample UUIDs: {batch_uuids[:3]}")
+                self.logger.info(f"    GraphQL query: {query}")
+
             try:
                 response = requests.post(
                     graphql_url,
@@ -488,6 +497,11 @@ class InspireBBRFetcher:
                     json={"query": query},
                     timeout=30,
                 )
+
+                # Debug: Log response details for first few batches
+                if batch_num <= 3:
+                    self.logger.info(f"    HTTP Status: {response.status_code}")
+                    self.logger.info(f"    Response: {response.text[:1000]}")
 
                 if response.status_code != 200:
                     self.logger.warning(f"    HTTP Error: {response.status_code}")
@@ -522,8 +536,20 @@ class InspireBBRFetcher:
                 # Rate limiting
                 time.sleep(0.5)
 
+                # Early exit for debugging in CI - stop after 5 batches if no results
+                if batch_num >= 5 and len(all_results) == 0:
+                    self.logger.warning(
+                        f"    No results after {batch_num} batches - stopping early for debugging"
+                    )
+                    break
+
             except Exception as e:
                 self.logger.warning(f"    Error: {e}")
+                # Debug: Log full error for first few batches
+                if batch_num <= 3:
+                    import traceback
+
+                    self.logger.warning(f"    Full error: {traceback.format_exc()}")
                 continue
 
         self.logger.info(
