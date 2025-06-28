@@ -21,9 +21,14 @@ on:
           - spf_su
           - dagi
           - jordbrugsanalyser
+          - fvm_wfs
           - soil_types
           - wetlands
           - water_projects
+          - property_cadastral_merge
+          - field_production
+          - field_area_analysis
+          - pesticide_disaggregation
 
 jobs:
   run-unified-pipeline:
@@ -34,9 +39,9 @@ jobs:
         source: >-
           ${{
             github.event_name == 'schedule' &&
-            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "soil_types", "wetlands", "water_projects"]') ||
+            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "fvm_wfs", "soil_types", "wetlands", "water_projects"]') ||
             (github.event.inputs.source == 'all' &&
-            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "soil_types", "wetlands", "water_projects"]')) ||
+            fromJson('["cadastral", "agricultural_fields", "bnbo", "spf_su", "dagi", "jordbrugsanalyser", "fvm_wfs", "soil_types", "wetlands", "water_projects", "property_cadastral_merge", "field_production", "field_area_analysis", "pesticide_disaggregation"]')) ||
             fromJson(format('["{0}"]', github.event.inputs.source))
           }}
       fail-fast: false
