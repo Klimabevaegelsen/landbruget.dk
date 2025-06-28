@@ -11,6 +11,17 @@ on:
         description: 'Specific years to process (comma-separated, e.g., "2024,2023" or "all")'
         required: false
         default: 'all'
+      stage:
+        description: 'Pipeline stage to run (bronze, silver, all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - bronze
+          - silver
+          - all
+  repository_dispatch:
+    types: [fvm_wfs_trigger]
 
 jobs:
   generate-matrix:
@@ -84,7 +95,7 @@ jobs:
           echo "Generated matrix with ${#matrix_items[@]} jobs:"
           echo "$matrix_json" | jq '.'
 
-  download:
+  process:
     needs: generate-matrix
     runs-on: ubuntu-latest
     strategy:
@@ -93,7 +104,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     
-    name: Download ${{ matrix.layer_type }}_${{ matrix.year }}
+    name: Process ${{ matrix.layer_type }}_${{ matrix.year }}
     
     steps:
       - name: Checkout code
@@ -117,13 +128,14 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Download FVM WFS Layer
+      - name: Process FVM WFS Layer
         run: |
           cd backend/pipelines/unified_pipeline
-          echo "Downloading ${{ matrix.layer_type }} for year ${{ matrix.year }}"
+          STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          echo "Processing ${{ matrix.layer_type }} for year ${{ matrix.year }} (stage: $STAGE)"
           python -m unified_pipeline \
             -s fvm_wfs \
-            -j bronze \
+            -j "$STAGE" \
             --fvm-layer-type ${{ matrix.layer_type }} \
             --fvm-year ${{ matrix.year }}
         timeout-minutes: 30  # Timeout per layer (should be sufficient based on testing)
@@ -131,33 +143,36 @@ jobs:
       - name: Report completion
         if: success()
         run: |
-          echo "✅ Successfully downloaded ${{ matrix.layer_type }}_${{ matrix.year }}"
-          echo "Data saved to: gs://landbrugsdata-raw-data/bronze/fvm_${{ matrix.layer_type }}_${{ matrix.year }}/"
+          STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          echo "✅ Successfully processed ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
+          echo "Data saved to: gs://landbrugsdata-raw-data/$STAGE/fvm_${{ matrix.layer_type }}_${{ matrix.year }}/"
 
       - name: Report failure
         if: failure()
         run: |
-          echo "❌ Failed to download ${{ matrix.layer_type }}_${{ matrix.year }}"
+          STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          echo "❌ Failed to process ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
           exit 1
 
   summary:
-    needs: [generate-matrix, download]
+    needs: [generate-matrix, process]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Download Summary
+      - name: Processing Summary
         run: |
-          echo "## FVM WFS Download Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Layer Type | Years | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          echo "## FVM WFS Processing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Layer Type | Years | Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|-------|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           # This would need to be enhanced to show actual results
           # For now, just show that the workflow completed
-          echo "| All layers | As requested | Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| All layers | As requested | $STAGE | Completed |" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Performance Notes" >> $GITHUB_STEP_SUMMARY
-          echo "- Each layer downloads ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
+          echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
           echo "- Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Total time for all 43 layers: ~15-20 minutes (vs 45+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
-          echo "- Data stored in: \`gs://landbrugsdata-raw-data/bronze/fvm_*\`" >> $GITHUB_STEP_SUMMARY 
+          echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 
