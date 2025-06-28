@@ -106,7 +106,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             # Return original data if dissolve fails
             return gdf
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[gpd.GeoDataFrame]:
         """
         Run the complete Cadastral silver layer processing job.
 
@@ -121,7 +121,8 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                         this data will be used instead of reading from storage.
 
         Returns:
-            None
+            Optional[gpd.GeoDataFrame]: Processed cadastral data for gold layer,
+                                       or None if processing fails.
 
         Raises:
             Exception: If there are issues at any step in the process.
@@ -135,18 +136,18 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                 raw_data = bronze_data
             else:
                 self.log.error(f"Expected GeoDataFrame from bronze stage, got {type(bronze_data)}")
-                return
+                return None
         else:
             # Fallback to reading from storage
             self.log.info("Reading bronze data from storage (fallback)")
             raw_data = self._read_bronze_data_from_storage(self.config.dataset, self.config.bucket)
             if raw_data is None:
                 self.log.error("Failed to read raw data from storage")
-                return
+                return None
 
         if raw_data is None or raw_data.empty:
             self.log.warning("No data found in bronze layer")
-            return
+            return None
 
         self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
 
@@ -155,7 +156,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
         if processed_gdf is None or processed_gdf.empty:
             self.log.warning("No valid geometries found after processing")
-            return
+            return None
 
         # Create dissolved version
         dissolved_gdf = self._create_dissolved_gdf(processed_gdf)
@@ -167,3 +168,6 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         )
 
         self.log.info("Cadastral silver job completed successfully")
+
+        # Return processed data for gold layer
+        return processed_gdf

@@ -9,6 +9,7 @@ to support agricultural and public health analyses.
 import argparse
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from bronze.geodanmark_wfs_fetcher import GeoDanmarkWFSFetcher
@@ -65,9 +66,12 @@ def main():
     # Load configuration
     settings = get_settings()
 
+    # Track pipeline start time for consistent timestamping
+    pipeline_start_time = datetime.now()
+
     try:
         if args.layer == "bronze":
-            run_bronze_layer(args, settings, logger)
+            run_bronze_layer(args, settings, logger, pipeline_start_time)
 
         elif args.layer == "silver":
             if not args.input_dir:
@@ -81,7 +85,9 @@ def main():
             logger.info(
                 "Running both layers - bronze will export and pass data to silver in memory"
             )
-            bronze_data = run_bronze_layer(args, settings, logger, return_data=True)
+            bronze_data = run_bronze_layer(
+                args, settings, logger, pipeline_start_time, return_data=True
+            )
 
             # Run silver layer with in-memory data
             run_silver_layer(args, settings, logger, bronze_data=bronze_data)
@@ -92,7 +98,11 @@ def main():
 
 
 def run_bronze_layer(
-    args: argparse.Namespace, settings: Settings, logger: logging.Logger, return_data: bool = False
+    args: argparse.Namespace,
+    settings: Settings,
+    logger: logging.Logger,
+    pipeline_start_time: datetime,
+    return_data: bool = False,
 ):
     """Execute bronze layer processing with coordinated INSPIRE BBR + GeoDanmark WFS."""
     logger.info("Starting bronze layer with INSPIRE BBR + GeoDanmark WFS")
@@ -107,7 +117,10 @@ def run_bronze_layer(
     logger.info("Fetching INSPIRE BBR building attributes with GraphQL enrichment...")
     inspire_fetcher = InspireBBRFetcher(settings, logger)
     inspire_result = inspire_fetcher.fetch_data(
-        output_dir, sample_size=args.sample_size, return_data=return_data
+        output_dir,
+        sample_size=args.sample_size,
+        return_data=return_data,
+        pipeline_start_time=pipeline_start_time,
     )
 
     # Then run GeoDanmark WFS to get geometries for the filtered buildings
@@ -137,7 +150,7 @@ def run_bronze_layer(
         logger.info(f"Requesting geometries for {len(building_ids):,} buildings")
 
         geodanmark_result = geodanmark_fetcher.fetch_building_geometries(
-            output_dir, building_ids, return_data=True
+            output_dir, building_ids, return_data=True, pipeline_start_time=pipeline_start_time
         )
 
         # Combine both results for silver layer using new structure

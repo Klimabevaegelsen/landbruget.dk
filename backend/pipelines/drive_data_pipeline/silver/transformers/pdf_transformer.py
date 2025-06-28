@@ -47,8 +47,17 @@ class PDFTransformer(BaseTransformer):
                     error="PDF file has no extractable tables",
                 )
 
-            # Create output directory for this file
-            file_output_dir = output_dir / metadata.original_subfolder / "pdf"
+            # Create output directory for this file - apply same sanitization as silver storage
+            sanitized_subfolder = (
+                metadata.original_subfolder.replace(" ", "_").replace(".", "_").replace(":", "_")
+            )
+            sanitized_subfolder = "".join(
+                c for c in sanitized_subfolder if c.isalnum() or c in "_-"
+            )
+            # Convert to lowercase
+            sanitized_subfolder = sanitized_subfolder.lower()
+
+            file_output_dir = output_dir / sanitized_subfolder / "pdf"
             file_output_dir.mkdir(parents=True, exist_ok=True)
 
             # Process each table

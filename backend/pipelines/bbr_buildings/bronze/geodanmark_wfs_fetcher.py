@@ -50,7 +50,11 @@ class GeoDanmarkWFSFetcher:
         """
 
     def fetch_building_geometries(
-        self, output_dir: Path, building_ids: list, return_data: bool = False
+        self,
+        output_dir: Path,
+        building_ids: list,
+        return_data: bool = False,
+        pipeline_start_time: datetime = None,
     ):
         """
         Fetch building geometries from GeoDanmark WFS for specific building IDs.
@@ -60,7 +64,9 @@ class GeoDanmarkWFSFetcher:
             building_ids: List of BBRUUID building IDs to fetch geometries for
             return_data: Whether to return data for in-memory processing
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if pipeline_start_time is None:
+            pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -121,7 +127,9 @@ class GeoDanmarkWFSFetcher:
             )
 
             # Save metadata
-            self._save_geometries_metadata(run_dir, building_ids, all_geometries)
+            self._save_geometries_metadata(
+                run_dir, building_ids, all_geometries, pipeline_start_time
+            )
 
             # Optionally return data for in-memory processing
             if return_data:
@@ -192,7 +200,11 @@ class GeoDanmarkWFSFetcher:
             return []
 
     def _save_geometries_metadata(
-        self, output_dir: Path, requested_ids: list, retrieved_geometries: list
+        self,
+        output_dir: Path,
+        requested_ids: list,
+        retrieved_geometries: list,
+        pipeline_start_time: datetime,
     ) -> None:
         """
         Save metadata about the geometry fetch operation.
@@ -209,7 +221,7 @@ class GeoDanmarkWFSFetcher:
                 retrieved_ids.append(feature["properties"]["BBRUUID"])
 
         metadata = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": pipeline_start_time.isoformat(),
             "source": "geodanmark_wfs_geometries",
             "total_requested": len(requested_ids),
             "total_retrieved": len(retrieved_geometries),

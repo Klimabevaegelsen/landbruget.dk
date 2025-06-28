@@ -7,7 +7,6 @@ Transforms raw grid data into a structured format for analysis and storage.
 import argparse
 import asyncio
 import logging
-import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -158,8 +157,9 @@ async def main():
         start_time = datetime.combine(args.start_date, datetime.min.time(), tzinfo=UTC)
         end_time = datetime.combine(args.end_date, datetime.max.time(), tzinfo=UTC)
 
-        # Create timestamped output directories for data storage
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create timestamped output directories for data storage using pipeline start time
+        pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         bronze_dir = Path(f"data/bronze/{timestamp}")
         silver_dir = Path(f"data/silver/{timestamp}")
         bronze_dir.mkdir(parents=True, exist_ok=True)
@@ -184,6 +184,57 @@ async def main():
         if args.progress:
             logger.warning(f"Total records processed: {total_records}")
             logger.warning(f"Data exported to: {bronze_dir} and {silver_dir}")
+
+        # Generate schema documentation for processed data
+        if total_records > 0:
+            try:
+                logger.info("Generating schema documentation for DMI climate data")
+
+                # Import schema documentation (with path adjustment)
+                import sys
+                from pathlib import Path
+
+                backend_path = Path(__file__).parent.parent.parent
+                if str(backend_path) not in sys.path:
+                    sys.path.insert(0, str(backend_path))
+
+                # Use the pipeline start time we already have
+                # Create DuckDB connection and load processed parquet files
+                import duckdb
+
+                from backend.common.schema_documentation import SchemaDocumentationManager
+
+                conn = duckdb.connect()
+
+                # Find all processed parquet files in silver directory
+                processed_files = list((silver_dir / "processed").glob("*.parquet"))
+                table_names = []
+
+                for file_path in processed_files:
+                    table_name = file_path.stem  # filename without extension
+                    conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')")
+                    table_names.append(table_name)
+
+                if table_names:
+                    # Initialize schema documentation manager
+                    schema_manager = SchemaDocumentationManager(
+                        connection=conn,
+                        pipeline_name="dmi_pipeline",
+                        pipeline_start_time=pipeline_start_time,
+                        logger=logger,
+                    )
+
+                    # Generate documentation for all processed tables
+                    schema_files = schema_manager.generate_all_documentation(table_names, stage="silver")
+                    logger.info("Generated schema documentation for DMI climate data")
+
+                    # Commit to GitHub
+                    schema_manager.commit_to_github()
+                    logger.info("DMI schema documentation committed to GitHub")
+
+            except Exception as e:
+                logger.error(f"Failed to generate DMI schema documentation: {e}", exc_info=True)
+                # Don't fail the pipeline if schema documentation fails
 
     except Exception as e:
         logger.error(f"Pipeline failed: {str(e)}", exc_info=True)

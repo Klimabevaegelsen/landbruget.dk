@@ -33,14 +33,14 @@ scraper = DMAScraper()
 
 def save_data(data, timestamp, PATH):
     timestamp_dir = os.path.join(PATH, timestamp)
-    blob_name = f"{timestamp_dir}/data.json"
+    blob_name = f"{timestamp_dir}/environmental_companies_raw.json"
     storage_backend.save_json(data, blob_name)
     print(f"Saved {blob_name} to storage")
 
 
 def save_parquet(data, timestamp, PATH):
     timestamp_dir = os.path.join(PATH, timestamp)
-    blob_name = f"{timestamp_dir}/data.parquet"
+    blob_name = f"{timestamp_dir}/environmental_companies.parquet"
     storage_backend.save_parquet(data, blob_name)
     print(f"Saved {blob_name} to storage")
 
@@ -121,14 +121,72 @@ def bronze(timestamp: str):
 
 
 if __name__ == "__main__":
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    pipeline_start_time = datetime.now()
+    timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
     args = parse_args()
     if args.silver:
         if not args.timestamp:
             print("Error: --timestamp is required for silver stage")
             sys.exit(1)
-        data = storage_backend.read_json(os.path.join(PREFIX_BRONZE_SAVE_PATH, args.timestamp, "data.json"))
+        data = storage_backend.read_json(
+            os.path.join(PREFIX_BRONZE_SAVE_PATH, args.timestamp, "environmental_companies_raw.json")
+        )
         silver(data, args.timestamp)
     else:
         data = bronze(timestamp)
         silver(data, timestamp)
+
+        # Generate schema documentation after silver processing
+        try:
+            print("Generating schema documentation for DMA data")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            backend_path = Path(__file__).parent.parent.parent
+            if str(backend_path) not in sys.path:
+                sys.path.insert(0, str(backend_path))
+
+            # Use the pipeline start time we already have
+            # Create DuckDB connection and load the parquet file
+            import duckdb
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            conn = duckdb.connect()
+
+            # Construct path to the silver parquet file
+            parquet_path = os.path.join(PREFIX_SILVER_SAVE_PATH, timestamp, "environmental_companies.parquet")
+
+            # Check if running locally or in GCS environment
+            if ENVIRONMENT.lower() in ("production", "container"):
+                # For GCS, we need to download the file first or use a different approach
+                print("Note: Schema documentation for GCS files not yet implemented")
+            else:
+                # For local files
+                if os.path.exists(parquet_path):
+                    table_name = "dma_processed"
+                    conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{parquet_path}')")
+
+                    # Initialize schema documentation manager
+                    schema_manager = SchemaDocumentationManager(
+                        connection=conn,
+                        pipeline_name="dma_scraper",
+                        pipeline_start_time=pipeline_start_time,
+                        logger=None,  # No logger available in this pipeline
+                    )
+
+                    # Generate documentation for DMA table
+                    schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+                    print("Generated schema documentation for DMA data")
+
+                    # Commit to GitHub
+                    schema_manager.commit_to_github()
+                    print("DMA schema documentation committed to GitHub")
+                else:
+                    print(f"Warning: Parquet file not found at {parquet_path}")
+
+        except Exception as e:
+            print(f"Failed to generate DMA schema documentation: {e}")
+            # Don't fail the pipeline if schema documentation fails
