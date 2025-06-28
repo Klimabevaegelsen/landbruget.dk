@@ -184,7 +184,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             self._save_data(
                 data=soil_types_gdf,
                 dataset=self.config.dataset,
-                bucket_name=self.config.bucket,
+                bucket=self.config.bucket,
                 stage="bronze",
             )
 
