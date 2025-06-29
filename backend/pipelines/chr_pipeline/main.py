@@ -506,25 +506,40 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         def smart_cattle_task(client, username, herd_num, start_date, end_date):
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
-        results = process_parallel(
-            smart_cattle_task, cattle_movement_tasks, context["args"]["workers"], "Processing Smart Cattle Movements"
-        )
-        context["animal_movements_results"] = results
+        # Process in chunks to avoid overwhelming GitHub Actions runner
+        chunk_size = 100  # Process 100 herds at a time
+        all_results = []
+        total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
+
+        for chunk_idx in range(total_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min(start_idx + chunk_size, len(cattle_movement_tasks))
+            chunk_tasks = cattle_movement_tasks[start_idx:end_idx]
+
+            if context["args"]["progress"]:
+                logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
+
+            chunk_results = process_parallel(
+                smart_cattle_task,
+                chunk_tasks,
+                context["args"]["workers"],
+                f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
+            )
+            all_results.extend(chunk_results)
+
+            # Log progress after each chunk
+            if context["args"]["progress"]:
+                chunk_successful = sum(1 for r in chunk_results if r)
+                chunk_movements = sum(len(r.get("movements", [])) for r in chunk_results if r)
+                logging.info(
+                    f"Chunk {chunk_idx + 1} completed: {chunk_successful}/{len(chunk_tasks)} successful, {chunk_movements} movements"
+                )
+
+        context["animal_movements_results"] = all_results
 
         if context["args"]["progress"]:
-            logging.info("Processing results from parallel cattle movement tasks...")
-            successful = sum(1 for r in results if r)
-            logging.info(f"Calculated successful tasks: {successful}/{len(cattle_movement_tasks)}")
-
-            # Count movements with progress indication for large datasets
-            total_movements = 0
-            for i, r in enumerate(results):
-                if r:
-                    total_movements += len(r.get("movements", []))
-                # Log progress every 1000 results to track if this is the bottleneck
-                if i > 0 and i % 1000 == 0:
-                    logging.info(f"Processed {i}/{len(results)} results for movement counting...")
-
+            successful = sum(1 for r in all_results if r)
+            total_movements = sum(len(r.get("movements", [])) for r in all_results if r)
             logging.info(
                 f"Completed Smart Cattle Movement tasks. Success: {successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
             )
