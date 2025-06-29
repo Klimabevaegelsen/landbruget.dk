@@ -35,13 +35,22 @@ backend_path = str(Path(__file__).parent.parent.parent)
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
-# Add unified pipeline path for optimized GCS access
-unified_pipeline_path = str(Path(__file__).parent.parent / "unified_pipeline" / "src")
-if unified_pipeline_path not in sys.path:
-    sys.path.insert(0, unified_pipeline_path)
+# Try to import optimized GCS access, fallback if not available
+try:
+    # Add unified pipeline path for optimized GCS access
+    unified_pipeline_path = str(Path(__file__).parent.parent / "unified_pipeline" / "src")
+    if unified_pipeline_path not in sys.path:
+        sys.path.insert(0, unified_pipeline_path)
 
-# Use optimized GCS access instead of old storage interface
-from unified_pipeline.util.gcs_access import GCSDataAccess
+    # Use optimized GCS access instead of old storage interface
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    logging.info("Successfully loaded optimized GCS access layer")
+except ImportError as e:
+    logging.warning(f"Could not load optimized GCS access layer: {e}")
+    logging.info("Falling back to standard storage interface")
+    # Fallback to basic GCS interface
+    from backend.common.storage_interface import GCSStorage as GCSDataAccess
 
 # Keep old interface for local storage fallback only
 from backend.common.storage_interface import LocalStorage

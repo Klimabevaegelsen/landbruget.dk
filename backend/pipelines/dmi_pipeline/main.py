@@ -229,11 +229,27 @@ async def main():
         gcs_bucket = os.getenv("GCS_BUCKET")
         if gcs_bucket:
             logger.info(f"Using optimized GCS access layer: {gcs_bucket}")
-            # Import optimized GCS access
-            from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import GCSDataAccess
+            # Try to import optimized GCS access, fallback if not available
+            try:
+                # Add the unified_pipeline src directory to Python path
+                unified_pipeline_path = os.path.join(os.path.dirname(__file__), "..", "unified_pipeline", "src")
+                if os.path.exists(unified_pipeline_path):
+                    sys.path.insert(0, unified_pipeline_path)
 
-            gcs_access = GCSDataAccess()
-            storage_backend = None  # We'll use gcs_access directly
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                gcs_access = GCSDataAccess()
+                storage_backend = None  # We'll use gcs_access directly
+                logger.info("Successfully loaded optimized GCS access layer")
+            except ImportError as e:
+                logger.warning(f"Could not load optimized GCS access layer: {e}")
+                logger.info("Falling back to local storage interface")
+                # Fallback to basic GCS interface
+                from backend.common.storage_interface import GCSStorage
+
+                gcs_access = None
+                storage_backend = GCSStorage(gcs_bucket)
+
             # For GCS, we use full gs:// paths
             bronze_path = f"gs://{gcs_bucket}/bronze/dmi/{timestamp}"
             silver_path = f"gs://{gcs_bucket}/silver/dmi/{timestamp}"
