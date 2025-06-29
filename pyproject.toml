@@ -21,7 +21,7 @@ dependencies = [
     "google-cloud-storage~=3.1.1",
     "google-cloud-bigquery~=3.29.0",
     "google-cloud-secret-manager~=2.24.0",
-    "fsspec~=2024.12.0",
+    "fsspec~=2025.5.1",
     "gcsfs~=2025.5.1",
     
     # Web Framework
@@ -38,7 +38,6 @@ dependencies = [
     "pyOpenSSL~=25.0.0",
     
     # Data Pipeline and Validation
-    "apache-beam~=2.62.0",
     "backoff~=2.2.1",
     
     # PDF Processing
@@ -65,7 +64,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = []
+bypass-selection = true
 
 [tool.ruff]
 line-length = 88

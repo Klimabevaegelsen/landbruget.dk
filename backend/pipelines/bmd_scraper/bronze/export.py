@@ -202,11 +202,17 @@ class GCSStorage:
         self.gcs_access = None
         if self.is_available:
             try:
-                # Import optimized GCS access
+                # Import optimized GCS access using proper Python path
                 import sys
                 from pathlib import Path
 
-                sys.path.append(str(Path(__file__).parent.parent.parent / "unified_pipeline" / "src"))
+                # Add the backend directory to Python path
+                backend_path = Path(__file__).parent.parent.parent.parent
+                unified_pipeline_path = backend_path / "pipelines" / "unified_pipeline" / "src"
+
+                if str(unified_pipeline_path) not in sys.path:
+                    sys.path.insert(0, str(unified_pipeline_path))
+
                 from unified_pipeline.util.gcs_access import GCSDataAccess
 
                 self.gcs_access = GCSDataAccess()
