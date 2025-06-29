@@ -190,25 +190,18 @@ class AgriculturalFieldsSilver(SilverBase):
                 for i in range(0, len(all_features), batch_size):
                     batch = all_features[i : i + batch_size]
 
-                    # Create VALUES clause for this batch
-                    values_list = []
-                    for feature in batch:
-                        values = []
-                        for col in columns:
-                            value = feature.get(col)
-                            if value is None:
-                                values.append("NULL")
-                            else:
-                                escaped_value = str(value).replace("'", "''")
-                                values.append(f"'{escaped_value}'")
-                        values_list.append(f"({', '.join(values)})")
+                    # Use parameterized queries instead of string concatenation
+                for feature in batch:
+                    values = [feature.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                    values_clause = ", ".join(values_list)
-
-                    processing_conn.execute(f"""
+                    processing_conn.execute(
+                        f"""
                         INSERT INTO temp_features ({", ".join(columns)})
-                        VALUES {values_clause}
-                    """)
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
                 processing_conn.execute(
                     "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
                 )

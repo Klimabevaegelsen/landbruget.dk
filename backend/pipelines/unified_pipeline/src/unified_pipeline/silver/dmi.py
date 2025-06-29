@@ -192,25 +192,18 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             for i in range(0, len(features), batch_size):
                 batch = features[i : i + batch_size]
 
-                # Create VALUES clause for this batch
-                values_list = []
+                # Use parameterized queries instead of string concatenation
                 for feature in batch:
-                    values = []
-                    for col in columns:
-                        value = feature.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [feature.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-
-                self.conn.execute(f"""
-                    INSERT INTO features_raw ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    self.conn.execute(
+                        f"""
+                        INSERT INTO features_raw ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
 
             # Create a table from the extracted features
             self.conn.execute("""
@@ -248,8 +241,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     MAX(value) as max_value,
                     COUNT(*) as count,
                     STDDEV(value) as stddev_value,
-                    ST_AsGeoJSON(ST_Centroid(ST_Union(geometry))) as centroid_geometry,
-                    ST_AsGeoJSON(ST_Envelope(ST_Union(geometry))) as bbox_geometry
+                    ST_AsGeoJSON(ST_Centroid(ST_Union_Agg(geometry))) as centroid_geometry,
+                    ST_AsGeoJSON(ST_Envelope(ST_Union_Agg(geometry))) as bbox_geometry
                 FROM transformed_data
                 GROUP BY parameter_id, valid_time, created
                 ORDER BY valid_time DESC

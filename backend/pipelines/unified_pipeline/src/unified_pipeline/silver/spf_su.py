@@ -52,23 +52,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_owner_details), batch_size):
                 batch = farm_owner_details[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_farm_owner_details ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_farm_owner_details ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_owner_details_final AS SELECT * FROM temp_farm_owner_details"
         )
@@ -98,23 +92,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_certificate), batch_size):
                 batch = farm_certificate[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_farm_certificate ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_farm_certificate ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_certificate_final AS SELECT * FROM temp_farm_certificate"
         )
@@ -144,23 +132,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_general_health_summary), batch_size):
                 batch = farm_general_health_summary[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_farm_health ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_farm_health ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_health_final AS SELECT * FROM temp_farm_health"
         )
@@ -190,23 +172,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_salmonella_data), batch_size):
                 batch = farm_salmonella_data[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_farm_salmonella ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_farm_salmonella ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_salmonella_final AS SELECT * FROM temp_farm_salmonella"
         )
@@ -245,23 +221,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_disease_control_status), batch_size):
                 batch = farm_disease_control_status[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_disease_control ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_disease_control ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE disease_control_final AS SELECT * FROM temp_disease_control"
         )
@@ -291,23 +261,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(farm_veterinarians), batch_size):
                 batch = farm_veterinarians[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_veterinarians ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_veterinarians ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute(
             "CREATE OR REPLACE TABLE veterinarians_final AS SELECT * FROM temp_veterinarians"
         )
@@ -337,23 +301,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(deliveryOptions), batch_size):
                 batch = deliveryOptions[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_delivery ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_delivery ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute("CREATE OR REPLACE TABLE delivery_final AS SELECT * FROM temp_delivery")
         # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
@@ -381,23 +339,17 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             batch_size = 1000
             for i in range(0, len(receptionOptions), batch_size):
                 batch = receptionOptions[i : i + batch_size]
-                values_list = []
                 for item in batch:
-                    values = []
-                    for col in columns:
-                        value = item.get(col)
-                        if value is None:
-                            values.append("NULL")
-                        else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
-                    values_list.append(f"({', '.join(values)})")
+                    values = [item.get(col) for col in columns]
+                    placeholders = ", ".join(["?" for _ in columns])
 
-                values_clause = ", ".join(values_list)
-                temp_conn.execute(f"""
-                    INSERT INTO temp_reception ({", ".join(columns)})
-                    VALUES {values_clause}
-                """)
+                    temp_conn.execute(
+                        f"""
+                        INSERT INTO temp_reception ({", ".join(columns)})
+                        VALUES ({placeholders})
+                    """,
+                        values,
+                    )
         temp_conn.execute("CREATE OR REPLACE TABLE reception_final AS SELECT * FROM temp_reception")
         # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
