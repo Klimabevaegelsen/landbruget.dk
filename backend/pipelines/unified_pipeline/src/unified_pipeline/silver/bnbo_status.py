@@ -525,6 +525,50 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             """)
             return empty_table_name
 
+    def _copy_table_to_gcs_connection(self, table_name: str) -> None:
+        """
+        Copy a table from the main connection to the GCS connection for saving.
+
+        Args:
+            table_name: Name of the table to copy
+        """
+        try:
+            self.log.info(f"Copying table {table_name} to GCS connection for saving")
+
+            # Drop table if it exists in GCS connection
+            self.gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+            # Get data from main connection
+            rows = self.conn.execute(f"SELECT * FROM {table_name}").fetchall()
+            columns = [desc[0] for desc in self.conn.execute(f"DESCRIBE {table_name}").fetchall()]
+
+            self.log.info(f"Table {table_name} has {len(rows)} rows and {len(columns)} columns")
+
+            # Create table in GCS connection
+            column_defs = ", ".join([f'"{col}" VARCHAR' for col in columns])
+            self.gcs_access.duckdb_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
+
+            # Insert data in batches to avoid memory issues
+            batch_size = 1000
+            placeholders = ", ".join(["?" for _ in columns])
+
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                for row in batch:
+                    self.gcs_access.duckdb_conn.execute(
+                        f"INSERT INTO {table_name} VALUES ({placeholders})", row
+                    )
+
+            # Verify table was created in GCS connection
+            gcs_count = self.gcs_access.duckdb_conn.execute(
+                f"SELECT COUNT(*) FROM {table_name}"
+            ).fetchone()[0]
+            self.log.info(f"✅ Table {table_name} copied to GCS connection with {gcs_count} rows")
+
+        except Exception as e:
+            self.log.error(f"Error copying table {table_name} to GCS connection: {e}")
+            raise
+
     async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
         Run the complete BNBO status silver layer processing job.
@@ -565,6 +609,10 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
             # ✅ MIGRATION: Save DuckDB tables using optimized methods
+            # Copy tables to GCS connection before saving
+            self._copy_table_to_gcs_connection(table_name)
+            self._copy_table_to_gcs_connection(dissolved_table_name)
+
             # Save the main features table
             self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")
 
