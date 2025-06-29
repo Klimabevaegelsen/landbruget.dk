@@ -798,9 +798,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.OriginalPesticideRowID,
                     CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
                     CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
-                    p.AcreageSize,
-                    p.CompanyName,
-                    p.Name as CropName
+                    p.AcreageSize
                 FROM pending_pesticide_rows p
                 WHERE p.CompanyRegistrationNumber IS NOT NULL 
                   AND p.Code IS NOT NULL
@@ -811,8 +809,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 pf.CVR_Str,
                 pf.Crop_Str,
                 pf.AcreageSize,
-                pf.CompanyName,
-                pf.CropName,
                 sf.FieldID,
                 sf.FieldArea,
                 sf.FieldIdentifier,
@@ -840,8 +836,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 cvr_str,
                 crop_str,
                 acreage_size,
-                company_name,
-                crop_name,
                 field_id,
                 field_area,
                 field_identifier,
@@ -876,11 +870,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 """
 
-                # Map original data columns - adjust indices based on actual schema
-                pesticide_name = original_data[13] if len(original_data) > 13 else None
-                pesticide_reg_num = original_data[14] if len(original_data) > 14 else None
-                dosage_quantity = original_data[15] if len(original_data) > 15 else None
-                dosage_unit = original_data[16] if len(original_data) > 16 else None
+                # Map original data columns based on actual pesticide table schema
+                # Schema: OriginalPesticideRowID, CompanyRegistrationNumber, PesticideName,
+                #         PesticideRegistrationNumber, DosageQuantity, DosageUnit, AcreageSize, Code, nopesticides
+                pesticide_name = original_data[2] if len(original_data) > 2 else None
+                pesticide_reg_num = original_data[3] if len(original_data) > 3 else None
+                dosage_quantity = original_data[4] if len(original_data) > 4 else None
+                dosage_unit = original_data[5] if len(original_data) > 5 else None
 
                 self.duckdb_conn.execute(
                     insert_query,
@@ -954,9 +950,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.OriginalPesticideRowID,
                     CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
                     CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
-                    p.AcreageSize,
-                    p.CompanyName,
-                    p.Name as CropName
+                    p.AcreageSize
                 FROM pending_pesticide_rows p
                 WHERE p.CompanyRegistrationNumber IS NOT NULL 
                   AND p.Code IS NOT NULL
@@ -967,8 +961,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 pf.CVR_Str,
                 pf.Crop_Str,
                 pf.AcreageSize,
-                pf.CompanyName,
-                pf.CropName,
                 mf.FieldCount as TotalFields,
                 mf.TotalFieldArea,
                 (pf.AcreageSize / mf.TotalFieldArea) * 100 as CoveragePercent
@@ -996,8 +988,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 cvr_str,
                 crop_str,
                 acreage_size,
-                company_name,
-                crop_name,
                 total_fields,
                 total_field_area,
                 coverage_percent,
@@ -1060,11 +1050,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     """
 
-                    # Map original data columns
-                    pesticide_name = original_data[13] if len(original_data) > 13 else None
-                    pesticide_reg_num = original_data[14] if len(original_data) > 14 else None
-                    dosage_quantity = original_data[15] if len(original_data) > 15 else None
-                    dosage_unit = original_data[16] if len(original_data) > 16 else None
+                    # Map original data columns based on actual pesticide table schema
+                    # Schema: OriginalPesticideRowID, CompanyRegistrationNumber, PesticideName,
+                    #         PesticideRegistrationNumber, DosageQuantity, DosageUnit, AcreageSize, Code, nopesticides
+                    pesticide_name = original_data[2] if len(original_data) > 2 else None
+                    pesticide_reg_num = original_data[3] if len(original_data) > 3 else None
+                    dosage_quantity = original_data[4] if len(original_data) > 4 else None
+                    dosage_unit = original_data[5] if len(original_data) > 5 else None
 
                     self.duckdb_conn.execute(
                         insert_query,
