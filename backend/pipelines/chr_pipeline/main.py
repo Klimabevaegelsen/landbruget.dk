@@ -506,8 +506,19 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context["animal_movements_results"] = results
 
         if context["args"]["progress"]:
+            logging.info("Processing results from parallel cattle movement tasks...")
             successful = sum(1 for r in results if r)
-            total_movements = sum(len(r.get("movements", [])) for r in results if r)
+            logging.info(f"Calculated successful tasks: {successful}/{len(cattle_movement_tasks)}")
+
+            # Count movements with progress indication for large datasets
+            total_movements = 0
+            for i, r in enumerate(results):
+                if r:
+                    total_movements += len(r.get("movements", []))
+                # Log progress every 1000 results to track if this is the bottleneck
+                if i > 0 and i % 1000 == 0:
+                    logging.info(f"Processed {i}/{len(results)} results for movement counting...")
+
             logging.info(
                 f"Completed Smart Cattle Movement tasks. Success: {successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
             )
@@ -754,7 +765,21 @@ def main():
             # But don't clear buffer if we're exporting context (dependent jobs might need the data)
             clear_buffer_after_export = not bool(context_export_path)
             logging.warning("Finalizing bronze export...")
+
+            # Add debugging info about buffer size before export
+            buffer_data = get_data_buffer()
+            if buffer_data:
+                total_records = sum(
+                    len(data.get("json", [])) + len(data.get("xml", [])) for data in buffer_data.values()
+                )
+                logging.warning(f"Buffer contains {total_records} total records across {len(buffer_data)} data types")
+                for key, data in buffer_data.items():
+                    json_count = len(data.get("json", []))
+                    xml_count = len(data.get("xml", []))
+                    logging.warning(f"  {key}: {json_count} JSON records, {xml_count} XML records")
+
             finalize_export(clear_buffer=clear_buffer_after_export)
+            logging.warning("Bronze export finalization completed.")
         else:
             logging.warning("No bronze data to export - skipping bronze export finalization.")
 

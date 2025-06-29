@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from typing import Any, Dict, Optional
 
 import certifi
+import requests
 from dotenv import load_dotenv
 from requests import Session
 from zeep import Client
@@ -47,13 +48,22 @@ def get_fvm_credentials() -> tuple[str, str]:
 
 # --- SOAP Client Creation ---
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication."""
+    """Create a Zeep SOAP client with WSSE authentication and timeout configuration."""
     session = Session()
     session.verify = certifi.where()
+
+    # Configure timeouts to prevent hanging on slow/unresponsive herds
+    # Connection timeout: 30 seconds to establish connection
+    # Read timeout: 300 seconds (5 minutes) to wait for response
+    # This is especially important for cattle movement data which can be large
+    adapter = requests.adapters.HTTPAdapter(timeout=requests.adapters.Timeout(connect=30, read=300))
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
     transport = Transport(session=session)
     try:
         client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
+        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / 300s read timeouts")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -189,7 +199,8 @@ def load_animal_movements(
             if animal_count > 0:
                 logger.debug(f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}")
 
-        return response
+        # Return aggregated summaries instead of massive raw response
+        return movement_summaries
 
     except Fault as soap_fault:
         logger.error(f"SOAP fault for herd {herd_number}: {soap_fault}")
