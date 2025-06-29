@@ -4,6 +4,8 @@ BBR Buildings Pipeline - Main Entry Point
 
 This pipeline fetches and processes Danish building data from Bygnings- og Boligregistret (BBR)
 to support agricultural and public health analyses.
+
+Updated to use bulk GeoDanmark download + local joins for improved performance.
 """
 
 import argparse
@@ -12,7 +14,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from bronze.geodanmark_wfs_fetcher import GeoDanmarkWFSFetcher
+# Updated imports for bulk approach
+from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config import Settings, get_settings
 from silver.building_processor import BuildingProcessor
@@ -22,7 +25,7 @@ from utils.logger import setup_logger
 def main():
     """Main entry point for the BBR buildings pipeline."""
     parser = argparse.ArgumentParser(
-        description="BBR Buildings Data Pipeline",
+        description="BBR Buildings Data Pipeline - Now with bulk GeoDanmark download!",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -32,8 +35,6 @@ def main():
         required=True,
         help="Pipeline layer to execute",
     )
-
-    # GeoDanmark WFS is always required for geometries, so no source selection needed
 
     parser.add_argument(
         "--input-dir", type=Path, help="Input directory (required for silver layer)"
@@ -46,9 +47,10 @@ def main():
     parser.add_argument("--sample-size", type=int, help="Sample size for testing")
 
     parser.add_argument(
-        "--enhance-classification",
+        "--bulk-download",
         action="store_true",
-        help="Enable enhanced classification using GeoDanmark WFS",
+        default=True,
+        help="Use bulk GeoDanmark download (default: True, much faster!)",
     )
 
     parser.add_argument(
@@ -71,7 +73,7 @@ def main():
 
     try:
         if args.layer == "bronze":
-            run_bronze_layer(args, settings, logger, pipeline_start_time)
+            run_bronze_layer_bulk(args, settings, logger, pipeline_start_time)
 
         elif args.layer == "silver":
             if not args.input_dir:
@@ -85,7 +87,7 @@ def main():
             logger.info(
                 "Running both layers - bronze will export and pass data to silver in memory"
             )
-            bronze_data = run_bronze_layer(
+            bronze_data = run_bronze_layer_bulk(
                 args, settings, logger, pipeline_start_time, return_data=True
             )
 
@@ -97,83 +99,129 @@ def main():
         sys.exit(1)
 
 
-def run_bronze_layer(
+def run_bronze_layer_bulk(
     args: argparse.Namespace,
     settings: Settings,
     logger: logging.Logger,
     pipeline_start_time: datetime,
     return_data: bool = False,
 ):
-    """Execute bronze layer processing with coordinated INSPIRE BBR + GeoDanmark WFS."""
-    logger.info("Starting bronze layer with INSPIRE BBR + GeoDanmark WFS")
+    """Execute bronze layer processing with bulk GeoDanmark download + local joins."""
+    logger.info("🚀 Starting bronze layer with BULK GeoDanmark download + local joins")
 
     output_dir = args.output_dir / "bronze"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Always run both sources in coordinated fashion
-    logger.info("Running coordinated INSPIRE BBR + GeoDanmark WFS...")
+    # Step 1: Bulk download ALL GeoDanmark buildings
+    logger.info("📦 Step 1: Bulk downloading GeoDanmark buildings...")
 
-    # First run INSPIRE BBR to get GraphQL-enriched building attributes and IDs
-    logger.info("Fetching INSPIRE BBR building attributes with GraphQL enrichment...")
+    if not settings.has_datafordeler_credentials:
+        raise ValueError(
+            "DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables required"
+        )
+
+    bulk_fetcher = BulkGeoDanmarkFetcher(
+        settings.datafordeler_username, settings.datafordeler_password
+    )
+
+    # Download buildings
+    bulk_fetcher.bulk_download_buildings(batch_size=30000)
+
+    logger.info("✅ Bulk GeoDanmark download completed!")
+
+    # Step 2: Fetch and enrich INSPIRE BBR data
+    logger.info("🏢 Step 2: Fetching INSPIRE BBR building attributes with GraphQL enrichment...")
     inspire_fetcher = InspireBBRFetcher(settings, logger)
     inspire_result = inspire_fetcher.fetch_data(
         output_dir,
-        sample_size=args.sample_size,
-        return_data=return_data,
+        sample_size=args.sample_size,  # None = all buildings, or specify for testing
+        return_data=True,  # Always return data for local joins
         pipeline_start_time=pipeline_start_time,
     )
 
-    # Then run GeoDanmark WFS to get geometries for the filtered buildings
-    if return_data and inspire_result:
-        logger.info("Fetching GeoDanmark WFS geometries for filtered buildings...")
-        geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
+    # Step 3: Perform local spatial join
+    logger.info("🔗 Step 3: Performing local spatial join...")
 
-        # Extract building IDs from INSPIRE BBR result
-        # Handle the GraphQL-enriched structure from inspire_bbr_fetcher
-        if isinstance(inspire_result, dict) and "data" in inspire_result:
-            inspire_data = inspire_result["data"]
-            if "building_ids" in inspire_data and "attributes_df" in inspire_data:
-                # GraphQL-enriched structure
-                building_ids = inspire_data["building_ids"]
-                attributes_df = inspire_data["attributes_df"]
-            else:
-                # Fallback for older structure
-                building_ids = inspire_data.get("building_ids", [])
-                attributes_df = inspire_data.get("attributes_df", None)
-                if attributes_df is None:
-                    attributes_df = inspire_data.get("attributes", None)
+    if inspire_result and "data" in inspire_result:
+        # Load GeoDanmark buildings
+        import duckdb
+
+        conn = duckdb.connect()
+        conn.execute("INSTALL spatial")
+        conn.execute("LOAD spatial")
+
+        # Load both datasets
+        geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
+
+        # Extract INSPIRE BBR building IDs
+        inspire_data = inspire_result["data"]
+        if "building_ids" in inspire_data and "attributes_df" in inspire_data:
+            building_ids = inspire_data["building_ids"]
+            attributes_df = inspire_data["attributes_df"]
         else:
-            # Fallback for very old structure
+            logger.warning("INSPIRE BBR data structure not as expected")
             building_ids = []
             attributes_df = None
 
-        logger.info(f"Requesting geometries for {len(building_ids):,} buildings")
-
-        geodanmark_result = geodanmark_fetcher.fetch_building_geometries(
-            output_dir, building_ids, return_data=True, pipeline_start_time=pipeline_start_time
+        logger.info(
+            f"🔍 Joining {len(building_ids):,} INSPIRE BBR buildings with GeoDanmark data..."
         )
 
-        # Combine both results for silver layer using new structure
-        result = {
-            "data": {
-                "attributes_df": attributes_df,  # GraphQL-enriched building data
-                "geometries": geodanmark_result["geometries"] if geodanmark_result else [],
-                "building_ids": building_ids,
-            },
-            "metadata": {
-                "inspire_metadata": inspire_result.get("metadata", None),
-                "geodanmark_metadata": geodanmark_result["metadata"] if geodanmark_result else None,
-                "source": "inspire_bbr_with_geodanmark_wfs",
-            },
-        }
+        # Perform the join using BBRUUID
+        if len(building_ids) > 0:
+            # Convert building_ids to SQL-compatible format
+            uuid_list = "', '".join(building_ids)
+
+            join_query = f"""
+            SELECT 
+                g.*,
+                'matched' as join_status
+            FROM read_parquet('{geodanmark_path}') g
+            WHERE g.BBRUUID IN ('{uuid_list}')
+            """
+
+            try:
+                joined_buildings = conn.execute(join_query).fetchdf()
+                logger.info(f"✅ Successfully joined {len(joined_buildings):,} buildings")
+
+                # Save joined results
+                output_file = (
+                    output_dir
+                    / f"joined_buildings_{pipeline_start_time.strftime('%Y%m%d_%H%M%S')}.geoparquet"
+                )
+                joined_buildings.to_parquet(output_file)
+                logger.info(f"💾 Saved joined results to {output_file}")
+
+                result = {
+                    "data": {
+                        "joined_buildings": joined_buildings,
+                        "attributes_df": attributes_df,
+                        "building_ids": building_ids,
+                    },
+                    "metadata": {
+                        "inspire_metadata": inspire_result.get("metadata", None),
+                        "geodanmark_buildings_total": conn.execute(
+                            f"SELECT COUNT(*) FROM read_parquet('{geodanmark_path}')"
+                        ).fetchone()[0],
+                        "joined_buildings_count": len(joined_buildings),
+                        "source": "bulk_geodanmark_with_inspire_bbr_join",
+                        "join_method": "local_spatial_join_by_bbruuid",
+                    },
+                }
+
+            except Exception as e:
+                logger.error(f"❌ Join failed: {e}")
+                result = None
+        else:
+            logger.warning("⚠️ No building IDs to join")
+            result = None
+
+        conn.close()
     else:
-        # If not returning data, still run GeoDanmark WFS for consistency
-        logger.info("Fetching sample GeoDanmark WFS data...")
-        geodanmark_fetcher = GeoDanmarkWFSFetcher(settings, logger)
-        geodanmark_result = geodanmark_fetcher.fetch_samples(output_dir, return_data=return_data)
+        logger.error("❌ INSPIRE BBR data not available for joining")
         result = None
 
-    logger.info("Bronze layer processing completed successfully")
+    logger.info("🎉 Bronze layer processing completed successfully with bulk approach!")
 
     if return_data:
         return result
@@ -197,14 +245,12 @@ def run_silver_layer(
         processor.process_buildings_from_data(
             bronze_data=bronze_data,
             output_dir=output_dir,
-            enhance_classification=args.enhance_classification,
         )
     else:
         # Traditional mode: read from disk
         processor.process_buildings(
             input_dir=args.input_dir,
             output_dir=output_dir,
-            enhance_classification=args.enhance_classification,
         )
 
     logger.info("Silver layer processing completed successfully")
