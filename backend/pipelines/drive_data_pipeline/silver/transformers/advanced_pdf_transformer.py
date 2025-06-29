@@ -169,7 +169,7 @@ class AdvancedPDFTransformer(PDFTransformer):
                     for table in tables:
                         if table and len(table) >= self.min_table_size:
                             # Convert to DataFrame
-                            df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+                            df = pd.DataFrame(table[1:], columns=table[0])
 
                             # Clean up the table
                             df = df.replace(r"^\s*$", np.nan, regex=True)
