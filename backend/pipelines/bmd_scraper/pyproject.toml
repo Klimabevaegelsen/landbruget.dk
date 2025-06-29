@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv",
     "pyarrow",
     "duckdb",
+    "gcsfs>=2025.3.2",
 ]
 
 [project.optional-dependencies]
