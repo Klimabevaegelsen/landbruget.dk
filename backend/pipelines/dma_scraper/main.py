@@ -14,8 +14,9 @@ sys.path.insert(0, ROOT)
 
 from bronze.fetch_company_data import DMAScraper
 from bronze.fetch_company_detail import DMACompanyDetailScraper
-from common.storage_interface import GCSStorage, LocalStorage
 from silver.transformation import transform_dma_json
+
+from backend.common.storage_interface import GCSStorage, LocalStorage
 
 nest_asyncio.apply()
 

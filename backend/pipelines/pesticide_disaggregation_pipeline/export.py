@@ -16,8 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from common.schema_documentation import SchemaDocumentationManager
-from common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+from backend.common.schema_documentation import SchemaDocumentationManager
+from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
 
 logger = logging.getLogger(__name__)
 

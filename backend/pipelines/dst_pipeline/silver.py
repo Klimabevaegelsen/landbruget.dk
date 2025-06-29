@@ -28,7 +28,7 @@ from ibis import _
 
 # Add parent directories to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
 
 # Configure ibis backend
 ibis.options.interactive = True

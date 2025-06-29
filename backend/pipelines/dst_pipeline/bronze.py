@@ -31,7 +31,7 @@ load_dotenv()
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
 
 
 def setup_logging(level: str) -> None:
