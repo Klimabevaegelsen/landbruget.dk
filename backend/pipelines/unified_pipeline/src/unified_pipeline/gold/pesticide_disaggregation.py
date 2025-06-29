@@ -485,9 +485,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             CREATE TABLE marker AS 
             SELECT 
                 field_id,
-                area_ha,
+                CAST(area_ha AS DOUBLE) as area_ha,
                 CAST({cvr_column} AS VARCHAR) as cvr_number,
-                crop_code,
+                CAST(crop_code AS VARCHAR) as crop_code,
                 crop_name,
                 organic_farming,
                 CAST({block_id_column} AS VARCHAR) as block_id,
@@ -610,7 +610,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     WHERE m.cvr_number IS NOT NULL 
                           AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                          AND m.crop_code IS NOT NULL AND m.area_ha > 0
+                          AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications
@@ -642,7 +642,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     AND m_fields.cvr_number IS NOT NULL 
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
-                    AND m_fields.area_ha > 0
+                    AND m_fields.area_ha > 0.0
             """
 
             self.duckdb_conn.execute(insert_query)
@@ -701,7 +701,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     WHERE m.cvr_number IS NOT NULL 
                           AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                          AND m.crop_code IS NOT NULL AND m.area_ha > 0
+                          AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                           AND m.field_id NOT IN {organic_ids_sql_tuple} 
                     GROUP BY CVR, CropCode
                 )
@@ -734,7 +734,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     AND m_fields.cvr_number IS NOT NULL 
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
-                    AND m_fields.area_ha > 0
+                    AND m_fields.area_ha > 0.0
                     AND m_fields.field_id NOT IN {organic_ids_sql_tuple}
             """
 
@@ -789,7 +789,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                   AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m.crop_code IS NOT NULL 
-                  AND m.area_ha > 0
+                  AND m.area_ha > 0.0
                 GROUP BY 1, 2, 4, 5, 6
                 HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
             ),
@@ -945,7 +945,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                   AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m.crop_code IS NOT NULL 
-                  AND m.area_ha > 0
+                  AND m.area_ha > 0.0
                 GROUP BY 1, 2
                 HAVING COUNT(*) > 1  -- Multiple fields per CVR/Crop
             ),
@@ -1015,7 +1015,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                   AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m.crop_code IS NOT NULL 
-                  AND m.area_ha > 0
+                  AND m.area_ha > 0.0
                 ORDER BY m.area_ha DESC
                 """
 

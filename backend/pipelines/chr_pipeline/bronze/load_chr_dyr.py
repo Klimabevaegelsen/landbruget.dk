@@ -276,10 +276,25 @@ def load_cattle_movement_summaries(
             return None
 
         # The movement_summaries are already processed and saved by load_animal_movements
-        # We just need to return them
-        logger.info(f"Herd {herd_number}: Returned {len(movement_summaries.get('movements', []))} movement summaries")
+        # Return only lightweight summary for memory efficiency (full data is already in storage)
+        movement_count = len(movement_summaries.get("movements", []))
+        logger.info(f"Herd {herd_number}: Returned {movement_count} movement summaries")
 
-        return movement_summaries
+        # Return lightweight summary instead of full data to reduce memory usage
+        lightweight_summary = {
+            "reporting_herd_number": movement_summaries.get("reporting_herd_number"),
+            "movement_count": movement_count,
+            "processed_successfully": True,
+            "summary_stats": {
+                "total_animals_processed": movement_summaries.get("summary_stats", {}).get(
+                    "total_animals_processed", 0
+                ),
+                "unique_movement_dates": movement_summaries.get("summary_stats", {}).get("unique_movement_dates", 0),
+                "counterparty_herds": movement_summaries.get("summary_stats", {}).get("counterparty_herds", 0),
+            },
+        }
+
+        return lightweight_summary
 
     except Exception as e:
         logger.error(f"Error processing cattle movement summaries for herd {herd_number}: {e}")
