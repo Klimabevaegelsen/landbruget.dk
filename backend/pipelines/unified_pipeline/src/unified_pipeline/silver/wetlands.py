@@ -312,7 +312,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         Process raw XML data into a DuckDB table.
 
         This method parses XML data containing wetland features and converts it to
-        a DuckDB table with attributes and geometries. It can handle both 
+        a DuckDB table with attributes and geometries. It can handle both
         and table name inputs.
 
         Args:
@@ -363,8 +363,53 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         self.log.info(f"Parsed {len(features):,} features from XML data")
 
         # ✅ MIGRATION: Create DuckDB table directly with spatial data
+        # Use DuckDB's native support for Python objects without pandas
         conn = self.conn
-        conn.register("temp_features", features)
+
+        if not features:
+            self.log.warning("No features to process")
+            return None
+
+        # Create table directly from the list of dictionaries using DuckDB's native capabilities
+        # First, get the column names from the first feature
+        columns = list(features[0].keys())
+
+        # Create the table schema
+        conn.execute(f"""
+            CREATE TABLE temp_features (
+                {", ".join([f"{col} VARCHAR" for col in columns])}
+            )
+        """)
+
+        # Insert data in batches to avoid SQL statement size limits
+        batch_size = 1000
+        for i in range(0, len(features), batch_size):
+            batch = features[i : i + batch_size]
+
+            # Create VALUES clause for this batch
+            values_list = []
+            for feature in batch:
+                # Escape single quotes and handle None values
+                values = []
+                for col in columns:
+                    value = feature.get(col)
+                    if value is None:
+                        values.append("NULL")
+                    else:
+                        # Escape single quotes by doubling them
+                        escaped_value = str(value).replace("'", "''")
+                        values.append(f"'{escaped_value}'")
+                values_list.append(f"({', '.join(values)})")
+
+            values_clause = ", ".join(values_list)
+
+            conn.execute(f"""
+                INSERT INTO temp_features ({", ".join(columns)})
+                VALUES {values_clause}
+            """)
+
+            if (i + batch_size) % 10000 == 0:
+                self.log.info(f"Inserted {i + batch_size:,} features into temp table")
 
         # Create spatial table with proper geometry column
         table_name = "wetlands_processed"
@@ -591,7 +636,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                             [xml_data, self.config.dataset, current_timestamp, current_timestamp],
                         )
 
-                    # Use table name instead of 
+                    # Use table name instead of
                     raw_data_table = "temp_raw_data"
                 else:
                     self.log.error(

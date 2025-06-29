@@ -172,8 +172,45 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     }
                 )
 
-            # Register the features list directly with DuckDB
-            self.conn.register("features_raw", features)
+            # Create table directly from the list of dictionaries using DuckDB's native capabilities
+            if not features:
+                self.log.warning("No features to process")
+                return None
+
+            # Get column names from the first feature
+            columns = list(features[0].keys())
+
+            # Create the table schema
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE features_raw (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(features), batch_size):
+                batch = features[i : i + batch_size]
+
+                # Create VALUES clause for this batch
+                values_list = []
+                for feature in batch:
+                    values = []
+                    for col in columns:
+                        value = feature.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+
+                self.conn.execute(f"""
+                    INSERT INTO features_raw ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
 
             # Create a table from the extracted features
             self.conn.execute("""

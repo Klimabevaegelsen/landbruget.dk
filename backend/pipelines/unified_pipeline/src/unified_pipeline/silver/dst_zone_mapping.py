@@ -108,6 +108,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         super().__init__(config, gcs_util)
         self.conn = duckdb.connect()
         self._configure_duckdb()
+        self.data_conn = None  # Track which connection has the DAGI data
 
     def _configure_duckdb(self):
         """Configure DuckDB with spatial extensions."""
@@ -115,6 +116,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         self.conn.execute("LOAD spatial")
 
     def _load_dagi_data(self, bronze_data: Optional[Dict[str, Any]] = None) -> None:
+        """Load DAGI data and set the connection to use for all operations."""
         """
         Load DAGI data into DuckDB tables.
 
@@ -227,11 +229,17 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                 source_table = data_result["table_name"]
                                 # Use the GCS connection for all operations
                                 conn = gcs_access.duckdb_conn
+                                # Set the data connection for all subsequent operations
+                                if self.data_conn is None:
+                                    self.data_conn = conn
                                 has_data = True
                             elif isinstance(data_result, str):
                                 # Old format: just a table name - use base class connection
                                 source_table = data_result
                                 conn = self.conn
+                                # Set the data connection for all subsequent operations
+                                if self.data_conn is None:
+                                    self.data_conn = conn
                                 has_data = True
                             else:
                                 self.log.warning(
@@ -242,35 +250,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                             has_data = False
 
                         if has_data:
-                            # If using GCS connection, copy data to base class connection for consistency
-                            if isinstance(data_result, dict) and "gcs_access" in data_result:
-                                # Copy data from GCS connection to base class connection
-                                temp_table = f"temp_{layer}_data"
-
-                                # Get the data from GCS connection
-                                rows = conn.execute(f"SELECT * FROM {source_table}").fetchall()
-                                columns = [desc[0] for desc in conn.description]
-
-                                # Create table in base connection with same structure
-                                column_defs = []
-                                for col in columns:
-                                    column_defs.append(f'"{col}" VARCHAR')
-
-                                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
-                                self.conn.execute(
-                                    f"CREATE TABLE {temp_table} ({', '.join(column_defs)})"
-                                )
-
-                                # Insert data row by row
-                                if rows:
-                                    placeholders = ", ".join(["?" for _ in columns])
-                                    for row in rows:
-                                        self.conn.execute(
-                                            f"INSERT INTO {temp_table} VALUES ({placeholders})", row
-                                        )
-
-                                # Now use the temp table as source for the standardized table
-                                source_table = temp_table
+                            # The source_table is the actual table name that was created
+                            # No need to copy - just use the correct connection and table name
 
                             # Get column mapping for this layer
                             col_mapping = layer_column_mapping.get(layer, {})
@@ -278,7 +259,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                             name_col = col_mapping.get("name_col", "name")
                             region_col = col_mapping.get("region_col", "NULL")
 
-                            # Create standardized table using actual column names and geometry column
+                            # Create standardized table using the connection where the data exists
                             conn.execute(f"""
                                 CREATE TABLE {layer} AS
                                 SELECT 
@@ -294,7 +275,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                 WHERE geometry IS NOT NULL
                             """)
 
-                            count = self.conn.execute(f"SELECT COUNT(*) FROM {layer}").fetchone()[0]
+                            count = conn.execute(f"SELECT COUNT(*) FROM {layer}").fetchone()[0]
                             self.log.info(f"Loaded {count} features for {layer} from silver")
                         else:
                             self.log.warning(f"No data found for DAGI {layer}")
@@ -303,10 +284,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     self.log.error(f"Error loading DAGI {layer}: {e}")
                     continue
 
-            # Validate that we have all required data
+            # Validate that we have all required data using the connection that has the data
             for layer in required_layers:
                 try:
-                    count = self.conn.execute(f"SELECT COUNT(*) FROM {layer}").fetchone()[0]
+                    if self.data_conn is not None:
+                        count = self.data_conn.execute(f"SELECT COUNT(*) FROM {layer}").fetchone()[
+                            0
+                        ]
+                    else:
+                        count = self.conn.execute(f"SELECT COUNT(*) FROM {layer}").fetchone()[0]
                     if count == 0:
                         raise ValueError(f"No data loaded for {layer}")
                 except:
@@ -334,6 +320,9 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         try:
             self.log.info("Creating DST zone lookup table with DuckDB")
 
+            # Use the connection that has the DAGI data
+            conn = self.data_conn if self.data_conn is not None else self.conn
+
             # Create DST mappings table
             dst_mappings_data = []
             for dst_region, mapping in self.config.dst_mappings.items():
@@ -349,7 +338,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # ✅ FIXED: Use pure DuckDB table creation instead of registration
             if dst_mappings_data:
                 # Create table structure
-                self.conn.execute("""
+                conn.execute("""
                     CREATE OR REPLACE TABLE dst_mappings_raw (
                         dst_region VARCHAR,
                         landsdel_code VARCHAR,
@@ -359,7 +348,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                 # Insert each mapping as a row using prepared statements
                 for mapping_dict in dst_mappings_data:
-                    self.conn.execute(
+                    conn.execute(
                         "INSERT INTO dst_mappings_raw VALUES (?, ?, ?)",
                         [
                             mapping_dict["dst_region"],

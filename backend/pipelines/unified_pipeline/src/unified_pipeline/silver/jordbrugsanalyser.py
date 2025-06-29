@@ -422,8 +422,46 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.info(f"Total features parsed for year {year}: {len(all_features)}")
 
             # ✅ MIGRATION: Process features using DuckDB directly
-            # Register the features with DuckDB
-            bronze_conn.register("temp_features", all_features)
+            # Create table directly from the list of dictionaries
+            if not all_features:
+                self.log.warning(f"No features to process for year {year}")
+                bronze_conn.close()
+                return None
+
+            # Get column names from the first feature
+            columns = list(all_features[0].keys())
+
+            # Create the table schema
+            bronze_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_features (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(all_features), batch_size):
+                batch = all_features[i : i + batch_size]
+
+                # Create VALUES clause for this batch
+                values_list = []
+                for feature in batch:
+                    values = []
+                    for col in columns:
+                        value = feature.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+
+                bronze_conn.execute(f"""
+                    INSERT INTO temp_features ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
 
             # Install spatial extension if not already installed
             try:

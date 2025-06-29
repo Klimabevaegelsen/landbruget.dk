@@ -448,8 +448,42 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             return None
         self.log.info(f"Extracted {len(features):,} features from raw data")
 
-        # ✅ MIGRATION: Create DuckDB table instead of 
-        self.conn.register("temp_features", features)
+        # ✅ MIGRATION: Create DuckDB table instead of pandas DataFrame
+        # Create table directly from the list of dictionaries using DuckDB's native capabilities
+        # Get column names from the first feature
+        columns = list(features[0].keys())
+
+        # Create the table schema
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE temp_features (
+                {", ".join([f"{col} VARCHAR" for col in columns])}
+            )
+        """)
+
+        # Insert data in batches
+        batch_size = 1000
+        for i in range(0, len(features), batch_size):
+            batch = features[i : i + batch_size]
+
+            # Create VALUES clause for this batch
+            values_list = []
+            for feature in batch:
+                values = []
+                for col in columns:
+                    value = feature.get(col)
+                    if value is None:
+                        values.append("NULL")
+                    else:
+                        escaped_value = str(value).replace("'", "''")
+                        values.append(f"'{escaped_value}'")
+                values_list.append(f"({', '.join(values)})")
+
+            values_clause = ", ".join(values_list)
+
+            self.conn.execute(f"""
+                INSERT INTO temp_features ({", ".join(columns)})
+                VALUES {values_clause}
+            """)
         table_name = "water_projects_processed"
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
@@ -604,8 +638,47 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                         }
                         for layer, data in bronze_data
                     ]
-                    self.conn.register("temp_raw_data", raw_data_list)
-                    # ✅ MIGRATION: Keep as table instead of converting to 
+
+                    # Create table directly from the list of dictionaries
+                    if not raw_data_list:
+                        self.log.warning("No raw data to process")
+                        return
+
+                    # Get column names from the first item
+                    columns = list(raw_data_list[0].keys())
+
+                    # Create the table schema
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE temp_raw_data (
+                            {", ".join([f"{col} VARCHAR" for col in columns])}
+                        )
+                    """)
+
+                    # Insert data in batches
+                    batch_size = 1000
+                    for i in range(0, len(raw_data_list), batch_size):
+                        batch = raw_data_list[i : i + batch_size]
+
+                        # Create VALUES clause for this batch
+                        values_list = []
+                        for item in batch:
+                            values = []
+                            for col in columns:
+                                value = item.get(col)
+                                if value is None:
+                                    values.append("NULL")
+                                else:
+                                    escaped_value = str(value).replace("'", "''")
+                                    values.append(f"'{escaped_value}'")
+                            values_list.append(f"({', '.join(values)})")
+
+                        values_clause = ", ".join(values_list)
+
+                        self.conn.execute(f"""
+                            INSERT INTO temp_raw_data ({", ".join(columns)})
+                            VALUES {values_clause}
+                        """)
+                    # ✅ MIGRATION: Keep as table instead of converting to
                     raw_data = "temp_raw_data"
                 else:
                     self.log.error(

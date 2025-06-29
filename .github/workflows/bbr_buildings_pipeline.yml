@@ -140,6 +140,9 @@ jobs:
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
       run: |
         # Build command based on inputs
         CMD="python main.py --layer ${{ inputs.layer }}"
