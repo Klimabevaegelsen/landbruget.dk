@@ -344,8 +344,41 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             self.log.warning("No features extracted from XML data")
             return None
 
-        # Register features with DuckDB and create spatial table
-        self.conn.register("bnbo_features_raw", features)
+        # Create table directly from the list of dictionaries using DuckDB's native capabilities
+        # Get column names from the first feature
+        columns = list(features[0].keys())
+
+        # Create the table schema
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE bnbo_features_raw (
+                {", ".join([f"{col} VARCHAR" for col in columns])}
+            )
+        """)
+
+        # Insert data in batches
+        batch_size = 1000
+        for i in range(0, len(features), batch_size):
+            batch = features[i : i + batch_size]
+
+            # Create VALUES clause for this batch
+            values_list = []
+            for feature in batch:
+                values = []
+                for col in columns:
+                    value = feature.get(col)
+                    if value is None:
+                        values.append("NULL")
+                    else:
+                        escaped_value = str(value).replace("'", "''")
+                        values.append(f"'{escaped_value}'")
+                values_list.append(f"({', '.join(values)})")
+
+            values_clause = ", ".join(values_list)
+
+            self.conn.execute(f"""
+                INSERT INTO bnbo_features_raw ({", ".join(columns)})
+                VALUES {values_clause}
+            """)
 
         table_name = "bnbo_processed_features"
         self.conn.execute(f"""

@@ -36,9 +36,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
 
         parsed = [SpfSuResponse.parse_obj(item) for item in data]
 
-        # ✅ MIGRATION: Farm owner details - direct table operations (no  conversion)
+        # ✅ MIGRATION: Farm owner details - direct table operations (no pandas conversion)
         farm_owner_details = [item.ownerDetailInfo.dict() for item in parsed]
-        temp_conn.register("temp_farm_owner_details", farm_owner_details)
+
+        # Create table directly from the list of dictionaries
+        if farm_owner_details:
+            columns = list(farm_owner_details[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_farm_owner_details (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_owner_details), batch_size):
+                batch = farm_owner_details[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_farm_owner_details ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_owner_details_final AS SELECT * FROM temp_farm_owner_details"
         )
@@ -52,9 +82,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Farm certificate - direct table operations (no  conversion)
+        # ✅ MIGRATION: Farm certificate - direct table operations (no pandas conversion)
         farm_certificate = [item.ownerDetailInfo.danishCertificate.dict() for item in parsed]
-        temp_conn.register("temp_farm_certificate", farm_certificate)
+
+        # Create table directly from the list of dictionaries
+        if farm_certificate:
+            columns = list(farm_certificate[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_farm_certificate (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_certificate), batch_size):
+                batch = farm_certificate[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_farm_certificate ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_certificate_final AS SELECT * FROM temp_farm_certificate"
         )
@@ -68,9 +128,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Farm general health summary - direct table operations (no  conversion)
+        # ✅ MIGRATION: Farm general health summary - direct table operations (no pandas conversion)
         farm_general_health_summary = [item.ownerDetailInfo.healthData.dict() for item in parsed]
-        temp_conn.register("temp_farm_health", farm_general_health_summary)
+
+        # Create table directly from the list of dictionaries
+        if farm_general_health_summary:
+            columns = list(farm_general_health_summary[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_farm_health (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_general_health_summary), batch_size):
+                batch = farm_general_health_summary[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_farm_health ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_health_final AS SELECT * FROM temp_farm_health"
         )
@@ -84,9 +174,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Farm salmonella data - direct table operations (no  conversion)
+        # ✅ MIGRATION: Farm salmonella data - direct table operations (no pandas conversion)
         farm_salmonella_data = [item.ownerDetailInfo.salmonellaData.dict() for item in parsed]
-        temp_conn.register("temp_farm_salmonella", farm_salmonella_data)
+
+        # Create table directly from the list of dictionaries
+        if farm_salmonella_data:
+            columns = list(farm_salmonella_data[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_farm_salmonella (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_salmonella_data), batch_size):
+                batch = farm_salmonella_data[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_farm_salmonella ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE farm_salmonella_final AS SELECT * FROM temp_farm_salmonella"
         )
@@ -112,7 +232,36 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
                         "next_sample": item.nextSample,
                     }
                 )
-        temp_conn.register("temp_disease_control", farm_disease_control_status)
+        # Create table directly from the list of dictionaries
+        if farm_disease_control_status:
+            columns = list(farm_disease_control_status[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_disease_control (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_disease_control_status), batch_size):
+                batch = farm_disease_control_status[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_disease_control ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE disease_control_final AS SELECT * FROM temp_disease_control"
         )
@@ -126,9 +275,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Farm veterinarians - direct table operations (no  conversion)
+        # ✅ MIGRATION: Farm veterinarians - direct table operations (no pandas conversion)
         farm_veterinarians = [item.healthStatus.veterinarians for item in parsed]
-        temp_conn.register("temp_veterinarians", farm_veterinarians)
+
+        # Create table directly from the list of dictionaries
+        if farm_veterinarians:
+            columns = list(farm_veterinarians[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_veterinarians (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(farm_veterinarians), batch_size):
+                batch = farm_veterinarians[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_veterinarians ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute(
             "CREATE OR REPLACE TABLE veterinarians_final AS SELECT * FROM temp_veterinarians"
         )
@@ -142,9 +321,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Delivery options - direct table operations (no  conversion)
+        # ✅ MIGRATION: Delivery options - direct table operations (no pandas conversion)
         deliveryOptions = [item.healthStatus.deliveryOptions for item in parsed]
-        temp_conn.register("temp_delivery", deliveryOptions)
+
+        # Create table directly from the list of dictionaries
+        if deliveryOptions:
+            columns = list(deliveryOptions[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_delivery (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(deliveryOptions), batch_size):
+                batch = deliveryOptions[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_delivery ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute("CREATE OR REPLACE TABLE delivery_final AS SELECT * FROM temp_delivery")
         # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
@@ -156,9 +365,39 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
             temp_conn,
         )
 
-        # ✅ MIGRATION: Reception options - direct table operations (no  conversion)
+        # ✅ MIGRATION: Reception options - direct table operations (no pandas conversion)
         receptionOptions = [item.healthStatus.receptionOptions for item in parsed]
-        temp_conn.register("temp_reception", receptionOptions)
+
+        # Create table directly from the list of dictionaries
+        if receptionOptions:
+            columns = list(receptionOptions[0].keys())
+            temp_conn.execute(f"""
+                CREATE OR REPLACE TABLE temp_reception (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(receptionOptions), batch_size):
+                batch = receptionOptions[i : i + batch_size]
+                values_list = []
+                for item in batch:
+                    values = []
+                    for col in columns:
+                        value = item.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+                temp_conn.execute(f"""
+                    INSERT INTO temp_reception ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
         temp_conn.execute("CREATE OR REPLACE TABLE reception_final AS SELECT * FROM temp_reception")
         # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(

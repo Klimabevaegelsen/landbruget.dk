@@ -71,8 +71,40 @@ class LocalStorage(StorageInterface):
             conn.register("temp_data", [data])
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
         elif isinstance(data, list):
-            # Convert list to table
-            conn.register("temp_data", data)
+            # Convert list to table - handle list of dicts properly
+            if data and isinstance(data[0], dict):
+                # This is a list of dictionaries, create table manually
+                columns = list(data[0].keys())
+                conn.execute(f"""
+                    CREATE OR REPLACE TABLE temp_data (
+                        {", ".join([f"{col} VARCHAR" for col in columns])}
+                    )
+                """)
+
+                # Insert data in batches
+                batch_size = 1000
+                for i in range(0, len(data), batch_size):
+                    batch = data[i : i + batch_size]
+                    values_list = []
+                    for item in batch:
+                        values = []
+                        for col in columns:
+                            value = item.get(col)
+                            if value is None:
+                                values.append("NULL")
+                            else:
+                                escaped_value = str(value).replace("'", "''")
+                                values.append(f"'{escaped_value}'")
+                        values_list.append(f"({', '.join(values)})")
+
+                    values_clause = ", ".join(values_list)
+                    conn.execute(f"""
+                        INSERT INTO temp_data ({", ".join(columns)})
+                        VALUES {values_clause}
+                    """)
+            else:
+                # Regular list, try to register directly
+                conn.register("temp_data", data)
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
         elif pd and isinstance(data, pd.DataFrame):
             # Legacy pandas support - register with DuckDB and export
@@ -135,7 +167,40 @@ class GCSStorage(StorageInterface):
                 if isinstance(data, dict):
                     conn.register("temp_parquet_data", [data])
                 elif isinstance(data, list):
-                    conn.register("temp_parquet_data", data)
+                    # Handle list of dicts properly
+                    if data and isinstance(data[0], dict):
+                        # This is a list of dictionaries, create table manually
+                        columns = list(data[0].keys())
+                        conn.execute(f"""
+                            CREATE OR REPLACE TABLE temp_parquet_data (
+                                {", ".join([f"{col} VARCHAR" for col in columns])}
+                            )
+                        """)
+
+                        # Insert data in batches
+                        batch_size = 1000
+                        for i in range(0, len(data), batch_size):
+                            batch = data[i : i + batch_size]
+                            values_list = []
+                            for item in batch:
+                                values = []
+                                for col in columns:
+                                    value = item.get(col)
+                                    if value is None:
+                                        values.append("NULL")
+                                    else:
+                                        escaped_value = str(value).replace("'", "''")
+                                        values.append(f"'{escaped_value}'")
+                                values_list.append(f"({', '.join(values)})")
+
+                            values_clause = ", ".join(values_list)
+                            conn.execute(f"""
+                                INSERT INTO temp_parquet_data ({", ".join(columns)})
+                                VALUES {values_clause}
+                            """)
+                    else:
+                        # Regular list, try to register directly
+                        conn.register("temp_parquet_data", data)
                 elif pd and isinstance(data, pd.DataFrame):
                     conn.register("temp_parquet_data", data)
                 else:
