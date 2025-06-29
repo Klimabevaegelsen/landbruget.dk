@@ -162,6 +162,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             for feature in raw_data["features"]:
                 properties = feature.get("properties", {})
                 geometry = feature.get("geometry", {})
+
                 features.append(
                     {
                         "value": properties.get("value"),
@@ -248,14 +249,34 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 ORDER BY valid_time DESC
             """)
 
-            # Add processing metadata
+            # Add processing metadata - create a new table instead of using result.query
+            # Create a temporary table with the aggregation results
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE aggregated_data AS
+                SELECT
+                    parameter_id,
+                    valid_time,
+                    created,
+                    AVG(value) as avg_value,
+                    MIN(value) as min_value,
+                    MAX(value) as max_value,
+                    COUNT(*) as count,
+                    STDDEV(value) as stddev_value,
+                    ST_AsGeoJSON(ST_Centroid(ST_Union_Agg(geometry))) as centroid_geometry,
+                    ST_AsGeoJSON(ST_Envelope(ST_Union_Agg(geometry))) as bbox_geometry
+                FROM transformed_data
+                GROUP BY parameter_id, valid_time, created
+                ORDER BY valid_time DESC
+            """)
+
+            # Now add the metadata columns
             processed_result = self.conn.execute(f"""
                 SELECT *,
                     '{datetime.now().isoformat()}' as processing_time,
                     '{self.config.source_crs}' as source_crs,
                     '{self.config.target_crs}' as target_crs,
                     {len(raw_data["features"])} as original_feature_count
-                FROM ({result.query})
+                FROM aggregated_data
             """)
 
             self.log.info(
@@ -313,23 +334,48 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 processed_data = self._transform_climate_data(raw_data, parameter_id)
 
                 if processed_data is not None:
-                    # ✅ MIGRATION: Save directly from DuckDB relation (no  conversion)
-                    row_count = processed_data.execute(
-                        "SELECT COUNT(*) FROM ({})".format(processed_data.query)
-                    ).fetchone()[0]
+                    # Check row count using the final table name instead of processed_data.query
+                    try:
+                        # Create a final table name for this parameter's processed data
+                        final_table_name = f"dmi_{parameter_id}_final"
+
+                        # Create the final table with the processed data
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {final_table_name} AS
+                            SELECT *,
+                                '{datetime.now().isoformat()}' as processing_time,
+                                '{self.config.source_crs}' as source_crs,
+                                '{self.config.target_crs}' as target_crs,
+                                {len(raw_data["features"])} as original_feature_count
+                            FROM aggregated_data
+                        """)
+
+                        # Get row count from the final table
+                        row_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM {final_table_name}"
+                        ).fetchone()[0]
+                    except Exception as e:
+                        self.log.error(f"Error in row count check: {e}")
+                        raise
 
                     if row_count > 0:
                         # ✅ MIGRATION: Save processed data directly from DuckDB relation
                         dataset_name = f"dmi_{parameter_id}"
-                        self._save_data(
-                            processed_data,
-                            dataset_name,
-                            self.config.bucket,
-                            "silver",
-                            subdataset=dataset_name,
-                            conn=self.conn,
-                        )
-                        all_processed_data[parameter_id] = processed_data
+                        try:
+                            # Save using the table name instead of the processed_data object
+                            self._save_data(
+                                final_table_name,
+                                dataset_name,
+                                self.config.bucket,
+                                "silver",
+                                subdataset=dataset_name,
+                                conn=self.conn,
+                            )
+                        except Exception as e:
+                            self.log.error(f"Error saving data for {dataset_name}: {e}")
+                            raise
+
+                        all_processed_data[parameter_id] = final_table_name
                         self.log.info(
                             f"Successfully processed {row_count} records for parameter {parameter_id}"
                         )

@@ -9,7 +9,6 @@ Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 """
 
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -98,25 +97,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.warning(f"Could not verify spatial extension version: {e}")
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
-        """Get all available fvm_marker years from GCS storage."""
-        try:
-            # List all files in silver layer to extract directory names
-            files = self.gcs_util.list_files(bucket_name=self.config.bucket, prefix="silver/")
-            years = set()
-
-            for file_blob in files:
-                # Extract years from blob names like "silver/fvm_marker_2021/timestamp/data.parquet"
-                match = re.search(r"silver/fvm_marker_(\d{4})/", file_blob.name)
-                if match:
-                    year = int(match.group(1))
-                    years.add(year)
-
-            return sorted(list(years))
-        except Exception as e:
-            self.log.error(f"Error discovering fvm_marker years: {e}")
-            return []
-
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]
     ) -> str:
@@ -132,57 +112,18 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.register(table_name, silver_data[dataset])
             return True
 
-        # Load from GCS using optimized access with proper timestamped path discovery
+        # Load from GCS using base class method
         try:
-            gcs_path = self._get_latest_silver_path_for_dataset(dataset)
-            if not gcs_path:
-                self.log.error(f"No silver data found for {dataset}")
-                return False
-
+            gcs_path = self._get_latest_silver_path(dataset)
             self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", table_name)
             self.log.info(f"Loaded {dataset} from GCS into table {table_name}")
             return True
+        except FileNotFoundError:
+            self.log.error(f"No silver data found for {dataset}")
+            return False
         except Exception as e:
             self.log.error(f"Failed to load {dataset}: {e}")
             return False
-
-    def _get_latest_silver_path_for_dataset(self, dataset: str) -> Optional[str]:
-        """Get the latest silver data path for a specific dataset, handling different file naming patterns."""
-        try:
-            # List all timestamped directories for this dataset
-            prefix = f"silver/{dataset}/"
-            blobs = list(
-                self.gcs_util.get_gcs_client().list_blobs(self.config.bucket, prefix=prefix)
-            )
-
-            if not blobs:
-                self.log.warning(f"No files found for dataset {dataset}")
-                return None
-
-            # Find timestamped directories and their files
-            timestamped_files = []
-            for blob in blobs:
-                # Look for parquet files in timestamped directories
-                # Pattern: silver/{dataset}/{timestamp}/{filename}.parquet
-                path_parts = blob.name.split("/")
-                if len(path_parts) >= 4 and path_parts[-1].endswith(".parquet"):
-                    timestamp = path_parts[2]  # Extract timestamp
-                    timestamped_files.append((timestamp, f"gs://{self.config.bucket}/{blob.name}"))
-
-            if not timestamped_files:
-                self.log.warning(f"No parquet files found for dataset {dataset}")
-                return None
-
-            # Sort by timestamp and get the latest
-            timestamped_files.sort(key=lambda x: x[0], reverse=True)
-            latest_path = timestamped_files[0][1]
-
-            self.log.info(f"Found latest {dataset} data at: {latest_path}")
-            return latest_path
-
-        except Exception as e:
-            self.log.error(f"Error finding latest data for {dataset}: {e}")
-            return None
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """Run field production estimation gold processing using pure DuckDB."""
