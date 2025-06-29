@@ -135,6 +135,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "simple-singleton" },
     { name = "uvicorn" },
 ]
 
@@ -151,6 +152,7 @@ requires-dist = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "simple-singleton", specifier = ">=2.0.0" },
     { name = "uvicorn" },
 ]
 
@@ -1246,6 +1248,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696 },
+]
+
+[[package]]
+name = "simple-singleton"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/76/7e70d62ce4af2f89f557406b356589ca3509253dcbbfdb8f7292808d6e0f/simple_singleton-2.0.0.tar.gz", hash = "sha256:5f5a1292305940c15e6eaf837cff68e81b19142dd07a0868c93cb4c492ef22ad", size = 15131 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/2b/fb243f5ee328ec582713cf2399adda4db44199e9e62525ba63afcb64e112/simple_singleton-2.0.0-py3-none-any.whl", hash = "sha256:831c4b082ecd37091a86eba370dc9788601c41bf15c896b07a9a242c8b008f43", size = 16718 },
 ]
 
 [[package]]

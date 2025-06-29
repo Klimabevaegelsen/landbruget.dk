@@ -307,5 +307,14 @@ class TestDMIBronze:
         calls = dmi_bronze.gcs_access.upload_json.call_args_list
         paths = [call[0][1] for call in calls]  # Second argument is the path
 
-        assert any("pot_evaporation_makkink_data.json" in path for path in paths)
-        assert any("pot_evaporation_makkink_metadata.json" in path for path in paths)
+        # Verify paths use proper GCS format with bucket name
+        assert any(
+            "gs://landbrugsdata-raw-data/bronze/dmi/" in path
+            and "pot_evaporation_makkink_data.json" in path
+            for path in paths
+        )
+        assert any(
+            "gs://landbrugsdata-raw-data/bronze/dmi/" in path
+            and "pot_evaporation_makkink_metadata.json" in path
+            for path in paths
+        )

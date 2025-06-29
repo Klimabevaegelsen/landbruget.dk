@@ -94,7 +94,7 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
         # Fallback to storage if no in-memory data
         try:
             # List all bronze data files for this table
-            pattern = f"bronze/dst/*/{table_id}_data.json"
+            pattern = f"gs://{self.config.bucket}/bronze/dst/*/{table_id}_data.json"
             bronze_files = self.gcs_access.list_files(pattern)
 
             if not bronze_files:
