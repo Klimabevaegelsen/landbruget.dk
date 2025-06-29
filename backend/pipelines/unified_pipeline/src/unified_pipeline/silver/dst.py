@@ -475,7 +475,7 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                     # Save using the base class method with the underlying DuckDB connection
                     self._save_data(
                         table_name,
-                        f"dst_{table_id.lower()}",
+                        f"{table_id.lower()}_processed",
                         self.config.bucket,
                         "silver",
                         conn=self.ibis_con.con,

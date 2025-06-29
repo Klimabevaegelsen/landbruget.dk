@@ -221,22 +221,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _get_available_field_years(self) -> Set[int]:
         """Extract available field years from GCS storage."""
-        try:
-            # List all files in silver layer to extract directory names
-            files = self.gcs_util.list_files(bucket_name=self.config.bucket, prefix="silver/")
-            years = set()
-
-            for file_blob in files:
-                # Extract years from blob names like "silver/fvm_marker_2021/timestamp/data.parquet"
-                match = re.search(r"silver/fvm_marker_(\d{4})/", file_blob.name)
-                if match:
-                    year = int(match.group(1))
-                    years.add(year)
-
-            return years
-        except Exception as e:
-            logger.error(f"Error discovering field years: {e}")
-            return set()
+        return set(self._get_available_fvm_marker_years())
 
     def _load_silver_data_for_years(
         self, pesticide_year: int, field_year: int, silver_data: Optional[Dict[str, Any]] = None

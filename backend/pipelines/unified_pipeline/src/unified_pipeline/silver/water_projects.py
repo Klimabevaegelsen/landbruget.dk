@@ -201,10 +201,30 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
 
                 try:
                     pos = [float(x) for x in pos_list.text.strip().split()]
-                    coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 2)]
+
+                    # DEBUG: Log coordinate parsing details
+                    self.log.debug(
+                        f"Raw coordinates count: {len(pos)}, first few: {pos[:6] if len(pos) > 6 else pos}"
+                    )
+
+                    # Handle both 2D and 3D coordinates - if we have 3D, take only x,y and skip z
+                    if len(pos) % 3 == 0:
+                        # 3D coordinates (x, y, z) - take only x, y
+                        coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 3)]
+                        self.log.debug(f"Parsed as 3D coordinates, extracted {len(coords)} pairs")
+                    else:
+                        # 2D coordinates (x, y)
+                        coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 2)]
+                        self.log.debug(f"Parsed as 2D coordinates, extracted {len(coords)} pairs")
+
                     if len(coords) >= 4:
                         # Store coordinate lists instead of Shapely objects
                         polygons.append(coords)
+                        self.log.debug(f"Added polygon with {len(coords)} coordinate pairs")
+                    else:
+                        self.log.warning(
+                            f"Insufficient coordinates for polygon: {len(coords)} pairs"
+                        )
                 except Exception as e:
                     self.log.error(f"Failed to parse coordinates: {str(e)}")
                     continue
@@ -687,13 +707,16 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             self.log.info("Processed raw data successfully")
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
-            # ✅ MIGRATION: Save DuckDB tables using optimized methods
-            self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")
-            self.save_data_direct(
+            # ✅ MIGRATION: Save DuckDB tables using standard _save_data method like other pipelines
+            self._save_data(
+                table_name, self.config.dataset, self.config.bucket, "silver", conn=self.conn
+            )
+            self._save_data(
                 dissolved_table_name,
                 f"{self.config.dataset}_dissolved",
                 self.config.bucket,
                 "silver",
+                conn=self.conn,
             )
 
             self.log.info("Saved processed data successfully")
