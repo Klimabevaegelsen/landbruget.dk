@@ -35,7 +35,6 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # Increased timeout for full dataset processing
     
     # Add permissions for GCS access
     permissions:
@@ -138,7 +137,6 @@ jobs:
 
     - name: Run BBR Buildings Pipeline
       working-directory: backend/pipelines/bbr_buildings
-      timeout-minutes: 150  # Set step-level timeout for full dataset
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
@@ -190,14 +188,10 @@ jobs:
         done) &
         MONITOR_PID=$!
         
-        # Run the pipeline with timeout handling
-        timeout 8400 $CMD || {
+        # Run the pipeline
+        $CMD || {
           EXIT_CODE=$?
           kill $MONITOR_PID 2>/dev/null || true
-          if [ $EXIT_CODE -eq 124 ]; then
-            echo "Pipeline timed out after 140 minutes"
-            echo "Full dataset processing requires significant time"
-          fi
           exit $EXIT_CODE
         }
         
