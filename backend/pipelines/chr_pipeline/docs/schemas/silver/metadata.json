@@ -1,0 +1,16 @@
+{
+  "pipeline": "chr_pipeline",
+  "stage": "silver",
+  "generated_at": "2024-01-01T12:00:00",
+  "tables": [
+    "bes_list",
+    "cattle_movements",
+    "empty_antibiotic_usage"
+  ],
+  "files_generated": [
+    "docs/schemas/silver/bes_list.md",
+    "docs/schemas/silver/cattle_movements.md",
+    "docs/schemas/silver/empty_antibiotic_usage.md",
+    "docs/schemas/silver/overview.md"
+  ]
+}
