@@ -473,10 +473,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         elif "KUNDE_LB" in temp_column_names:
             cvr_column = "KUNDE_LB"
         else:
-            logger.error(
-                f"No CVR column found in marker data. Available columns: {temp_column_names}"
+            logger.warning(
+                f"No CVR column found in marker data. Skipping this year pair as CVR matching is required. Available columns: {temp_column_names}"
             )
-            raise ValueError("No CVR column found in marker data")
+            return None
 
         # Check if block_id exists, if not use field_id
         block_id_column = "block_id" if "block_id" in temp_column_names else "field_id"
@@ -488,7 +488,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 area_ha,
                 CAST({cvr_column} AS VARCHAR) as cvr_number,
                 crop_code,
-                crop_type,
+                crop_name,
                 organic_farming,
                 CAST({block_id_column} AS VARCHAR) as block_id,
                 year
