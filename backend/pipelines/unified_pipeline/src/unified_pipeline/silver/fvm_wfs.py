@@ -361,11 +361,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         try:
             # Read corresponding Markblokke data for spatial join
             markblokke_dataset = f"fvm_markblokke_{year}"
-            markblokke_df = self._read_data_from_storage(
+            markblokke_result = self._read_data_from_storage(
                 markblokke_dataset, self.config.bucket, stage="silver"
             )
 
-            if markblokke_df is None or markblokke_df.empty:
+            # Handle the new GCS access format
+            if markblokke_result is None:
                 self.log.warning(f"No Markblokke data found for {year}, cannot add block IDs")
                 # Add empty block_id column using DuckDB
                 result_table = f"marker_with_null_block_{year}"
@@ -374,125 +375,192 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 )
                 return result_table
 
-            self.log.info(f"Markblokke data columns for {year}: {list(markblokke_df.columns)}")
-            self.log.info(f"Markblokke data shape: {markblokke_df.shape}")
+            # Extract GCS access and table name from result
+            if isinstance(markblokke_result, dict) and "gcs_access" in markblokke_result:
+                gcs_access = markblokke_result["gcs_access"]
+                markblokke_table = markblokke_result["table_name"]
 
-            # Find the actual block ID column name (could be MARKBLOKNR, block_id, MB_NR, etc.)
-            block_id_column = None
-            for col in markblokke_df.columns:
-                if col.lower() in ["block_id", "markbloknr", "mb_nr", "markblok_nr"]:
-                    block_id_column = col
-                    break
+                # Check if table has data
+                row_count = gcs_access.duckdb_conn.execute(
+                    f"SELECT COUNT(*) FROM {markblokke_table}"
+                ).fetchone()[0]
 
-            if block_id_column is None:
-                self.log.error(
-                    f"No block ID column found in Markblokke data for {year}. Available columns: {list(markblokke_df.columns)}"
+                if row_count == 0:
+                    self.log.warning(f"No Markblokke data found for {year}, cannot add block IDs")
+                    # Add empty block_id column using DuckDB
+                    result_table = f"marker_with_null_block_{year}"
+                    self.conn.execute(
+                        f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                    )
+                    return result_table
+
+                # Get column information from the GCS table
+                columns_result = gcs_access.duckdb_conn.execute(
+                    f"DESCRIBE {markblokke_table}"
+                ).fetchall()
+                markblokke_columns = [col[0] for col in columns_result]
+
+                self.log.info(f"Markblokke data columns for {year}: {markblokke_columns}")
+                self.log.info(f"Markblokke data row count: {row_count}")
+
+                # Find the actual block ID column name (could be MARKBLOKNR, block_id, MB_NR, etc.)
+                block_id_column = None
+                for col in markblokke_columns:
+                    if col.lower() in ["block_id", "markbloknr", "mb_nr", "markblok_nr"]:
+                        block_id_column = col
+                        break
+
+                if block_id_column is None:
+                    self.log.error(
+                        f"No block ID column found in Markblokke data for {year}. Available columns: {markblokke_columns}"
+                    )
+                    # Add empty block_id column using DuckDB
+                    result_table = f"marker_with_null_block_{year}"
+                    self.conn.execute(
+                        f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                    )
+                    return result_table
+
+                self.log.info(f"Using {block_id_column} as block ID column")
+
+                # Copy the markblokke data from GCS connection to our connection
+                # First get all data from the GCS table
+                markblokke_data = gcs_access.duckdb_conn.execute(
+                    f"SELECT * FROM {markblokke_table}"
+                ).fetchall()
+                columns_info = gcs_access.duckdb_conn.execute(
+                    f"DESCRIBE {markblokke_table}"
+                ).fetchall()
+
+                # Create table in our connection with the same structure
+                column_defs = []
+                for col_info in columns_info:
+                    col_name, col_type = col_info[0], col_info[1]
+                    column_defs.append(f"{col_name} {col_type}")
+
+                create_table_sql = f"CREATE OR REPLACE TABLE blocks ({', '.join(column_defs)})"
+                self.conn.execute(create_table_sql)
+
+                # Insert data into our connection
+                if markblokke_data:
+                    placeholders = ", ".join(["?" for _ in columns_info])
+                    insert_sql = f"INSERT INTO blocks VALUES ({placeholders})"
+                    self.conn.executemany(insert_sql, markblokke_data)
+
+                # Get geometry column names
+                marker_columns = self.conn.execute(f"DESCRIBE {marker_table}").fetchall()
+                marker_col_names = [col[0] for col in marker_columns]
+
+                geom_col = "geometry_wkt" if "geometry_wkt" in marker_col_names else "geometry"
+                markblokke_geom_col = (
+                    "geometry_wkt" if "geometry_wkt" in markblokke_columns else "geometry"
                 )
+
+                # Check if geometries need conversion from Shapely to WKT
+                sample_geom_query = (
+                    f"SELECT {geom_col} FROM {marker_table} WHERE {geom_col} IS NOT NULL LIMIT 1"
+                )
+                sample_result = self.conn.execute(sample_geom_query).fetchone()
+
+                if sample_result and sample_result[0] is not None:
+                    sample_geom = sample_result[0]
+                    if hasattr(sample_geom, "wkt"):
+                        self.log.info(
+                            "Converting Shapely geometries to WKT for DuckDB compatibility"
+                        )
+                        # Convert Shapely to WKT in the table
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {marker_table}_wkt AS
+                            SELECT *, 
+                                CASE WHEN {geom_col} IS NOT NULL THEN ST_AsText({geom_col}) ELSE NULL END as {geom_col}_wkt
+                            FROM {marker_table}
+                        """)
+                        marker_table = f"{marker_table}_wkt"
+                        geom_col = f"{geom_col}_wkt"
+
+                        # Also convert markblokke geometries if needed
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE blocks_wkt AS
+                            SELECT *, 
+                                CASE WHEN {markblokke_geom_col} IS NOT NULL THEN ST_AsText({markblokke_geom_col}) ELSE NULL END as {markblokke_geom_col}_wkt
+                            FROM blocks
+                        """)
+                        self.conn.execute("DROP TABLE blocks")
+                        self.conn.execute("ALTER TABLE blocks_wkt RENAME TO blocks")
+                        markblokke_geom_col = f"{markblokke_geom_col}_wkt"
+
+                # Perform spatial join using DuckDB-spatial with WKT geometries
+                spatial_join_query = f"""
+                    SELECT 
+                        m.*,
+                        b.{block_id_column} as block_id
+                    FROM {marker_table} m
+                    LEFT JOIN blocks b ON ST_Intersects(
+                        ST_GeomFromText(m.{geom_col}), 
+                        ST_GeomFromText(b.{markblokke_geom_col})
+                    )
+                    WHERE m.{geom_col} IS NOT NULL AND b.{markblokke_geom_col} IS NOT NULL
+                """
+
+                # Get block count for logging
+                block_count = self.conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
+
+                self.log.info(
+                    f"Executing DuckDB-spatial join for {row_count} markers with {block_count} blocks in {year}"
+                )
+
+                # Execute the spatial join
+                result_table = f"spatial_join_result_{year}"
+                self.conn.execute(f"CREATE OR REPLACE TABLE {result_table} AS {spatial_join_query}")
+                result_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[
+                    0
+                ]
+
+                # Add markers that didn't have geometry (NULL geometries)
+                if result_count < row_count:
+                    self.log.info(
+                        f"Adding {row_count - result_count} markers without valid geometry"
+                    )
+
+                    # Get markers with NULL geometry and add to final result
+                    final_table = f"final_result_{year}"
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {final_table} AS
+                        SELECT * FROM {result_table}
+                        UNION ALL
+                        SELECT *, NULL as block_id
+                        FROM {marker_table}
+                        WHERE {geom_col} IS NULL
+                    """)
+
+                    result_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM {final_table}"
+                    ).fetchone()[0]
+                    result_table = final_table
+
+                self.log.info(
+                    f"Added block IDs via DuckDB spatial join for {result_count} markers in {year}"
+                )
+
+                # Log statistics about the join success
+                markers_with_blocks = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {result_table} WHERE block_id IS NOT NULL"
+                ).fetchone()[0]
+                if row_count > 0:
+                    self.log.info(
+                        f"Spatial join success rate: {markers_with_blocks}/{row_count} ({markers_with_blocks / row_count * 100:.1f}%)"
+                    )
+
+                return result_table
+            else:
+                # Handle case where markblokke_result is not in expected format
+                self.log.error(f"Unexpected markblokke_result format: {type(markblokke_result)}")
                 # Add empty block_id column using DuckDB
                 result_table = f"marker_with_null_block_{year}"
                 self.conn.execute(
                     f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return result_table
-
-            self.log.info(f"Using {block_id_column} as block ID column")
-
-            # Register markblokke data with DuckDB
-            self.conn.register("blocks", markblokke_df)
-
-            # Get geometry column names
-            marker_columns = self.conn.execute(f"DESCRIBE {marker_table}").fetchall()
-            marker_col_names = [col[0] for col in marker_columns]
-
-            geom_col = "geometry_wkt" if "geometry_wkt" in marker_col_names else "geometry"
-            markblokke_geom_col = (
-                "geometry_wkt" if "geometry_wkt" in markblokke_df.columns else "geometry"
-            )
-
-            # Check if geometries need conversion from Shapely to WKT
-            sample_geom_query = (
-                f"SELECT {geom_col} FROM {marker_table} WHERE {geom_col} IS NOT NULL LIMIT 1"
-            )
-            sample_result = self.conn.execute(sample_geom_query).fetchone()
-
-            if sample_result and sample_result[0] is not None:
-                sample_geom = sample_result[0]
-                if hasattr(sample_geom, "wkt"):
-                    self.log.info("Converting Shapely geometries to WKT for DuckDB compatibility")
-                    # Convert Shapely to WKT in the table
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE {marker_table}_wkt AS
-                        SELECT *, 
-                            CASE WHEN {geom_col} IS NOT NULL THEN ST_AsText({geom_col}) ELSE NULL END as {geom_col}_wkt
-                        FROM {marker_table}
-                    """)
-                    marker_table = f"{marker_table}_wkt"
-                    geom_col = f"{geom_col}_wkt"
-
-                    # Also convert markblokke geometries if needed
-                    markblokke_df_wkt = markblokke_df.copy()
-                    markblokke_df_wkt[f"{markblokke_geom_col}_wkt"] = markblokke_df[
-                        markblokke_geom_col
-                    ].apply(lambda x: x.wkt if hasattr(x, "wkt") and x is not None else x)
-                    self.conn.register("blocks", markblokke_df_wkt)
-                    markblokke_geom_col = f"{markblokke_geom_col}_wkt"
-
-            # Perform spatial join using DuckDB-spatial with WKT geometries
-            spatial_join_query = f"""
-                SELECT 
-                    m.*,
-                    b.{block_id_column} as block_id
-                FROM {marker_table} m
-                LEFT JOIN blocks b ON ST_Intersects(
-                    ST_GeomFromText(m.{geom_col}), 
-                    ST_GeomFromText(b.{markblokke_geom_col})
-                )
-                WHERE m.{geom_col} IS NOT NULL AND b.{markblokke_geom_col} IS NOT NULL
-            """
-
-            self.log.info(
-                f"Executing DuckDB-spatial join for {row_count} markers with {len(markblokke_df)} blocks in {year}"
-            )
-
-            # Execute the spatial join
-            result_table = f"spatial_join_result_{year}"
-            self.conn.execute(f"CREATE OR REPLACE TABLE {result_table} AS {spatial_join_query}")
-            result_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
-
-            # Add markers that didn't have geometry (NULL geometries)
-            if result_count < row_count:
-                self.log.info(f"Adding {row_count - result_count} markers without valid geometry")
-
-                # Get markers with NULL geometry and add to final result
-                final_table = f"final_result_{year}"
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {final_table} AS
-                    SELECT * FROM {result_table}
-                    UNION ALL
-                    SELECT *, NULL as block_id
-                    FROM {marker_table}
-                    WHERE {geom_col} IS NULL
-                """)
-
-                result_count = self.conn.execute(f"SELECT COUNT(*) FROM {final_table}").fetchone()[
-                    0
-                ]
-                result_table = final_table
-
-            self.log.info(
-                f"Added block IDs via DuckDB spatial join for {result_count} markers in {year}"
-            )
-
-            # Log statistics about the join success
-            markers_with_blocks = self.conn.execute(
-                f"SELECT COUNT(*) FROM {result_table} WHERE block_id IS NOT NULL"
-            ).fetchone()[0]
-            if row_count > 0:
-                self.log.info(
-                    f"Spatial join success rate: {markers_with_blocks}/{row_count} ({markers_with_blocks / row_count * 100:.1f}%)"
-                )
-
-            return result_table
 
         except Exception as e:
             self.log.error(f"Error adding block IDs via spatial join for {year}: {e}")
