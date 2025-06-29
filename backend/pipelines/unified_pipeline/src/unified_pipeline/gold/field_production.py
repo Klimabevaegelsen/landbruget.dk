@@ -378,7 +378,31 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             self.log.info("Setting up spatial processing with DST zones")
 
+            # Debug: Check the structure and sample data of dst_zones_raw table
+            try:
+                columns = self.conn.execute("DESCRIBE dst_zones_raw").fetchall()
+                self.log.info(f"dst_zones_raw table structure: {columns}")
+
+                sample_data = self.conn.execute("SELECT * FROM dst_zones_raw LIMIT 3").fetchall()
+                self.log.info(f"Sample dst_zones_raw data: {sample_data}")
+
+                # Check for NULL geometries
+                null_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM dst_zones_raw WHERE geometry IS NULL"
+                ).fetchone()[0]
+                empty_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM dst_zones_raw WHERE geometry = ''"
+                ).fetchone()[0]
+                total_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones_raw").fetchone()[0]
+                self.log.info(
+                    f"Geometry data: {total_count} total, {null_count} NULL, {empty_count} empty"
+                )
+
+            except Exception as debug_e:
+                self.log.warning(f"Debug info failed: {debug_e}")
+
             # Create optimized DST zones table with spatial geometry
+            # Simply filter out NULL geometries and convert WKT strings to geometry objects
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
                 SELECT 
@@ -387,14 +411,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     dst_regions,
                     ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
-                WHERE geometry IS NOT NULL
+                WHERE geometry IS NOT NULL 
+                  AND geometry != ''
             """)
+
+            # Verify we have valid zones
+            zone_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones").fetchone()[0]
+            if zone_count == 0:
+                self.log.error("No valid DST zones found after filtering")
+                raise ValueError("No valid DST zones available for spatial processing")
 
             # Create spatial index
             self.conn.execute("CREATE INDEX idx_dst_zones_geom ON dst_zones USING RTREE (geometry)")
 
-            zone_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones").fetchone()[0]
-            self.log.info(f"✅ Created DST zones table with {zone_count} zones and spatial index")
+            self.log.info(
+                f"✅ Created DST zones table with {zone_count} valid zones and spatial index"
+            )
 
         except Exception as e:
             self.log.error(f"Failed to setup spatial processing with DST zones: {e}")
