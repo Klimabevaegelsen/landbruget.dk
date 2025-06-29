@@ -17,8 +17,10 @@ from silver.load import DataLoader
 from silver.transform import DataTransformer
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-# Import GCS storage interface
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add the project root to sys.path to enable backend imports
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Configure logging
 logger = logging.getLogger(__name__)
