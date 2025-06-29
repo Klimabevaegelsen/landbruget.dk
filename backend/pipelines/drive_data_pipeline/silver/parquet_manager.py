@@ -6,7 +6,8 @@ import tempfile
 from pathlib import Path
 
 import pyarrow.parquet as pq
-from shapely.geometry import Point
+
+# ✅ MIGRATION: Removed shapely import - using DuckDB ST_Point for all spatial operations
 
 # Handle imports for both standalone and package usage
 try:
@@ -364,54 +365,5 @@ class ParquetManager(DuckDBProcessor):
             else:
                 raise ValueError(f"Unsupported data type: {type(gdf)}")
 
-    def dataframe_to_geodataframe(
-        self,
-        df,  # Could be DataFrame or table name
-        latitude_col: str,
-        longitude_col: str,
-        target_crs: str = "EPSG:4326",
-    ):
-        """Convert a DataFrame with lat/lon columns to a GeoDataFrame (compatibility method)."""
-        if isinstance(df, str):
-            # It's a table name - create spatial table and export as GeoDataFrame
-            spatial_table = self.create_spatial_table_from_coords(
-                df, latitude_col, longitude_col, target_crs
-            )
-
-            # Export to GeoDataFrame for compatibility
-            result_df = self.conn.execute(f"""
-                SELECT 
-                    * EXCLUDE (geometry),
-                    ST_AsText(geometry) as geometry
-                FROM {spatial_table}
-            """).df()
-
-            import geopandas as gpd
-            from shapely import wkt
-
-            result_df["geometry"] = result_df["geometry"].apply(wkt.loads)
-            gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs=target_crs)
-
-            return gdf
-        else:
-            # It's a pandas DataFrame - use original logic
-            import geopandas as gpd
-            import pandas as pd
-
-            if isinstance(df, pd.DataFrame):
-                # Create geometry column
-                geometry = [
-                    Point(lon, lat) if pd.notna(lon) and pd.notna(lat) else None
-                    for lon, lat in zip(df[longitude_col], df[latitude_col], strict=False)
-                ]
-
-                # Create GeoDataFrame
-                gdf = gpd.GeoDataFrame(
-                    df.drop([longitude_col, latitude_col], axis=1),
-                    geometry=geometry,
-                    crs=target_crs,
-                )
-
-                return gdf
-            else:
-                raise ValueError(f"Unsupported data type: {type(df)}")
+    # ✅ REMOVED: Legacy dataframe_to_geodataframe method
+    # Use create_spatial_table_from_coords() instead for DuckDB-optimized spatial operations

@@ -447,11 +447,30 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                     continue
 
                 if processed_data is not None:
-                    # Save processed data
-                    df = processed_data.to_pandas()
-                    self._save_data(df, f"dst_{table_id.lower()}", self.config.bucket, "silver")
-                    all_processed_data[table_id] = df
-                    self.log.info(f"Successfully processed {len(df)} records for table {table_id}")
+                    # ✅ OPTIMIZED: Save processed data directly without DataFrame conversion
+                    # Create a DuckDB table from the Ibis expression
+                    table_name = f"dst_{table_id.lower()}_processed"
+                    processed_data.cache().name(table_name)
+
+                    # Get record count for logging (without DataFrame conversion)
+                    record_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM {table_name}"
+                    ).fetchone()[0]
+
+                    # Save directly using optimized method
+                    gcs_path = self.save_data_direct(
+                        table_name, f"dst_{table_id.lower()}", self.config.bucket, "silver"
+                    )
+
+                    # Store table name for gold stage processing (not DataFrame)
+                    all_processed_data[table_id] = table_name
+                    self.log.info(
+                        f"Successfully processed {record_count:,} records for table {table_id}"
+                    )
+                    self.log.info(f"Saved to: {gcs_path}")
+
+                    # Clean up the temporary table
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 else:
                     self.log.warning(f"Failed to process data for table {table_id}")
 
