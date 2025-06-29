@@ -1,0 +1,16 @@
+{
+  "source_url": "https://api.statbank.dk/v1",
+  "fetch_timestamp_utc_iso": "2025-06-29T11:21:11.255595",
+  "fetch_timestamp_dirname": "20250629",
+  "description": "Raw data data from Danmarks Statistik API for table HST77",
+  "pipeline_name": "dst_pipeline",
+  "layer": "bronze",
+  "file_format": "json",
+  "table_id": "HST77",
+  "data_type": "data",
+  "data_filename": "HST77_data.json",
+  "relative_data_file_path": "20250629/HST77_data.json",
+  "record_count": 0,
+  "api_lang": "da",
+  "source_system": "Danmarks Statistik API"
+}

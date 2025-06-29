@@ -1,0 +1,11 @@
+{
+  "processing_timestamp": "20250629_112049",
+  "processed_tables": [
+    "FRO"
+  ],
+  "total_tables": 1,
+  "processing_status": "completed",
+  "layer": "silver",
+  "pipeline_name": "dst_api_pipeline",
+  "source_system": "Danmarks Statistik API"
+}
