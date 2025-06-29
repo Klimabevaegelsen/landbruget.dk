@@ -8,18 +8,19 @@ import time
 from datetime import datetime
 
 import nest_asyncio
-from bronze.fetch_company_data import DMAScraper
-from silver.transformation import transform_dma_json
 
 ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 sys.path.insert(0, ROOT)
 
+from bronze.fetch_company_data import DMAScraper
 from bronze.fetch_company_detail import DMACompanyDetailScraper
 from common.storage_interface import GCSStorage, LocalStorage
+from silver.transformation import transform_dma_json
+
+nest_asyncio.apply()
 
 PREFIX_BRONZE_SAVE_PATH = os.environ.get("BRONZE_OUTPUT_DIR", "bronze/dma")
 PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
-nest_asyncio.apply()
 
 # Initialize GCS client and bucket
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")

@@ -26,14 +26,14 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_diko")
 ENDPOINTS = {"diko": "https://ws.fvst.dk/service/DIKOWS?wsdl"}
 
 # Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"  # TODO: Confirm if this needs changing
+DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # Valid species codes for DIKO
 VALID_DIKO_SPECIES = {
     12: "Cattle",
     13: "Sheep",
     14: "Goats",
-    15: "Pigs",  # Note: Pigs might need to use SvineflytningWS instead
+    15: "Pigs",
 }
 
 # --- Credential Handling ---
@@ -81,7 +81,7 @@ def _create_base_request(username: str, session_id: str = "1", track_id: str = "
         "KlientId": DEFAULT_CLIENT_ID,
         "SessionId": session_id,
         "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",  # Add UUID for uniqueness
+        "TrackID": f"{track_id}-{uuid.uuid4()}",
     }
 
 

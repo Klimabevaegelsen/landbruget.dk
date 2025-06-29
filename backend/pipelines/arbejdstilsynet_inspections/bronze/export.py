@@ -15,12 +15,29 @@ load_dotenv()
 
 
 class GCSStorage:
-    """Google Cloud Storage backend for arbejdstilsynet_inspections files."""
+    """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections"):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
+
+        # ✅ OPTIMIZED: Initialize optimized GCS access
+        self.gcs_access = None
+        if self.is_available:
+            try:
+                # Import optimized GCS access
+                import sys
+                from pathlib import Path
+
+                sys.path.append(str(Path(__file__).parent.parent.parent / "unified_pipeline" / "src"))
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                self.gcs_access = GCSDataAccess()
+                logging.info("✅ Arbejdstilsynet GCSStorage: Initialized optimized GCS access")
+            except Exception as e:
+                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                self.gcs_access = None
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -32,23 +49,40 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, gcs_path=None):
-        """Upload a file to GCS bucket."""
+        """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
 
         if gcs_path is None:
-            # Use the file structure from local path but with GCS prefix
-            relative_path = os.path.relpath(local_path, start=os.path.dirname(os.path.dirname(local_path)))
-            gcs_path = f"{self.prefix}/{relative_path}"
+            # Use the timestamp from the local path
+            timestamp = os.path.basename(os.path.dirname(local_path))
+            filename = os.path.basename(local_path)
+            gcs_path = f"{self.prefix}/{timestamp}/{filename}"
 
         try:
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(local_path)
-            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path}")
-            return True
+            # ✅ OPTIMIZED: Use streaming upload if available
+            if self.gcs_access:
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+
+                # Stream file directly without loading into memory
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+
+                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                return True
+            else:
+                # Fallback to old method if optimized access failed
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_filename(local_path)
+                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                return True
+
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
             return False
@@ -347,35 +381,44 @@ class BronzePipeline:
             logging.error("No data fetched for any filter. Exiting bronze run.")
             raise RuntimeError("Bronze pipeline: No data fetched by Playwright.")
 
-        from io import BytesIO
-
-        import pandas as pd
+        # ✅ MIGRATION: Use DuckDB instead of pandas for CSV processing
+        import duckdb
 
         # Create temp folder for initial raw CSVs
         temp_dir = self.bronze_data_dir / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        dfs = []
+        # Initialize DuckDB connection for CSV processing
+        conn = duckdb.connect()
+        csv_files = []
+
         for filter_name, csv_bytes in results:
             try:
-                df = pd.read_csv(BytesIO(csv_bytes), encoding="utf-8")
-                dfs.append(df)
                 safe_filter_name = filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
                 temp_csv_path = temp_dir / f"data_{safe_filter_name}.csv"
                 with open(temp_csv_path, "wb") as f:
                     f.write(csv_bytes)
+                csv_files.append(str(temp_csv_path))
             except Exception as e:
                 logging.error(
-                    "[Bronze] Could not parse/save CSV for filter %s: %s",
+                    "[Bronze] Could not save CSV for filter %s: %s",
                     filter_name,
                     e,
                 )
 
-        if not dfs:
+        if not csv_files:
             logging.error("No valid CSVs to merge. Exiting bronze run.")
             raise RuntimeError("Bronze pipeline: No valid CSVs to merge after fetching.")
 
-        merged_df = pd.concat(dfs, ignore_index=True)
+        # ✅ MIGRATION: Use DuckDB UNION to merge CSV files instead of pandas concat
+        # Create UNION query for all CSV files
+        union_parts = []
+        for csv_file in csv_files:
+            union_parts.append(f"SELECT * FROM read_csv_auto('{csv_file}')")
+
+        union_query = " UNION ALL ".join(union_parts)
+        merged_df = conn.execute(union_query).df()
+        conn.close()
 
         timestamp_str = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         storage_dir = self.bronze_data_dir / timestamp_str

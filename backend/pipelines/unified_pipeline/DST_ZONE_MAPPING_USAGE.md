@@ -90,7 +90,7 @@ df_reference = pd.read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapp
 
 ```python
 # Load agricultural fields
-fields = gpd.read_parquet('gs://landbrugsdata-raw-data/silver/agricultural_fields_2024/latest/data.parquet')
+fields = gpd.read_parquet('gs://landbrugsdata-raw-data/silver/fvm_marker_2024/latest/data.parquet')
 
 # Perform spatial join to add DST zones
 fields_with_dst = gpd.sjoin(fields, gdf_lookup, how='left', predicate='within')

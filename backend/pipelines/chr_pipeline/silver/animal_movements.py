@@ -96,7 +96,6 @@ def create_chr_dyr_animal_movements_table(
             },
         )
 
-        # Add null columns if source was missing
         for target in animal_cols.values():
             if target not in animals.columns:
                 animals = animals.mutate(**{target: ibis.null()})

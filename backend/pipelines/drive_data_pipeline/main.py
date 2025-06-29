@@ -13,10 +13,6 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Load .env file directly
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(env_path)
-
 # Use absolute imports
 from drive_data_pipeline.bronze import BronzeProcessor
 from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
@@ -25,6 +21,10 @@ from drive_data_pipeline.config import get_settings, parse_args
 from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
+
+# Load .env file directly
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(env_path)
 
 
 class ProgressTracker:
@@ -431,11 +431,10 @@ def main() -> int:
                 logger.info("Generating schema documentation for drive data pipeline")
 
                 # Import schema documentation (with path adjustment)
-                import sys
-                from pathlib import Path
+                from pathlib import Path as PathLib
 
                 # Find the project root (directory containing 'backend' folder)
-                current_file = Path(__file__).resolve()
+                current_file = PathLib(__file__).resolve()
                 project_root = None
 
                 # Go up the directory tree to find the project root

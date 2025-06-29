@@ -296,7 +296,6 @@ def process_hst77_data(json_data: Dict[str, Any], metadata: Dict[str, Any], pipe
     df = load_dst_json_into_duckdb(json_data, "hst77_raw")
     logging.info(f"Loaded data with columns: {df.columns}")
 
-    # DEBUG: Print schema and sample data
     try:
         logging.info(f"Table schema: {df.schema()}")
         sample = df.head(5).execute()
@@ -607,11 +606,12 @@ def save_silver_data(
             # Upload to GCS using storage interface
             gcs_path = f"silver/dst/{timestamp}/{parquet_filename}"
 
-            # Read temp parquet and save via storage interface
-            import pandas as pd  # Only used here for GCS upload compatibility
-
-            temp_df = pd.read_parquet(temp_path)
+            # ✅ MIGRATION: Use DuckDB to read temp parquet for GCS upload compatibility
+            # Create a new DuckDB connection for this operation
+            temp_con = ibis.duckdb.connect()
+            temp_df = temp_con.execute(f"SELECT * FROM read_parquet('{temp_path}')").to_pandas()
             storage.save_parquet(temp_df, gcs_path)
+            temp_con.disconnect()
 
             logging.info(f"Exported {record_count} records to GCS at {gcs_path}")
 

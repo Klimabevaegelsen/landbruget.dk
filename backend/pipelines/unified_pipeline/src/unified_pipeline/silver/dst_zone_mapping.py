@@ -19,7 +19,8 @@ import json
 from typing import Any, Dict, Optional
 
 import geopandas as gpd
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -212,7 +213,6 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             self.log.info(f"Creating DST zone lookup from {len(landsdele)} landsdele")
 
-            # Debug: Log available columns
             self.log.info(f"Landsdele columns: {list(landsdele.columns)}")
             self.log.info(f"Regioner columns: {list(regioner.columns)}")
 
@@ -289,8 +289,13 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             gdf_lookup = gpd.GeoDataFrame(lookup_records, crs=self.config.target_crs)
 
-            # Add metadata
-            gdf_lookup["created_at"] = pd.Timestamp.now(tz="UTC")
+            # ✅ MIGRATION: Add metadata using DuckDB timestamp
+            import duckdb
+
+            temp_conn = duckdb.connect()
+            current_timestamp = temp_conn.execute("SELECT current_timestamp").fetchone()[0]
+            temp_conn.close()
+            gdf_lookup["created_at"] = current_timestamp
             gdf_lookup["data_source"] = "dst_zone_mapping"
             gdf_lookup["mapping_version"] = "1.0"
 
@@ -313,7 +318,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error creating DST zone lookup: {e}")
             raise
 
-    def _create_reference_table(self, lookup_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
+    def _create_reference_table(self, lookup_gdf: gpd.GeoDataFrame):
         """
         Create a reference table without geometry for easy viewing.
 

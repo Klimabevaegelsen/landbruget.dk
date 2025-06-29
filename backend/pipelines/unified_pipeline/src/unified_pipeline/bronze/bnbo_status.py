@@ -20,7 +20,8 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for DataFrame operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -265,25 +266,33 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
                 self.log.error(f"Error occured while fetching chunk: {e}")
                 raise e
 
-    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: list[str]):
         """
-        Create a DataFrame from the raw data.
-        This method takes a list of strings and converts it into a pandas DataFrame.
+        Create a DataFrame from the raw data using DuckDB.
+        This method takes a list of strings and converts it into a DuckDB DataFrame.
 
         Args:
             raw_data (list[str]): List of strings.
 
         Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata.
+            DataFrame: DataFrame containing the raw data with metadata.
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = self.config.name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
+        # ✅ MIGRATION: Use DuckDB to create DataFrame instead of pandas
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Register the raw data
+        self.conn.register("temp_bnbo_data", {"payload": raw_data})
+
+        # Create the final DataFrame with metadata columns
+        df = self.conn.execute(f"""
+            SELECT 
+                payload,
+                '{self.config.name}' as source,
+                '{current_timestamp}' as created_at,
+                '{current_timestamp}' as updated_at
+            FROM temp_bnbo_data
+        """).df()
+
         return df
 
     async def run(self) -> Optional[list[str]]:

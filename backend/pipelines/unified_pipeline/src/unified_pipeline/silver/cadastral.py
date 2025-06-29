@@ -3,7 +3,8 @@ import os
 from typing import Any, Optional
 
 import geopandas as gpd
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
@@ -34,6 +35,15 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
     def __init__(self, config: CadastralSilverConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
+
+    def _get_current_timestamp(self):
+        """Get current timestamp using DuckDB."""
+        import duckdb
+
+        temp_conn = duckdb.connect()
+        timestamp = temp_conn.execute("SELECT current_timestamp").fetchone()[0]
+        temp_conn.close()
+        return timestamp
 
     def _validate_and_transform(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
@@ -93,7 +103,8 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                     "geometry": [dissolved_geometry],
                     "feature_count": [len(gdf)],
                     "total_area": [gdf.geometry.area.sum()],
-                    "dissolved_at": [pd.Timestamp.now()],
+                    # ✅ MIGRATION: Use DuckDB timestamp instead of pandas
+                    "dissolved_at": [self._get_current_timestamp()],
                 },
                 crs=gdf.crs,
             )

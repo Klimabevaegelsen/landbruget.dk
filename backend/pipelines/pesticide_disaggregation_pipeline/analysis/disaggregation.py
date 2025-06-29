@@ -194,6 +194,14 @@ class PesticideDisaggregator:
 
         logger.info("Attempting disaggregation by Marker Non-Organic match using direct organic_farming column filter.")
 
+        # Get organic field IDs and convert to SQL tuple format
+        organic_field_ids = self._get_organic_marker_field_ids()
+        if organic_field_ids:
+            organic_ids_list = [f"'{field_id}'" for field_id in organic_field_ids]
+            organic_ids_sql_tuple = f"({', '.join(organic_ids_list)})"
+        else:
+            organic_ids_sql_tuple = "('')"
+
         try:
             insert_query = f"""
                 WITH NonOrganicMarkerFieldCVRCropTotals AS (

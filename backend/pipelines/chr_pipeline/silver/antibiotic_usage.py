@@ -3,8 +3,8 @@ from pathlib import Path
 
 import ibis
 import ibis.expr.datatypes as dt
-import pandas as pd  # Import pandas for empty df case
 
+# ✅ MIGRATION: Removed pandas import - using Ibis for empty table creation
 # Import export module
 from . import export
 
@@ -23,27 +23,30 @@ def create_antibiotic_usage_table(
     logging.info("Starting creation of antibiotic_usage table.")
     if vetstat_raw is None:
         logging.warning("Cannot create antibiotic_usage: vetstat_raw table missing. Creating empty table with schema.")
-        # Create an empty antibiotic_usage table with the correct schema
-        empty_data = {
-            "entity_id": [],
-            "cvr_number": [],
-            "chr_number": [],
-            "year": [],
-            "month": [],
-            "species_code": [],
-            "age_group_code": [],
-            "avg_usage_rolling_9m": [],
-            "avg_usage_rolling_12m": [],
-            "animal_days": [],
-            "animal_doses": [],
-            "add_per_100_dyr_per_dag": [],
-            "limit_value": [],
-            "municipality_code": [],
-            "municipality_name": [],
-            "region_code": [],
-            "region_name": [],
-        }
-        empty_df = pd.DataFrame(empty_data)
+        # ✅ MIGRATION: Create empty table using Ibis instead of pandas
+        # Create empty table with proper schema using DuckDB
+        empty_table_sql = """
+            SELECT 
+                CAST(NULL AS VARCHAR) as entity_id,
+                CAST(NULL AS VARCHAR) as cvr_number,
+                CAST(NULL AS BIGINT) as chr_number,
+                CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS INTEGER) as month,
+                CAST(NULL AS INTEGER) as species_code,
+                CAST(NULL AS INTEGER) as age_group_code,
+                CAST(NULL AS DOUBLE) as avg_usage_rolling_9m,
+                CAST(NULL AS DOUBLE) as avg_usage_rolling_12m,
+                CAST(NULL AS DOUBLE) as animal_days,
+                CAST(NULL AS DOUBLE) as animal_doses,
+                CAST(NULL AS DOUBLE) as add_per_100_dyr_per_dag,
+                CAST(NULL AS DOUBLE) as limit_value,
+                CAST(NULL AS INTEGER) as municipality_code,
+                CAST(NULL AS VARCHAR) as municipality_name,
+                CAST(NULL AS INTEGER) as region_code,
+                CAST(NULL AS VARCHAR) as region_name
+            WHERE 1=0
+        """
+        empty_df = con.sql(empty_table_sql).to_pandas()
         output_path = silver_dir / "antibiotic_usage.parquet"
         saved_path = export.save_table(output_path, empty_df, is_geo=False)
         if saved_path is None:
@@ -57,27 +60,29 @@ def create_antibiotic_usage_table(
         logging.warning(
             "Cannot create antibiotic_usage: vetstat_raw table exists but has no columns (likely empty source). Creating empty table with schema."
         )
-        # Reuse the empty table creation logic from the None check
-        empty_data = {
-            "entity_id": [],
-            "cvr_number": [],
-            "chr_number": [],
-            "year": [],
-            "month": [],
-            "species_code": [],
-            "age_group_code": [],
-            "avg_usage_rolling_9m": [],
-            "avg_usage_rolling_12m": [],
-            "animal_days": [],
-            "animal_doses": [],
-            "add_per_100_dyr_per_dag": [],
-            "limit_value": [],
-            "municipality_code": [],
-            "municipality_name": [],
-            "region_code": [],
-            "region_name": [],
-        }
-        empty_df = pd.DataFrame(empty_data)
+        # ✅ MIGRATION: Reuse the empty table creation logic from the None check
+        empty_table_sql = """
+            SELECT 
+                CAST(NULL AS VARCHAR) as entity_id,
+                CAST(NULL AS VARCHAR) as cvr_number,
+                CAST(NULL AS BIGINT) as chr_number,
+                CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS INTEGER) as month,
+                CAST(NULL AS INTEGER) as species_code,
+                CAST(NULL AS INTEGER) as age_group_code,
+                CAST(NULL AS DOUBLE) as avg_usage_rolling_9m,
+                CAST(NULL AS DOUBLE) as avg_usage_rolling_12m,
+                CAST(NULL AS DOUBLE) as animal_days,
+                CAST(NULL AS DOUBLE) as animal_doses,
+                CAST(NULL AS DOUBLE) as add_per_100_dyr_per_dag,
+                CAST(NULL AS DOUBLE) as limit_value,
+                CAST(NULL AS INTEGER) as municipality_code,
+                CAST(NULL AS VARCHAR) as municipality_name,
+                CAST(NULL AS INTEGER) as region_code,
+                CAST(NULL AS VARCHAR) as region_name
+            WHERE 1=0
+        """
+        empty_df = con.sql(empty_table_sql).to_pandas()
         output_path = silver_dir / "antibiotic_usage.parquet"
         saved_path = export.save_table(output_path, empty_df, is_geo=False)
         if saved_path is None:
@@ -105,7 +110,6 @@ def create_antibiotic_usage_table(
         "Kommunenavn": "municipality_name_raw",
         "Regionsnr": "region_code_raw",
         "Regionsnavn": "region_name_raw",
-        # Add more fields if available and needed
     }
     available_source_cols = vetstat_raw.columns
 
@@ -119,7 +123,6 @@ def create_antibiotic_usage_table(
             }
         )
 
-        # Add null columns if source was missing
         for target in usage_cols.values():
             if target not in usage_base.columns:
                 usage_base = usage_base.mutate(**{target: ibis.null()})
@@ -251,8 +254,6 @@ def create_antibiotic_usage_table(
             "municipality_name",
             "region_code",
             "region_name",
-            # Add joined name columns if included: 'species_name', 'age_group_name'
-            # Add 'entity_id' if joined or added as null (REMOVED)
         ]
         # Insert entity_id if it exists (REMOVED)
         # if 'entity_id' in usage_cleaned.columns:
@@ -266,7 +267,7 @@ def create_antibiotic_usage_table(
             else:
                 # Infer type or default to string/null
                 col_type = dt.string  # Default
-                # Removed entity_id specific type inference
+
                 # Add more type inference if needed
                 final_select_cols[col] = ibis.null().cast(col_type).name(col)
                 logging.warning(f"Column '{col}' missing after processing/joins, adding as null.")

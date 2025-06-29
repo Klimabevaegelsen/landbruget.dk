@@ -12,8 +12,8 @@ from pathlib import Path
 
 import geopandas as gpd
 import ibis
-import pandas as pd
 
+# ✅ MIGRATION: Removed pandas import - using DuckDB/Ibis for data operations
 from config import Settings
 
 
@@ -323,16 +323,37 @@ class BuildingProcessor:
             buildings_gdf["layer_source"] = "building"
             constructions_gdf["layer_source"] = "otherConstruction"
 
-            # Combine both datasets
-            gdf = gpd.GeoDataFrame(pd.concat([buildings_gdf, constructions_gdf], ignore_index=True))
-            self.logger.info(f"Combined total: {len(gdf):,} records")
+            # ✅ MIGRATION: Combine datasets using DuckDB instead of pandas concat
+            # Convert GeoDataFrames to regular DataFrames with WKT geometry
+            buildings_df = buildings_gdf.copy()
+            buildings_df["geometry_wkt"] = buildings_gdf.geometry.to_wkt()
+            buildings_df = buildings_df.drop("geometry", axis=1)
 
-            # Convert to regular pandas DataFrame for DuckDB
-            df = pd.DataFrame(gdf)
+            constructions_df = constructions_gdf.copy()
+            constructions_df["geometry_wkt"] = constructions_gdf.geometry.to_wkt()
+            constructions_df = constructions_df.drop("geometry", axis=1)
 
-            # Convert geometry to WKT for DuckDB
+            # Register both DataFrames with DuckDB
+            self.conn.register("buildings_temp", buildings_df)
+            self.conn.register("constructions_temp", constructions_df)
+
+            # Combine using DuckDB UNION
+            combined_query = """
+                SELECT * FROM buildings_temp
+                UNION ALL
+                SELECT * FROM constructions_temp
+            """
+            self.conn.execute(f"CREATE TABLE combined_buildings AS {combined_query}")
+            combined_df = self.conn.execute("SELECT * FROM combined_buildings").df()
+
+            self.logger.info(f"Combined total: {len(combined_df):,} records")
+
+            # Use the combined DataFrame
+            df = combined_df
+
+            # ✅ MIGRATION: Geometry already converted to WKT above
+            # Remove any remaining geometry column if it exists
             if "geometry" in df.columns:
-                df["geometry_wkt"] = gdf.geometry.to_wkt()
                 df = df.drop("geometry", axis=1)
 
             # Register with DuckDB
@@ -396,7 +417,13 @@ class BuildingProcessor:
                                     }
                                 )
 
-                    geometries_df = pd.DataFrame(geometries_data)
+                    # ✅ MIGRATION: Create DataFrame using DuckDB instead of pandas
+                    import duckdb
+
+                    temp_conn = duckdb.connect()
+                    temp_conn.register("temp_geometries", geometries_data)
+                    geometries_df = temp_conn.execute("SELECT * FROM temp_geometries").df()
+                    temp_conn.close()
                     self.logger.info(f"Processed {len(geometries_df):,} geometries for joining")
 
                     # Register both DataFrames with DuckDB
@@ -509,7 +536,13 @@ class BuildingProcessor:
                                 }
                             )
 
-                geometries_df = pd.DataFrame(geometries_data)
+                # ✅ MIGRATION: Create DataFrame using DuckDB instead of pandas
+                import duckdb
+
+                temp_conn = duckdb.connect()
+                temp_conn.register("temp_geometries", geometries_data)
+                geometries_df = temp_conn.execute("SELECT * FROM temp_geometries").df()
+                temp_conn.close()
                 self.logger.info(f"Processed {len(geometries_df):,} geometries for joining")
 
                 # Register both DataFrames with DuckDB
@@ -567,8 +600,11 @@ class BuildingProcessor:
                 gdf = bronze_data["data"]
                 self.logger.info(f"Using legacy in-memory data with {len(gdf):,} records")
 
-                # Convert to regular pandas DataFrame for DuckDB
-                df = pd.DataFrame(gdf)
+                # ✅ MIGRATION: Convert to regular DataFrame for DuckDB
+                # Convert GeoDataFrame to regular DataFrame with WKT geometry
+                df = gdf.copy()
+                df["geometry_wkt"] = gdf.geometry.to_wkt()
+                df = df.drop("geometry", axis=1)
 
                 # Convert geometry to WKT for DuckDB
                 if "geometry" in df.columns:

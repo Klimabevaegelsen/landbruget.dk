@@ -246,7 +246,6 @@ def main():
             logger.info("Generating schema documentation for BMD silver data")
 
             # Import schema documentation (with path adjustment)
-            import sys
             from pathlib import Path
 
             # Find the project root (directory containing 'backend' folder)

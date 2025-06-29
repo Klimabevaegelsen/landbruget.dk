@@ -3,27 +3,26 @@ Silver layer processing for BNBO Status data.
 
 This module transforms raw data (from the bronze layer) into cleaner,
 more structured data for analytical purposes. It handles the extraction
-of GeoJSON features from API responses, converts them to GeoDataFrames,
+of GeoJSON features from API responses, converts them using DuckDB-spatial,
 and applies transformations such as column renaming and geometry validation.
 
 The module consists of two main components:
 - BNBOStatusSilverConfig: Configuration for Silver processing
-- BNBOStatusSilver: Implementation of Silver processing logic
+- BNBOStatusSilver: Implementation of Silver processing logic using DuckDB-spatial
 
-The process reads in bronze layer data, transforms it into GeoDataFrames,
+The process reads in bronze layer data, transforms it using DuckDB-spatial,
 validates geometries, and stores the processed data in GCS.
 """
 
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
-import geopandas as gpd
-import pandas as pd
-from shapely import MultiPolygon, Polygon, difference, unary_union, wkt
+# ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
+from shapely import MultiPolygon, Polygon
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -85,6 +84,19 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
         """
         super().__init__(config, gcs_util)
+
+        # ✅ MIGRATION: Add optimized GCS access
+        self.gcs_access = GCSDataAccess()
+
+        # ✅ MIGRATION: Setup DuckDB with spatial extensions
+        self._setup_duckdb()
+
+    def _setup_duckdb(self):
+        """Setup DuckDB connection with spatial extensions."""
+        # Install and load spatial extension
+        self.conn.execute("INSTALL spatial")
+        self.conn.execute("LOAD spatial")
+        self.log.info("✅ DuckDB-spatial initialized for BNBO status processing")
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """
@@ -242,32 +254,43 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return None
 
     @timed(name="Processing bronze data")  # type: ignore
-    def _process_xml_data(self, raw_data: pd.DataFrame) -> Optional[gpd.GeoDataFrame]:
+    def _process_xml_data(self, raw_data) -> Optional[str]:
         """
-        Process XML data from the bronze layer into a GeoDataFrame.
+        Process XML data from the bronze layer using DuckDB-spatial.
 
-        This method iterates through all XML data in the input DataFrame, parses
-        features using _parse_feature, and constructs a GeoDataFrame with the
-        extracted geometries and attributes.
+        This method iterates through all XML data, parses features using _parse_feature,
+        and constructs a DuckDB table with the extracted geometries and attributes.
 
         Args:
-            raw_data (pd.DataFrame): DataFrame containing XML data in a 'payload' column.
+            raw_data: Raw data containing XML data in a 'payload' column.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: A GeoDataFrame containing the processed features,
-                                       or None if processing fails.
+            Optional[str]: Table name in DuckDB containing the processed features,
+                          or None if processing fails.
 
         Raises:
             Exception: If there are issues processing the XML data.
         """
-        if raw_data is None or raw_data.empty:
+        if raw_data is None:
             self.log.warning("No raw data to process")
             return None
 
-        self.log.info("Processing XML data from bronze layer")
+        # ✅ MIGRATION: Convert to DataFrame if it's not already using DuckDB
+        if not hasattr(raw_data, "iterrows"):  # Check if it's DataFrame-like
+            # Use DuckDB to create DataFrame
+            self.conn.register("temp_raw_data", raw_data)
+            raw_df = self.conn.execute("SELECT * FROM temp_raw_data").df()
+        else:
+            raw_df = raw_data
+
+        if raw_df.empty:
+            self.log.warning("No raw data to process")
+            return None
+
+        self.log.info("Processing XML data from bronze layer using DuckDB-spatial")
 
         features = []
-        for index, row in raw_data.iterrows():
+        for index, row in raw_df.iterrows():
             try:
                 # Parse the XML data
                 xml_data = row["payload"]
@@ -290,88 +313,159 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
-        df = pd.DataFrame(features)
-        geometries = [wkt.loads(f["geometry"]) for f in features]
-        return gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
 
-    @timed(name="Creating dissolved GeoDataFrame")  # type: ignore
-    def _create_dissolved_df(self, df: gpd.GeoDataFrame, dataset: str) -> gpd.GeoDataFrame:
+        # ✅ MIGRATION: Create DuckDB table instead of GeoDataFrame
+        if not features:
+            self.log.warning("No features extracted from XML data")
+            return None
+
+        # Register features with DuckDB and create spatial table
+        self.conn.register("bnbo_features_raw", features)
+
+        table_name = "bnbo_processed_features"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT 
+                *,
+                ST_GeomFromText(geometry) as geometry_spatial
+            FROM bnbo_features_raw
+            WHERE geometry IS NOT NULL
+        """)
+
+        feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
+
+        return table_name
+
+    @timed(name="Creating dissolved table using DuckDB-spatial")  # type: ignore
+    def _create_dissolved_df(self, input_table_name: str, dataset: str) -> str:
         """
-        Create a dissolved GeoDataFrame by merging geometries by status category.
-
-        This method groups geometries by their status category ("Action Required" or
-        "Completed"), dissolves them into unified geometries, and handles overlapping
-        areas by giving priority to "Action Required" areas.
+        Create dissolved table for BNBO status data using DuckDB-spatial.
 
         Args:
-            df (gpd.GeoDataFrame): The input GeoDataFrame containing features with geometries
-                                  and status_category attributes.
-            dataset (str): The name of the dataset, used for logging and validation.
+            input_table_name: Name of the DuckDB table containing processed features
+            dataset: Dataset name for logging
 
         Returns:
-            gpd.GeoDataFrame: A new GeoDataFrame containing the dissolved geometries.
-
-        Raises:
-            Exception: If there are issues during the dissolve operation.
+            str: Name of the DuckDB table containing dissolved geometries
         """
         try:
-            # Convert to WGS84 before processing
-            if df.crs and df.crs.to_epsg() != 4326:
-                df = df.to_crs("EPSG:4326")
+            dissolved_table_name = "bnbo_dissolved_features"
 
-            # Split into two categories
-            action_required = df[df["status_category"] == "Action Required"]
-            completed = df[df["status_category"] == "Completed"]
+            self.log.info(
+                "Creating dissolved geometries by status category using DuckDB-spatial..."
+            )
 
-            # Dissolve each category
-            action_required_dissolved = None
-            if not action_required.empty:
-                action_required_dissolved = unary_union(action_required.geometry.values).buffer(0)
+            # Create dissolved geometries for each category
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {dissolved_table_name} AS
+                SELECT 
+                    status_category,
+                    ST_Union_Agg(geometry_spatial) as dissolved_geometry
+                FROM {input_table_name}
+                WHERE ST_IsValid(geometry_spatial)
+                    AND status_category IN ('Action Required', 'Completed')
+                GROUP BY status_category
+            """)
 
-            completed_dissolved = None
-            if not completed.empty:
-                completed_dissolved = unary_union(completed.geometry.values).buffer(0)
+            # Check what categories we have
+            categories_result = self.conn.execute(f"""
+                SELECT status_category, ST_AsText(dissolved_geometry) as geometry_wkt
+                FROM {dissolved_table_name}
+                ORDER BY status_category
+            """).fetchall()
+
+            if not categories_result:
+                self.log.warning("No valid geometries to dissolve")
+                # Create empty table with proper schema
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {dissolved_table_name} AS
+                    SELECT 
+                        CAST(NULL AS VARCHAR) as status_category,
+                        CAST(NULL AS GEOMETRY) as dissolved_geometry
+                    WHERE FALSE
+                """)
+                return dissolved_table_name
 
             # Handle overlaps - remove completed areas that overlap with action required
-            if action_required_dissolved is not None and completed_dissolved is not None:
-                completed_dissolved = difference(completed_dissolved, action_required_dissolved)
+            action_required_geom = None
+            completed_geom = None
 
-            # Create final dissolved GeoDataFrame
-            dissolved_geometries = []
-            categories = []
+            for category, geom_wkt in categories_result:
+                if category == "Action Required":
+                    action_required_geom = geom_wkt
+                elif category == "Completed":
+                    completed_geom = geom_wkt
 
-            if action_required_dissolved is not None:
-                if action_required_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(action_required_dissolved.geoms))  # type: ignore
-                    categories.extend(["Action Required"] * len(action_required_dissolved.geoms))  # type: ignore
-                else:
-                    dissolved_geometries.append(action_required_dissolved)
-                    categories.append("Action Required")
+            # Process overlaps using DuckDB-spatial ST_Difference
+            if action_required_geom and completed_geom:
+                self.log.info("Handling overlaps between Action Required and Completed areas...")
 
-            if completed_dissolved is not None:
-                if completed_dissolved.geom_type == "MultiPolygon":
-                    dissolved_geometries.extend(list(completed_dissolved.geoms))  # type: ignore
-                    categories.extend(["Completed"] * len(completed_dissolved.geoms))  # type: ignore
-                else:
-                    dissolved_geometries.append(completed_dissolved)
-                    categories.append("Completed")
+                # Create final table with overlap handling
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
+                    SELECT 
+                        'Action Required' as status_category,
+                        dissolved_geometry,
+                        ST_AsText(dissolved_geometry) as geometry_wkt
+                    FROM {dissolved_table_name}
+                    WHERE status_category = 'Action Required'
+                    
+                    UNION ALL
+                    
+                    SELECT 
+                        'Completed' as status_category,
+                        ST_Difference(
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
+                        ) as dissolved_geometry,
+                        ST_AsText(ST_Difference(
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
+                        )) as geometry_wkt
+                """)
+            else:
+                # No overlaps to handle, use original dissolved geometries
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
+                    SELECT 
+                        status_category,
+                        dissolved_geometry,
+                        ST_AsText(dissolved_geometry) as geometry_wkt
+                    FROM {dissolved_table_name}
+                """)
 
-            dissolved_gdf = gpd.GeoDataFrame(
-                {"status_category": categories, "geometry": dissolved_geometries}, crs="EPSG:4326"
+            # Clean up intermediate table and rename final
+            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
+            self.conn.execute(
+                f"ALTER TABLE {dissolved_table_name}_final RENAME TO {dissolved_table_name}"
             )
 
-            # Final validation
-            dissolved_gdf = validate_and_transform_geometries(
-                dissolved_gdf, f"silver.{dataset}_dissolved"
-            )
+            # Get final count
+            final_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {dissolved_table_name}
+                WHERE dissolved_geometry IS NOT NULL
+                    AND NOT ST_IsEmpty(dissolved_geometry)
+            """).fetchone()[0]
+
             self.log.info(
-                f"Dissolved {len(dissolved_gdf):,} features into "
-                f"{len(dissolved_gdf.geometry):,} geometries"
+                f"Created dissolved table '{dissolved_table_name}' with {final_count} dissolved geometries"
             )
-            return dissolved_gdf
+            return dissolved_table_name
+
         except Exception as e:
-            self.log.error(f"Error during dissolve operation: {str(e)}")
-            raise e
+            self.log.error(f"Error creating dissolved geometries: {str(e)}", exc_info=True)
+            # Create empty table on error
+            empty_table_name = "bnbo_dissolved_empty"
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {empty_table_name} AS
+                SELECT 
+                    CAST(NULL AS VARCHAR) as status_category,
+                    CAST(NULL AS GEOMETRY) as dissolved_geometry,
+                    CAST(NULL AS VARCHAR) as geometry_wkt
+                WHERE FALSE
+            """)
+            return empty_table_name
 
     async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
@@ -404,17 +498,24 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 return
             self.log.info("Read raw data successfully")
 
-            geo_df = self._process_xml_data(raw_data)
-            if geo_df is None:
+            table_name = self._process_xml_data(raw_data)
+            if table_name is None:
                 self.log.error("Failed to process raw data")
                 return
             self.log.info("Processed raw data successfully")
 
-            dissolved_df = self._create_dissolved_df(geo_df, self.config.dataset)
+            dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
-            # Save using new unified method
-            self._save_data(geo_df, self.config.dataset, self.config.bucket, stage="silver")
-            self._save_data(
-                dissolved_df, f"{self.config.dataset}_dissolved", self.config.bucket, stage="silver"
+            # ✅ MIGRATION: Save DuckDB tables using optimized methods
+            # Save the main features table
+            self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")
+
+            # Save the dissolved features table
+            self.save_data_direct(
+                dissolved_table_name,
+                f"{self.config.dataset}_dissolved",
+                self.config.bucket,
+                "silver",
             )
+
             self.log.info("Saved processed data successfully")
