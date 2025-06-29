@@ -199,8 +199,41 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             if not feature_data:
                 return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
 
-            # Register data with DuckDB and create spatial table
-            self.conn.register("raw_features", feature_data)
+            # Create table directly from the list of dictionaries using DuckDB's native capabilities
+            # Get column names from the first feature
+            columns = list(feature_data[0].keys())
+
+            # Create the table schema
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE raw_features (
+                    {", ".join([f"{col} VARCHAR" for col in columns])}
+                )
+            """)
+
+            # Insert data in batches
+            batch_size = 1000
+            for i in range(0, len(feature_data), batch_size):
+                batch = feature_data[i : i + batch_size]
+
+                # Create VALUES clause for this batch
+                values_list = []
+                for feature in batch:
+                    values = []
+                    for col in columns:
+                        value = feature.get(col)
+                        if value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                    values_list.append(f"({', '.join(values)})")
+
+                values_clause = ", ".join(values_list)
+
+                self.conn.execute(f"""
+                    INSERT INTO raw_features ({", ".join(columns)})
+                    VALUES {values_clause}
+                """)
 
             # Apply column mapping in SQL
             column_mappings = []
@@ -463,7 +496,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 payloads_result = self.conn.execute(f"SELECT payload FROM {raw_df}").fetchall()
                 payloads = [row[0] for row in payloads_result]
             else:
-                # raw_df is a 
+                # raw_df is a
                 payloads = raw_df["payload"].tolist()
 
             # Get appropriate column mapping based on layer type
@@ -565,7 +598,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     )
                     # ❌ ELIMINATED: No more wasteful  conversion
                     # temp_df = self.conn.execute("SELECT * FROM final_processed")
-                    # ✅ MIGRATION: Pass table name instead of 
+                    # ✅ MIGRATION: Pass table name instead of
                     result_table = await self._add_block_ids_via_spatial_join(
                         "final_processed", year
                     )
@@ -622,7 +655,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             self.conn.execute(
                                 "INSERT INTO temp_raw_data VALUES (?)", [str(raw_data)]
                             )
-                            # ✅ MIGRATION: Keep as table instead of converting to 
+                            # ✅ MIGRATION: Keep as table instead of converting to
                             raw_data = "temp_raw_data"
                     else:
                         self.log.warning(f"No in-memory data found for {layer_type} {year}")
