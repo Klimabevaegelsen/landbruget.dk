@@ -4,23 +4,34 @@ Fetches and processes climate data from the Danish Meteorological Institute (DMI
 Transforms raw grid data into a structured format for analysis and storage.
 """
 
+import sys
+from pathlib import Path
+
+# Add the project root to sys.path to enable backend imports
+# Find project root by looking for 'backend' directory
+current_file = Path(__file__).resolve()
+project_root = None
+for parent in current_file.parents:
+    if (parent / "backend").is_dir():
+        project_root = parent
+        break
+
+if project_root and str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import argparse
 import asyncio
 import logging
 import os
-import sys
+import shutil
+import tempfile
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
 
 from bronze.extract import DMIApiClient, DMIConfig
-from silver.load import DataLoader
-from silver.transform import DataTransformer
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-# Add the project root to sys.path to enable backend imports
-project_root = Path(__file__).parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+from silver.load import DataLoader
+from silver.transform import DataTransformer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -110,6 +121,7 @@ async def process_parameter(
     transformer: DataTransformer,
     loader: DataLoader,
     storage_backend,
+    gcs_access,
     parameter_id: str,
     start_time: datetime,
     end_time: datetime,
@@ -125,22 +137,58 @@ async def process_parameter(
     if data and data["features"]:
         # Save raw data to bronze layer
         bronze_file_path = f"{bronze_path}/raw/{parameter_id}_raw.json"
-        storage_backend.save_json(data, bronze_file_path)
+
+        if gcs_access:
+            # Use optimized GCS access for JSON upload (streaming, no temp files)
+            gcs_access.upload_json(data, bronze_file_path)
+        else:
+            storage_backend.save_json(data, bronze_file_path)
+
         logger.info(f"Saved raw data to {bronze_file_path}")
 
         # Transform raw grid data into structured format using DuckDB
         processed_result = transformer.transform_data(data)
 
         if processed_result:
-            # Convert DuckDB result to DataFrame for storage
-            df = processed_result.df()
-
             # Save processed data to silver layer
             silver_file_path = f"{silver_path}/processed/{parameter_id}_processed.parquet"
-            storage_backend.save_parquet(df, silver_file_path)
 
-            # Get count of processed records
-            count = len(df)
+            if gcs_access:
+                # ✅ OPTIMAL: Avoid DataFrame conversion entirely
+                # Create a temporary table in the transformer's DuckDB connection
+                table_name = f"temp_{parameter_id}_processed"
+
+                # The processed_result is already a DuckDB result from transformer
+                # We need to save it as a table first, then use GCS access to upload
+                transformer_conn = processed_result.connection
+                transformer_conn.execute(
+                    f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM ({processed_result.sql})"
+                )
+
+                # Use GCS access to upload directly from the DuckDB table
+                with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
+                    # Export from transformer's DuckDB to temp file
+                    transformer_conn.execute(f"""
+                        COPY {table_name} TO '{tmp.name}' 
+                        (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
+                    """)
+
+                    # Stream upload to GCS
+                    with open(tmp.name, "rb") as src:
+                        with gcs_access.fs.open(silver_file_path.replace("gs://", ""), "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+
+                    # Get count
+                    count = transformer_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+                    # Cleanup
+                    transformer_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            else:
+                # Fallback to DataFrame conversion for local storage
+                df = processed_result.df()
+                storage_backend.save_parquet(df, silver_file_path)
+                count = len(df)
+
             logger.info(f"Successfully processed {count} records for {parameter_id}")
             logger.info(f"Saved processed data to {silver_file_path}")
             return count
@@ -177,23 +225,25 @@ async def main():
         pipeline_start_time = datetime.now()
         timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
-        # Initialize storage backend (GCS or local based on environment)
+        # Initialize optimized GCS access layer
         gcs_bucket = os.getenv("GCS_BUCKET")
         if gcs_bucket:
-            logger.info(f"Using GCS storage: {gcs_bucket}")
-            # Import storage classes
-            from backend.common.storage_interface import GCSStorage
+            logger.info(f"Using optimized GCS access layer: {gcs_bucket}")
+            # Import optimized GCS access
+            from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import GCSDataAccess
 
-            storage_backend = GCSStorage(gcs_bucket)
-            # For GCS, we use string paths instead of Path objects
-            bronze_path = f"bronze/dmi/{timestamp}"
-            silver_path = f"silver/dmi/{timestamp}"
+            gcs_access = GCSDataAccess()
+            storage_backend = None  # We'll use gcs_access directly
+            # For GCS, we use full gs:// paths
+            bronze_path = f"gs://{gcs_bucket}/bronze/dmi/{timestamp}"
+            silver_path = f"gs://{gcs_bucket}/silver/dmi/{timestamp}"
         else:
             logger.info("Using local storage")
             base_data_path = os.getenv("DATA_PATH", "./data")
-            # Import storage classes
+            # Import storage classes for local development
             from backend.common.storage_interface import LocalStorage
 
+            gcs_access = None
             storage_backend = LocalStorage(base_data_path)
             bronze_path = f"bronze/dmi/{timestamp}"
             silver_path = f"silver/dmi/{timestamp}"
@@ -210,6 +260,7 @@ async def main():
                         transformer,
                         loader,
                         storage_backend,
+                        gcs_access,
                         param_id,
                         start_time,
                         end_time,
@@ -235,19 +286,6 @@ async def main():
         if total_records > 0:
             try:
                 logger.info("Generating schema documentation for DMI climate data")
-
-                # Find the project root (directory containing 'backend' folder)
-                current_file = Path(__file__).resolve()
-                project_root = None
-
-                # Go up the directory tree to find the project root
-                for parent in current_file.parents:
-                    if (parent / "backend").is_dir():
-                        project_root = parent
-                        break
-
-                if project_root and str(project_root) not in sys.path:
-                    sys.path.insert(0, str(project_root))
 
                 # Use the pipeline start time we already have
                 # Create DuckDB connection and load processed parquet files

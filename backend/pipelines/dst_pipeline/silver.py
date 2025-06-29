@@ -27,8 +27,20 @@ import ibis
 from ibis import _
 
 # Add parent directories to path for imports
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+backend_path = str(Path(__file__).parent.parent.parent)
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path)
+
+# Add unified pipeline path for optimized GCS access
+unified_pipeline_path = str(Path(__file__).parent.parent / "unified_pipeline" / "src")
+if unified_pipeline_path not in sys.path:
+    sys.path.insert(0, unified_pipeline_path)
+
+# Use optimized GCS access instead of old storage interface
+from unified_pipeline.util.gcs_access import GCSDataAccess
+
+# Keep old interface for local storage fallback only
+from backend.common.storage_interface import LocalStorage, StorageInterface
 
 # Configure ibis backend
 ibis.options.interactive = True
@@ -76,17 +88,15 @@ def get_storage_interface() -> StorageInterface:
     environment = os.getenv("ENVIRONMENT", "dev")
 
     if environment == "prod" and gcs_bucket:
-        logging.info(f"Using GCS storage with bucket: {gcs_bucket}")
-        return GCSStorage(gcs_bucket)
+        logging.info(f"Using optimized GCS storage with bucket: {gcs_bucket}")
+        return GCSDataAccess()
     else:
         base_dir = os.getenv("LOCAL_STORAGE_DIR", "bronze/dst")
         logging.info(f"Using local storage with base directory: {base_dir}")
         return LocalStorage(base_dir)
 
 
-def find_latest_bronze_data(
-    storage: StorageInterface, table_id: str, bronze_data: dict = None
-) -> Optional[Dict[str, Any]]:
+def find_latest_bronze_data(storage, table_id: str, bronze_data: dict = None) -> Optional[Dict[str, Any]]:
     """Find and load the most recent bronze data for a table"""
 
     # If we have in-memory bronze data, use it directly
@@ -113,14 +123,14 @@ def find_latest_bronze_data(
             logging.error(f"Failed to load bronze data from {latest_file}: {e}")
             return None
 
-    else:
-        # For GCS storage, list and read the latest bronze data
+    elif isinstance(storage, GCSDataAccess):
+        # ✅ OPTIMIZED: Use new GCS access methods with streaming
         try:
+            gcs_bucket = os.getenv("GCS_BUCKET")
+
             # List all bronze data files for this table
-            bronze_files = []
-            for blob in storage.client.list_blobs(storage.bucket_name, prefix="bronze/dst/"):
-                if blob.name.endswith(f"{table_id}_data.json"):
-                    bronze_files.append(blob.name)
+            pattern = f"gs://{gcs_bucket}/bronze/dst/*/{table_id}_data.json"
+            bronze_files = storage.list_files(pattern)
 
             if not bronze_files:
                 logging.warning(f"No bronze data files found for table {table_id}")
@@ -132,14 +142,15 @@ def find_latest_bronze_data(
 
             logging.info(f"Loading latest bronze data from GCS: {latest_file}")
 
-            # Read the JSON data from GCS
-            blob = storage.client.bucket(storage.bucket_name).blob(latest_file)
-            json_content = blob.download_as_text()
-            return json.loads(json_content)
+            # ✅ OPTIMIZED: Use streaming JSON download (no temp files)
+            return storage.download_json(latest_file)
 
         except Exception as e:
             logging.error(f"Failed to load bronze data from GCS: {e}")
             return None
+    else:
+        logging.error(f"Unsupported storage type: {type(storage)}")
+        return None
 
 
 def load_table_metadata(storage: StorageInterface, table_id: str) -> Dict[str, Any]:
@@ -643,10 +654,16 @@ def save_silver_data(
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
         logging.info(f"Saved metadata to {metadata_path}")
+    elif isinstance(storage, GCSDataAccess):
+        # ✅ OPTIMIZED: Use streaming JSON upload for metadata
+        gcs_bucket = os.getenv("GCS_BUCKET")
+        gcs_metadata_path = f"gs://{gcs_bucket}/silver/dst/{timestamp}/{table_id.lower()}_metadata.json"
+        storage.upload_json(metadata, gcs_metadata_path)
+        logging.info(f"Saved metadata to GCS at {gcs_metadata_path}")
     else:
-        # Save metadata to GCS
+        # Fallback for other storage types
         storage.save_json(metadata, metadata_path)
-        logging.info(f"Saved metadata to GCS at {metadata_path}")
+        logging.info(f"Saved metadata to {metadata_path}")
 
     logging.info(f"Successfully saved {record_count} records using DuckDB native export")
 
@@ -740,10 +757,17 @@ def main_with_args(args: argparse.Namespace) -> bool:
         with open(summary_file, "w") as f:
             json.dump(summary, f, indent=2)
         logging.info(f"Saved summary to {summary_file}")
+    elif isinstance(storage, GCSDataAccess):
+        # ✅ OPTIMIZED: Use streaming JSON upload for summary
+        gcs_bucket = os.getenv("GCS_BUCKET")
+        summary_path = f"gs://{gcs_bucket}/silver/dst/{timestamp}/processing_summary.json"
+        storage.upload_json(summary, summary_path)
+        logging.info(f"Saved summary to {summary_path}")
     else:
-        # Save summary to GCS
+        # Fallback for other storage types
         summary_path = f"silver/dst/{timestamp}/processing_summary.json"
         storage.save_json(summary, summary_path)
+        logging.info(f"Saved summary to {summary_path}")
 
     logging.info("Silver layer processing completed successfully")
     logging.info(f"Processed {len(processed_tables)} tables: {', '.join(processed_tables)}")

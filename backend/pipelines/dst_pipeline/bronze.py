@@ -30,8 +30,21 @@ load_dotenv()
 # Import storage interface
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+# Add the backend directory to the path so we can import from backend.common
+backend_path = str(Path(__file__).parent.parent.parent)
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path)
+
+# Add unified pipeline path for optimized GCS access
+unified_pipeline_path = str(Path(__file__).parent.parent / "unified_pipeline" / "src")
+if unified_pipeline_path not in sys.path:
+    sys.path.insert(0, unified_pipeline_path)
+
+# Use optimized GCS access instead of old storage interface
+from unified_pipeline.util.gcs_access import GCSDataAccess
+
+# Keep old interface for local storage fallback only
+from backend.common.storage_interface import LocalStorage
 
 
 def setup_logging(level: str) -> None:
@@ -237,14 +250,14 @@ class DSTApiClient:
         return None
 
 
-def get_storage_interface() -> StorageInterface:
+def get_storage_interface():
     """Get the appropriate storage interface based on environment"""
     gcs_bucket = os.getenv("GCS_BUCKET")
     environment = os.getenv("ENVIRONMENT", "dev")
 
     if environment == "prod" and gcs_bucket:
-        logging.info(f"Using GCS storage with bucket: {gcs_bucket}")
-        return GCSStorage(gcs_bucket)
+        logging.info(f"Using optimized GCS storage with bucket: {gcs_bucket}")
+        return GCSDataAccess()
     else:
         base_dir = os.getenv("LOCAL_STORAGE_DIR", "bronze/dst")
         logging.info(f"Using local storage with base directory: {base_dir}")
@@ -253,7 +266,7 @@ def get_storage_interface() -> StorageInterface:
 
 def save_raw_data(
     data: Dict[str, Any],
-    storage: StorageInterface,
+    storage,
     table_id: str,
     data_type: str,
     timestamp: str,
@@ -266,16 +279,21 @@ def save_raw_data(
         pipeline_start_time = datetime.now()
     date_str = pipeline_start_time.strftime("%Y%m%d")
 
-    # Add bronze/dst prefix for GCS storage
-    if isinstance(storage, GCSStorage):
-        data_path = f"bronze/dst/{date_str}/{table_id}_{data_type}.json"
-        metadata_path = f"bronze/dst/{date_str}/{table_id}_{data_type}_metadata.json"
+    # Handle different storage types
+    if isinstance(storage, GCSDataAccess):
+        # ✅ OPTIMIZED: Use streaming JSON upload for GCS
+        gcs_bucket = os.getenv("GCS_BUCKET")
+        data_path = f"gs://{gcs_bucket}/bronze/dst/{date_str}/{table_id}_{data_type}.json"
+        metadata_path = f"gs://{gcs_bucket}/bronze/dst/{date_str}/{table_id}_{data_type}_metadata.json"
+
+        # Upload JSON data with streaming (no temp files, no DataFrames)
+        storage.upload_json(data, data_path)
+
     else:
+        # Local storage fallback
         data_path = f"{date_str}/{table_id}_{data_type}.json"
         metadata_path = f"{date_str}/{table_id}_{data_type}_metadata.json"
-
-    # Save raw data exactly as received (no transformations)
-    storage.save_json(data, data_path)
+        storage.save_json(data, data_path)
 
     # Create metadata following established patterns
     metadata = {
@@ -303,7 +321,12 @@ def save_raw_data(
         metadata["variable_count"] = len(data["variables"])
         metadata["variables"] = [var.get("id") for var in data["variables"] if "id" in var]
 
-    storage.save_json(metadata, metadata_path)
+    # Save metadata with appropriate method
+    if isinstance(storage, GCSDataAccess):
+        # ✅ OPTIMIZED: Use streaming JSON upload for metadata
+        storage.upload_json(metadata, metadata_path)
+    else:
+        storage.save_json(metadata, metadata_path)
 
     logging.info(f"Saved raw {data_type} data to {data_path}")
     logging.info(f"Saved {data_type} metadata to {metadata_path}")
