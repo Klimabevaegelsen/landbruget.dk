@@ -507,9 +507,13 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
         # Process in chunks to avoid overwhelming GitHub Actions runner
-        chunk_size = 100  # Process 100 herds at a time
+        chunk_size = 50  # Process 50 herds at a time (reduced for better memory management)
         all_results = []
         total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
+
+        # Track overall statistics
+        total_successful = 0
+        total_movements = 0
 
         for chunk_idx in range(total_chunks):
             start_idx = chunk_idx * chunk_size
@@ -525,23 +529,71 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 context["args"]["workers"],
                 f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
             )
-            all_results.extend(chunk_results)
+
+            # Process and upload chunk results immediately to avoid memory buildup
+            chunk_successful = sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
+            chunk_movements = sum(
+                r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
+            )
+
+            # Add successful results to buffer (they're already saved individually by load_cattle_movement_summaries)
+            # We just need to track them for context, not accumulate all data
+            successful_results = [r for r in chunk_results if r and r.get("processed_successfully", False)]
+            all_results.extend(successful_results)
+
+            # Update totals
+            total_successful += chunk_successful
+            total_movements += chunk_movements
 
             # Log progress after each chunk
             if context["args"]["progress"]:
-                chunk_successful = sum(1 for r in chunk_results if r)
-                chunk_movements = sum(len(r.get("movements", [])) for r in chunk_results if r)
                 logging.info(
                     f"Chunk {chunk_idx + 1} completed: {chunk_successful}/{len(chunk_tasks)} successful, {chunk_movements} movements"
                 )
+                logging.info(
+                    f"Overall progress: {total_successful} successful herds, {total_movements} total movements"
+                )
+
+            # Progressive cleanup: Clear chunk results from memory after processing
+            # (Individual herd data is already saved to storage by load_cattle_movement_summaries)
+            del chunk_results
+
+            # Progressive upload: Flush buffer every 5 chunks to prevent memory buildup
+            if (chunk_idx + 1) % 5 == 0 or chunk_idx + 1 == total_chunks:
+                if context["args"]["progress"]:
+                    logging.info(f"Flushing data buffer after chunk {chunk_idx + 1} to prevent memory buildup...")
+
+                # Import the export function and flush the buffer
+                from bronze.export import finalize_export
+
+                finalize_export(clear_buffer=True)
+
+                if context["args"]["progress"]:
+                    logging.info(f"Buffer flushed successfully after chunk {chunk_idx + 1}")
+
+            # Optional: Force garbage collection and memory monitoring for large datasets
+            import gc
+            import os
+
+            if chunk_idx % 3 == 0:  # Every 3 chunks
+                gc.collect()
+
+                # Log memory usage for monitoring
+                if context["args"]["progress"]:
+                    try:
+                        import psutil
+
+                        process = psutil.Process(os.getpid())
+                        memory_mb = process.memory_info().rss / 1024 / 1024
+                        logging.info(f"Memory usage after chunk {chunk_idx + 1}: {memory_mb:.1f} MB")
+                    except Exception:
+                        pass  # Ignore if psutil is not available
 
         context["animal_movements_results"] = all_results
 
         if context["args"]["progress"]:
-            successful = sum(1 for r in all_results if r)
-            total_movements = sum(len(r.get("movements", [])) for r in all_results if r)
             logging.info(
-                f"Completed Smart Cattle Movement tasks. Success: {successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
+                f"Completed Smart Cattle Movement tasks. Success: {total_successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
             )
 
     elif step == "vetstat":
