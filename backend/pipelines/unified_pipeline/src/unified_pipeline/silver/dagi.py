@@ -155,9 +155,23 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 self.log.warning(f"No valid features with geometry found in {layer_type}")
                 return None
 
-            # Register data with DuckDB
+            # Create table using DuckDB (can't use register() with Python lists)
             temp_table = f"temp_{layer_type}_features"
-            self.conn.register(temp_table, feature_records)
+
+            if feature_records:
+                # Get column names from first record
+                columns = list(feature_records[0].keys())
+                column_defs = ", ".join([f'"{col}" VARCHAR' for col in columns])
+
+                # Create table structure
+                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                self.conn.execute(f"CREATE TABLE {temp_table} ({column_defs})")
+
+                # Insert data row by row
+                placeholders = ", ".join(["?" for _ in columns])
+                for record in feature_records:
+                    values = [record.get(col) for col in columns]
+                    self.conn.execute(f"INSERT INTO {temp_table} VALUES ({placeholders})", values)
 
             # Get available columns
             columns_info = self.conn.execute(f"DESCRIBE {temp_table}").fetchall()

@@ -298,8 +298,8 @@ class BaseSource(Generic[T], ABC):
                     conn.execute(f"COPY {table_name} TO '{temp_path}' (FORMAT PARQUET)")
 
                     # Upload to GCS
-                    self.gcs_util.upload_file_to_gcs(
-                        local_file_path=temp_path, bucket_name=bucket, blob_name=path
+                    self.gcs_util.upload_file(
+                        bucket_name=bucket, source_file_path=temp_path, destination_blob_name=path
                     )
 
                     # Clean up temporary file
@@ -393,47 +393,36 @@ class BaseSource(Generic[T], ABC):
 
             # Determine file type and read accordingly
             if latest_file.name.endswith(".parquet"):
-                # Try reading as GeoDataFrame first, fallback to regular DataFrame
-                try:
-                    return self.gcs_util.download_geopandas_from_gcs(
-                        bucket_name=bucket, blob_name=latest_file.name
-                    )
-                except Exception as geo_error:
-                    if "Missing geo metadata" in str(geo_error):
-                        # ✅ MIGRATION: Use DuckDB for efficient parquet reading
-                        import os
-                        import tempfile
+                # ✅ MIGRATION: Use GCSDataAccess properly with its own connection
+                from unified_pipeline.util.gcs_access import GCSDataAccess
 
-                        with tempfile.NamedTemporaryFile(
-                            suffix=".parquet", delete=False
-                        ) as tmp_file:
-                            temp_path = tmp_file.name
+                # Create GCS access instance - it has its own DuckDB connection
+                gcs_access = GCSDataAccess()
+                gcs_path = f"gs://{bucket}/{latest_file.name}"
 
-                        try:
-                            self.gcs_util.download_file(bucket, latest_file.name, temp_path)
-                            # ✅ MIGRATION: Use DuckDB to read parquet with table creation
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE bronze_data_temp AS
-                                SELECT * FROM read_parquet('{temp_path}')
-                            """)
-                            # ✅ MIGRATION: Return table name instead of DataFrame
-                            row_count = self.conn.execute(
-                                "SELECT COUNT(*) FROM bronze_data_temp"
-                            ).fetchone()[0]
-                            self.log.info(
-                                f"✅ Successfully loaded {row_count} records using DuckDB from {latest_file.name}"
-                            )
-                            return "bronze_data_temp"
-                        finally:
-                            if os.path.exists(temp_path):
-                                os.unlink(temp_path)
-                    else:
-                        raise geo_error
+                # Create table in GCS connection using the proper method
+                table_name = f"bronze_data_{dataset}_{stage}"
+                gcs_access.create_table_from_gcs(table_name, gcs_path)
+
+                # Get row count for logging using GCS connection
+                row_count = gcs_access.duckdb_conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
+                self.log.info(
+                    f"✅ Successfully loaded {row_count} records using GCSDataAccess from {latest_file.name}"
+                )
+
+                # Return both the GCS access instance and table name
+                # This allows the caller to use the same connection
+                return {"gcs_access": gcs_access, "table_name": table_name}
 
             elif latest_file.name.endswith(".json"):
-                return self.gcs_util.download_json_from_gcs(
-                    bucket_name=bucket, blob_name=latest_file.name
-                )
+                # ✅ MIGRATION: Use modern GCS access for JSON downloads
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                gcs_access = GCSDataAccess()
+                gcs_path = f"gs://{bucket}/{latest_file.name}"
+                return gcs_access.download_json(gcs_path)
             else:
                 self.log.error(f"Unsupported file type: {latest_file.name}")
                 return None
@@ -494,8 +483,6 @@ class BaseSource(Generic[T], ABC):
                         return table_name
                     else:
                         # List of dicts - use DuckDB JSON functions
-                        import json
-
                         json_data = json.dumps(bronze_data)
                         self.conn.execute(f"""
                             CREATE TABLE {table_name} AS 
@@ -504,8 +491,6 @@ class BaseSource(Generic[T], ABC):
                         return table_name
                 elif isinstance(bronze_data, dict):
                     # Single dict - create table with one row
-                    import json
-
                     json_data = json.dumps([bronze_data])
                     self.conn.execute(f"""
                         CREATE TABLE {table_name} AS 
@@ -576,8 +561,6 @@ class BaseSource(Generic[T], ABC):
                         table_name = f"local_bronze_data_{dataset}"
                         if isinstance(data, list):
                             # Create table from list using DuckDB
-                            import json
-
                             json_str = json.dumps(data)
                             self.conn.execute(f"""
                                 CREATE TABLE {table_name} AS 
@@ -586,8 +569,6 @@ class BaseSource(Generic[T], ABC):
                             return table_name
                         else:
                             # Create table from single item using DuckDB
-                            import json
-
                             json_str = json.dumps([data])
                             self.conn.execute(f"""
                                 CREATE TABLE {table_name} AS 
@@ -620,24 +601,20 @@ class BaseSource(Generic[T], ABC):
                 )
 
                 if latest_blob.name.endswith(".parquet"):
-                    # Get the file path and read with DuckDB
-                    parquet_path = self.gcs_util.read_dataframe_from_gcs(
-                        bucket_name, latest_blob.name
-                    )
-                    # ✅ MIGRATION: Read parquet file using DuckDB with table creation
-                    table_name = f"gcs_bronze_data_{dataset}"
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE {table_name} AS
-                        SELECT * FROM read_parquet('{parquet_path}')
-                    """)
-                    # ✅ MIGRATION: Return table name instead of DataFrame
-                    # Clean up temporary file
-                    import shutil
+                    # ✅ MIGRATION: Use modern GCS access instead of deprecated DataFrame approach
+                    from unified_pipeline.util.gcs_access import GCSDataAccess
 
-                    temp_dir = os.path.dirname(parquet_path)
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
-                    return table_name
+                    gcs_access = GCSDataAccess()
+                    gcs_path = f"gs://{bucket_name}/{latest_blob.name}"
+
+                    # Use the optimized temp download with base class DuckDB connection
+                    with gcs_access._temp_download(gcs_path) as temp_file:
+                        table_name = f"gcs_bronze_data_{dataset}"
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            SELECT * FROM read_parquet('{temp_file}')
+                        """)
+                        return table_name
                 elif latest_blob.name.endswith(".json"):
                     # Download JSON file and parse
                     temp_file = f"/tmp/bronze_temp_{dataset}.json"
@@ -649,8 +626,6 @@ class BaseSource(Generic[T], ABC):
                     table_name = f"gcs_bronze_data_{dataset}"
                     if isinstance(data, list):
                         # Create table from list using DuckDB
-                        import json
-
                         json_str = json.dumps(data)
                         self.conn.execute(f"""
                             CREATE TABLE {table_name} AS 
@@ -659,8 +634,6 @@ class BaseSource(Generic[T], ABC):
                         return table_name
                     else:
                         # Create table from single item using DuckDB
-                        import json
-
                         json_str = json.dumps([data])
                         self.conn.execute(f"""
                             CREATE TABLE {table_name} AS 
@@ -817,8 +790,6 @@ class BaseSource(Generic[T], ABC):
                 # Convert dict/list to table using DuckDB
                 if isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
-                        import json
-
                         json_data = json.dumps(data)
                         self.conn.execute(f"""
                             CREATE TABLE {temp_table_name} AS 
@@ -832,8 +803,6 @@ class BaseSource(Generic[T], ABC):
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
-                    import json
-
                     json_data = json.dumps([data])
                     self.conn.execute(f"""
                         CREATE TABLE {temp_table_name} AS 

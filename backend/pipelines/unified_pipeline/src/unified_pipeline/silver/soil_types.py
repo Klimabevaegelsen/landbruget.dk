@@ -82,9 +82,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
         """
         super().__init__(config, gcs_util)
 
-    def _validate_and_transform_with_duckdb(self, wfs_url: str) -> str:
+    async def _validate_and_transform_with_duckdb(self, wfs_url: str) -> str:
         """
-        Fetch WFS data and validate geometries using DuckDB-spatial.
+        Fetch WFS data and validate geometries using HTTP request + DuckDB-spatial.
 
         Args:
             wfs_url (str): The WFS URL to fetch data from
@@ -96,23 +96,141 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             Exception: If WFS fetch or validation fails
         """
         try:
-            self.log.info("Fetching soil types data from WFS using DuckDB-spatial")
+            self.log.info("Fetching soil types data from WFS using HTTP request")
 
-            # ✅ MIGRATION: Use DuckDB-spatial to fetch WFS data directly
+            # Fetch data using HTTP request (like other pipelines do)
+
+            import aiohttp
+
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session:
+                async with session.get(wfs_url) as response:
+                    if response.status != 200:
+                        response_text = await response.text()
+                        raise Exception(
+                            f"WFS request failed with status {response.status}: {response_text[:500]}"
+                        )
+
+                    # Get the response as JSON
+                    wfs_data = await response.json()
+
+            self.log.info("Successfully fetched WFS data via HTTP request")
+
+            # Process the GeoJSON data with DuckDB
             table_name = "soil_types_raw"
 
-            # Use DuckDB spatial extension to read WFS data
+            # Convert GeoJSON features to records for DuckDB
+            features = wfs_data.get("features", [])
+            if not features:
+                raise Exception("No features found in WFS response")
+
+                # Use DuckDB's JSON functions to process GeoJSON directly
+            import json
+
+            # Save the GeoJSON to a temporary file that DuckDB can read
+            geojson_str = json.dumps(wfs_data)
+
+            # Stream process the features in batches to avoid memory issues
+            features = wfs_data.get("features", [])
+            if not features:
+                raise Exception("No features found in WFS response")
+
+            # Create the table first
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {table_name} AS
-                SELECT * FROM ST_Read('{wfs_url}')
+                CREATE OR REPLACE TABLE {table_name} (
+                    properties JSON,
+                    geometry GEOMETRY
+                )
             """)
+
+            # Process features in batches to avoid memory issues
+            batch_size = 1000
+            total_processed = 0
+
+            for i in range(0, len(features), batch_size):
+                batch = features[i : i + batch_size]
+
+                # Convert batch to list of tuples for DuckDB
+                batch_data = []
+                for feature in batch:
+                    if feature.get("geometry"):
+                        properties_json = json.dumps(feature.get("properties", {}))
+                        geometry_json = json.dumps(feature["geometry"])
+                        batch_data.append((properties_json, geometry_json))
+
+                if batch_data:
+                    # Insert batch using DuckDB's VALUES clause
+                    placeholders = ",".join(["(?, ST_GeomFromGeoJSON(?))"] * len(batch_data))
+                    params = []
+                    for props, geom in batch_data:
+                        params.extend([props, geom])
+
+                    self.conn.execute(
+                        f"""
+                        INSERT INTO {table_name} (properties, geometry)
+                        VALUES {placeholders}
+                    """,
+                        params,
+                    )
+
+                    total_processed += len(batch_data)
+                    self.log.info(f"Processed {total_processed:,} features so far...")
+
+            self.log.info(f"Finished streaming processing of {total_processed:,} features")
+
+            # Flatten the properties JSON into individual columns
+            # First, get the column names from the properties
+            sample_properties = self.conn.execute(f"""
+                SELECT properties 
+                FROM {table_name} 
+                WHERE properties IS NOT NULL 
+                LIMIT 1
+            """).fetchone()
+
+            if sample_properties and sample_properties[0]:
+                properties_dict = json.loads(sample_properties[0])
+                property_columns = list(properties_dict.keys())
+
+                # Create column extractions
+                column_extractions = []
+                for col in property_columns:
+                    # Handle different data types
+                    column_extractions.append(f"json_extract(properties, '$.{col}') as \"{col}\"")
+
+                # Recreate table with flattened properties
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name}_final AS
+                    SELECT 
+                        {", ".join(column_extractions)},
+                        geometry,
+                        current_timestamp as processed_at,
+                        'validated' as data_quality
+                    FROM {table_name}
+                """)
+
+                # Clean up temporary table and rename final table
+                self.conn.execute(f"DROP TABLE {table_name}")
+                self.conn.execute(f"ALTER TABLE {table_name}_final RENAME TO {table_name}")
+            else:
+                # If no properties, just add metadata columns
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name}_final AS
+                    SELECT 
+                        geometry,
+                        current_timestamp as processed_at,
+                        'validated' as data_quality
+                    FROM {table_name}
+                """)
+
+                # Clean up temporary table and rename final table
+                self.conn.execute(f"DROP TABLE {table_name}")
+                self.conn.execute(f"ALTER TABLE {table_name}_final RENAME TO {table_name}")
 
             # Check if we got any data
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             if count == 0:
-                raise Exception("No data retrieved from WFS endpoint")
+                raise Exception("No data loaded into DuckDB table")
 
-            self.log.info(f"Fetched {count:,} features from WFS endpoint")
+            self.log.info(f"Loaded {count:,} features into DuckDB table")
 
             # ✅ MIGRATION: Standardize column names using DuckDB
             processed_table = "soil_types_processed"
@@ -164,6 +282,51 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
         except Exception as e:
             self.log.error(f"Error in DuckDB-spatial validation and transformation: {str(e)}")
             raise
+
+    def _geometry_to_wkt(self, geometry_dict: dict) -> str:
+        """Convert GeoJSON geometry to WKT format for DuckDB-spatial."""
+        geom_type = geometry_dict.get("type")
+        coordinates = geometry_dict.get("coordinates", [])
+
+        def coord_to_string(coord):
+            """Convert coordinate array to string, handling 2D and 3D coordinates."""
+            if len(coord) >= 2:
+                # Only use X and Y coordinates, ignore Z if present
+                return f"{coord[0]} {coord[1]}"
+            return None
+
+        if geom_type == "Point":
+            if len(coordinates) >= 2:
+                coord_str = coord_to_string(coordinates)
+                if coord_str:
+                    return f"POINT({coord_str})"
+        elif geom_type == "Polygon":
+            if coordinates and len(coordinates) > 0:
+                exterior = coordinates[0]
+                points = []
+                for pt in exterior:
+                    coord_str = coord_to_string(pt)
+                    if coord_str:
+                        points.append(coord_str)
+                if points:
+                    return f"POLYGON(({' '.join(points)}))"
+        elif geom_type == "MultiPolygon":
+            if coordinates:
+                polygons = []
+                for polygon in coordinates:
+                    if polygon and len(polygon) > 0:
+                        exterior = polygon[0]
+                        points = []
+                        for pt in exterior:
+                            coord_str = coord_to_string(pt)
+                            if coord_str:
+                                points.append(coord_str)
+                        if points:
+                            polygons.append(f"(({' '.join(points)}))")
+                if polygons:
+                    return f"MULTIPOLYGON({', '.join(polygons)})"
+
+        return None
 
     def _perform_quality_checks(self, table_name: str) -> None:
         """
@@ -290,7 +453,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                     return
 
             # ✅ MIGRATION: Process data using DuckDB-spatial
-            processed_table = self._validate_and_transform_with_duckdb(wfs_url)
+            processed_table = await self._validate_and_transform_with_duckdb(wfs_url)
 
             # Perform quality checks
             self._perform_quality_checks(processed_table)
