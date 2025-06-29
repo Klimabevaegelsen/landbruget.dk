@@ -10,10 +10,27 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
 
 # Load environment variables from .env file (local development only)
-env_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
-)
-load_dotenv(env_path)
+# Try multiple possible locations for .env file
+possible_env_paths = [
+    # Current pipeline directory (where GitHub Actions creates it)
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    # Backend directory (original location)
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
+    ),
+    # Project root
+    os.path.join(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
+        ".env",
+    ),
+]
+
+for env_path in possible_env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        break
 
 
 class StorageType(str, Enum):
