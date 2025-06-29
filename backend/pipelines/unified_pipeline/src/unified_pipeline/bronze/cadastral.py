@@ -256,7 +256,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                         retry_after = int(response.headers.get("Retry-After", 5))
                         self.log.warning(f"Rate limited, waiting {retry_after} seconds")
                         await asyncio.sleep(retry_after)
-                        raise ClientError("Rate limited")
+                        raise aiohttp.ClientError("Rate limited")
 
                     response.raise_for_status()
                     content = await response.text()

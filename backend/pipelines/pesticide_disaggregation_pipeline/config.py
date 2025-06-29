@@ -42,7 +42,7 @@ class Config:
         field_year = pesticide_year + 1
 
         return {
-            "marker": f"silver/agricultural_fields_{field_year}",
+            "marker": f"silver/fvm_marker_{field_year}",
             "pesticide": "silver/Pesticides",  # Pesticide data is in Pesticides directory
             # REMOVED: "jordbrugsanalyser" - redundant validation dataset (99.98% match with marker)
             # REMOVED: "gkea": "silver/Fertiliser" - GKEA data removed from pipeline

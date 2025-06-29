@@ -21,7 +21,8 @@ import json
 from typing import Any, Dict, Optional
 
 import geopandas as gpd
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -271,7 +272,13 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
             # Add processing metadata
             result["layer_type"] = layer_type
-            result["processing_timestamp"] = pd.Timestamp.now(tz="UTC")
+            # ✅ MIGRATION: Use DuckDB timestamp instead of pandas
+            import duckdb
+
+            temp_conn = duckdb.connect()
+            current_timestamp = temp_conn.execute("SELECT current_timestamp").fetchone()[0]
+            temp_conn.close()
+            result["processing_timestamp"] = current_timestamp
             result["data_source"] = "dagi_dawa_api"
             result["crs_epsg"] = self.config.target_crs
 
@@ -296,7 +303,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error adding metadata to {layer_type}: {e}")
             raise
 
-    def _process_layer(self, raw_data: pd.DataFrame, layer_type: str) -> Optional[gpd.GeoDataFrame]:
+    def _process_layer(self, raw_data, layer_type: str) -> Optional[gpd.GeoDataFrame]:
         """
         Process a single DAGI layer through the silver transformation pipeline.
 
@@ -379,17 +386,29 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             # Bronze data is a dict mapping layer names to raw JSON data
                             if isinstance(bronze_data, dict) and layer_name in bronze_data:
                                 raw_json = bronze_data[layer_name]
-                                # Create DataFrame with the raw JSON payload
-                                bronze_df = pd.DataFrame(
+                                # ✅ MIGRATION: Create DataFrame with DuckDB instead of pandas
+                                import duckdb
+
+                                temp_conn = duckdb.connect()
+                                current_timestamp = temp_conn.execute(
+                                    "SELECT current_timestamp"
+                                ).fetchone()[0]
+                                temp_conn.close()
+
+                                temp_conn2 = duckdb.connect()
+                                temp_conn2.register(
+                                    "temp_bronze",
                                     [
                                         {
                                             "payload": raw_json,
                                             "source": f"{self.config.name} - {layer_name}",
-                                            "created_at": pd.Timestamp.now(tz="UTC"),
-                                            "updated_at": pd.Timestamp.now(tz="UTC"),
+                                            "created_at": current_timestamp,
+                                            "updated_at": current_timestamp,
                                         }
-                                    ]
+                                    ],
                                 )
+                                bronze_df = temp_conn2.execute("SELECT * FROM temp_bronze").df()
+                                temp_conn2.close()
                             else:
                                 self.log.warning(f"No in-memory data found for layer {layer_name}")
                                 continue

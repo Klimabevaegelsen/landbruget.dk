@@ -16,7 +16,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import geopandas as gpd
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from pydantic import ConfigDict
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
@@ -134,7 +135,12 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
         # Handle encoding issues (XML contains ISO-8859-1 encoded data)
         # Common Danish characters that might need fixing
-        replacements = {"gr�s": "græs", "�": "ø", "�": "å", "�": "æ"}
+        replacements = {
+            "gr�s": "græs",
+            "\ufffd": "ø",  # replacement character to ø
+            # Note: Some Unicode characters may appear the same but have different encodings
+            # We handle the most common ones here
+        }
 
         for old, new in replacements.items():
             cleaned = cleaned.replace(old, new)
@@ -368,8 +374,15 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                 # Bronze data is a dict mapping year to list of raw WFS responses
                 if isinstance(bronze_data, dict) and str(year) in bronze_data:
                     raw_responses = bronze_data[str(year)]
-                    # Create DataFrame with the raw XML payloads
-                    bronze_df = pd.DataFrame({"payload": raw_responses})
+                    # ✅ MIGRATION: Create DataFrame with DuckDB instead of pandas
+                    import duckdb
+
+                    temp_conn = duckdb.connect()
+                    temp_conn.register(
+                        "temp_responses", [{"payload": resp} for resp in raw_responses]
+                    )
+                    bronze_df = temp_conn.execute("SELECT * FROM temp_responses").df()
+                    temp_conn.close()
                 else:
                     self.log.warning(f"No in-memory data found for year {year}")
                     return None
@@ -400,8 +413,13 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
             self.log.info(f"Total features parsed for year {year}: {len(all_features)}")
 
-            # Create DataFrame from features
-            df = pd.DataFrame(all_features)
+            # ✅ MIGRATION: Create DataFrame from features using DuckDB
+            import duckdb
+
+            temp_conn = duckdb.connect()
+            temp_conn.register("temp_features", all_features)
+            df = temp_conn.execute("SELECT * FROM temp_features").df()
+            temp_conn.close()
 
             # Create geometries from WKT
             geometries = []

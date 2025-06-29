@@ -32,8 +32,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copy requirements and install
-COPY requirements.txt /app/
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml /app/
+RUN uv pip install --system --no-cache -e .
 
 # Copy the rest of your code
 COPY . /app

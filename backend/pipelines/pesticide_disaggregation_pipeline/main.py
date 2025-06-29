@@ -27,8 +27,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add debug logging configuration (if needed, or manage globally)
-# debug_logger = logging.getLogger("debug")
-# debug_logger.setLevel(logging.DEBUG)
 
 
 def setup_and_load_data(
@@ -70,10 +68,9 @@ def perform_initial_analysis(cvr_matcher: CVRMatcher, field_analyzer: FieldDatas
     matching_report = cvr_matcher.generate_matching_report()
     logger.info("CVR Matching Report Summary:")
     logger.info(f"  Total unmatched pesticide CVRs: {matching_report['unmatched_pesticide']['total_unmatched']}")
-    # REMOVED: GKEA non-numeric CVR reporting - GKEA data no longer used
+
     logger.info(f"  Total empty marker CVRs: {matching_report['empty_marker_cvrs']['total_empty']}")
 
-    # REMOVED: Jordbrugsanalyser comparison - redundant validation dataset removed
     logger.info("Field Dataset Validation: Jordbrugsanalyser comparison skipped (dataset removed for simplification)")
 
 
@@ -106,10 +103,6 @@ def run_disaggregation_strategies(
         )
     else:
         logger.info("No rows processed by Marker CVR-Area Match.")
-
-    # REMOVED: GKEA CVR-Area Match strategy
-    # GKEA data has been removed from the pipeline due to lack of spatial data
-    logger.info("GKEA CVR-Area Match strategy skipped - GKEA data removed from pipeline")
 
     # Strategy 3: Marker Non-Organic CVR-Area Match
     logger.info("Running Marker Non-Organic CVR-Area Match strategy...")
@@ -619,7 +612,6 @@ def analyze_pending_rows(db_manager: DatabaseManager, config: Config):
         except Exception as e:
             logger.error(f"    Could not save details for AcreageSize > Marker area to CSV: {e}")
 
-    # REMOVED: GKEA area comparison analysis - GKEA data no longer used
     logger.info("  GKEA area comparison analysis skipped - GKEA data removed from pipeline")
 
     logger.info("Analysis of pending rows complete.")

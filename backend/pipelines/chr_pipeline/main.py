@@ -37,7 +37,6 @@ def setup_logging(log_level: str):
     """Configure logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Remove all existing handlers to start fresh
     root = logging.getLogger()
     for handler in root.handlers[:]:
         root.removeHandler(handler)
@@ -212,7 +211,6 @@ def fetch_herds(
                             # but we won't add them if the limit is hit.
                             continue  # Skip this herd if species limit reached
 
-                        # Add herd if not already seen (herd_to_species ensures uniqueness across all species)
                         if herd_number not in herd_to_species:
                             herd_to_species[herd_number] = species_code
                             # Increment count for this species
@@ -241,7 +239,6 @@ def fetch_herds(
                 if not has_more:
                     break  # No more pages for this combo
 
-                # Update start number for next page
                 if last_herd is not None:
                     start_number = last_herd + 1
                 else:  # Should not happen if has_more is False, but safety break
@@ -274,7 +271,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                 total=len(futures),
                 desc=desc or func.__name__,
                 unit="tasks",
-                mininterval=1.0,  # Update at most once per second
+                mininterval=1.0,
                 bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
             ):
                 try:
@@ -639,7 +636,6 @@ def main():
                     **imported_context,
                 }
 
-            # Update args with imported values if not explicitly provided
             if not args.get("start_date") and imported_context.get("args", {}).get("start_date"):
                 context["args"]["start_date"] = imported_context["args"]["start_date"]
             if not args.get("end_date") and imported_context.get("args", {}).get("end_date"):

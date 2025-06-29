@@ -21,7 +21,7 @@ class DatasetLoader:
             self.gcs = gcsfs.GCSFileSystem()
             logger.info(f"✅ GCS initialized, using bucket: {config.GCS_BUCKET}")
         except ImportError:
-            raise ImportError("gcsfs is required for GCS integration. Install with: pip install gcsfs")
+            raise ImportError("gcsfs is required for GCS integration. Install with: uv pip install gcsfs")
 
     def find_latest_data_path(self, base_path: str, pattern: str = "data.parquet") -> str:
         """Find the most recent data file in a GCS directory structure"""

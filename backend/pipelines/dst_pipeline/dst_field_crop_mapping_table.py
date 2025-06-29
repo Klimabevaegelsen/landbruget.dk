@@ -104,13 +104,6 @@ DST_FIELD_MAPPING = {
         "field_count": 250,
         "notes": "Spring spelt - ancient grain variety",
     },
-    "Boghvede": {
-        "dst_table": "HST77",
-        "dst_category": "Havre, blandsæd og andet korn",
-        "match_quality": "approximate",
-        "field_count": 209,
-        "notes": "Buckwheat - specialty grain",
-    },
     # =============================================================================
     # OILSEEDS & LEGUMES (HST77)
     # =============================================================================
@@ -735,20 +728,6 @@ DST_FIELD_MAPPING = {
         "field_count": 86233,
         "notes": "Winter hybrid rye - maps to rye category",
     },
-    "Vinterrug": {
-        "dst_table": "HST77",
-        "dst_category": "Rug",
-        "match_quality": "perfect",
-        "field_count": 20054,
-        "notes": "Winter rye - exact match",
-    },
-    "Vårrug": {
-        "dst_table": "HST77",
-        "dst_category": "Rug",
-        "match_quality": "perfect",
-        "field_count": 433,
-        "notes": "Spring rye - exact match",
-    },
     "Vintertriticale": {
         "dst_table": "HST77",
         "dst_category": "Triticale",
@@ -1227,26 +1206,12 @@ DST_FIELD_MAPPING = {
         "notes": "Mustard - other oilseeds category",
     },
     # Additional Vegetables
-    "Rødkål": {
-        "dst_table": "GARTN1",
-        "dst_category": "Rødkål",
-        "match_quality": "perfect",
-        "field_count": 1876,
-        "notes": "Red cabbage - exact match",
-    },
     "Kinakål": {
         "dst_table": "GARTN1",
         "dst_category": "Anden kål",
         "match_quality": "good",
         "field_count": 234,
         "notes": "Chinese cabbage - other cabbage category",
-    },
-    "Rosenkål": {
-        "dst_table": "GARTN1",
-        "dst_category": "Rosenkål",
-        "match_quality": "perfect",
-        "field_count": 567,
-        "notes": "Brussels sprouts - exact match",
     },
     # =============================================================================
     # ADDITIONAL MAPPABLE CROPS FROM UNMAPPED ANALYSIS

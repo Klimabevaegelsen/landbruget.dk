@@ -359,7 +359,7 @@ exec(open('dst_field_crop_mapping_table.py').read())
 
 # Load DST data and field data
 dst_data = pd.read_parquet('silver/dst/latest/hst77_processed.parquet')
-field_data = pd.read_parquet('../../data_cache/agricultural_fields/agricultural_fields_2024_data.parquet')
+field_data = pd.read_parquet('../../data_cache/fvm_marker/fvm_marker_2024_data.parquet')
 
 # Map field crops to DST categories
 field_data['dst_info'] = field_data['crop_type'].apply(get_dst_category)

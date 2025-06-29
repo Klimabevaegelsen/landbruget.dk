@@ -18,8 +18,11 @@ apt-get install -y python3-pip python3-venv git dnsutils iputils-ping
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
+# Install uv first
+pip3 install uv
+
 # Install required Python packages
-pip install google-cloud-storage google-cloud-secret-manager paramiko
+uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko
 
 # Create the transfer script
 cat > /opt/transfer_script.py << 'EOF'

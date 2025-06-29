@@ -1,8 +1,13 @@
 """
-Export module for pesticide disaggregation pipeline.
+Export module for pesticide disaggregation pipeline - OPTIMIZED VERSION.
 
 This module handles the standardized export of disaggregated pesticide data
-to GCS following the pipeline standardization patterns.
+to GCS following the pipeline standardization patterns with optimized performance.
+
+Performance improvements:
+- Eliminates temp file creation and cleanup
+- Uses streaming upload for better memory efficiency
+- Maintains backward compatibility with existing workflows
 """
 
 import logging
@@ -18,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class PesticideExporter:
-    """Handles export of disaggregated pesticide data following standardized patterns."""
+    """Handles export of disaggregated pesticide data following standardized patterns - OPTIMIZED VERSION."""
 
     def __init__(self, db_manager, config, pipeline_start_time: Optional[datetime] = None):
         """Initialize the exporter with database manager and configuration."""
@@ -35,6 +40,21 @@ class PesticideExporter:
             logger=logger,
         )
 
+        # ✅ OPTIMIZED: Initialize optimized GCS access
+        self.gcs_access = None
+        try:
+            # Import optimized GCS access
+            import sys
+
+            sys.path.append(str(Path(__file__).parent.parent / "unified_pipeline" / "src"))
+            from unified_pipeline.util.gcs_access import GCSDataAccess
+
+            self.gcs_access = GCSDataAccess()
+            logger.info("✅ PesticideExporter: Initialized optimized GCS access")
+        except Exception as e:
+            logger.warning(f"Failed to initialize optimized GCS access: {e}")
+            self.gcs_access = None
+
     def get_storage_interface(self) -> StorageInterface:
         """Get the appropriate storage interface based on environment."""
         environment = os.getenv("ENVIRONMENT", "dev")
@@ -48,8 +68,8 @@ class PesticideExporter:
             return LocalStorage()
 
     def export_disaggregated_data(self) -> None:
-        """Export disaggregated pesticide data with only essential columns."""
-        logger.info("Exporting disaggregated pesticide data...")
+        """Export disaggregated pesticide data with only essential columns - OPTIMIZED VERSION."""
+        logger.info("Exporting disaggregated pesticide data (optimized)...")
 
         # SQL query to select only the essential columns
         export_query = """
@@ -80,20 +100,31 @@ class PesticideExporter:
             # Export to GCS following the standard path pattern
             gcs_path = f"silver/pesticide_disaggregation_pipeline/{self.timestamp}/{filename}"
 
-            # Export to temporary local file first
-            temp_path = Path(f"/tmp/{filename}")
-            self.db.execute_query(f"COPY ({export_query}) TO '{str(temp_path)}' (FORMAT PARQUET)")
+            # ✅ OPTIMIZED: Use direct export to GCS without temp files
+            if self.gcs_access:
+                try:
+                    # Create a table from the query results
+                    table_name = "export_temp_table"
+                    self.gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    self.gcs_access.duckdb_conn.execute(f"CREATE TABLE {table_name} AS ({export_query})")
 
-            # Upload to GCS
-            import pandas as pd
+                    # Export directly to GCS using optimized method
+                    full_gcs_path = f"gs://{storage.bucket}/{gcs_path}"
+                    self.gcs_access.upload_from_duckdb_table(
+                        table_name, full_gcs_path, compression="zstd", row_group_size=100000
+                    )
 
-            df = pd.read_parquet(temp_path)
-            storage.save_parquet(df, gcs_path)
+                    # Cleanup temp table
+                    self.gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-            # Clean up temp file
-            temp_path.unlink()
-
-            logger.info(f"Exported disaggregated data to GCS: gs://{storage.bucket}/{gcs_path}")
+                    logger.info(f"✅ Exported disaggregated data to GCS (optimized): {full_gcs_path}")
+                except Exception as e:
+                    logger.error(f"Optimized export failed, falling back to original method: {e}")
+                    # Fallback to original temp file method
+                    self._export_with_temp_file(storage, gcs_path, export_query, filename)
+            else:
+                # Fallback if optimized access not available
+                self._export_with_temp_file(storage, gcs_path, export_query, filename)
 
         else:
             # Export locally for development
@@ -103,6 +134,25 @@ class PesticideExporter:
 
             self.db.execute_query(f"COPY ({export_query}) TO '{str(output_path)}' (FORMAT PARQUET)")
             logger.info(f"Exported disaggregated data locally: {output_path}")
+
+    def _export_with_temp_file(self, storage: GCSStorage, gcs_path: str, export_query: str, filename: str):
+        """Fallback method using temp files (original approach)."""
+        logger.info("Using fallback temp file export method")
+
+        # Export to temporary local file first
+        temp_path = Path(f"/tmp/{filename}")
+        self.db.execute_query(f"COPY ({export_query}) TO '{str(temp_path)}' (FORMAT PARQUET)")
+
+        # Upload to GCS
+        import pandas as pd
+
+        df = pd.read_parquet(temp_path)
+        storage.save_parquet(df, gcs_path)
+
+        # Clean up temp file
+        temp_path.unlink()
+
+        logger.info(f"Exported disaggregated data to GCS (fallback): gs://{storage.bucket}/{gcs_path}")
 
     def generate_schema_documentation(self) -> str:
         """Generate schema documentation for the disaggregated table."""

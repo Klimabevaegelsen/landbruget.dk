@@ -56,7 +56,7 @@ gs://<bucket-name>/silver/bmd/<timestamp>/metadata.json
 3. Install dependencies:
    ```bash
    cd backend/pipelines/bmd_scraper
-   pip install -e .
+   uv pip install -e .
    ```
 
 ### Production Setup
@@ -66,7 +66,7 @@ For production environments with Google Cloud Storage:
 1. Install with production dependencies:
    ```bash
    cd backend/pipelines/bmd_scraper
-   pip install -e ".[production]"
+   uv pip install -e ".[production]"
    ```
 
 2. Update the .env file with your GCS configuration:

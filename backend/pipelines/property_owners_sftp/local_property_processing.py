@@ -56,6 +56,21 @@ class PropertyDataProcessor:
         self.crs_transformer = None
         self.crs_detection_done = False
         self.pipeline_start_time = datetime.now()  # Track when processing started
+        # ✅ MIGRATION: Create long-lived DuckDB connection
+        self.conn = None
+        try:
+            self.conn = duckdb.connect()
+            logger.info("✅ DuckDB connection established for property processing")
+        except ImportError:
+            logger.warning("DuckDB not available - schema documentation will be skipped")
+
+    def __del__(self):
+        """Clean up DuckDB connection."""
+        if self.conn:
+            try:
+                self.conn.close()
+            except:
+                pass
 
     def detect_and_setup_crs_transformer(self, sample_geometry):
         """Detect CRS from sample geometry and setup transformer if needed."""
@@ -425,9 +440,14 @@ class PropertyDataProcessor:
                 logger.info("Generating schema documentation for property owners data...")
                 flush_logs()
 
-                # Load the parquet file into DuckDB for schema documentation
-                conn = duckdb.connect()
-                conn.execute(f"CREATE TABLE property_owners AS SELECT * FROM read_parquet('{output_parquet_path}')")
+                # ✅ MIGRATION: Use existing connection instead of creating new one
+                if self.conn:
+                    conn = self.conn
+                    conn.execute(f"CREATE TABLE property_owners AS SELECT * FROM read_parquet('{output_parquet_path}')")
+                else:
+                    # Fallback if connection failed during init
+                    conn = duckdb.connect()
+                    conn.execute(f"CREATE TABLE property_owners AS SELECT * FROM read_parquet('{output_parquet_path}')")
 
                 schema_manager = SchemaDocumentationManager(
                     connection=conn,
@@ -542,21 +562,33 @@ def main_local_test():
         logger.info(f"✅ Local processing successful! Output: {parquet_file}")
         flush_logs()
 
-        # Quick analysis of the result
+        # ✅ MIGRATION: Quick analysis using DuckDB instead of pandas
         logger.info("=== Quick Analysis ===")
-        import pandas as pd
+        import duckdb
 
-        df = pd.read_parquet(parquet_file)
-        logger.info(f"Processed {len(df)} rows")
-        logger.info(f"Columns: {list(df.columns)}")
-        logger.info(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+        conn = duckdb.connect()
+        # Get basic statistics
+        row_count = conn.execute(f"SELECT COUNT(*) FROM read_parquet('{parquet_file}')").fetchone()[0]
+        columns = conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{parquet_file}')").fetchall()
+        column_names = [col[0] for col in columns]
 
-        # Show sample of privacy transformations
-        if "ejendePerson" in df.columns:
+        logger.info(f"Processed {row_count} rows")
+        logger.info(f"Columns: {column_names}")
+
+        # Get file size instead of memory usage
+        file_size_mb = Path(parquet_file).stat().st_size / 1024**2
+        logger.info(f"File size: {file_size_mb:.1f} MB")
+
+        # ✅ MIGRATION: Show sample of privacy transformations using DuckDB
+        if "ejendePerson" in column_names:
             logger.info("Sample ejendePerson data (should show UUID instead of CPR):")
-            sample_person = df["ejendePerson"].dropna().iloc[0] if len(df["ejendePerson"].dropna()) > 0 else None
-            if sample_person:
-                logger.info(f"Person data keys: {sample_person.keys() if hasattr(sample_person, 'keys') else 'N/A'}")
+            sample_result = conn.execute(
+                f"SELECT ejendePerson FROM read_parquet('{parquet_file}') WHERE ejendePerson IS NOT NULL LIMIT 1"
+            ).fetchone()
+            if sample_result and sample_result[0]:
+                logger.info(f"Person data sample: {str(sample_result[0])[:100]}...")
+
+        conn.close()
 
         flush_logs()
         return True

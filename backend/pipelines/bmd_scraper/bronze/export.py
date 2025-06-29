@@ -191,12 +191,29 @@ class BMDScraper:
 
 
 class GCSStorage:
-    """Google Cloud Storage backend for BMD files."""
+    """Google Cloud Storage backend for BMD files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="bronze/bmd"):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
+
+        # ✅ OPTIMIZED: Initialize optimized GCS access
+        self.gcs_access = None
+        if self.is_available:
+            try:
+                # Import optimized GCS access
+                import sys
+                from pathlib import Path
+
+                sys.path.append(str(Path(__file__).parent.parent.parent / "unified_pipeline" / "src"))
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                self.gcs_access = GCSDataAccess()
+                logging.info("✅ BMD GCSStorage: Initialized optimized GCS access")
+            except Exception as e:
+                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                self.gcs_access = None
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -209,7 +226,7 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, gcs_path=None):
-        """Upload a file to GCS bucket."""
+        """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
@@ -220,14 +237,30 @@ class GCSStorage:
             gcs_path = f"{self.prefix}/{relative_path}"
 
         try:
-            from google.cloud import storage
+            # ✅ OPTIMIZED: Use streaming upload if available
+            if self.gcs_access:
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(local_path)
-            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path}")
-            return True
+                # Stream file directly without loading into memory
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+
+                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                return True
+            else:
+                # Fallback to old method if optimized access failed
+                from google.cloud import storage
+
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_filename(local_path)
+                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                return True
+
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
             return False

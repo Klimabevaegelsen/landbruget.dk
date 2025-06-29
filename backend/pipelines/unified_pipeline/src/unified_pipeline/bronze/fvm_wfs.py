@@ -22,7 +22,8 @@ from asyncio import Semaphore
 from typing import Dict, List, Optional
 
 import aiohttp
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for DataFrame operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -65,7 +66,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     name: str = "Danish FVM WFS Agricultural Data"
     type: str = "wfs"
     description: str = "Agricultural field blocks and markers from FVM WFS service"
-    wfs_url: str = "https://geodata.fvm.dk/geoserver/ows"
+    wfs_url: str = "https://geodata.fvm.dk/geoserver/wfs"
     dataset_markblokke: str = "fvm_markblokke"
     dataset_marker: str = "fvm_marker"
     frequency: str = "yearly"
@@ -188,13 +189,16 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         else:
             return f"{layer_type}:{layer_type}_{year}"
 
-    def _get_wfs_params(self, layer_name: str, get_count_only: bool = False) -> Dict[str, str]:
+    def _get_wfs_params(
+        self, layer_name: str, get_count_only: bool = False, start_index: int = 0
+    ) -> Dict[str, str]:
         """
         Get WFS GetFeature request parameters.
 
         Args:
             layer_name (str): Name of the layer to request
             get_count_only (bool): If True, request only feature count
+            start_index (int): Starting index for pagination (ignored if batch_size=0)
 
         Returns:
             Dict[str, str]: WFS request parameters
@@ -211,8 +215,12 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             params["resultType"] = "hits"
         else:
             params["outputFormat"] = self.config.output_format
+            # Add pagination parameters when batch_size > 0
             if self.config.batch_size > 0:
+                params["startIndex"] = str(start_index)
                 params["count"] = str(self.config.batch_size)
+            # For unlimited downloads (batch_size=0), don't add pagination parameters
+            # but the server may still apply default limits, so we need to handle that
 
         return params
 
@@ -309,9 +317,9 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                     self.log.error(err_msg)
                     raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: List[str], layer_type: str, year: int) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: List[str], layer_type: str, year: int):
         """
-        Create a DataFrame from the raw WFS data.
+        Create a DataFrame from the raw WFS data using DuckDB.
 
         Args:
             raw_data (List[str]): List of raw WFS response strings
@@ -319,18 +327,26 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             year (int): Year of the data
 
         Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata
+            DataFrame: DataFrame containing the raw data with metadata
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = self.config.name
-        df["layer_type"] = layer_type
-        df["year"] = year
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
+        # ✅ MIGRATION: Use DuckDB to create DataFrame instead of pandas
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Register the raw data
+        self.conn.register("temp_wfs_data", {"payload": raw_data})
+
+        # Create the final DataFrame with metadata columns
+        df = self.conn.execute(f"""
+            SELECT 
+                payload,
+                '{self.config.name}' as source,
+                '{layer_type}' as layer_type,
+                {year} as year,
+                '{current_timestamp}' as created_at,
+                '{current_timestamp}' as updated_at
+            FROM temp_wfs_data
+        """).df()
+
         return df
 
     async def _process_layer_type(

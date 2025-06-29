@@ -12,34 +12,44 @@ from pathlib import Path
 def install_dependencies():
     """Install all required dependencies for the Drive Data Pipeline."""
     print("Installing Drive Data Pipeline dependencies...")
-    
+
     # Get the directory of this script
     script_dir = Path(__file__).parent.absolute()
-    
-    # The requirements file path
-    requirements_file = script_dir / "requirements.txt"
-    
-    # Check if requirements file exists
-    if not requirements_file.exists():
-        print(f"Requirements file not found at {requirements_file}")
+
+    # The pyproject.toml file path
+    pyproject_file = script_dir / "pyproject.toml"
+
+    # Check if pyproject.toml file exists
+    if not pyproject_file.exists():
+        print(f"pyproject.toml file not found at {pyproject_file}")
         sys.exit(1)
-    
-    # Install the dependencies
+
+    # Install uv first if not available
     try:
-        print(f"Installing packages from {requirements_file}...")
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-r",
-            str(requirements_file)
-        ])
+        subprocess.check_call(
+            [sys.executable, "-c", "import uv"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        print("Installing uv...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "uv"])
+
+    # Install the dependencies using uv
+    try:
+        print(f"Installing packages from {pyproject_file}...")
+        subprocess.check_call(
+            [sys.executable, "-m", "uv", "pip", "install", "-e", "."], cwd=script_dir
+        )
         print("Successfully installed dependencies.")
     except subprocess.CalledProcessError as e:
         print(f"Failed to install dependencies: {e}")
         sys.exit(1)
-    
+
     # Verify critical dependencies
     try:
         print("Verifying critical dependencies...")
-        
+
         # Try importing some key packages
         import_checks = [
             "duckdb",
@@ -50,9 +60,9 @@ def install_dependencies():
             "pdf2image",
             "pytesseract",
             "pdfplumber",
-            "tabula"
+            "tabula",
         ]
-        
+
         for package in import_checks:
             try:
                 __import__(package)
@@ -60,7 +70,7 @@ def install_dependencies():
             except ImportError as e:
                 print(f"✗ {package} import failed: {e}")
                 raise
-        
+
         print("All critical dependencies verified.")
     except Exception as e:
         print(f"Dependency verification failed: {e}")
@@ -69,4 +79,4 @@ def install_dependencies():
 
 if __name__ == "__main__":
     install_dependencies()
-    print("\nSetup complete. You can now run the Drive Data Pipeline.") 
+    print("\nSetup complete. You can now run the Drive Data Pipeline.")

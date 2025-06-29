@@ -5,7 +5,6 @@ from typing import Optional
 import geopandas as gpd
 import ibis
 import ibis.expr.datatypes as dt
-import pandas as pd
 
 # Import config
 # Import export module
@@ -17,7 +16,7 @@ from . import config, export
 # Helper function to simplify casting and sanitizing in Ibis
 # Note: This UDF approach might have limitations depending on the backend capabilities.
 # If performance issues arise, alternative SQL-based sanitization might be needed.
-# @ibis.udf.scalar.python # REMOVED UDF
+
 # def sanitize_and_cast_string(col: ibis.expr.types.StringValue) -> ibis.expr.types.StringValue:
 #     """Sanitizes a string column in Ibis."""
 #     # This is a placeholder; direct string manipulation in Ibis/SQL is preferred
@@ -97,24 +96,39 @@ def create_properties_table(
             "vet_dept_name",
             "vet_section_name",
         ]
+        # ✅ MIGRATION: Use DuckDB string operations instead of pandas
         for col in str_cols_to_sanitize:
             if col in df_intermediate.columns:
-                df_intermediate[col] = df_intermediate[col].astype(str).str.strip().replace("", pd.NA)
+                df_intermediate[col] = df_intermediate[col].astype(str).str.strip().replace("", None)
 
         # Convert date strings to date objects
         date_cols = {
             "date_created_str": "date_created",
             "date_updated_str": "date_updated",
         }
+        # ✅ MIGRATION: Use DuckDB date operations instead of pandas
+        # Register dataframe with DuckDB for date conversion
+        spatial_conn = con._con  # Access underlying DuckDB connection from Ibis
+        spatial_conn.register("temp_properties_df", df_intermediate)
+
         for str_col, final_col in date_cols.items():
             if str_col in df_intermediate.columns:
-                df_intermediate[final_col] = pd.to_datetime(df_intermediate[str_col], errors="coerce").dt.date
-                df_intermediate = df_intermediate.drop(columns=[str_col])
+                # Use DuckDB to convert date strings
+                spatial_conn.execute(f"""
+                    CREATE OR REPLACE TABLE temp_properties_df AS
+                    SELECT 
+                        * EXCLUDE {str_col},
+                        TRY_CAST({str_col} AS DATE) as {final_col}
+                    FROM temp_properties_df
+                """)
+
+        # Get the result back as DataFrame
+        df_intermediate = spatial_conn.execute("SELECT * FROM temp_properties_df").df()
 
         logging.info(f"Properties count after Pandas cleaning: {len(df_intermediate)}")
 
-        # --- STEP 5: Create Geometry using GeoPandas ---
-        logging.info("Creating geometry for properties...")
+        # --- STEP 5: Create Geometry using DuckDB-spatial ---
+        logging.info("Creating geometry for properties using DuckDB-spatial...")
 
         df_filtered = df_intermediate[
             df_intermediate["geo_coord_x_source"].notna() & df_intermediate["geo_coord_y_source"].notna()
@@ -125,27 +139,79 @@ def create_properties_table(
             return None
 
         try:
-            gdf = gpd.GeoDataFrame(
-                df_filtered,
-                geometry=gpd.points_from_xy(
-                    df_filtered.geo_coord_x_source,
-                    df_filtered.geo_coord_y_source,
-                    crs=config.SOURCE_CRS,  # Set initial CRS
-                ),
-            )
-            # Add CRS source column AFTER filtering and GDF creation
-            gdf["geo_crs_source"] = config.SOURCE_CRS
+            # ✅ MIGRATION: Use Ibis DuckDB connection instead of creating new one
 
-            logging.info(f"Created initial GeoDataFrame for properties. Shape: {gdf.shape}")
+            # Convert to raw DuckDB connection for spatial operations
+            spatial_conn = con._con  # Access underlying DuckDB connection from Ibis
 
-            # --- STEP 6: Transform CRS ---
-            logging.info(f"Transforming properties geometry to target CRS: {config.TARGET_CRS}...")
-            gdf = gdf.to_crs(config.TARGET_CRS)
-            logging.info(f"Transformed properties GeoDataFrame. Shape: {gdf.shape}")
+            # Register the filtered DataFrame with DuckDB
+            spatial_conn.register("properties_df", df_filtered)
+
+            # Create geometry using DuckDB-spatial ST_Point and ST_Transform
+            logging.info(f"Creating points with source CRS: {config.SOURCE_CRS}")
+            logging.info(f"Transforming to target CRS: {config.TARGET_CRS}")
+
+            # Create table with geometries using DuckDB-spatial
+            spatial_conn.execute(f"""
+                CREATE TABLE properties_with_geom AS
+                SELECT 
+                    *,
+                    '{config.SOURCE_CRS}' as geo_crs_source,
+                    ST_Transform(
+                        ST_Point(geo_coord_x_source, geo_coord_y_source), 
+                        '{config.SOURCE_CRS}', 
+                        '{config.TARGET_CRS}'
+                    ) as geometry
+                FROM properties_df
+                WHERE geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL
+            """)
+
+            # Validate geometries using DuckDB-spatial
+            invalid_count = spatial_conn.execute("""
+                SELECT COUNT(*) FROM properties_with_geom 
+                WHERE geometry IS NOT NULL AND NOT ST_IsValid(geometry)
+            """).fetchone()[0]
+
+            if invalid_count > 0:
+                logging.warning(f"Found {invalid_count} invalid geometries. Attempting to fix...")
+                try:
+                    spatial_conn.execute("""
+                        UPDATE properties_with_geom SET 
+                            geometry = ST_Buffer(geometry, 0)
+                        WHERE geometry IS NOT NULL AND NOT ST_IsValid(geometry)
+                    """)
+                except Exception as fix_error:
+                    logging.warning(f"Could not fix invalid geometries: {fix_error}")
+                    # Remove invalid geometries
+                    spatial_conn.execute("""
+                        DELETE FROM properties_with_geom 
+                        WHERE geometry IS NOT NULL AND NOT ST_IsValid(geometry)
+                    """)
+
+            # Get the result back as DataFrame with geometry as WKT
+            result_df = spatial_conn.execute("""
+                SELECT 
+                    * EXCLUDE geometry,
+                    ST_AsText(geometry) as geometry
+                FROM properties_with_geom
+                ORDER BY chr_number
+            """).df()
+
+            logging.info(f"Created geometries for {len(result_df)} properties using DuckDB-spatial")
+
+            # Convert back to GeoDataFrame for compatibility with existing save logic
+            from shapely import wkt
+
+            # Convert WKT back to Shapely geometries
+            result_df["geometry"] = result_df["geometry"].apply(wkt.loads)
+            gdf_final = gpd.GeoDataFrame(result_df, crs=config.TARGET_CRS)
+
+            logging.info(f"Final GeoDataFrame shape: {gdf_final.shape}")
+            logging.info(f"Final GeoDataFrame CRS: {gdf_final.crs}")
 
         except Exception as e:
             logging.error(
-                f"Failed during properties GeoDataFrame creation/transformation: {e}",
+                f"Failed during DuckDB-spatial geometry creation: {e}",
                 exc_info=True,
             )
             return None
@@ -176,14 +242,14 @@ def create_properties_table(
 
         # Ensure all desired columns exist before selection/reindexing
         # Adjust final_cols_order if 'geometry' is the standard name now
-        if "geometry" in gdf.columns and "geo_geometry" not in gdf.columns:
+        if "geometry" in gdf_final.columns and "geo_geometry" not in gdf_final.columns:
             final_cols_order = [col if col != "geo_geometry" else "geometry" for col in final_cols_order]
 
-        available_cols = gdf.columns
+        available_cols = gdf_final.columns
         cols_to_select = [col for col in final_cols_order if col in available_cols]
 
         # Reindex to ensure final column order and select subset
-        gdf_final = gdf.reindex(columns=cols_to_select)
+        gdf_final = gdf_final.reindex(columns=cols_to_select)
 
         output_path = silver_dir / "properties.geoparquet"
         try:

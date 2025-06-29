@@ -17,7 +17,8 @@ import os
 from typing import Any, Optional
 
 import geopandas as gpd
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
@@ -128,27 +129,57 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             if "geometry" in validated_gdf.columns:
                 validated_gdf = validated_gdf.set_geometry("geometry")
 
-            # Clean and standardize data types
-            if "soil_height" in validated_gdf.columns:
-                validated_gdf["soil_height"] = pd.to_numeric(
-                    validated_gdf["soil_height"], errors="coerce"
-                )
+            # ✅ MIGRATION: Clean and standardize data types using DuckDB
+            # Convert GeoDataFrame to regular DataFrame for DuckDB processing
+            df_for_processing = validated_gdf.copy()
+            if hasattr(df_for_processing, "geometry"):
+                df_for_processing["geometry_wkt"] = validated_gdf.geometry.to_wkt()
+                df_for_processing = df_for_processing.drop("geometry", axis=1)
 
-            if "soil_code" in validated_gdf.columns:
-                validated_gdf["soil_code"] = pd.to_numeric(
-                    validated_gdf["soil_code"], errors="coerce"
-                )
+            # Use DuckDB for numeric conversions
+            if (
+                "soil_height" in df_for_processing.columns
+                or "soil_code" in df_for_processing.columns
+            ):
+                import duckdb
+
+                temp_conn = duckdb.connect()
+                temp_conn.register("temp_soil_data", df_for_processing)
+
+                # Build conversion query
+                select_parts = []
+                for col in df_for_processing.columns:
+                    if col == "soil_height":
+                        select_parts.append("TRY_CAST(soil_height AS DOUBLE) as soil_height")
+                    elif col == "soil_code":
+                        select_parts.append("TRY_CAST(soil_code AS DOUBLE) as soil_code")
+                    else:
+                        select_parts.append(f'"{col}"')
+
+                conversion_query = f"SELECT {', '.join(select_parts)} FROM temp_soil_data"
+                df_converted = temp_conn.execute(conversion_query).df()
+                temp_conn.close()
+
+                # Update the validated_gdf with converted values
+                for col in ["soil_height", "soil_code"]:
+                    if col in df_converted.columns:
+                        validated_gdf[col] = df_converted[col]
 
             # Clean text fields
             text_columns = ["soil_description", "theme_name"]
             for col in text_columns:
                 if col in validated_gdf.columns:
                     validated_gdf[col] = validated_gdf[col].astype(str).str.strip()
-                    # Replace 'nan' strings with actual NaN
-                    validated_gdf[col] = validated_gdf[col].replace("nan", pd.NA)
+                    # ✅ MIGRATION: Replace 'nan' strings with actual NaN using native pandas
+                    validated_gdf[col] = validated_gdf[col].replace("nan", None)
 
-            # Add processing metadata
-            validated_gdf["processed_at"] = pd.Timestamp.now()
+            # ✅ MIGRATION: Add processing metadata using DuckDB timestamp
+            import duckdb
+
+            temp_conn = duckdb.connect()
+            current_timestamp = temp_conn.execute("SELECT current_timestamp").fetchone()[0]
+            temp_conn.close()
+            validated_gdf["processed_at"] = current_timestamp
             validated_gdf["data_quality"] = "validated"
 
             # Remove any completely empty rows
