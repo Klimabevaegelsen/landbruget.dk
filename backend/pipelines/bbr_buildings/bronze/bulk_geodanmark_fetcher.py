@@ -153,35 +153,41 @@ class BulkGeoDanmarkFetcher:
     def bulk_download_buildings(self, batch_size: int = 30000):
         """Download all buildings in batches and save to GeoParquet."""
 
-        # Get total count
-        total_count = self.get_total_building_count()
-        if total_count == 0:
-            logger.error("Could not determine total building count")
-            return
-
-        # Calculate number of batches needed
-        total_batches = (total_count + batch_size - 1) // batch_size
-        logger.info(f"Will download {total_batches} batches of {batch_size:,} buildings each")
+        # Don't rely on get_total_building_count() as WFS service limits it to 30,000
+        # Instead, keep fetching until we get fewer records than batch_size
+        logger.info("🚀 Starting bulk download - will fetch until no more data available")
+        logger.info(f"Using batch size: {batch_size:,}")
 
         all_gdfs = []
         successful_batches = 0
+        batch_num = 0
+        total_buildings_downloaded = 0
 
-        for batch_num in range(total_batches):
+        while True:
             start_index = batch_num * batch_size
 
-            logger.info(f"Processing batch {batch_num + 1}/{total_batches}")
+            logger.info(f"Processing batch {batch_num + 1} (starting at index {start_index:,})")
 
             # Fetch batch
             gml_content = self.fetch_buildings_batch(start_index, batch_size)
             if not gml_content:
-                logger.error(f"Failed to fetch batch {batch_num + 1}, skipping")
-                continue
+                logger.error(f"Failed to fetch batch {batch_num + 1}, stopping download")
+                break
 
             # Parse to GeoDataFrame
             gdf = self.parse_gml_to_geodataframe(gml_content)
-            if gdf is None or len(gdf) == 0:
-                logger.error(f"Failed to parse batch {batch_num + 1}, skipping")
-                continue
+            if gdf is None:
+                logger.error(f"Failed to parse batch {batch_num + 1}, stopping download")
+                break
+
+            current_batch_size = len(gdf)
+            total_buildings_downloaded += current_batch_size
+            logger.info(f"Downloaded {current_batch_size:,} buildings in batch {batch_num + 1}")
+            logger.info(f"Total buildings downloaded so far: {total_buildings_downloaded:,}")
+
+            if current_batch_size == 0:
+                logger.info("No more buildings to download - reached end of dataset")
+                break
 
             all_gdfs.append(gdf)
             successful_batches += 1
@@ -191,16 +197,24 @@ class BulkGeoDanmarkFetcher:
                 self._save_intermediate_results(all_gdfs, batch_num)
                 all_gdfs = []
 
+            # Check if we got fewer records than requested - indicates end of dataset
+            if current_batch_size < batch_size:
+                logger.info(
+                    f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                )
+                break
+
+            batch_num += 1
+
             # Rate limiting
             time.sleep(0.5)
 
         # Save any remaining results
         if all_gdfs:
-            self._save_intermediate_results(all_gdfs, total_batches - 1)
+            self._save_intermediate_results(all_gdfs, batch_num)
 
-        logger.info(
-            f"Completed bulk download: {successful_batches}/{total_batches} batches successful"
-        )
+        logger.info(f"✅ Completed bulk download: {successful_batches} batches successful")
+        logger.info(f"🏢 Total buildings downloaded: {total_buildings_downloaded:,}")
 
         # Combine all intermediate files into final result
         self._combine_intermediate_files()
@@ -264,13 +278,15 @@ class BulkGeoDanmarkFetcher:
 
             conn.close()
 
-            logger.info(f"Combined {total_buildings:,} buildings into final file")
+            logger.info(
+                f"🏢 Combined {total_buildings:,} buildings into final file: geodanmark_buildings_complete.geoparquet"
+            )
 
             # Clean up intermediate files
             for file in intermediate_files:
                 file.unlink()
 
-            logger.info("Cleaned up intermediate files")
+            logger.info("🧹 Cleaned up intermediate files")
 
         except Exception as e:
             logger.error(f"Error combining intermediate files: {e}")
