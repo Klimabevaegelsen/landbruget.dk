@@ -55,7 +55,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "Journalnr": "journal_number",
         "CVR": "cvr_number",
         "Afgkode": "crop_code",
-        "Afgroede": "crop_type",
+        "Afgroede": "crop_name",
         "GB": "organic_farming",
         "GBanmeldt": "reported_area_ha",
         "Markblok": "block_id",
