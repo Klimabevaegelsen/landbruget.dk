@@ -1,4 +1,3 @@
-from ..base import BronzeBase
 """
 Bronze layer data ingestion for Agricultural Fields data.
 
@@ -31,7 +30,7 @@ from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
-class AgriculturalFieldsBronzeConfig(BronzeBase):
+class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     """
     Configuration for the Agricultural Fields Bronze source.
 
@@ -41,6 +40,7 @@ class AgriculturalFieldsBronzeConfig(BronzeBase):
 
     Attributes:
         name (str): Human-readable name of the data source
+        dataset (str): Machine name for the dataset, used in storage paths
         type (str): Type of the data source (arcgis)
         description (str): Brief description of the data
         fields_url (str): URL for fetching agricultural fields data
@@ -57,6 +57,7 @@ class AgriculturalFieldsBronzeConfig(BronzeBase):
     """
 
     name: str = "Danish Agricultural Fields"
+    dataset: str = "agricultural_fields"
     type: str = "arcgis"
     description: str = "Multi-year agricultural field data (2020-2025)"
 
@@ -96,7 +97,7 @@ class AgriculturalFieldsBronzeConfig(BronzeBase):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class AgriculturalFieldsBronze(BronzeBase):
+class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for agricultural fields data.
 
@@ -218,49 +219,6 @@ class AgriculturalFieldsBronze(BronzeBase):
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: list[str], year: int):
-        """
-        Create a  from the raw data using DuckDB.
-        This method takes a list of JSON strings and converts it into a DuckDB .
-
-        Args:
-            raw_data (list[str]): List of JSON strings.
-            year (int): The year this data represents.
-
-        Returns:
-            :  containing the raw data with metadata.
-        """
-        # ✅ MIGRATION: Use DuckDB with proper Python list handling
-        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
-
-        # DuckDB can work with Python lists directly when using the right approach
-        # Create a table by inserting values one by one to avoid complex escaping
-        self.conn.execute("CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR)")
-
-        # Use prepared statements to safely insert the JSON strings
-        for json_str in raw_data:
-            self.conn.execute("INSERT INTO temp_raw_data VALUES (?)", [json_str])
-
-        # ✅ MIGRATION: Create the final table with metadata columns directly
-        self.conn.execute(
-            """
-            CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
-                payload,
-                ? as source,
-                ? as year,
-                ? as created_at,
-                ? as updated_at
-            FROM temp_raw_data
-        """,
-            [self.config.name, year, current_timestamp, current_timestamp],
-        )
-
-        # Clean up the temporary table
-        self.conn.execute("DROP TABLE temp_raw_data")
-
-        return "final_dataframe"
-
     async def _process_data(self, url: str, dataset: str, year: int) -> str:
         """
         Process data from the specified URL and save it to Google Cloud Storage.
@@ -322,7 +280,35 @@ class AgriculturalFieldsBronze(BronzeBase):
                 return empty_table_name
             self.log.info("Fetched raw data successfully")
 
-            table_name = self.create_dataframe(raw_data, year)
+            # Create table directly with raw JSON data
+            current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+            table_name = f"bronze_data_{dataset}_{year}"
+
+            # Create temporary table for raw data
+            self.conn.execute("CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR)")
+
+            # Insert JSON strings using prepared statements
+            for json_str in raw_data:
+                self.conn.execute("INSERT INTO temp_raw_data VALUES (?)", [json_str])
+
+            # Create final table with metadata
+            self.conn.execute(
+                f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT 
+                    payload,
+                    ? as source,
+                    ? as year,
+                    ? as created_at,
+                    ? as updated_at
+                FROM temp_raw_data
+            """,
+                [self.config.name, year, current_timestamp, current_timestamp],
+            )
+
+            # Clean up temporary table
+            self.conn.execute("DROP TABLE temp_raw_data")
+
             dataset_with_year = f"{dataset}_{year}"
             self.log.info(f"Saving data to GCS for {dataset_with_year}")
 

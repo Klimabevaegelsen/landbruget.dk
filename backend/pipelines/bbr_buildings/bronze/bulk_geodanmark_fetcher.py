@@ -3,6 +3,8 @@ Bulk GeoDanmark Buildings Fetcher
 
 Downloads all buildings from GeoDanmark WFS service using pagination
 and saves to GeoParquet format for efficient local processing.
+
+Uses DuckDB with spatial extension instead of GeoPandas for optimal performance.
 """
 
 import logging
@@ -12,7 +14,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import duckdb
-import geopandas as gpd
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -32,6 +33,11 @@ class BulkGeoDanmarkFetcher:
         self.session = self._create_session()
         self.output_dir = Path("data")
         self.output_dir.mkdir(exist_ok=True)
+
+        # Initialize DuckDB connection with spatial extension
+        self.conn = duckdb.connect()
+        self.conn.execute("INSTALL spatial")
+        self.conn.execute("LOAD spatial")
 
     def _create_session(self) -> requests.Session:
         """Create a session with retry strategy and connection pooling."""
@@ -125,22 +131,37 @@ class BulkGeoDanmarkFetcher:
             logger.error(f"Unexpected error fetching batch starting at {start_index:,}: {e}")
             return None
 
-    def parse_gml_to_geodataframe(self, gml_content: str) -> gpd.GeoDataFrame | None:
-        """Parse GML content to GeoDataFrame."""
+    def parse_gml_to_duckdb_table(self, gml_content: str, table_name: str) -> bool:
+        """Parse GML content to DuckDB table using spatial extension."""
         try:
-            # Save GML to temporary file for GeoPandas to read
+            # Save GML to temporary file for DuckDB spatial to read
             temp_file = self.output_dir / "temp_batch.gml"
             with open(temp_file, "w", encoding="utf-8") as f:
                 f.write(gml_content)
 
-            # Read with GeoPandas
-            gdf = gpd.read_file(temp_file)
+            # Use DuckDB spatial to read GML file
+            try:
+                # Read GML file into DuckDB table
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS 
+                    SELECT * FROM ST_Read('{temp_file}')
+                """)
 
-            # Clean up temp file
-            temp_file.unlink()
+                # Get record count
+                result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                record_count = result[0] if result else 0
 
-            logger.info(f"Parsed {len(gdf)} buildings from GML")
-            return gdf
+                logger.info(f"Parsed {record_count} buildings from GML into table {table_name}")
+
+                # Clean up temp file
+                temp_file.unlink()
+
+                return record_count > 0
+
+            except Exception as e:
+                logger.error(f"DuckDB spatial read failed: {e}")
+                # Fallback: Try to parse GML manually
+                return self._parse_gml_manually(gml_content, table_name)
 
         except Exception as e:
             logger.error(f"Error parsing GML: {e}")
@@ -148,7 +169,100 @@ class BulkGeoDanmarkFetcher:
             temp_file = self.output_dir / "temp_batch.gml"
             if temp_file.exists():
                 temp_file.unlink()
-            return None
+            return False
+
+    def _parse_gml_manually(self, gml_content: str, table_name: str) -> bool:
+        """Fallback: Parse GML manually using XML parsing."""
+        try:
+            logger.info("Attempting manual GML parsing as fallback")
+
+            # Parse XML
+            root = ET.fromstring(gml_content)
+
+            # Extract building features
+            buildings = []
+
+            # Define namespaces
+            namespaces = {
+                "gml": "http://www.opengis.net/gml/3.2",
+                "gdk60": "http://www.geodanmark.dk/gdk60",
+            }
+
+            # Find all building features
+            for feature in root.findall(".//gdk60:Bygning", namespaces):
+                building = {}
+
+                # Extract attributes
+                for child in feature:
+                    if child.tag.endswith("}geometry"):
+                        # Handle geometry - extract coordinates
+                        coords_elem = child.find(".//gml:coordinates", namespaces)
+                        if coords_elem is not None:
+                            coords_text = coords_elem.text
+                            if coords_text:
+                                # Parse coordinates and create WKT
+                                coords = coords_text.strip().split()
+                                if len(coords) >= 2:
+                                    # Simple point geometry for now
+                                    building["geometry"] = f"POINT({coords[0]} {coords[1]})"
+                    else:
+                        # Extract other attributes
+                        tag_name = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                        building[tag_name] = child.text
+
+                if building:
+                    buildings.append(building)
+
+            if not buildings:
+                logger.warning("No buildings extracted from GML")
+                return False
+
+            # Create table with extracted data
+            if buildings:
+                # Get all unique keys
+                all_keys = set()
+                for building in buildings:
+                    all_keys.update(building.keys())
+
+                # Create table schema
+                columns = []
+                for key in sorted(all_keys):
+                    if key == "geometry":
+                        columns.append(f"{key} GEOMETRY")
+                    else:
+                        columns.append(f"{key} VARCHAR")
+
+                schema = ", ".join(columns)
+                self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} ({schema})")
+
+                # Insert data
+                for building in buildings:
+                    cols = list(building.keys())
+                    values = []
+                    for col in cols:
+                        value = building[col]
+                        if col == "geometry" and value:
+                            values.append(f"ST_GeomFromText('{value}')")
+                        elif value is None:
+                            values.append("NULL")
+                        else:
+                            escaped_value = str(value).replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+
+                    cols_str = ", ".join(cols)
+                    values_str = ", ".join(values)
+                    self.conn.execute(
+                        f"INSERT INTO {table_name} ({cols_str}) VALUES ({values_str})"
+                    )
+
+                logger.info(f"Manually parsed {len(buildings)} buildings into table {table_name}")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Manual GML parsing failed: {e}")
+            return False
 
     def bulk_download_buildings(self, batch_size: int = 30000):
         """Download all buildings in batches and save to GeoParquet."""
@@ -158,10 +272,10 @@ class BulkGeoDanmarkFetcher:
         logger.info("🚀 Starting bulk download - will fetch until no more data available")
         logger.info(f"Using batch size: {batch_size:,}")
 
-        all_gdfs = []
         successful_batches = 0
         batch_num = 0
         total_buildings_downloaded = 0
+        batch_tables = []
 
         while True:
             start_index = batch_num * batch_size
@@ -174,13 +288,17 @@ class BulkGeoDanmarkFetcher:
                 logger.error(f"Failed to fetch batch {batch_num + 1}, stopping download")
                 break
 
-            # Parse to GeoDataFrame
-            gdf = self.parse_gml_to_geodataframe(gml_content)
-            if gdf is None:
+            # Parse to DuckDB table
+            table_name = f"buildings_batch_{batch_num}"
+            success = self.parse_gml_to_duckdb_table(gml_content, table_name)
+            if not success:
                 logger.error(f"Failed to parse batch {batch_num + 1}, stopping download")
                 break
 
-            current_batch_size = len(gdf)
+            # Get batch size
+            result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+            current_batch_size = result[0] if result else 0
+
             total_buildings_downloaded += current_batch_size
             logger.info(f"Downloaded {current_batch_size:,} buildings in batch {batch_num + 1}")
             logger.info(f"Total buildings downloaded so far: {total_buildings_downloaded:,}")
@@ -189,13 +307,13 @@ class BulkGeoDanmarkFetcher:
                 logger.info("No more buildings to download - reached end of dataset")
                 break
 
-            all_gdfs.append(gdf)
+            batch_tables.append(table_name)
             successful_batches += 1
 
             # Save intermediate results every 10 batches
-            if len(all_gdfs) >= 10:
-                self._save_intermediate_results(all_gdfs, batch_num)
-                all_gdfs = []
+            if len(batch_tables) >= 10:
+                self._save_intermediate_results(batch_tables, batch_num)
+                batch_tables = []
 
             # Check if we got fewer records than requested - indicates end of dataset
             if current_batch_size < batch_size:
@@ -210,8 +328,8 @@ class BulkGeoDanmarkFetcher:
             time.sleep(0.5)
 
         # Save any remaining results
-        if all_gdfs:
-            self._save_intermediate_results(all_gdfs, batch_num)
+        if batch_tables:
+            self._save_intermediate_results(batch_tables, batch_num)
 
         logger.info(f"✅ Completed bulk download: {successful_batches} batches successful")
         logger.info(f"🏢 Total buildings downloaded: {total_buildings_downloaded:,}")
@@ -219,20 +337,33 @@ class BulkGeoDanmarkFetcher:
         # Combine all intermediate files into final result
         self._combine_intermediate_files()
 
-    def _save_intermediate_results(self, gdfs: list, batch_num: int):
+    def _save_intermediate_results(self, table_names: list, batch_num: int):
         """Save intermediate results to avoid memory issues."""
-        if not gdfs:
+        if not table_names:
             return
 
         try:
-            # Combine GeoDataFrames
-            combined_gdf = gpd.pd.concat(gdfs, ignore_index=True)
+            # Combine all batch tables using UNION ALL
+            union_query = " UNION ALL ".join([f"SELECT * FROM {table}" for table in table_names])
 
-            # Save to intermediate file
+            # Save to intermediate GeoParquet file
             output_file = self.output_dir / f"geodanmark_buildings_batch_{batch_num:04d}.geoparquet"
-            combined_gdf.to_parquet(output_file)
 
-            logger.info(f"Saved {len(combined_gdf)} buildings to {output_file}")
+            self.conn.execute(f"""
+                COPY (
+                    {union_query}
+                ) TO '{output_file}' (FORMAT PARQUET)
+            """)
+
+            # Get total count
+            result = self.conn.execute(f"SELECT COUNT(*) FROM ({union_query})").fetchone()
+            total_count = result[0] if result else 0
+
+            logger.info(f"Saved {total_count} buildings to {output_file}")
+
+            # Drop the batch tables to free memory
+            for table_name in table_names:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
         except Exception as e:
             logger.error(f"Error saving intermediate results: {e}")
@@ -251,13 +382,6 @@ class BulkGeoDanmarkFetcher:
 
             logger.info(f"Combining {len(intermediate_files)} intermediate files")
 
-            # Use DuckDB for efficient combining
-            conn = duckdb.connect()
-
-            # Install and load spatial extension
-            conn.execute("INSTALL spatial")
-            conn.execute("LOAD spatial")
-
             # Create a single table from all files
             file_paths = [str(f) for f in intermediate_files]
             file_list = "', '".join(file_paths)
@@ -269,14 +393,12 @@ class BulkGeoDanmarkFetcher:
             (FORMAT PARQUET)
             """
 
-            conn.execute(query)
+            self.conn.execute(query)
 
             # Get final count
             count_query = f"SELECT COUNT(*) as total FROM read_parquet(['{file_list}'])"
-            result = conn.execute(count_query).fetchone()
+            result = self.conn.execute(count_query).fetchone()
             total_buildings = result[0] if result else 0
-
-            conn.close()
 
             logger.info(
                 f"🏢 Combined {total_buildings:,} buildings into final file: geodanmark_buildings_complete.geoparquet"
@@ -290,6 +412,11 @@ class BulkGeoDanmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error combining intermediate files: {e}")
+
+    def __del__(self):
+        """Clean up DuckDB connection."""
+        if hasattr(self, "conn"):
+            self.conn.close()
 
 
 def main():

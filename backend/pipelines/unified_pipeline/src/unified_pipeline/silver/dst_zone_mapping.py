@@ -196,14 +196,44 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                             else:
                                 code_column = "kode"  # fallback
 
+                            # Check what columns are actually available in the raw data
+                            available_columns = [
+                                desc[0]
+                                for desc in self.conn.execute(f"DESCRIBE {layer}_raw").fetchall()
+                            ]
+
+                            # Build SELECT clause based on available columns
+                            select_parts = []
+                            select_parts.append(f"{code_column} as code")
+
+                            # Add name column
+                            if "navn" in available_columns:
+                                select_parts.append("navn as name")
+                            elif "name" in available_columns:
+                                select_parts.append("name as name")
+                            else:
+                                select_parts.append("'' as name")
+
+                            # Add region code - be flexible about column names
+                            if "regionskode" in available_columns:
+                                select_parts.append("regionskode as region_code")
+                            elif "region_code" in available_columns:
+                                select_parts.append("region_code as region_code")
+                            else:
+                                select_parts.append("'' as region_code")
+
+                            # Add other optional columns
+                            if "nuts2" in available_columns:
+                                select_parts.append("COALESCE(nuts2, '') as nuts2")
+                            else:
+                                select_parts.append("'' as nuts2")
+
+                            select_clause = ", ".join(select_parts)
+
                             self.conn.execute(f"""
                                 CREATE TABLE {layer} AS
                                 SELECT 
-                                    {code_column} as code,
-                                    navn as name,
-                                    regionskode as region_code,
-                                    regionsnavn as region_name,
-                                    COALESCE(nuts2, '') as nuts2,
+                                    {select_clause},
                                     ST_GeomFromText(geometry_wkt) as geometry,
                                     geometry_wkt,
                                     ST_Area(ST_GeomFromText(geometry_wkt)) as area_m2,
@@ -260,18 +290,75 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                             region_col = col_mapping.get("region_col", "NULL")
 
                             # Copy data from GCS connection to base class connection
-                            # First get the data from the GCS connection
+                            # First check what columns are available in the silver data
+                            available_silver_columns = [
+                                desc[0]
+                                for desc in conn.execute(f"DESCRIBE {source_table}").fetchall()
+                            ]
+
+                            # Build SELECT clause based on available columns
+                            select_parts = []
+
+                            # Map code column
+                            if code_col in available_silver_columns:
+                                select_parts.append(f"{code_col} as code")
+                            elif "code" in available_silver_columns:
+                                select_parts.append("code as code")
+                            else:
+                                select_parts.append("'' as code")
+
+                            # Map name column
+                            if name_col in available_silver_columns:
+                                select_parts.append(f"{name_col} as name")
+                            elif "name" in available_silver_columns:
+                                select_parts.append("name as name")
+                            else:
+                                select_parts.append("'' as name")
+
+                            # Map region code column
+                            if region_col != "NULL" and region_col in available_silver_columns:
+                                select_parts.append(f"{region_col} as region_code")
+                            elif "region_code" in available_silver_columns:
+                                select_parts.append("region_code as region_code")
+                            else:
+                                select_parts.append("'' as region_code")
+
+                            # Add spatial columns
+                            if "geometry" in available_silver_columns:
+                                select_parts.extend(
+                                    [
+                                        "ST_AsText(geometry) as geometry_wkt",
+                                        "ST_Area(geometry) as area_m2",
+                                        "ST_X(ST_Centroid(geometry)) as centroid_x",
+                                        "ST_Y(ST_Centroid(geometry)) as centroid_y",
+                                    ]
+                                )
+                            elif "geometry_wkt" in available_silver_columns:
+                                select_parts.extend(
+                                    [
+                                        "geometry_wkt",
+                                        "COALESCE(area_m2, 0.0) as area_m2",
+                                        "COALESCE(centroid_x, 0.0) as centroid_x",
+                                        "COALESCE(centroid_y, 0.0) as centroid_y",
+                                    ]
+                                )
+                            else:
+                                select_parts.extend(
+                                    [
+                                        "'' as geometry_wkt",
+                                        "0.0 as area_m2",
+                                        "0.0 as centroid_x",
+                                        "0.0 as centroid_y",
+                                    ]
+                                )
+
+                            select_clause = ", ".join(select_parts)
+
+                            # Get the data from the GCS connection
                             rows = conn.execute(f"""
-                                SELECT 
-                                    {code_col} as code,
-                                    {name_col} as name,
-                                    {region_col} as region_code,
-                                    ST_AsText(geometry) as geometry_wkt,
-                                    ST_Area(geometry) as area_m2,
-                                    ST_X(ST_Centroid(geometry)) as centroid_x,
-                                    ST_Y(ST_Centroid(geometry)) as centroid_y
+                                SELECT {select_clause}
                                 FROM {source_table}
-                                WHERE geometry IS NOT NULL
+                                WHERE 1=1
                             """).fetchall()
 
                             # Create table in base class connection

@@ -76,37 +76,80 @@ The component maps 9 DST regions to 11 DAGI landsdele:
 ### Loading Data
 
 ```python
-import geopandas as gpd
-import pandas as pd
+import duckdb
 
-# Load spatial lookup table
-gdf_lookup = gpd.read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping/latest/data.parquet')
+# Connect to DuckDB with spatial extension
+conn = duckdb.connect()
+conn.execute("INSTALL spatial")
+conn.execute("LOAD spatial")
 
-# Load reference table
-df_reference = pd.read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping_reference/latest/data.parquet')
+# Load spatial lookup table directly from GCS
+conn.execute("""
+    CREATE OR REPLACE TABLE dst_lookup AS 
+    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping/latest/data.parquet')
+""")
+
+# Load reference table (without geometry for faster queries)
+conn.execute("""
+    CREATE OR REPLACE TABLE dst_reference AS 
+    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping_reference/latest/data.parquet')
+""")
 ```
 
 ### Spatial Joins with Agricultural Fields
 
 ```python
 # Load agricultural fields
-fields = gpd.read_parquet('gs://landbrugsdata-raw-data/silver/fvm_marker_2024/latest/data.parquet')
+conn.execute("""
+    CREATE OR REPLACE TABLE fields AS 
+    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/fvm_marker_2024/latest/data.parquet')
+""")
 
-# Perform spatial join to add DST zones
-fields_with_dst = gpd.sjoin(fields, gdf_lookup, how='left', predicate='within')
+# Perform spatial join to add DST zones using DuckDB spatial functions
+conn.execute("""
+    CREATE OR REPLACE TABLE fields_with_dst AS
+    SELECT 
+        f.*,
+        d.landsdel_name,
+        d.landsdel_code,
+        d.dst_regions,
+        d.dagi_region_name
+    FROM fields f
+    LEFT JOIN dst_lookup d ON ST_Within(f.geometry, d.geometry)
+""")
 
-# Now each field has DST zone information
-print(fields_with_dst[['cvr_number', 'crop_type', 'landsdel_name', 'dst_regions']].head())
+# Query results
+result = conn.execute("""
+    SELECT cvr_number, crop_type, landsdel_name, dst_regions 
+    FROM fields_with_dst 
+    LIMIT 5
+""").fetchall()
+
+for row in result:
+    print(row)
 ```
 
 ### Filtering by DST Region
 
 ```python
 # Get all landsdele for a specific DST region
-fyn_landsdele = gdf_lookup[gdf_lookup['dst_regions'].str.contains('Landsdel Fyn', na=False)]
+fyn_landsdele = conn.execute("""
+    SELECT * FROM dst_lookup 
+    WHERE dst_regions LIKE '%Landsdel Fyn%'
+""").fetchall()
 
-# Get fields in Fyn region
-fyn_fields = gpd.sjoin(fields, fyn_landsdele, how='inner', predicate='within')
+# Get fields in Fyn region using spatial join
+conn.execute("""
+    CREATE OR REPLACE TABLE fyn_fields AS
+    SELECT f.*
+    FROM fields f
+    INNER JOIN dst_lookup d ON ST_Within(f.geometry, d.geometry)
+    WHERE d.dst_regions LIKE '%Landsdel Fyn%'
+""")
+
+# Count fields in Fyn
+fyn_count = conn.execute("SELECT COUNT(*) FROM fyn_fields").fetchone()[0]
+print(f"Fields in Fyn region: {fyn_count:,}")
 ```
 
 ## Configuration
