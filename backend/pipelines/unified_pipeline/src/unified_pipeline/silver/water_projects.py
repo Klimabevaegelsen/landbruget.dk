@@ -346,7 +346,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 if "rings" not in geom:
                     continue
 
-                    # Convert geometry using DuckDB-spatial
+                # Convert geometry using DuckDB-spatial
                 polygons_wkt = []
                 for ring in geom["rings"]:
                     coords = [(x, y) for x, y in ring]
@@ -460,30 +460,23 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             )
         """)
 
-        # Insert data in batches
+        # Insert data in batches using parameterized queries to avoid SQL injection and truncation
         batch_size = 1000
         for i in range(0, len(features), batch_size):
             batch = features[i : i + batch_size]
 
-            # Create VALUES clause for this batch
-            values_list = []
+            # Use parameterized queries instead of string concatenation
             for feature in batch:
-                values = []
-                for col in columns:
-                    value = feature.get(col)
-                    if value is None:
-                        values.append("NULL")
-                    else:
-                        escaped_value = str(value).replace("'", "''")
-                        values.append(f"'{escaped_value}'")
-                values_list.append(f"({', '.join(values)})")
+                values = [feature.get(col) for col in columns]
+                placeholders = ", ".join(["?" for _ in columns])
 
-            values_clause = ", ".join(values_list)
-
-            self.conn.execute(f"""
-                INSERT INTO temp_features ({", ".join(columns)})
-                VALUES {values_clause}
-            """)
+                self.conn.execute(
+                    f"""
+                    INSERT INTO temp_features ({", ".join(columns)})
+                    VALUES ({placeholders})
+                """,
+                    values,
+                )
         table_name = "water_projects_processed"
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
@@ -659,25 +652,18 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     for i in range(0, len(raw_data_list), batch_size):
                         batch = raw_data_list[i : i + batch_size]
 
-                        # Create VALUES clause for this batch
-                        values_list = []
+                        # Use parameterized queries instead of string concatenation
                         for item in batch:
-                            values = []
-                            for col in columns:
-                                value = item.get(col)
-                                if value is None:
-                                    values.append("NULL")
-                                else:
-                                    escaped_value = str(value).replace("'", "''")
-                                    values.append(f"'{escaped_value}'")
-                            values_list.append(f"({', '.join(values)})")
+                            values = [item.get(col) for col in columns]
+                            placeholders = ", ".join(["?" for _ in columns])
 
-                        values_clause = ", ".join(values_list)
-
-                        self.conn.execute(f"""
-                            INSERT INTO temp_raw_data ({", ".join(columns)})
-                            VALUES {values_clause}
-                        """)
+                            self.conn.execute(
+                                f"""
+                                INSERT INTO temp_raw_data ({", ".join(columns)})
+                                VALUES ({placeholders})
+                            """,
+                                values,
+                            )
                     # ✅ MIGRATION: Keep as table instead of converting to
                     raw_data = "temp_raw_data"
                 else:

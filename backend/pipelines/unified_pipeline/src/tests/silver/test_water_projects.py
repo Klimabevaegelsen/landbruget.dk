@@ -203,8 +203,8 @@ def sample_json_string() -> str:
 
 
 @pytest.fixture
-def sample_bronze_df() -> :
-    """Return a sample  with bronze data."""
+def sample_bronze_df() -> dict:
+    """Return a sample dict with bronze data."""
     return (
         {
             "layer": ["test_layer1", "test_layer2"],
@@ -622,7 +622,7 @@ def test_process_json_data_invalid_geometry(silver_source: WaterProjectsSilver) 
 
 
 def test_process_data_success(
-    silver_source: WaterProjectsSilver, sample_bronze_df: 
+    silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
     """Test _process_data with valid bronze data."""
     with (

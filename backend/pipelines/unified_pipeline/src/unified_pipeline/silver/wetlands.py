@@ -387,26 +387,18 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             batch = features[i : i + batch_size]
 
             # Create VALUES clause for this batch
-            values_list = []
+            # Use parameterized queries instead of string concatenation
             for feature in batch:
-                # Escape single quotes and handle None values
-                values = []
-                for col in columns:
-                    value = feature.get(col)
-                    if value is None:
-                        values.append("NULL")
-                    else:
-                        # Escape single quotes by doubling them
-                        escaped_value = str(value).replace("'", "''")
-                        values.append(f"'{escaped_value}'")
-                values_list.append(f"({', '.join(values)})")
+                values = [feature.get(col) for col in columns]
+                placeholders = ", ".join(["?" for _ in columns])
 
-            values_clause = ", ".join(values_list)
-
-            conn.execute(f"""
-                INSERT INTO temp_features ({", ".join(columns)})
-                VALUES {values_clause}
-            """)
+                conn.execute(
+                    f"""
+                    INSERT INTO temp_features ({", ".join(columns)})
+                    VALUES ({placeholders})
+                """,
+                    values,
+                )
 
             if (i + batch_size) % 10000 == 0:
                 self.log.info(f"Inserted {i + batch_size:,} features into temp table")

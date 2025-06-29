@@ -73,27 +73,21 @@ class LocalStorage(StorageInterface):
                     )
                 """)
 
-                # Insert data in batches
+                # Insert data in batches using parameterized queries
                 batch_size = 1000
                 for i in range(0, len(data), batch_size):
                     batch = data[i : i + batch_size]
-                    values_list = []
                     for item in batch:
-                        values = []
-                        for col in columns:
-                            value = item.get(col)
-                            if value is None:
-                                values.append("NULL")
-                            else:
-                                escaped_value = str(value).replace("'", "''")
-                                values.append(f"'{escaped_value}'")
-                        values_list.append(f"({', '.join(values)})")
+                        values = [item.get(col) for col in columns]
+                        placeholders = ", ".join(["?" for _ in columns])
 
-                    values_clause = ", ".join(values_list)
-                    conn.execute(f"""
-                        INSERT INTO temp_data ({", ".join(columns)})
-                        VALUES {values_clause}
-                    """)
+                        conn.execute(
+                            f"""
+                            INSERT INTO temp_data ({", ".join(columns)})
+                            VALUES ({placeholders})
+                        """,
+                            values,
+                        )
             else:
                 # Regular list, try to register directly
                 conn.register("temp_data", data)
@@ -167,27 +161,21 @@ class GCSStorage(StorageInterface):
                             )
                         """)
 
-                        # Insert data in batches
+                        # Insert data in batches using parameterized queries
                         batch_size = 1000
                         for i in range(0, len(data), batch_size):
                             batch = data[i : i + batch_size]
-                            values_list = []
                             for item in batch:
-                                values = []
-                                for col in columns:
-                                    value = item.get(col)
-                                    if value is None:
-                                        values.append("NULL")
-                                    else:
-                                        escaped_value = str(value).replace("'", "''")
-                                        values.append(f"'{escaped_value}'")
-                                values_list.append(f"({', '.join(values)})")
+                                values = [item.get(col) for col in columns]
+                                placeholders = ", ".join(["?" for _ in columns])
 
-                            values_clause = ", ".join(values_list)
-                            conn.execute(f"""
-                                INSERT INTO temp_parquet_data ({", ".join(columns)})
-                                VALUES {values_clause}
-                            """)
+                                conn.execute(
+                                    f"""
+                                    INSERT INTO temp_parquet_data ({", ".join(columns)})
+                                    VALUES ({placeholders})
+                                """,
+                                    values,
+                                )
                     else:
                         # Regular list, try to register directly
                         conn.register("temp_parquet_data", data)

@@ -360,25 +360,18 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         for i in range(0, len(features), batch_size):
             batch = features[i : i + batch_size]
 
-            # Create VALUES clause for this batch
-            values_list = []
+            # Use parameterized queries instead of string concatenation
             for feature in batch:
-                values = []
-                for col in columns:
-                    value = feature.get(col)
-                    if value is None:
-                        values.append("NULL")
-                    else:
-                        escaped_value = str(value).replace("'", "''")
-                        values.append(f"'{escaped_value}'")
-                values_list.append(f"({', '.join(values)})")
+                values = [feature.get(col) for col in columns]
+                placeholders = ", ".join(["?" for _ in columns])
 
-            values_clause = ", ".join(values_list)
-
-            self.conn.execute(f"""
-                INSERT INTO bnbo_features_raw ({", ".join(columns)})
-                VALUES {values_clause}
-            """)
+                self.conn.execute(
+                    f"""
+                    INSERT INTO bnbo_features_raw ({", ".join(columns)})
+                    VALUES ({placeholders})
+                """,
+                    values,
+                )
 
         table_name = "bnbo_processed_features"
         self.conn.execute(f"""
