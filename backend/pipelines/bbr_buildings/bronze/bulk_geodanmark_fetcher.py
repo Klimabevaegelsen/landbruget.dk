@@ -235,24 +235,32 @@ class BulkGeoDanmarkFetcher:
                 schema = ", ".join(columns)
                 self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} ({schema})")
 
-                # Insert data
+                # Insert data using parameterized queries
                 for building in buildings:
                     cols = list(building.keys())
                     values = []
                     for col in cols:
                         value = building[col]
                         if col == "geometry" and value:
-                            values.append(f"ST_GeomFromText('{value}')")
-                        elif value is None:
-                            values.append("NULL")
+                            # Handle geometry specially - still need ST_GeomFromText
+                            values.append(
+                                value
+                            )  # Store WKT string, will use ST_GeomFromText in query
                         else:
-                            escaped_value = str(value).replace("'", "''")
-                            values.append(f"'{escaped_value}'")
+                            values.append(value)
+
+                    # Create placeholders, handling geometry column specially
+                    placeholders = []
+                    for col in cols:
+                        if col == "geometry":
+                            placeholders.append("ST_GeomFromText(?)")
+                        else:
+                            placeholders.append("?")
 
                     cols_str = ", ".join(cols)
-                    values_str = ", ".join(values)
+                    placeholders_str = ", ".join(placeholders)
                     self.conn.execute(
-                        f"INSERT INTO {table_name} ({cols_str}) VALUES ({values_str})"
+                        f"INSERT INTO {table_name} ({cols_str}) VALUES ({placeholders_str})", values
                     )
 
                 logger.info(f"Manually parsed {len(buildings)} buildings into table {table_name}")
