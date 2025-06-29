@@ -267,28 +267,17 @@ def load_cattle_movement_summaries(
     logger.info(f"Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
 
     try:
-        # Get raw individual animal data (same as before)
-        response = load_animal_movements(chr_dyr_client, username, herd_number, start_date, end_date)
+        # Get aggregated movement summaries directly from load_animal_movements
+        # Note: load_animal_movements now returns aggregated summaries, not raw SOAP responses
+        movement_summaries = load_animal_movements(chr_dyr_client, username, herd_number, start_date, end_date)
 
-        if not response or not hasattr(response, "Response"):
-            logger.warning(f"No valid response for herd {herd_number}")
+        if not movement_summaries:
+            logger.warning(f"No movement summaries returned for herd {herd_number}")
             return None
 
-        # Process and aggregate individual animal records
-        movement_summaries = _aggregate_cattle_movements(response, herd_number)
-
-        if movement_summaries:
-            # Save aggregated summaries instead of raw individual records
-            save_raw_data(
-                data_type="cattle_movement_summaries",
-                identifier=f"{herd_number}_{start_date}_{end_date}",
-                raw_response=movement_summaries,
-            )
-
-            logger.info(
-                f"Herd {herd_number}: Aggregated {len(movement_summaries.get('movements', []))} "
-                f"movement summaries from individual cattle records"
-            )
+        # The movement_summaries are already processed and saved by load_animal_movements
+        # We just need to return them
+        logger.info(f"Herd {herd_number}: Returned {len(movement_summaries.get('movements', []))} movement summaries")
 
         return movement_summaries
 
