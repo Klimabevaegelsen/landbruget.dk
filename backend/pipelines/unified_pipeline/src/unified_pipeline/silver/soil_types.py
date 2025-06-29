@@ -309,7 +309,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                     if coord_str:
                         points.append(coord_str)
                 if points:
-                    return f"POLYGON(({' '.join(points)}))"
+                    return f"POLYGON(({', '.join(points)}))"
         elif geom_type == "MultiPolygon":
             if coordinates:
                 polygons = []
@@ -322,7 +322,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                             if coord_str:
                                 points.append(coord_str)
                         if points:
-                            polygons.append(f"(({' '.join(points)}))")
+                            polygons.append(f"(({', '.join(points)}))")
                 if polygons:
                     return f"MULTIPOLYGON({', '.join(polygons)})"
 

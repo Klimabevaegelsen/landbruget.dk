@@ -75,6 +75,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     # Markblokke fields
     markblokke_column_mapping: Dict[str, str] = {
         "MB_NR": "block_id",
+        "MARKBLOKNR": "block_id",  # Alternative column name for block ID
         "BLOKAREAL": "block_area_ha",
         "MARKBLOKTY": "block_type",
         "STATUSOPL": "status_info",
@@ -156,7 +157,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         super().__init__(config, gcs_util)
 
     async def extract_geojson_from_wfs_payload(
-        self, payload_json: str, column_mapping: Dict[str, str]
+        self, payload_json: str, column_mapping: Dict[str, str], table_suffix: str = ""
     ):
         """
         Extract GeoJSON features from a raw WFS payload and convert to  using DuckDB.
@@ -168,6 +169,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Args:
             payload_json: JSON string containing features from FVM WFS response
             column_mapping: Dictionary mapping original column names to standardized names
+            table_suffix: Optional suffix to add to table names
 
         Returns:
             A  containing the extracted features with standardized column names,
@@ -192,12 +194,19 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 if geometry:
                     # Convert geometry to WKT for DuckDB
-                    feature_data.append(
-                        {**properties, "geometry_wkt": self._geometry_to_wkt(geometry)}
-                    )
+                    wkt_geom = self._geometry_to_wkt(geometry)
+                    if wkt_geom:  # Only add features with valid geometry
+                        feature_data.append({**properties, "geometry_wkt": wkt_geom})
+                    else:
+                        self.log.debug(f"Skipping feature with invalid geometry: {geometry}")
 
             if not feature_data:
-                return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
+                self.log.warning("No features with valid geometry found in payload")
+                # Create empty table for consistency
+                self.conn.execute(
+                    f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+                )
+                return f"extracted_features_{table_suffix}"
 
             # Create table directly from the list of dictionaries using DuckDB's native capabilities
             # Get column names from the first feature
@@ -205,7 +214,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create the table schema
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE raw_features (
+                CREATE OR REPLACE TABLE raw_features_{table_suffix} (
                     {", ".join([f"{col} VARCHAR" for col in columns])}
                 )
             """)
@@ -222,59 +231,95 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                     self.conn.execute(
                         f"""
-                        INSERT INTO raw_features ({", ".join(columns)})
+                        INSERT INTO raw_features_{table_suffix} ({", ".join(columns)})
                         VALUES ({placeholders})
                     """,
                         values,
                     )
 
-            # Apply column mapping in SQL
+            # Apply column mapping in SQL - only include columns that exist in the data
             column_mappings = []
+            available_columns = set(columns)
+
             for old_col, new_col in column_mapping.items():
-                column_mappings.append(f'"{old_col}" as "{new_col}"')
+                if old_col in available_columns:
+                    column_mappings.append(f'"{old_col}" as "{new_col}"')
+
+            # Add any unmapped columns with their original names
+            for col in columns:
+                if col != "geometry_wkt" and col not in column_mapping:
+                    column_mappings.append(f'"{col}"')
 
             # Create spatial table with transformed geometry as WKT string
             # Return DuckDB relation instead of pandas  to avoid Shapely conversion
             result_query = f"""
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
-                    ST_AsText(ST_Transform(ST_GeomFromText(geometry_wkt), 'EPSG:25832', 'EPSG:4326')) as geometry_wkt
-                FROM raw_features
-                WHERE geometry_wkt IS NOT NULL
+                    CASE 
+                        WHEN geometry_wkt IS NOT NULL AND geometry_wkt != '' THEN
+                            COALESCE(
+                                ST_AsText(ST_Transform(ST_GeomFromText(geometry_wkt), 'EPSG:25832', 'EPSG:4326')),
+                                geometry_wkt  -- Fallback to original if transformation fails
+                            )
+                        ELSE NULL
+                    END as geometry_wkt
+                FROM raw_features_{table_suffix}
+                WHERE geometry_wkt IS NOT NULL AND geometry_wkt != ''
             """
 
-            return self.conn.execute(result_query)
+            # Execute query and return as a table/relation that can be registered
+            self.conn.execute(
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS {result_query}"
+            )
+            return f"extracted_features_{table_suffix}"
 
         except json.JSONDecodeError as e:
             self.log.error(f"Error parsing JSON payload: {e}")
-            return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
+            # Create empty table for consistency
+            self.conn.execute(
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+            )
+            return f"extracted_features_{table_suffix}"
         except Exception as e:
             self.log.error(f"Error processing payload: {e}")
-            return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
+            # Create empty table for consistency
+            self.conn.execute(
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+            )
+            return f"extracted_features_{table_suffix}"
 
     def _geometry_to_wkt(self, geometry_dict: dict) -> str:
         """Convert GeoJSON geometry to WKT format for DuckDB-spatial."""
-        geom_type = geometry_dict.get("type")
-        coordinates = geometry_dict.get("coordinates", [])
+        try:
+            geom_type = geometry_dict.get("type")
+            coordinates = geometry_dict.get("coordinates", [])
 
-        if geom_type == "Point":
-            if len(coordinates) >= 2:
-                return f"POINT({coordinates[0]} {coordinates[1]})"
-        elif geom_type == "Polygon":
-            if coordinates and len(coordinates) > 0:
-                exterior = coordinates[0]
-                points = " ".join([f"{pt[0]} {pt[1]}" for pt in exterior])
-                return f"POLYGON(({points}))"
-        elif geom_type == "MultiPolygon":
-            if coordinates:
-                polygons = []
-                for polygon in coordinates:
-                    if polygon and len(polygon) > 0:
-                        exterior = polygon[0]
-                        points = " ".join([f"{pt[0]} {pt[1]}" for pt in exterior])
-                        polygons.append(f"(({points}))")
-                if polygons:
-                    return f"MULTIPOLYGON({', '.join(polygons)})"
+            if geom_type == "Point":
+                if len(coordinates) >= 2:
+                    return f"POINT({coordinates[0]} {coordinates[1]})"
+            elif geom_type == "Polygon":
+                if coordinates and len(coordinates) > 0:
+                    exterior = coordinates[0]
+                    if len(exterior) >= 4:  # Polygon must have at least 4 points (closed)
+                        points = ", ".join([f"{pt[0]} {pt[1]}" for pt in exterior if len(pt) >= 2])
+                        if points:
+                            return f"POLYGON(({points}))"
+            elif geom_type == "MultiPolygon":
+                if coordinates:
+                    polygons = []
+                    for polygon in coordinates:
+                        if polygon and len(polygon) > 0:
+                            exterior = polygon[0]
+                            if len(exterior) >= 4:  # Polygon must have at least 4 points (closed)
+                                points = ", ".join(
+                                    [f"{pt[0]} {pt[1]}" for pt in exterior if len(pt) >= 2]
+                                )
+                                if points:
+                                    polygons.append(f"(({points}))")
+                    if polygons:
+                        return f"MULTIPOLYGON({', '.join(polygons)})"
+        except Exception as e:
+            self.log.warning(f"Error converting geometry to WKT: {e}")
 
         return None
 
@@ -502,24 +547,32 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Extract GeoJSON features from each payload using DuckDB relations
             tasks = [
-                self.extract_geojson_from_wfs_payload(payload, column_mapping)
-                for payload in payloads
+                self.extract_geojson_from_wfs_payload(payload, column_mapping, f"{year}_{i}")
+                for i, payload in enumerate(payloads)
             ]
             geo_relations_list = await asyncio.gather(*tasks)
 
             # Filter out empty relations and register them for UNION
             valid_relations = []
-            for i, relation in enumerate(geo_relations_list):
-                # Check if relation has data by registering and counting rows
-                table_name = f"temp_relation_{i}"
-                self.conn.register(table_name, relation)
-                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                if row_count > 0:
-                    valid_relations.append(table_name)
+            for table_name in geo_relations_list:
+                try:
+                    if isinstance(table_name, str):
+                        row_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM {table_name}"
+                        ).fetchone()[0]
+                        if row_count > 0:
+                            valid_relations.append(table_name)
+                except Exception as e:
+                    self.log.warning(f"Could not process table {table_name}: {e}")
+                    continue
 
             if not valid_relations:
                 self.log.warning(f"No valid data extracted for {layer_type} {year}")
-                return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
+                # Create empty result table
+                self.conn.execute(
+                    "CREATE OR REPLACE TABLE empty_final_result AS SELECT NULL as geometry_wkt LIMIT 0"
+                )
+                return "empty_final_result"
 
             # ✅ MIGRATION: Use DuckDB UNION operations instead of pandas concat
             if len(valid_relations) == 1:
@@ -534,11 +587,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     ORDER BY COALESCE(processed_at, current_timestamp)
                 """
 
-            # Execute the combined query to get the final relation
-            combined_relation = self.conn.execute(combined_query)
-
-            # Register the combined relation and get column info
-            self.conn.register("combined_temp", combined_relation)
+            # Execute the combined query to create a table directly
+            self.conn.execute(f"CREATE OR REPLACE TABLE combined_temp AS {combined_query}")
 
             # Get column names using DuckDB DESCRIBE
             columns_info = self.conn.execute("DESCRIBE combined_temp").fetchall()
@@ -566,6 +616,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # ✅ MIGRATION: Create table instead of  conversion
             self.conn.execute(f"CREATE OR REPLACE TABLE final_processed AS {final_query}")
+
+            # Clean up temporary table to avoid registration conflicts
+            self.conn.execute("DROP TABLE IF EXISTS combined_temp")
 
             # Check if we have data
             row_count = self.conn.execute("SELECT COUNT(*) FROM final_processed").fetchone()[0]
@@ -603,6 +656,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         )
                     else:
                         self.conn.register("final_processed", result_table)
+
+            # Clean up any remaining temporary tables to prevent accumulation
+            for table in valid_relations:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
 
             return "final_processed"
 
@@ -708,7 +765,6 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     "silver",
                     conn=self.conn,
                 )
-                self.log.info(f"Saved processed data successfully for {silver_dataset_with_year}")
 
             except Exception as e:
                 self.log.error(f"Error processing {layer_type} for year {year}: {e}")
