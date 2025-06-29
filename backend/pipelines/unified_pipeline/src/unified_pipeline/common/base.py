@@ -8,6 +8,7 @@ enforces a consistent interface across different data sources and stages.
 
 import json
 import os
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Generic, Optional, TypeVar
@@ -1112,3 +1113,22 @@ class BaseSource(Generic[T], ABC):
         if not files:
             raise FileNotFoundError(f"No silver data found for {dataset}")
         return sorted(files)[-1]  # Latest by timestamp
+
+    def _get_available_fvm_marker_years(self) -> list[int]:
+        """Get all available fvm_marker years from GCS storage."""
+        try:
+            # List all files in silver layer to extract directory names
+            files = self.gcs_util.list_files(bucket_name=self.config.bucket, prefix="silver/")
+            years = set()
+
+            for file_blob in files:
+                # Extract years from blob names like "silver/fvm_marker_2021/timestamp/data.parquet"
+                match = re.search(r"silver/fvm_marker_(\d{4})/", file_blob.name)
+                if match:
+                    year = int(match.group(1))
+                    years.add(year)
+
+            return sorted(list(years))
+        except Exception as e:
+            self.log.error(f"Error discovering fvm_marker years: {e}")
+            return []

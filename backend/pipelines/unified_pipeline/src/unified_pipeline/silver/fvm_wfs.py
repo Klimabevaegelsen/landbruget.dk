@@ -700,39 +700,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 self.log.info(f"Processed {row_count:,} features for {silver_dataset_with_year}")
 
-                # Export directly to GCS using DuckDB COPY command
-                gcs_path = f"gs://{self.config.bucket}/silver/{silver_dataset_with_year}/{silver_dataset_with_year}.parquet"
-
-                # Use temporary file approach since DuckDB can't write directly to GCS
-                import tempfile
-
-                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
-                    temp_path = tmp.name
-
-                try:
-                    # Export to temp file using DuckDB
-                    self.conn.execute(
-                        f"COPY {table_name} TO '{temp_path}' (FORMAT PARQUET, COMPRESSION zstd)"
-                    )
-
-                    # Upload to GCS using gcsfs
-                    from unified_pipeline.util.gcs_access import get_gcs_filesystem
-
-                    fs = get_gcs_filesystem()
-                    gcs_path_no_gs = gcs_path.replace("gs://", "")
-
-                    with open(temp_path, "rb") as src:
-                        with fs.open(gcs_path_no_gs, "wb") as dst:
-                            import shutil
-
-                            shutil.copyfileobj(src, dst)
-
-                finally:
-                    # Cleanup temp file
-                    import os
-
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
+                # Save using the standard base class method for consistent storage pattern
+                self._save_data(
+                    table_name,
+                    silver_dataset_with_year,
+                    self.config.bucket,
+                    "silver",
+                    conn=self.conn,
+                )
                 self.log.info(f"Saved processed data successfully for {silver_dataset_with_year}")
 
             except Exception as e:

@@ -9,7 +9,6 @@ Migrated from the standalone field_area_analysis_pipeline to the unified pipelin
 """
 
 import os
-import re
 import tempfile
 from typing import Any, Dict, List, Optional
 
@@ -80,25 +79,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info(
             f"   Memory: {self.config.memory_limit}, Threads: {self.config.thread_count}, Batch size: {self.config.batch_size:,}"
         )
-
-    def _get_available_fvm_marker_years(self) -> List[int]:
-        """Get all available fvm_marker years from GCS storage."""
-        try:
-            # List all files in silver layer to extract directory names
-            files = self.gcs_util.list_files(bucket_name=self.config.bucket, prefix="silver/")
-            years = set()
-
-            for file_blob in files:
-                # Extract years from blob names like "silver/fvm_marker_2021/timestamp/data.parquet"
-                match = re.search(r"silver/fvm_marker_(\d{4})/", file_blob.name)
-                if match:
-                    year = int(match.group(1))
-                    years.add(year)
-
-            return sorted(list(years))
-        except Exception as e:
-            self.log.error(f"Error discovering fvm_marker years: {e}")
-            return []
 
     def _load_agricultural_fields_for_years_optimized(
         self, years: List[int], silver_data: Optional[Dict[str, Any]] = None
