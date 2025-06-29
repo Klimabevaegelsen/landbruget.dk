@@ -166,11 +166,40 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
     def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> Optional[str]:
         """Get the latest silver data path for a specific dataset."""
         try:
-            pattern = f"gs://{self.config.bucket}/silver/{dataset_name}/*/data.parquet"
-            files = self.gcs_access.list_files(pattern)
-            if files:
-                return sorted(files)[-1]  # Latest by timestamp
-            return None
+            # Handle FVM marker datasets with specific naming pattern
+            if dataset_name.startswith("fvm_marker_"):
+                # For FVM marker files, look for fvm_marker_YYYY.parquet pattern
+                files = self.gcs_util.list_files(
+                    bucket_name=self.config.bucket, prefix=f"silver/{dataset_name}/"
+                )
+
+                # Find the parquet file in timestamped subdirectories
+                target_file = None
+                latest_timestamp = None
+                for file_blob in files:
+                    if file_blob.name.endswith(f"{dataset_name}.parquet"):
+                        # Extract timestamp from path like "silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
+                        path_parts = file_blob.name.split("/")
+                        if len(path_parts) >= 3:
+                            timestamp_dir = path_parts[2]  # "20241201_123456"
+                            if latest_timestamp is None or timestamp_dir > latest_timestamp:
+                                latest_timestamp = timestamp_dir
+                                target_file = file_blob.name
+
+                if target_file:
+                    gcs_path = f"gs://{self.config.bucket}/{target_file}"
+                    self.log.info(f"Found {dataset_name} data at {gcs_path}")
+                    return gcs_path
+                else:
+                    self.log.warning(f"No data found for {dataset_name}")
+                    return None
+            else:
+                # Standard pattern for other datasets
+                pattern = f"gs://{self.config.bucket}/silver/{dataset_name}/*/data.parquet"
+                files = self.gcs_access.list_files(pattern)
+                if files:
+                    return sorted(files)[-1]  # Latest by timestamp
+                return None
         except Exception as e:
             self.log.error(f"Error finding latest data for {dataset_name}: {e}")
             return None
