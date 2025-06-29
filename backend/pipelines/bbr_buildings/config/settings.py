@@ -9,8 +9,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
 
-# Load environment variables from .env file
-env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+# Load environment variables from .env file (local development only)
+env_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
+)
 load_dotenv(env_path)
 
 
@@ -58,6 +60,17 @@ class Settings(BaseModel):
     # Processing Configuration
     max_workers: int = Field(4, description="Number of workers for parallel processing")
     chunk_size: int = Field(50000, description="Chunk size for data processing")
+
+    # Geometry Fetching Configuration
+    max_geometries_to_fetch: int | None = Field(
+        None, description="Maximum number of geometries to fetch (None = fetch all)"
+    )
+    geometry_batch_size: int = Field(
+        25, description="Initial batch size for geometry fetching (will be adapted)"
+    )
+    geometry_max_workers: int = Field(
+        8, description="Number of parallel workers for geometry fetching"
+    )
 
     # Logging settings
     log_level: LogLevel = Field(LogLevel.INFO, description="Logging level")
