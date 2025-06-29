@@ -10,9 +10,8 @@ from typing import Optional
 import aiohttp
 from dotenv import load_dotenv
 from pydantic import ConfigDict
-from shapely import wkt
-from shapely.geometry import MultiPolygon, Polygon
 
+# ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -122,13 +121,17 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         return params
 
     def _parse_geometry(self, geom_elem):
-        """Parse GML geometry to WKT"""
+        """Parse GML geometry to WKT using pure coordinate-based approach.
+
+        ✅ OPTIMIZED: This method now creates WKT directly from coordinates without
+        using shapely, providing better performance for large datasets.
+        """
         try:
             pos_lists = geom_elem.findall(".//gml:posList", self.namespaces)
             if not pos_lists:
                 return None
 
-            polygons = []
+            polygon_wkts = []
             for pos_list in pos_lists:
                 if not pos_list.text:
                     continue
@@ -146,39 +149,33 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                     if pairs[0] != pairs[-1]:
                         pairs.append(pairs[0])  # Close the polygon
 
-                    polygon = Polygon(pairs)
-                    if polygon.is_valid:
-                        polygons.append(polygon)
-                    else:
-                        # Try to fix invalid polygon
-                        from shapely.ops import make_valid
+                    # Create WKT polygon directly from coordinate pairs
+                    coord_pairs = [f"{x} {y}" for x, y in pairs]
+                    polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
 
-                        fixed_polygon = make_valid(polygon)
-                        if fixed_polygon.geom_type in ("Polygon", "MultiPolygon"):
-                            polygons.append(fixed_polygon)
-                        else:
-                            logger.warning(
-                                f"Could not create valid polygon, got {fixed_polygon.geom_type}"
-                            )
+                    # Basic validation: check if we have enough points and it's closed
+                    if len(pairs) >= 4 and pairs[0] == pairs[-1]:
+                        polygon_wkts.append(polygon_wkt)
+                    else:
+                        logger.warning("Invalid polygon: insufficient points or not closed")
+                        continue
+
                 except Exception as e:
-                    logger.warning(f"Error creating polygon: {str(e)}")
+                    logger.warning(f"Error creating polygon WKT: {str(e)}")
                     continue
 
-            if not polygons:
+            if not polygon_wkts:
                 return None
 
-            if len(polygons) == 1:
-                final_geom = polygons[0]
+            # Create final WKT (MultiPolygon if multiple, single Polygon otherwise)
+            if len(polygon_wkts) == 1:
+                final_wkt = polygon_wkts[0]
             else:
-                try:
-                    final_geom = MultiPolygon(polygons)
-                except Exception as e:
-                    logger.warning(
-                        f"Error creating MultiPolygon: {str(e)}, falling back to first valid polygon"
-                    )
-                    final_geom = polygons[0]
+                # Create MultiPolygon WKT
+                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
+                final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
 
-            return wkt.dumps(final_geom)
+            return final_wkt
 
         except Exception as e:
             logger.error(f"Error parsing geometry: {str(e)}")
@@ -328,12 +325,11 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                 if failed_chunks:
                     logger.error(f"Failed to process chunks starting at indices: {failed_chunks}")
-                df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...") if k != "geometry"} for f in features_batch]
-                )
-                geometries = [wkt.loads(f["geometry"]) for f in features_batch]
-                gdf = gself.conn.execute("CREATE TABLE geo_table AS SELECT ...")
+
+                # Return the raw features batch for processing by silver layer
+                # Silver layer will use ibis/duckdb for proper data handling
                 logger.info(f"Sync completed. Total processed: {total_processed:,} features")
-                return total_processed, gdf
+                return total_processed, features_batch
 
         except Exception as e:
             self.is_sync_complete = False
@@ -399,7 +395,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error getting total count: {str(e)}")
             raise
 
-    async def run(self) -> Optional[gGeo]:
+    async def run(self) -> Optional[list]:
         """
         Run the complete Cadastral bronze layer job.
 
@@ -409,8 +405,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         3. Returns the processed data for in-memory passing to silver stage
 
         Returns:
-            Optional[gGeo]: The processed cadastral data that can be
-                                       passed to silver stage, or None if processing fails
+            Optional[list]: The raw cadastral features data that can be
+                           passed to silver stage, or None if processing fails
 
         Raises:
             Exception: If there are issues at any step in the process.
@@ -421,15 +417,15 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         self.log.info(os.getenv("SAVE_LOCAL"))
         self.log.info(self.config.save_local)
         self.log.info("Running Cadastral bronze layer job")
-        _, gdf = await self._parse_features()
-        if gdf is None:
+        _, features_data = await self._parse_features()
+        if features_data is None:
             self.log.error("Failed to fetch raw data")
             return None
         self.log.info("Fetched raw data successfully")
 
         # Save using existing method (already uses timestamped structure)
-        self._save_data(gdf, self.config.dataset, self.config.bucket, "bronze")
+        self._save_data(features_data, self.config.dataset, self.config.bucket, "bronze")
         self.log.info("Saved raw data successfully")
 
         # Return data for in-memory passing
-        return gdf
+        return features_data
