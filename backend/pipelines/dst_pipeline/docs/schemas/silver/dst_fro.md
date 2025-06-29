@@ -2,7 +2,7 @@
 
 **Pipeline:** dst_pipeline
 **Stage:** silver
-**Generated:** 2025-06-29 11:22:46
+**Generated:** 2025-06-29 11:46:44
 
 ## Table Overview
 
@@ -34,5 +34,5 @@
 | value | 0.0 | 163752.1 | 1067 | 4739.44 | 13.8% |
 | crop_category | All seeds | Other | 4 |  | 0.0% |
 | table_source | FRO | FRO | 1 |  | 0.0% |
-| processed_at | 2025-06-29T11:22:46.899357 | 2025-06-29T11:22:46.899357 | 1 |  | 0.0% |
+| processed_at | 2025-06-29T11:46:44.054038 | 2025-06-29T11:46:44.054038 | 1 |  | 0.0% |
 | source_system | Danmarks Statistik API | Danmarks Statistik API | 1 |  | 0.0% |
