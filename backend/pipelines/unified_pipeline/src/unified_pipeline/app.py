@@ -18,6 +18,8 @@ from unified_pipeline.bronze.agricultural_fields import (
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
 from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeConfig
 from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
+from unified_pipeline.bronze.dmi import DMIBronze, DMIBronzeConfig
+from unified_pipeline.bronze.dst import DSTBronze, DSTBronzeConfig
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
 from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronze,
@@ -53,6 +55,8 @@ from unified_pipeline.silver.agricultural_fields import (
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
 from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
+from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
+from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
 from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
