@@ -476,13 +476,10 @@ class BaseSource(Generic[T], ABC):
                 if isinstance(bronze_data, list) and len(bronze_data) > 0:
                     if isinstance(bronze_data[0], str):
                         # List of strings (e.g., XML payloads) - create table directly in DuckDB
-                        self.conn.execute(
-                            f"""
+                        self.conn.execute(f"""
                             CREATE TABLE {table_name} AS 
-                            SELECT unnest(?) as payload
-                        """,
-                            [bronze_data],
-                        )
+                            SELECT unnest({bronze_data}) as payload
+                        """)
                         return table_name
                     else:
                         # List of dicts - use DuckDB JSON functions
@@ -1069,13 +1066,24 @@ class BaseSource(Generic[T], ABC):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         gcs_path = f"gs://{bucket}/{stage}/{dataset}/{timestamp}/data.parquet"
 
-        # ✅ OPTIMIZED: Direct export from DuckDB table to GCS
-        self.gcs_access.upload_from_duckdb_table(
-            table_name,
-            gcs_path,
-            compression="zstd",
-            row_group_size=100000,
-        )
+        # ✅ OPTIMIZED: Export directly from instance's DuckDB connection
+        import shutil
+        import tempfile
+
+        # Build COPY options for optimal Parquet export
+        copy_options = ["FORMAT PARQUET"]
+        copy_options.append("COMPRESSION zstd")
+        copy_options.append("ROW_GROUP_SIZE 100000")
+        options_str = ", ".join(copy_options)
+
+        with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
+            # Export from instance's DuckDB connection where table was created
+            self.conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
+
+            # Stream copy to GCS without loading into memory
+            with open(tmp.name, "rb") as src:
+                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
         self.log.info(f"✅ Saved {table_name} directly to {gcs_path} (optimized)")
         return gcs_path

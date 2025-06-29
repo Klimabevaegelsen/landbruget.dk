@@ -314,12 +314,44 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             continue
 
                         # ✅ OPTIMIZED: Save directly without DataFrame conversion
-                        gcs_path = self.save_data_direct(
-                            processed_table, silver_dataset_name, self.config.bucket, "silver"
-                        )
-                        self.log.info(
-                            f"Successfully processed and saved DAGI {layer_name} to {gcs_path}"
-                        )
+                        # First copy table to gcs_access connection for saving
+                        try:
+                            self.log.info(
+                                f"Copying table {processed_table} to GCS connection for saving"
+                            )
+                            self.gcs_access.duckdb_conn.execute(
+                                f"DROP TABLE IF EXISTS {processed_table}"
+                            )
+                            rows = self.conn.execute(f"SELECT * FROM {processed_table}").fetchall()
+                            columns = [
+                                desc[0]
+                                for desc in self.conn.execute(
+                                    f"DESCRIBE {processed_table}"
+                                ).fetchall()
+                            ]
+
+                            # Create table in gcs_access connection
+                            column_defs = ", ".join([f'"{col}" VARCHAR' for col in columns])
+                            self.gcs_access.duckdb_conn.execute(
+                                f"CREATE TABLE {processed_table} ({column_defs})"
+                            )
+
+                            # Insert data
+                            placeholders = ", ".join(["?" for _ in columns])
+                            for row in rows:
+                                self.gcs_access.duckdb_conn.execute(
+                                    f"INSERT INTO {processed_table} VALUES ({placeholders})", row
+                                )
+
+                            gcs_path = self.save_data_direct(
+                                processed_table, silver_dataset_name, self.config.bucket, "silver"
+                            )
+                            self.log.info(
+                                f"Successfully processed and saved DAGI {layer_name} to {gcs_path}"
+                            )
+                        except Exception as e:
+                            self.log.error(f"Error saving DAGI {layer_name}: {e}")
+                            continue
 
                         # Store table name for potential gold stage consumption
                         processed_data[layer_name] = processed_table
