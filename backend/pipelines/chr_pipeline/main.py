@@ -23,12 +23,13 @@ from bronze.load_stamdata import ENDPOINTS as STAMDATA_ENDPOINTS
 from bronze.load_stamdata import create_soap_client as create_stamdata_client
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
+from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,11 @@ def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List
     if not response or not hasattr(response, "Response"):
         logger.error("Invalid or empty Stamdata response")
         return []
+
+    # Save the raw response to the export buffer
+    from bronze.export import save_raw_data
+
+    save_raw_data(raw_response=response, data_type="stamdata_species_usage", identifier="all")
 
     combinations = []
     for combo in response.Response if isinstance(response.Response, list) else [response.Response]:

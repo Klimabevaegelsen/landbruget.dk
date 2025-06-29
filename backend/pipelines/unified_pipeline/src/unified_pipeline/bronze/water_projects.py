@@ -21,7 +21,6 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -431,27 +430,48 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
         self.log.info(f"Total raw features fetched: {len(raw_features)}")
         return raw_features
 
-    def create_dataframe(self, raw_data: list[tuple[str, str]]) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: list[tuple[str, str]]):
         """
-        Create a DataFrame from the raw data.
-        This method takes a list of tuples and converts it into a pandas DataFrame.
+        Create a  from the raw data using DuckDB.
+        This method takes a list of tuples and converts it into a DuckDB table.
 
         Args:
             raw_data (list[tuple[str, str]]): List of tuples containing layer and feature data.
 
         Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata.
+            str: Table name containing the raw data with metadata.
         """
-        df = pd.DataFrame(
-            {
-                "payload": [data[1] for data in raw_data],
-                "layer": [data[0] for data in raw_data],
-            }
+        # ✅ MIGRATION: Use DuckDB with proper Python list handling
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Create a table by inserting values one by one to avoid complex escaping
+        self.conn.execute(
+            "CREATE OR REPLACE TABLE temp_water_data (payload VARCHAR, layer VARCHAR)"
         )
-        df["source"] = self.config.name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
-        return df
+
+        # Use prepared statements to safely insert the data
+        for layer, data in raw_data:
+            self.conn.execute("INSERT INTO temp_water_data VALUES (?, ?)", [data, layer])
+
+        # ✅ MIGRATION: Create the final table with metadata columns directly
+        self.conn.execute(
+            """
+            CREATE OR REPLACE TABLE final_dataframe AS
+            SELECT 
+                payload,
+                layer,
+                ? as source,
+                ? as created_at,
+                ? as updated_at
+            FROM temp_water_data
+        """,
+            [self.config.name, current_timestamp, current_timestamp],
+        )
+
+        # Clean up the temporary table
+        self.conn.execute("DROP TABLE temp_water_data")
+
+        return "final_dataframe"
 
     async def run(self) -> Optional[list[tuple[str, str]]]:
         """
@@ -462,7 +482,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
 
         1. Fetches raw data from all configured layers and services
         2. Validates that data was successfully retrieved
-        3. Creates a standardized DataFrame with metadata
+        3. Creates a standardized  with metadata
         4. Saves the raw data to Google Cloud Storage
         5. Returns the raw data for in-memory passing to silver stage
 
@@ -483,8 +503,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
                 self.log.error("No raw data fetched")
                 return None
             self.log.info("Fetched raw data successfully")
-            df = self.create_dataframe(raw_data)
-            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
+            table_name = self.create_dataframe(raw_data)
+            self._save_data(table_name, self.config.dataset, self.config.bucket, stage="bronze")
             self.log.info("Saved raw data successfully")
             self.log.info("Water Projects bronze job completed successfully")
 

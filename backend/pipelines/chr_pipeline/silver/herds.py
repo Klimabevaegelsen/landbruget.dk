@@ -127,7 +127,8 @@ def create_herds_table(
             return None  # Return None if no rows
 
         logging.info(f"Saving herds table with {rows} rows.")
-        saved_path = export.save_table(output_path, herds_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, herds_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herds table - no path returned")
             return None
@@ -254,7 +255,8 @@ def create_herd_owners_table(
             return None
 
         logging.info(f"Saving herd_owners table with attributes ({rows} rows).")
-        saved_path = export.save_table(output_path, herd_owners_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, herd_owners_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_owners table - no path returned")
             return None
@@ -377,7 +379,8 @@ def create_herd_users_table(
             return None
 
         logging.info(f"Saving herd_users table with attributes ({rows} rows).")
-        saved_path = export.save_table(output_path, herd_users_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, herd_users_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_users table - no path returned")
             return None
@@ -487,7 +490,8 @@ def create_herd_sizes_table(
             return None
 
         logging.info(f"Saving herd_sizes table with {rows} rows.")
-        saved_path = export.save_table(output_path, herd_sizes_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, herd_sizes_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save herd_sizes table - no path returned")
             return None

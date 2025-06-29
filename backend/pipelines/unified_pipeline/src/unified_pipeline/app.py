@@ -266,6 +266,22 @@ def execute(cli_config: cli.CliConfig) -> None:
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
+        cli.Source.dst: {
+            cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
+            cli.Stage.silver: [(DSTSilver, DSTSilverConfig)],
+            cli.Stage.all: [
+                (DSTBronze, DSTBronzeConfig),
+                (DSTSilver, DSTSilverConfig),
+            ],
+        },
+        cli.Source.dmi: {
+            cli.Stage.bronze: [(DMIBronze, DMIBronzeConfig)],
+            cli.Stage.silver: [(DMISilver, DMISilverConfig)],
+            cli.Stage.all: [
+                (DMIBronze, DMIBronzeConfig),
+                (DMISilver, DMISilverConfig),
+            ],
+        },
     }
 
     # Retrieve jobs for given source and stage

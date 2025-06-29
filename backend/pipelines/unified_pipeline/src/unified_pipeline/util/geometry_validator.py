@@ -1,4 +1,3 @@
-import geopandas as gpd
 from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.util.log_util import Logger
@@ -57,7 +56,7 @@ def is_valid_for_bigquery(geom: Polygon) -> bool:
         return False
 
 
-def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) -> gpd.GeoDataFrame:
+def validate_and_transform_geometries(gdf: gGeo, dataset_name: str) -> gGeo:
     """
     Validates and transforms geometries for BigQuery compatibility.
 
@@ -72,11 +71,11 @@ def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) 
     4. Final cleanup and validation in WGS84
 
     Args:
-        gdf: GeoDataFrame with geometries in any CRS
+        gdf: Geo with geometries in any CRS
         dataset_name: Name of dataset for logging
 
     Returns:
-        GeoDataFrame with valid geometries in EPSG:4326
+        Geo with valid geometries in EPSG:4326
 
     Raises:
         ValueError: If geometries cannot be made valid
@@ -127,7 +126,7 @@ def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) 
             raise ValueError(f"Found {self_intersecting.sum()} self-intersecting geometries")
 
         # Remove nulls and empty geometries
-        gdf = gpd.GeoDataFrame(gdf.dropna(subset=["geometry"]), crs=gdf.crs)
+        gdf = gself.conn.execute("CREATE TABLE geo_table AS SELECT ..."), crs=gdf.crs)
         gdf = gdf[~gdf.geometry.is_empty]
 
         final_count = len(gdf)

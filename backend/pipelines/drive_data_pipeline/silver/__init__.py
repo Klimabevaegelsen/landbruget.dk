@@ -1,6 +1,6 @@
 """Silver layer module for Google Drive data pipeline."""
 
-from .duckdb_helper import DuckDBHelper
+from .duckdb_base import DuckDBProcessor
 from .parquet_manager import ParquetManager
 from .processor import SilverProcessor
 from .storage import SilverStorageManager
@@ -8,6 +8,6 @@ from .storage import SilverStorageManager
 __all__ = [
     "SilverProcessor",
     "SilverStorageManager",
-    "DuckDBHelper",
+    "DuckDBProcessor",
     "ParquetManager",
-] 
+]

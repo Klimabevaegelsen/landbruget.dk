@@ -1,3 +1,4 @@
+import duckdb
 #!/usr/bin/env python3
 """
 Standalone test for the DuckDBHelper class.
@@ -8,7 +9,6 @@ import sys
 from pathlib import Path
 
 # Third-party imports
-import pandas as pd
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
@@ -29,11 +29,7 @@ def test_duckdb_helper():
     helper = DuckDBHelper()
     
     # Create a test DataFrame
-    df = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5],
-        'name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
-        'value': [10.5, 20.1, 30.7, 40.2, 50.9]
-    })
+    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
     
     print("Created test DataFrame:")
     print(df.head())

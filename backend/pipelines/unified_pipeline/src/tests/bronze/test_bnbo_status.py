@@ -1,7 +1,6 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 from tenacity import stop_after_attempt
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
@@ -277,16 +276,16 @@ async def test_run_no_data(bnbo_status_bronze: BNBOStatusBronze) -> None:
 
 
 def test_create_dataframe(bnbo_status_bronze: BNBOStatusBronze) -> None:
-    """Test the create_dataframe method that converts raw data to a DataFrame with metadata."""
+    """Test the create_dataframe method that converts raw data to a  with metadata."""
     raw_data = ["<xml>data1</xml>", "<xml>data2</xml>", "<xml>data3</xml>"]
 
     result_df = bnbo_status_bronze.create_dataframe(raw_data)
 
-    assert isinstance(result_df, pd.DataFrame)
+    assert isinstance(result_df, )
     assert set(result_df.columns) == {"payload", "created_at", "source", "updated_at"}
     assert len(result_df) == 3
     assert result_df["payload"].tolist() == raw_data
     assert all(result_df["source"] == bnbo_status_bronze.config.name)
 
-    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["created_at"])
-    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["updated_at"])
+    assert all(isinstance(ts, Timestamp) for ts in result_df["created_at"])
+    assert all(isinstance(ts, Timestamp) for ts in result_df["updated_at"])

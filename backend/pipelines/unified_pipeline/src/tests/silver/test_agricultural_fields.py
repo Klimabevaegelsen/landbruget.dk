@@ -5,8 +5,6 @@ Tests for the AgriculturalFieldsSilver class.
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 from unified_pipeline.silver.agricultural_fields import (
@@ -79,9 +77,9 @@ def sample_payload() -> str:
 
 
 @pytest.fixture
-def sample_dataframe() -> pd.DataFrame:
-    """Return a sample DataFrame with payloads."""
-    return pd.DataFrame(
+def sample_dataframe() -> :
+    """Return a sample  with payloads."""
+    return (
         {
             "payload": [
                 '{"features":[{"attributes":{"Marknr":"123","IMK_areal":5.5,"CVR":"12345678"},'
@@ -135,12 +133,12 @@ async def test_extract_geojson_from_payload_error(silver_source: AgriculturalFie
 
 @pytest.mark.asyncio
 async def test_process_data_success(
-    silver_source: AgriculturalFieldsSilver, sample_dataframe: pd.DataFrame
+    silver_source: AgriculturalFieldsSilver, sample_dataframe: 
 ) -> None:
     """Test successfully processing data."""
 
-    # Create a mock GeoDataFrame to return from validate_and_transform_geometries
-    mock_gdf = gpd.GeoDataFrame(
+    # Create a mock Geo to return from validate_and_transform_geometries
+    mock_gdf = gGeo(
         {
             "field_id": ["123", "456"],
             "area_ha": [5.5, 3.2],
@@ -167,7 +165,7 @@ async def test_process_data_empty_result(
 ) -> None:
     """Test processing data with empty result."""
 
-    empty_df = pd.DataFrame({"payload": []})
+    empty_df = ({"payload": []})
     result = await silver_source._process_data(empty_df, "test_dataset")
     assert result.empty
     mock_validate.assert_not_called()
@@ -177,8 +175,8 @@ async def test_process_data_empty_result(
 async def test_process_data_column_renaming(silver_source: AgriculturalFieldsSilver) -> None:
     """Test column renaming during data processing."""
 
-    # Create a DataFrame with a column that needs renaming
-    df_with_special_chars = pd.DataFrame(
+    # Create a  with a column that needs renaming
+    df_with_special_chars = (
         {
             "payload": [
                 '{"features":[{"attributes":{"Marknr":"123","field.name":"Field(1)","field(test)":"test"},'
@@ -187,8 +185,8 @@ async def test_process_data_column_renaming(silver_source: AgriculturalFieldsSil
         }
     )
 
-    # Create a GeoDataFrame that would be created from the payload
-    gdf = gpd.GeoDataFrame(
+    # Create a Geo that would be created from the payload
+    gdf = gGeo(
         {
             "field_id": ["123"],
             "field.name": ["Field(1)"],
@@ -218,11 +216,11 @@ async def test_run_success(silver_source: AgriculturalFieldsSilver) -> None:
 
     # Mock the read_bronze_data method
     silver_source._read_bronze_data = MagicMock(  # type: ignore[method-assign]
-        return_value=pd.DataFrame({"payload": ["test_payload"]})
+        return_value=({"payload": ["test_payload"]})
     )
 
     # Mock the _process_data method
-    mock_geo_df = gpd.GeoDataFrame({"field_id": ["123"]})
+    mock_geo_df = gGeo({"field_id": ["123"]})
     silver_source._process_data = AsyncMock(return_value=mock_geo_df)  # type: ignore[method-assign]
 
     # Mock the _save_data method
@@ -262,7 +260,7 @@ async def test_run_process_data_failure(silver_source: AgriculturalFieldsSilver)
 
     # Mock the read_bronze_data method
     silver_source._read_bronze_data = MagicMock(  # type: ignore[method-assign]
-        return_value=pd.DataFrame({"payload": ["test_payload"]})
+        return_value=({"payload": ["test_payload"]})
     )
 
     # Mock the _process_data method to return None (failure)

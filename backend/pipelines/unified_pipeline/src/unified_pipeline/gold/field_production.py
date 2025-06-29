@@ -5,7 +5,7 @@ This module implements the gold layer processor for field production estimates.
 It combines agricultural fields data with DST (Danish Statistics) yield data to create
 comprehensive production estimates for analytics and downstream consumption.
 
-Migrated from the standalone field_production_pipeline to the unified pipeline architecture.
+Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 """
 
 import os
@@ -14,17 +14,15 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import duckdb
-import pandas as pd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 # Import the DST mapping table from the DST pipeline
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent / "dst_pipeline"))
-from dst_field_crop_mapping_table import get_dst_category
 
 
 class FieldProductionGoldConfig(BaseJobConfig):
@@ -59,7 +57,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
 
 class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterface):
     """
-    Gold layer processor for field production estimates.
+    Gold layer processor for field production estimates using pure DuckDB.
 
     Combines agricultural fields and DST yield data to create
     comprehensive production estimates for analytics and downstream consumption.
@@ -69,13 +67,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         super().__init__(config, gcs_util)
         self.log = Logger.get_logger()
 
-        # Initialize DuckDB connection for spatial operations
-        self.conn = duckdb.connect()
-        self._configure_duckdb()
+        # Initialize optimized GCS access
+        self.gcs_access = GCSDataAccess()
 
-        # Initialize spatial processing
-        self.dst_zone_mapping = None
-        self.spatial_conn = None
+        # Use the optimized DuckDB connection from GCS access
+        self.conn = self.gcs_access.duckdb_conn
+        self._configure_duckdb()
 
     def _configure_duckdb(self):
         """Configure DuckDB for optimal spatial operations."""
@@ -83,9 +80,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.conn.execute("SET threads = 4")  # Use all available CPU cores
         self.conn.execute("SET enable_progress_bar = true")
         self.conn.execute("SET preserve_insertion_order = false")
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
 
+        # Spatial extensions already loaded by GCSDataAccess
         # Verify SPATIAL_JOIN operator availability
         try:
             version_result = self.conn.execute(
@@ -123,75 +119,35 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]
-    ) -> Optional[pd.DataFrame]:
-        """Load agricultural fields data for all available years."""
-        all_fields = []
+    ) -> str:
+        """DEPRECATED: Use _process_single_year_with_dst_yields instead for memory efficiency."""
+        raise NotImplementedError("This method has been replaced by year-by-year processing")
 
-        for year in years:
-            dataset_name = f"fvm_marker_{year}"
-            try:
-                # Try to load from silver_data first
-                if silver_data and dataset_name in silver_data:
-                    year_data = silver_data[dataset_name]
-                    self.log.info(f"Using in-memory data for {dataset_name}")
-                else:
-                    # Load from GCS
-                    year_data = self._read_data_from_storage(
-                        dataset_name, self.config.bucket, stage="silver"
-                    )
-                    self.log.info(f"Loaded {dataset_name} from GCS")
-
-                if year_data is not None and len(year_data) > 0:
-                    # Add year column if not present
-                    if "year" not in year_data.columns:
-                        year_data["year"] = year
-                    all_fields.append(year_data)
-                    self.log.info(f"Added {len(year_data)} fields for year {year}")
-                else:
-                    self.log.warning(f"No data found for {dataset_name}")
-
-            except Exception as e:
-                self.log.error(f"Error loading {dataset_name}: {e}")
-                continue
-
-        if not all_fields:
-            return None
-
-        # ✅ MIGRATION: Use DuckDB UNION operations instead of pandas concat
-        if len(all_fields) == 1:
-            combined_fields = all_fields[0]
-        else:
-            # Register all dataframes and combine with UNION
-            for i, df in enumerate(all_fields):
-                self.conn.register(f"fields_year_{i}", df)
-
-            # Create UNION query for all years
-            union_parts = [f"SELECT * FROM fields_year_{i}" for i in range(len(all_fields))]
-            union_query = " UNION ALL ".join(union_parts)
-
-            combined_fields = self.conn.execute(union_query).df()
-
-        self.log.info(f"Combined {len(combined_fields)} fields across {len(all_fields)} years")
-
-        return combined_fields
-
-    def _load_silver_data(
-        self, dataset: str, silver_data: Optional[Dict[str, Any]]
-    ) -> Optional[Any]:
-        """Load silver data with fallback to storage."""
-
+    def _load_silver_data_to_table(
+        self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
+    ) -> bool:
+        """Load silver data into DuckDB table."""
         if silver_data and dataset in silver_data:
             self.log.info(f"Using in-memory silver data for {dataset}")
-            return silver_data[dataset]
+            self.conn.register(table_name, silver_data[dataset])
+            return True
 
-        # Fallback to storage
-        self.log.info(f"Reading {dataset} from GCS storage")
-        return self._read_data_from_storage(dataset, self.config.bucket, stage="silver")
+        # Load from GCS using optimized access
+        gcs_path = f"gs://{self.config.bucket}/silver/{dataset}/latest/data.parquet"
+        try:
+            self.gcs_access.query_parquet_direct(
+                gcs_path, "SELECT * FROM read_parquet_table", table_name
+            )
+            self.log.info(f"Loaded {dataset} from GCS into table {table_name}")
+            return True
+        except Exception as e:
+            self.log.error(f"Failed to load {dataset}: {e}")
+            return False
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        """Run field production estimation gold processing."""
+        """Run field production estimation gold processing using pure DuckDB."""
 
-        self.log.info("Starting field production gold layer processing")
+        self.log.info("Starting field production gold layer processing with DuckDB")
 
         # Get all available years
         available_years = self._get_available_fvm_marker_years()
@@ -203,160 +159,253 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             f"Found fvm_marker data for years: {available_years} ({len(available_years)} years)"
         )
 
-        # Load DST zone mapping (this is small and can stay in memory)
-        dst_zone_mapping = self._load_silver_data(self.config.dst_zone_mapping_dataset, silver_data)
-        if dst_zone_mapping is None:
+        # Load DST zone mapping into DuckDB table (small dataset, can stay in memory)
+        if not self._load_silver_data_to_table(
+            self.config.dst_zone_mapping_dataset, "dst_zones_raw", silver_data
+        ):
             self.log.error("DST zone mapping is required for production estimation")
             return
 
-        self.log.info(f"Loaded DST zone mapping with {len(dst_zone_mapping)} zones")
+        # Setup spatial processing with DST zones
+        self._setup_spatial_processing_with_dst_zones()
 
-        # Setup spatial processing with DST zones (once)
-        self._setup_spatial_processing_with_dst_zones(dst_zone_mapping)
-
-        # Load DST yield data (this is relatively small and can stay in memory)
-        dst_data = self._load_dst_yield_data(silver_data)
-        if not dst_data:
+        # Load DST yield data into DuckDB tables (relatively small, can stay in memory)
+        dst_tables_loaded = self._load_dst_yield_data(silver_data)
+        if not dst_tables_loaded:
             self.log.warning("No DST yield data available - production estimates will be limited")
-        else:
-            total_yield_records = sum(len(df) for df in dst_data.values())
-            self.log.info(
-                f"Loaded {total_yield_records} yield records from {len(dst_data)} DST datasets"
-            )
 
-        # Process each year individually to avoid memory issues
-        all_production_estimates = []
-        batch_size = self.config.batch_size
+        # Create final results table
+        self.conn.execute("DROP TABLE IF EXISTS final_production_estimates")
+        self.conn.execute("""
+            CREATE TABLE final_production_estimates AS
+            SELECT * FROM (VALUES 
+                ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy', 
+                 0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp)
+            ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming, 
+                   landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha, 
+                   yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at)
+            WHERE false
+        """)
+
+        # Process each year individually to control memory usage
         total_fields_processed = 0
-
         for year in available_years:
             self.log.info(f"Processing year {year}...")
 
-            # Load agricultural fields for this year only
-            year_fields = self._load_agricultural_fields_for_years([year], silver_data)
-            if year_fields is None or year_fields.empty:
-                self.log.warning(f"No agricultural fields data found for year {year}")
+            try:
+                # Load and process single year
+                year_count = self._process_single_year_with_dst_yields(year, silver_data)
+                if year_count > 0:
+                    total_fields_processed += year_count
+                    self.log.info(f"✅ Completed year {year}: {year_count:,} fields processed")
+                else:
+                    self.log.warning(f"No fields processed for year {year}")
+
+                # Memory cleanup after each year
+                self.conn.execute("DROP TABLE IF EXISTS current_year_fields")
+                self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
+                self.conn.execute("DROP TABLE IF EXISTS year_production_estimates")
+
+            except Exception as e:
+                self.log.error(f"Error processing year {year}: {e}")
                 continue
 
-            self.log.info(f"  Loaded {len(year_fields)} fields for year {year}")
-            total_fields_processed += len(year_fields)
-
-            # Process year fields in batches
-            total_batches = (len(year_fields) + batch_size - 1) // batch_size
-
-            for batch_idx in range(total_batches):
-                start_idx = batch_idx * batch_size
-                end_idx = min((batch_idx + 1) * batch_size, len(year_fields))
-                batch = year_fields.iloc[start_idx:end_idx]
-
-                self.log.info(
-                    f"    Processing batch {batch_idx + 1}/{total_batches} ({len(batch)} fields)"
-                )
-
-                # Process batch with DST yields
-                batch_estimates = self._process_field_batch_with_dst_yields(batch, dst_data, year)
-                if not batch_estimates.empty:
-                    all_production_estimates.append(batch_estimates)
-
-                # Progress update
-                progress = (batch_idx + 1) / total_batches * 100
-                self.log.info(f"      ⏱️ Batch completed | Progress: {progress:.1f}%")
-
-            # Clear year data from memory after processing
-            del year_fields
-            self.log.info(f"  ✅ Completed year {year}")
-
-        # Combine all results
-        if not all_production_estimates:
-            self.log.error("No production estimates were generated")
+        if total_fields_processed == 0:
+            self.log.error("No fields were processed across all years")
             return
 
         self.log.info(
-            f"🔗 Combining {len(all_production_estimates)} batches from {len(available_years)} years..."
+            f"Processed {total_fields_processed:,} fields across {len(available_years)} years"
         )
 
-        # ✅ MIGRATION: Use DuckDB UNION operations instead of pandas concat
-        if len(all_production_estimates) == 1:
-            final_estimates = all_production_estimates[0]
-        else:
-            # Register all dataframes and combine with UNION
-            for i, df in enumerate(all_production_estimates):
-                self.conn.register(f"production_batch_{i}", df)
+        # Generate summary statistics using DuckDB
+        self._generate_summary_statistics()
 
-            # Create UNION query for all batches
-            union_parts = [
-                f"SELECT * FROM production_batch_{i}" for i in range(len(all_production_estimates))
-            ]
-            union_query = " UNION ALL ".join(union_parts)
+        # Save to gold layer using optimized export
+        self._save_results_to_gold()
 
-            final_estimates = self.conn.execute(union_query).df()
+        self.log.info("Field production gold layer processing completed")
 
-        # Log summary statistics
-        total_fields = len(final_estimates)
-        years_covered = sorted(final_estimates["year"].unique())
-        crops_covered = len(final_estimates["crop_type"].unique())
-        fields_with_yields = len(final_estimates[final_estimates["yield_estimate_hkg_ha"].notna()])
-        fields_with_production = len(
-            final_estimates[final_estimates["production_estimate_hkg"].notna()]
-        )
-        yield_coverage = fields_with_yields / total_fields if total_fields > 0 else 0
-        production_coverage = fields_with_production / total_fields if total_fields > 0 else 0
+    def _process_single_year_with_dst_yields(
+        self, year: int, silver_data: Optional[Dict[str, Any]]
+    ) -> int:
+        """Process a single year of fields with DST yields to control memory usage."""
+        try:
+            dataset_name = f"fvm_marker_{year}"
 
-        self.log.info("Field production summary:")
-        self.log.info(f"  Total fields processed: {total_fields_processed:,}")
-        self.log.info(f"  Total production estimates: {total_fields:,}")
-        self.log.info(
-            f"  Years covered: {len(years_covered)} years ({min(years_covered)}-{max(years_covered)})"
-        )
-        self.log.info(f"  Unique crop types: {crops_covered}")
-        self.log.info(
-            f"  Fields with yield estimates: {fields_with_yields:,} ({yield_coverage:.1%})"
-        )
-        self.log.info(
-            f"  Fields with production estimates: {fields_with_production:,} ({production_coverage:.1%})"
-        )
+            # Load single year of agricultural fields
+            if silver_data and dataset_name in silver_data:
+                self.log.info(f"Using in-memory data for {dataset_name}")
+                # Register the  and create table
+                self.conn.register(f"temp_{dataset_name}", silver_data[dataset_name])
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE current_year_fields AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        area_ha,
+                        crop_type,
+                        organic_farming,
+                        {year} as year,
+                        ST_GeomFromText(geometry) as geometry
+                    FROM temp_{dataset_name}
+                    WHERE geometry IS NOT NULL
+                """)
+            else:
+                # Load from GCS using optimized access
+                gcs_path = f"gs://{self.config.bucket}/silver/{dataset_name}/latest/data.parquet"
+                try:
+                    # Use optimized GCS access to create table directly
+                    temp_table = self.gcs_access.query_parquet_direct(
+                        gcs_path,
+                        f"""SELECT 
+                            field_id,
+                            block_id,
+                            cvr_number,
+                            area_ha,
+                            crop_type,
+                            organic_farming,
+                            {year} as year,
+                            ST_GeomFromText(geometry) as geometry
+                        FROM read_parquet_table 
+                        WHERE geometry IS NOT NULL""",
+                        "current_year_fields",
+                    )
 
-        # Summary by year
-        for year in years_covered:
-            year_data = final_estimates[final_estimates["year"] == year]
-            year_count = len(year_data)
-            year_with_production = len(year_data[year_data["production_estimate_hkg"].notna()])
-            year_coverage = year_with_production / year_count if year_count > 0 else 0
-            self.log.info(
-                f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1%})"
-            )
+                except Exception as e:
+                    self.log.warning(f"Could not load {dataset_name} from GCS: {e}")
+                    return 0
 
-        # Check quality thresholds
-        if yield_coverage < self.config.min_yield_coverage:
-            self.log.warning(
-                f"Yield coverage {yield_coverage:.1%} below minimum threshold {self.config.min_yield_coverage:.1%}"
-            )
+            # Check if any data was loaded
+            year_count = self.conn.execute("SELECT COUNT(*) FROM current_year_fields").fetchone()[0]
+            if year_count == 0:
+                self.log.warning(f"No data loaded for {dataset_name}")
+                return 0
 
-        # Save to gold layer
-        self._save_data(final_estimates, self.config.dataset, self.config.bucket, stage="gold")
+            self.log.info(f"  Loaded {year_count:,} fields for year {year}")
 
-        self.log.info(
-            f"Field production gold layer processing completed - processed {len(available_years)} years"
-        )
+            # Spatial join with DST zones using SPATIAL_JOIN operator
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE year_fields_with_zones AS
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    z.landsdel_code,
+                    z.landsdel_name,
+                    z.dst_regions,
+                    ST_AsText(f.geometry) as geometry_wkt
+                FROM current_year_fields f
+                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+            """)
 
-    def _setup_spatial_processing_with_dst_zones(self, dst_zone_mapping: pd.DataFrame) -> None:
+            # Create production estimates for this year
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE year_production_estimates AS
+                WITH yield_data AS (
+                    SELECT 
+                        f.*,
+                        CASE 
+                            WHEN f.dst_regions IS NOT NULL THEN 
+                                COALESCE(
+                                    -- Try exact DST region match first
+                                    (SELECT d.value FROM dst_hst77_processed d 
+                                     WHERE d.region = f.dst_regions AND d.year = f.year 
+                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
+                                    (SELECT d.value FROM dst_gartn1_processed d 
+                                     WHERE d.region = f.dst_regions AND d.year = f.year 
+                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
+                                    (SELECT d.value FROM dst_fro_processed d 
+                                     WHERE d.region = f.dst_regions AND d.year = f.year 
+                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
+                                    (SELECT d.value FROM dst_halm1_processed d 
+                                     WHERE d.region = f.dst_regions AND d.year = f.year 
+                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
+                                    -- Fallback to national average
+                                    (SELECT d.value FROM dst_hst77_processed d 
+                                     WHERE d.region ILIKE '%Hele landet%' AND d.year = f.year 
+                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1)
+                                )
+                            ELSE NULL
+                        END as yield_estimate_hkg_ha
+                    FROM year_fields_with_zones f
+                )
+                SELECT 
+                    -- JOIN KEYS
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    -- FIELD DATA
+                    area_ha,
+                    crop_type,
+                    organic_farming,
+                    -- DST ZONE INFO
+                    landsdel_code,
+                    landsdel_name,
+                    dst_regions,
+                    -- YIELD DATA
+                    yield_estimate_hkg_ha,
+                    CASE 
+                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN 'dst_region_match'
+                        ELSE 'no_yield_data'
+                    END as yield_estimation_method,
+                    -- PRODUCTION ESTIMATE
+                    CASE 
+                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN area_ha * yield_estimate_hkg_ha
+                        ELSE NULL
+                    END as production_estimate_hkg,
+                    CASE 
+                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN 'hkg'
+                        ELSE NULL
+                    END as production_unit,
+                    -- SPATIAL INFO
+                    geometry_wkt,
+                    -- METADATA
+                    current_timestamp as created_at
+                FROM yield_data
+            """)
+
+            # Insert year results into final table
+            self.conn.execute("""
+                INSERT INTO final_production_estimates
+                SELECT * FROM year_production_estimates
+            """)
+
+            # Get count of processed fields for this year
+            processed_count = self.conn.execute(
+                "SELECT COUNT(*) FROM year_production_estimates"
+            ).fetchone()[0]
+
+            return processed_count
+
+        except Exception as e:
+            self.log.error(f"Error processing year {year}: {e}")
+            return 0
+
+    def _process_all_fields_with_dst_yields(self, fields_table: str, years: List[int]) -> None:
+        """DEPRECATED: Use _process_single_year_with_dst_yields instead for memory efficiency."""
+        raise NotImplementedError("This method has been replaced by year-by-year processing")
+
+    def _setup_spatial_processing_with_dst_zones(self) -> None:
         """Setup spatial processing with DST zones in DuckDB."""
         try:
             self.log.info("Setting up spatial processing with DST zones")
 
-            # Register DST zone mapping with DuckDB
-            self.conn.register("dst_zones_df", dst_zone_mapping)
-
-            # Create optimized DST zones table
-            self.conn.execute("DROP TABLE IF EXISTS dst_zones")
+            # Create optimized DST zones table with spatial geometry
             self.conn.execute("""
-                CREATE TABLE dst_zones AS
+                CREATE OR REPLACE TABLE dst_zones AS
                 SELECT 
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
                     ST_GeomFromText(geometry) as geometry
-                FROM dst_zones_df
+                FROM dst_zones_raw
                 WHERE geometry IS NOT NULL
             """)
 
@@ -370,225 +419,111 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.error(f"Failed to setup spatial processing with DST zones: {e}")
             raise
 
-    def _load_dst_yield_data(
-        self, silver_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, pd.DataFrame]:
-        """Load DST yield data from all available sources."""
-        dst_data = {}
+    def _load_dst_yield_data(self, silver_data: Optional[Dict[str, Any]] = None) -> List[str]:
+        """Load DST yield data into DuckDB tables."""
+        loaded_tables = []
 
         for dataset in self.config.dst_yield_datasets:
+            table_name = f"dst_{dataset}"
             try:
-                data = self._load_silver_data(dataset, silver_data)
-                if data is not None and len(data) > 0:
-                    dst_data[dataset] = data
-                    self.log.info(f"Loaded {len(data)} records from {dataset}")
+                if self._load_silver_data_to_table(dataset, table_name, silver_data):
+                    # Get record count
+                    count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                    self.log.info(f"Loaded {count} records from {dataset} into {table_name}")
+                    loaded_tables.append(table_name)
                 else:
                     self.log.warning(f"No data found for {dataset}")
             except Exception as e:
                 self.log.error(f"Error loading {dataset}: {e}")
                 continue
 
-        return dst_data
+        return loaded_tables
 
-    def _process_field_batch_with_dst_yields(
-        self, fields_batch: pd.DataFrame, dst_data: Dict[str, pd.DataFrame], year: int
-    ) -> pd.DataFrame:
-        """Process field batch with spatial joins and yield calculations."""
+    def _generate_summary_statistics(self) -> None:
+        """Generate summary statistics using DuckDB."""
         try:
-            # Register fields batch with DuckDB
-            self.conn.register("fields_batch_df", fields_batch)
-
-            # Create fields table with spatial geometries
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE current_fields AS
+            # Get summary statistics
+            summary = self.conn.execute("""
                 SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    area_ha,
-                    crop_type,
-                    organic_farming,
+                    COUNT(*) as total_fields,
+                    COUNT(DISTINCT year) as years_covered,
+                    COUNT(DISTINCT crop_type) as crops_covered,
+                    COUNT(yield_estimate_hkg_ha) as fields_with_yields,
+                    COUNT(production_estimate_hkg) as fields_with_production,
+                    MIN(year) as min_year,
+                    MAX(year) as max_year
+                FROM final_production_estimates
+            """).fetchone()
+
+            (
+                total_fields,
+                years_covered,
+                crops_covered,
+                fields_with_yields,
+                fields_with_production,
+                min_year,
+                max_year,
+            ) = summary
+
+            yield_coverage = fields_with_yields / total_fields if total_fields > 0 else 0
+            production_coverage = fields_with_production / total_fields if total_fields > 0 else 0
+
+            self.log.info("Field production summary:")
+            self.log.info(f"  Total production estimates: {total_fields:,}")
+            self.log.info(f"  Years covered: {years_covered} years ({min_year}-{max_year})")
+            self.log.info(f"  Unique crop types: {crops_covered}")
+            self.log.info(
+                f"  Fields with yield estimates: {fields_with_yields:,} ({yield_coverage:.1%})"
+            )
+            self.log.info(
+                f"  Fields with production estimates: {fields_with_production:,} ({production_coverage:.1%})"
+            )
+
+            # Summary by year
+            year_summary = self.conn.execute("""
+                SELECT 
                     year,
-                    ST_GeomFromText(geometry) as geometry
-                FROM fields_batch_df
-                WHERE geometry IS NOT NULL
-            """)
+                    COUNT(*) as year_count,
+                    COUNT(production_estimate_hkg) as year_with_production,
+                    COUNT(production_estimate_hkg) * 100.0 / COUNT(*) as year_coverage
+                FROM final_production_estimates
+                GROUP BY year
+                ORDER BY year
+            """).fetchall()
 
-            # Spatial join with DST zones
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE fields_with_dst_zones AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.area_ha,
-                    f.crop_type,
-                    f.organic_farming,
-                    f.year,
-                    f.geometry,
-                    z.landsdel_code,
-                    z.landsdel_name,
-                    z.dst_regions
-                FROM current_fields f
-                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
-            """)
-
-            # Get fields with DST zone information
-            fields_with_zones = self.conn.execute("""
-                SELECT * FROM fields_with_dst_zones
-            """).df()
-
-            # Calculate production estimates for each field
-            production_estimates = []
-
-            for _, field in fields_with_zones.iterrows():
-                field_id = field["field_id"]
-                block_id = field["block_id"]
-                crop_type = field["crop_type"]
-                area_ha = field["area_ha"]
-                dst_regions = field.get("dst_regions", "")
-                landsdel_name = field.get("landsdel_name", "")
-
-                # Get DST mapping info
-                dst_info = get_dst_category(crop_type)
-
-                # Find yield data for this crop and region
-                yield_estimate = self._get_yield_estimate(
-                    dst_info, crop_type, dst_regions, landsdel_name, year, dst_data
+            for year, year_count, year_with_production, year_coverage in year_summary:
+                self.log.info(
+                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1f}%)"
                 )
 
-                # Calculate production
-                production_hkg = None
-                if yield_estimate and yield_estimate["yield_value"]:
-                    production_hkg = area_ha * yield_estimate["yield_value"]
-
-                # Create production record
-                production_estimate = {
-                    # JOIN KEYS
-                    "field_id": field_id,
-                    "block_id": block_id,
-                    "cvr_number": field.get("cvr_number"),
-                    "year": field.get("year", year),
-                    # FIELD DATA
-                    "area_ha": area_ha,
-                    "crop_type": crop_type,
-                    "organic_farming": field.get("organic_farming", False),
-                    # DST ZONE INFO
-                    "landsdel_code": field.get("landsdel_code"),
-                    "landsdel_name": landsdel_name,
-                    "dst_regions": dst_regions,
-                    # DST MAPPING INFO
-                    "has_dst_mapping": dst_info["has_dst_mapping"] if dst_info else False,
-                    "dst_table": dst_info["dst_table"] if dst_info else None,
-                    "dst_category": dst_info.get("dst_category") if dst_info else None,
-                    # YIELD DATA
-                    "yield_estimate_hkg_ha": yield_estimate["yield_value"]
-                    if yield_estimate
-                    else None,
-                    "yield_source_table": yield_estimate["source_table"]
-                    if yield_estimate
-                    else None,
-                    "yield_source_region": yield_estimate["source_region"]
-                    if yield_estimate
-                    else None,
-                    "yield_estimation_method": yield_estimate["estimation_method"]
-                    if yield_estimate
-                    else "no_yield_data",
-                    # PRODUCTION ESTIMATE
-                    "production_estimate_hkg": production_hkg,
-                    "production_unit": "hkg" if production_hkg else None,
-                    # SPATIAL INFO
-                    "geometry_wkt": field["geometry"].wkt
-                    if hasattr(field["geometry"], "wkt")
-                    else str(field["geometry"]),
-                    # METADATA
-                    "created_at": pd.Timestamp.now(),
-                }
-                production_estimates.append(production_estimate)
-
-            return pd.DataFrame(production_estimates)
+            # Check quality thresholds
+            if yield_coverage < self.config.min_yield_coverage:
+                self.log.warning(
+                    f"Yield coverage {yield_coverage:.1%} below minimum threshold {self.config.min_yield_coverage:.1%}"
+                )
 
         except Exception as e:
-            self.log.error(f"Error processing field batch with DST yields: {e}")
-            return pd.DataFrame()
+            self.log.error(f"Error generating summary statistics: {e}")
 
-    def _get_yield_estimate(
-        self,
-        dst_info: Dict,
-        crop_type: str,
-        dst_regions: str,
-        landsdel_name: str,
-        year: int,
-        dst_data: Dict[str, pd.DataFrame],
-    ) -> Optional[Dict[str, Any]]:
-        """Get yield estimate for a field based on DST data."""
-        if not dst_info or not dst_info.get("has_dst_mapping"):
-            return None
+    def _save_results_to_gold(self) -> None:
+        """Save results to gold layer using optimized DuckDB export."""
+        try:
+            # Use optimized save method from base class
+            output_path = (
+                f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
+            )
 
-        dst_table = dst_info["dst_table"]
-        dst_category = dst_info["dst_category"]
+            # Export directly from DuckDB table to GCS
+            self.gcs_access.upload_from_duckdb_table(
+                self.conn,
+                "final_production_estimates",
+                output_path,
+                compression="zstd",
+                row_group_size=100000,
+            )
 
-        # Map DST table to dataset name
-        table_mapping = {
-            "HST77": "hst77_processed",
-            "GARTN1": "gartn1_processed",
-            "FRO": "fro_processed",
-            "HALM1": "halm1_processed",
-        }
+            self.log.info(f"Saved field production estimates to {output_path}")
 
-        dataset_name = table_mapping.get(dst_table)
-        if not dataset_name or dataset_name not in dst_data:
-            return None
-
-        dst_df = dst_data[dataset_name]
-
-        # Filter for the specific crop and year
-        crop_data = dst_df[
-            (dst_df["crop_type"] == dst_category)
-            & (dst_df["year"] == year)
-            & (dst_df["measurement_unit"].str.contains("yield|hektoliter", case=False, na=False))
-        ]
-
-        if crop_data.empty:
-            return None
-
-        # Try to find data for the specific DST region
-        best_match = None
-        estimation_method = "no_match"
-
-        if dst_regions:
-            # Split pipe-separated DST regions
-            regions = [r.strip() for r in dst_regions.split("|")]
-
-            for region in regions:
-                region_data = crop_data[
-                    crop_data["region"].str.contains(region, case=False, na=False)
-                ]
-                if not region_data.empty:
-                    best_match = region_data.iloc[0]
-                    estimation_method = f"dst_region_{region}"
-                    break
-
-        # Fallback to national average ("Hele landet")
-        if best_match is None:
-            national_data = crop_data[
-                crop_data["region"].str.contains("Hele landet", case=False, na=False)
-            ]
-            if not national_data.empty:
-                best_match = national_data.iloc[0]
-                estimation_method = "national_average"
-
-        # Last fallback - any available data
-        if best_match is None and not crop_data.empty:
-            best_match = crop_data.iloc[0]
-            estimation_method = "fallback_any_region"
-
-        if best_match is not None:
-            return {
-                "yield_value": best_match["value"],
-                "source_table": dst_table,
-                "source_region": best_match["region"],
-                "estimation_method": estimation_method,
-            }
-
-        return None
+        except Exception as e:
+            self.log.error(f"Error saving results: {e}")
+            raise

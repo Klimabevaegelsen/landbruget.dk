@@ -1,3 +1,4 @@
+from ..base import SilverBase
 """
 Silver layer processing for Agricultural Fields data.
 
@@ -23,7 +24,7 @@ from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
-class AgriculturalFieldsSilverConfig(BaseJobConfig):
+class AgriculturalFieldsSilverConfig(SilverBase):
     """
     Configuration for Agricultural Fields Silver data processing.
 
@@ -65,7 +66,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
     }
 
 
-class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
+class AgriculturalFieldsSilver(SilverBase):
     """
     Silver layer processor for agricultural fields data using DuckDB-spatial.
 
@@ -101,7 +102,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB-spatial initialized for agricultural fields processing")
 
-    async def _process_payloads_with_duckdb(self, raw_df, dataset: str, year: int):
+    async def _process_payloads_with_duckdb(self, raw_data_input, dataset: str, year: int):
         """
         Process raw payloads using DuckDB-spatial for all geometric operations.
 
@@ -109,31 +110,33 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         handle coordinate transformations, and validate geometries.
 
         Args:
-            raw_df: DataFrame containing raw payloads from the bronze layer
+            raw_data_input: Table name containing raw payloads from the bronze layer
             dataset: Name of the dataset being processed
             year: Year of the data being processed
 
         Returns:
-            A DataFrame containing all processed features with validated geometries,
-            or None if processing fails
+            A tuple (table_name, connection) containing all processed features with validated geometries,
+            or (None, None) if processing fails
         """
         async with AsyncTimer("Processing data with DuckDB-spatial"):
             try:
-                # Register the raw data with DuckDB
-                self.conn.register("raw_payloads", raw_df)
+                # ✅ MIGRATION: Only handle table names now
+                if isinstance(raw_data_input, str):
+                    # Input is a table name
+                    table_name = raw_data_input
+                    processing_conn = self.conn
 
-                # Create a table to hold all extracted features
-                self.conn.execute("DROP TABLE IF EXISTS extracted_features")
-                self.conn.execute("""
-                    CREATE TABLE extracted_features AS
-                    SELECT 
-                        payload,
-                        ROW_NUMBER() OVER () as payload_id
-                    FROM raw_payloads
-                """)
+                    # Get payloads from table
+                    payloads = [
+                        row[0]
+                        for row in processing_conn.execute(
+                            f"SELECT payload FROM {table_name}"
+                        ).fetchall()
+                    ]
+                else:
+                    self.log.error(f"Expected table name (string), got {type(raw_data_input)}")
+                    return None, None
 
-                # Process each payload and extract GeoJSON features
-                payloads = raw_df["payload"].tolist()
                 all_features = []
 
                 for i, payload_json in enumerate(payloads):
@@ -164,24 +167,19 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 if not all_features:
                     self.log.warning("No valid features extracted from payloads")
-                    return None
+                    return None, None
 
-                # ✅ MIGRATION: Convert to DataFrame using DuckDB
-                import duckdb
+                # ✅ MIGRATION: Convert to table using DuckDB (no  conversion)
+                processing_conn.register("temp_features", all_features)
+                processing_conn.execute(
+                    "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
+                )
 
-                temp_conn = duckdb.connect()
-                temp_conn.register("temp_features", all_features)
-                features_df = temp_conn.execute("SELECT * FROM temp_features").df()
-                temp_conn.close()
-                self.conn.register("features_raw", features_df)
+                # ✅ MIGRATION: Get column info without  conversion
+                columns_info = processing_conn.execute("DESCRIBE features_raw").fetchall()
+                available_columns = [row[0] for row in columns_info]
 
                 # Apply column mapping and create spatial geometries using DuckDB-spatial
-                column_mapping_sql = []
-                for old_col, new_col in self.config.column_mapping.items():
-                    column_mapping_sql.append(f'"{old_col}" as {new_col}')
-
-                # Build the SELECT statement with available columns
-                available_columns = features_df.columns.tolist()
                 select_columns = []
 
                 for old_col, new_col in self.config.column_mapping.items():
@@ -206,8 +204,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 select_clause = ", ".join(select_columns) if select_columns else "*"
 
                 # Create the final processed table with spatial geometries
-                self.conn.execute(f"""
-                    CREATE TABLE processed_features AS
+                final_table_name = f"processed_features_{dataset}_{year}"
+                processing_conn.execute(f"""
+                    CREATE OR REPLACE TABLE {final_table_name} AS
                     SELECT 
                         {select_clause},
                         {year} as year,
@@ -218,27 +217,24 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 """)
 
                 # Transform geometries from EPSG:25832 to EPSG:4326 for consistency
-                self.conn.execute("""
-                    UPDATE processed_features 
+                processing_conn.execute(f"""
+                    UPDATE {final_table_name} 
                     SET geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
                     WHERE is_valid_geometry = true
                 """)
 
-                # Get the final result as DataFrame with geometry as WKT
-                result_df = self.conn.execute("""
-                    SELECT 
-                        * EXCLUDE (geometry, is_valid_geometry),
-                        ST_AsText(geometry) as geometry
-                    FROM processed_features 
-                    WHERE is_valid_geometry = true
-                """).df()
+                # ✅ MIGRATION: Return table name instead of 
+                row_count = processing_conn.execute(
+                    f"SELECT COUNT(*) FROM {final_table_name} WHERE is_valid_geometry = true"
+                ).fetchone()[0]
+                self.log.info(f"Processed {row_count} valid features using DuckDB-spatial")
 
-                self.log.info(f"Processed {len(result_df)} valid features using DuckDB-spatial")
-                return result_df
+                # Return table name and connection for further processing
+                return final_table_name, processing_conn
 
             except Exception as e:
                 self.log.error(f"Error processing data with DuckDB-spatial: {e}")
-                return None
+                return None, None
 
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
@@ -275,19 +271,39 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # Bronze data is expected to be a complex dict structure with multi-year data
-                            if isinstance(bronze_data, dict) and dataset_with_year in bronze_data:
-                                raw_data = bronze_data[dataset_with_year]
-                                # ✅ MIGRATION: Check and convert raw data using DuckDB
-                                if not hasattr(raw_data, "columns"):  # Not a DataFrame-like object
-                                    import duckdb
-
-                                    temp_conn = duckdb.connect()
-                                    temp_conn.register("temp_raw", {"payload": raw_data})
-                                    raw_data = temp_conn.execute("SELECT * FROM temp_raw").df()
-                                    temp_conn.close()
+                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: table_name}, "blocks": {year: table_name}}
+                            if isinstance(bronze_data, dict):
+                                # Map dataset names to bronze data keys
+                                bronze_key = "fields" if "fields" in dataset else "blocks"
+                                if bronze_key in bronze_data and year in bronze_data[bronze_key]:
+                                    # Bronze data should contain table names now
+                                    raw_data_table = bronze_data[bronze_key][year]
+                                    if isinstance(raw_data_table, str):
+                                        # It's already a table name
+                                        raw_data = raw_data_table
+                                    else:
+                                        # Convert raw data to table
+                                        table_name = f"bronze_raw_{dataset}_{year}"
+                                        if isinstance(raw_data_table, list):
+                                            # List of JSON strings
+                                            
+                                            df = ({"payload": raw_data_table})
+                                            self.conn.register(table_name, df)
+                                            raw_data = table_name
+                                        else:
+                                            self.log.error(
+                                                f"Unsupported bronze data type: {type(raw_data_table)}"
+                                            )
+                                            continue
+                                else:
+                                    self.log.warning(
+                                        f"No in-memory data found for {bronze_key} year {year}"
+                                    )
+                                    continue
                             else:
-                                self.log.warning(f"No in-memory data found for {dataset_with_year}")
+                                self.log.warning(
+                                    f"Unexpected bronze data structure: {type(bronze_data)}"
+                                )
                                 continue
                         else:
                             # Fallback to reading from storage
@@ -300,24 +316,32 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                 continue
 
                         self.log.info(f"Read raw data successfully for {dataset_with_year}")
-                        processed_df = await self._process_payloads_with_duckdb(
+                        table_name, temp_conn = await self._process_payloads_with_duckdb(
                             raw_data, dataset, year
                         )
 
-                        if processed_df is None or processed_df.empty:
+                        if table_name is None or temp_conn is None:
                             self.log.warning(f"No processed data for {dataset_with_year}, skipping")
                             continue
 
                         self.log.info(f"Processed raw data successfully for {dataset_with_year}")
 
-                        # Store processed data for potential gold stage consumption
-                        processed_data[dataset_with_year] = processed_df
-
-                        # Save using DuckDB-spatial optimized format
+                        # ✅ MIGRATION: Save directly from table (no  conversion)
                         self._save_data(
-                            processed_df, dataset_with_year, self.config.bucket, stage="silver"
+                            table_name,
+                            dataset_with_year,
+                            self.config.bucket,
+                            stage="silver",
+                            conn=temp_conn,
                         )
                         self.log.info(f"Saved processed data successfully for {dataset_with_year}")
+
+                        # Store table name for potential gold stage consumption
+                        processed_data[dataset_with_year] = table_name
+
+                        # Clean up temporary connection if it was created for bronze data processing
+                        if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:
+                            temp_conn.close()
 
                     except Exception as e:
                         self.log.error(f"Error processing {dataset} for year {year}: {e}")

@@ -1,3 +1,4 @@
+from ..base import SilverBase
 """
 Silver layer processing for BNBO Status data.
 
@@ -26,7 +27,7 @@ from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
-class BNBOStatusSilverConfig(BaseJobConfig):
+class BNBOStatusSilverConfig(SilverBase):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source.
 
@@ -57,7 +58,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
 
 
-class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
+class BNBOStatusSilver(SilverBase):
     """
     Silver layer processor for BNBO status data.
 
@@ -70,7 +71,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     1. Reading raw XML data from the bronze layer.
     2. Parsing XML features and extracting geometries.
     3. Converting geometries to WKT format and calculating areas.
-    4. Creating a GeoDataFrame with the processed features.
+    4. Creating a Geo with the processed features.
     5. Dissolving geometries based on status categories.
     6. Saving the processed data back to GCS.
     """
@@ -275,46 +276,59 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             self.log.warning("No raw data to process")
             return None
 
-        # ✅ MIGRATION: Convert to DataFrame if it's not already using DuckDB
-        if not hasattr(raw_data, "iterrows"):  # Check if it's DataFrame-like
-            # Use DuckDB to create DataFrame
+        # ✅ MIGRATION: Convert to  if it's not already using DuckDB
+        if not hasattr(raw_data, "iterrows"):  # Check if it's -like
+            # Use DuckDB to create 
             self.conn.register("temp_raw_data", raw_data)
-            raw_df = self.conn.execute("SELECT * FROM temp_raw_data").df()
+            # ✅ MIGRATION: Work with table name instead of 
+            raw_df_table = "temp_raw_data"
+            # Get row count to check if empty
+            row_count = self.conn.execute("SELECT COUNT(*) FROM temp_raw_data").fetchone()[0]
+            if row_count == 0:
+                self.log.warning("No raw data to process")
+                return None
+            # Get data for iteration - only fetch when needed
+            raw_df = self.conn.execute("SELECT * FROM temp_raw_data").fetchall()
+            columns = [desc[0] for desc in self.conn.description]
         else:
             raw_df = raw_data
-
-        if raw_df.empty:
-            self.log.warning("No raw data to process")
-            return None
+            if raw_df.empty:
+                self.log.warning("No raw data to process")
+                return None
 
         self.log.info("Processing XML data from bronze layer using DuckDB-spatial")
 
         features = []
-        for index, row in raw_df.iterrows():
-            try:
-                # Parse the XML data
-                xml_data = row["payload"]
-                root = ET.fromstring(xml_data)
+        # ✅ MIGRATION: Handle both  and fetchall() results
+        if not hasattr(raw_data, "iterrows"):  # This is fetchall() result
+            for index, row_tuple in enumerate(raw_df):
+                try:
+                    # Convert tuple to dict using column names
+                    row = dict(zip(columns, row_tuple))
+                    # Parse the XML data
+                    xml_data = row["payload"]
+                    root = ET.fromstring(xml_data)
 
-                # Get the namespace
-                namespace = self.get_first_namespace(root)
-                if namespace is None:
-                    err_msg = f"Error processing row {index}: No namespace found in XML"
-                    self.log.error(err_msg)
-                    raise Exception(err_msg)
-                for member in root.findall(".//ns:member", namespaces={"ns": namespace}):
-                    for feature in member:
-                        parsed = self._parse_feature(feature)
-                        if parsed and parsed.get("geometry"):
-                            features.append(parsed)
+                    # Get the namespace
+                    namespace = self.get_first_namespace(root)
+                    if namespace is None:
+                        err_msg = f"Error processing row {index}: No namespace found in XML"
+                        self.log.error(err_msg)
+                        raise Exception(err_msg)
+                    for member in root.findall(".//ns:member", namespaces={"ns": namespace}):
+                        for feature in member:
+                            parsed = self._parse_feature(feature)
+                            if parsed and parsed.get("geometry"):
+                                features.append(parsed)
 
-            except Exception as e:
-                self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
-                raise e
+                except Exception as e:
+                    self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
+                    raise e
+        # ✅ MIGRATION: Removed  handling - only table names supported now
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
 
-        # ✅ MIGRATION: Create DuckDB table instead of GeoDataFrame
+        # ✅ MIGRATION: Create DuckDB table instead of Geo
         if not features:
             self.log.warning("No features extracted from XML data")
             return None
@@ -473,8 +487,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
 
         This is the main entry point that orchestrates the entire process:
         1. Reads data from the bronze layer (either in-memory or from storage)
-        2. Processes XML data into a GeoDataFrame
-        3. Creates a dissolved version of the GeoDataFrame
+        2. Processes XML data into a Geo
+        3. Creates a dissolved version of the Geo
         4. Saves both the original and dissolved data to GCS
 
         Args:

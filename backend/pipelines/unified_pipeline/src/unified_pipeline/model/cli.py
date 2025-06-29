@@ -45,6 +45,8 @@ class Source(Enum):
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
+        dst: Danish Statistics (Danmarks Statistik) API data source
+        dmi: Danish Meteorological Institute (DMI) climate data source
     """
 
     bnbo = "bnbo"
@@ -61,6 +63,8 @@ class Source(Enum):
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
+    dst = "dst"
+    dmi = "dmi"
 
 
 class Stage(Enum):

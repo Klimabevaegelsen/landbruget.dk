@@ -13,12 +13,10 @@ dependencies = [
     "click>=8.1.8",
     "cryptography>=44.0.3",
     "gcsfs>=2025.3.2",
-    "geopandas>=1.0.1",
     "google-cloud-storage>=3.1.0",
     "ibis-framework[duckdb,geospatial]>=10.5.0",
     "loguru>=0.7.3",
     "lxml>=5.4.0",
-    "pandas>=2.2.3",
     "psutil>=6.1.0",
     "pyarrow>=20.0.0",
     "pydantic-settings>=2.9.1",
@@ -88,4 +86,3 @@ select = ["E", "F", "I", "N"]
 ignore = []
 
 [tool.ruff.lint.isort]
-known-third-party = ["click", "cryptography", "gcsfs", "geopandas", "google", "ibis_framework", "loguru", "lxml", "pandas", "pyarrow", "pydantic", "dotenv", "simple_singleton"]

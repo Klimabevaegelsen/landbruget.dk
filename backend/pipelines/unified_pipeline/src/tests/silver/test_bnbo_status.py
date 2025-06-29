@@ -1,8 +1,6 @@
 import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
-import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
@@ -39,7 +37,7 @@ def test_bnbo_status_silver_config(silver_config: BNBOStatusSilverConfig) -> Non
     assert silver_config.gml_ns == "{http://www.opengis.net/gml/3.2}"
 
 
-@patch("unified_pipeline.common.base.pd.Timestamp")
+@patch("unified_pipeline.common.base.Timestamp")
 @patch("unified_pipeline.common.base.os.makedirs")
 def test_read_data_success(
     mock_makedirs: MagicMock,
@@ -48,7 +46,7 @@ def test_read_data_success(
     mock_gcs_util: MagicMock,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    mock_now = pd.Timestamp("2025-05-08")
+    mock_now = Timestamp("2025-05-08")
     mock_timestamp.now.return_value = mock_now
     expected_date_str = mock_now.strftime("%Y-%m-%d")
 
@@ -58,10 +56,10 @@ def test_read_data_success(
     mock_bucket.blob.return_value = mock_blob
     mock_gcs_util.get_gcs_client.return_value.bucket.return_value = mock_bucket
 
-    dummy_df = pd.DataFrame({"payload": ["<xml></xml>"]})
+    dummy_df = ({"payload": ["<xml></xml>"]})
 
     with patch(
-        "unified_pipeline.common.base.pd.read_parquet", return_value=dummy_df
+        "unified_pipeline.common.base.read_parquet", return_value=dummy_df
     ) as mock_read_parquet:
         result_df = bnbo_status_silver._read_bronze_data(
             silver_config.dataset, silver_config.bucket
@@ -80,17 +78,17 @@ def test_read_data_success(
     mock_read_parquet.assert_called_once_with(temp_file)
 
     assert result_df is not None
-    pd.testing.assert_frame_equal(result_df, dummy_df)
+    testing.assert_frame_equal(result_df, dummy_df)
 
 
-@patch("unified_pipeline.silver.bnbo_status.pd.Timestamp")
+@patch("unified_pipeline.silver.bnbo_status.Timestamp")
 def test_read_data_blob_not_exists(
     mock_timestamp: MagicMock,
     bnbo_status_silver: BNBOStatusSilver,
     mock_gcs_util: MagicMock,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    mock_now = pd.Timestamp("2025-05-08")
+    mock_now = Timestamp("2025-05-08")
     mock_timestamp.now.return_value = mock_now
 
     mock_blob = MagicMock()
@@ -353,12 +351,12 @@ def test_process_xml_data(bnbo_status_silver: BNBOStatusSilver) -> None:
         </gml:member>
     </gml:FeatureCollection>
     """
-    df = pd.DataFrame({"payload": [xml_string]})
+    df = ({"payload": [xml_string]})
 
     result = bnbo_status_silver._process_xml_data(df)
 
     assert result is not None
-    assert isinstance(result, pd.DataFrame)
+    assert isinstance(result, )
     assert "geometry" in result.columns
     assert "area_ha" in result.columns
     assert "status_bnbo" in result.columns
@@ -370,8 +368,8 @@ def test_process_xml_data(bnbo_status_silver: BNBOStatusSilver) -> None:
 
 
 def test_process_xml_data_with_empty_dataframe(bnbo_status_silver: BNBOStatusSilver) -> None:
-    """Test processing an empty DataFrame"""
-    df = pd.DataFrame()
+    """Test processing an empty """
+    df = ()
     result = bnbo_status_silver._process_xml_data(df)
     assert result is None
 
@@ -384,7 +382,7 @@ def test_process_xml_data_with_no_namespace(bnbo_status_silver: BNBOStatusSilver
         </member>
     </FeatureCollection>
     """
-    df = pd.DataFrame({"payload": [xml_string]})
+    df = ({"payload": [xml_string]})
     with pytest.raises(Exception) as excinfo:
         bnbo_status_silver._process_xml_data(df)
         assert "No namespace found in XML" in str(excinfo.value)
@@ -410,7 +408,7 @@ def test_create_dissolved_df_mixed_statuses(
             Polygon([(6, 6), (6, 8), (8, 8), (8, 6)]),  # No overlap
         ],
     }
-    input_gdf = gpd.GeoDataFrame(
+    input_gdf = gGeo(
         data, crs="EPSG:4326"
     )  # Use EPSG:4326 directly to avoid transformation issues
 
@@ -449,7 +447,7 @@ def test_create_dissolved_df_action_required_only(
             Polygon([(1, 1), (1, 3), (3, 3), (3, 1)]),  # Area 4.0, overlaps with first
         ],
     }
-    input_gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
+    input_gdf = gGeo(data, crs="EPSG:4326")
     mock_validate_transform.side_effect = lambda gdf, _: gdf
 
     result_gdf = bnbo_status_silver._create_dissolved_df(input_gdf.copy(), "test_dataset_ar_only")
@@ -479,7 +477,7 @@ def test_create_dissolved_df_completed_only(
             Polygon([(1, 1), (1, 3), (3, 3), (3, 1)]),  # Area 4.0, overlaps
         ],
     }
-    input_gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")  # Use consistent CRS
+    input_gdf = gGeo(data, crs="EPSG:4326")  # Use consistent CRS
     mock_validate_transform.side_effect = lambda gdf, _: gdf
 
     result_gdf = bnbo_status_silver._create_dissolved_df(input_gdf.copy(), "test_dataset_c_only")
@@ -498,12 +496,12 @@ def test_create_dissolved_df_completed_only(
 def test_create_dissolved_df_empty_input(
     mock_validate_transform: MagicMock, bnbo_status_silver: BNBOStatusSilver
 ) -> None:
-    """Test _create_dissolved_df with an empty GeoDataFrame."""
-    # Create empty GeoDataFrame
-    empty_gdf = gpd.GeoDataFrame({"status_category": [], "geometry": []}, crs="EPSG:4326")
+    """Test _create_dissolved_df with an empty Geo."""
+    # Create empty Geo
+    empty_gdf = gGeo({"status_category": [], "geometry": []}, crs="EPSG:4326")
 
-    # Mock to return an empty GeoDataFrame with correct columns
-    mock_validate_transform.side_effect = lambda gdf, _: gpd.GeoDataFrame(
+    # Mock to return an empty Geo with correct columns
+    mock_validate_transform.side_effect = lambda gdf, _: gGeo(
         columns=["status_category", "geometry"], crs="EPSG:4326", geometry="geometry"
     )
 
@@ -520,12 +518,12 @@ def test_create_dissolved_df_validate_transform_call(
     mock_validate_transform: MagicMock, bnbo_status_silver: BNBOStatusSilver
 ) -> None:
     """Test that validate_and_transform_geometries is called correctly."""
-    # Create a simple GeoDataFrame
+    # Create a simple Geo
     data = {
         "status_category": ["Action Required"],
         "geometry": [Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
     }
-    input_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    input_gdf = gGeo(data, crs="EPSG:25832")
     mock_validate_transform.side_effect = lambda gdf, _: gdf
 
     # Call the method
@@ -534,7 +532,7 @@ def test_create_dissolved_df_validate_transform_call(
     # Check that the validation function was called with the right arguments
     mock_validate_transform.assert_called_once()
     called_gdf = mock_validate_transform.call_args[0][0]
-    assert isinstance(called_gdf, gpd.GeoDataFrame)
+    assert isinstance(called_gdf, gGeo)
     assert called_gdf.crs.to_epsg() == 4326  # type: ignore
     assert "status_category" in called_gdf.columns
     assert called_gdf["status_category"].iloc[0] == "Action Required"
@@ -544,12 +542,12 @@ def test_exception_handling_in_create_dissolved_df(
     bnbo_status_silver: BNBOStatusSilver,
 ) -> None:
     """Test exception handling in _create_dissolved_df."""
-    # Create a GeoDataFrame with invalid geometries
+    # Create a Geo with invalid geometries
     data = {
         "status_category": ["Action Required"],
         "geometry": [None],  # Invalid geometry
     }
-    input_gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
+    input_gdf = gGeo(data, crs="EPSG:4326")
 
     with patch(
         "unified_pipeline.silver.bnbo_status.validate_and_transform_geometries",
@@ -566,17 +564,17 @@ def test_save_data(
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
     """Test saving data to GCS."""
-    # Create a sample GeoDataFrame
+    # Create a sample Geo
     data = {
         "status_category": ["Action Required"],
         "geometry": [Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
     }
-    gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
+    gdf = gGeo(data, crs="EPSG:4326")
 
     # Mock the GCS client and bucket
     mock_bucket = MagicMock()
     mock_gcs_util.get_gcs_client.return_value.bucket.return_value = mock_bucket
-    current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+    current_date = Timestamp.now().strftime("%Y-%m-%d")
     # Call the save_data method
     bnbo_status_silver._save_data(gdf, silver_config.dataset, silver_config.bucket)
 
@@ -590,9 +588,9 @@ def test_save_data_with_empty_dataframe(
     mock_gcs_util: MagicMock,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    """Test saving an empty GeoDataFrame to GCS."""
-    # Create an empty GeoDataFrame
-    gdf = gpd.GeoDataFrame(columns=["status_category", "geometry"], crs="EPSG:4326")
+    """Test saving an empty Geo to GCS."""
+    # Create an empty Geo
+    gdf = gGeo(columns=["status_category", "geometry"], crs="EPSG:4326")
 
     # Mock the GCS client and bucket
     mock_bucket = MagicMock()
@@ -614,13 +612,13 @@ async def test_run(
     # Mock the read_data and save_data methods
     with (
         patch.object(
-            bnbo_status_silver, "_read_bronze_data", return_value=pd.DataFrame()
+            bnbo_status_silver, "_read_bronze_data", return_value=()
         ) as mock_read_data,
         patch.object(
-            bnbo_status_silver, "_process_xml_data", return_value=pd.DataFrame()
+            bnbo_status_silver, "_process_xml_data", return_value=()
         ) as mock_process_xml_data,
         patch.object(
-            bnbo_status_silver, "_create_dissolved_df", return_value=pd.DataFrame()
+            bnbo_status_silver, "_create_dissolved_df", return_value=()
         ) as mock_create_dissolved_df,
         patch.object(bnbo_status_silver, "_save_data") as mock_save_data,
     ):
@@ -639,7 +637,7 @@ async def test_run_with_empty_dataframe(
     bnbo_status_silver: BNBOStatusSilver,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    """Test the run method with an empty DataFrame."""
+    """Test the run method with an empty ."""
     # Mock the read_data and save_data methods
     with (
         patch.object(bnbo_status_silver, "_read_bronze_data", return_value=None) as mock_read_data,
@@ -659,7 +657,7 @@ async def test_run_with_empty_processed_data(
     # Mock the read_data and save_data methods
     with (
         patch.object(
-            bnbo_status_silver, "_read_bronze_data", return_value=pd.DataFrame()
+            bnbo_status_silver, "_read_bronze_data", return_value=()
         ) as mock_read_data,
         patch.object(
             bnbo_status_silver, "_process_xml_data", return_value=None

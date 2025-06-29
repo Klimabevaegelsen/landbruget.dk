@@ -18,7 +18,6 @@ import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import duckdb
-import pandas as pd
 from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -149,11 +148,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     f"INSERT INTO {temp_combined_table} SELECT * FROM {year_table}"
                 )
 
-        # Get the combined result
-        combined_results = self.duckdb_conn.execute(f"SELECT * FROM {temp_combined_table}").df()
-
-        # Calculate overall coverage statistics
-        total_disaggregated = len(combined_results)
+        # ✅ MIGRATION: Calculate statistics directly in DuckDB without  conversion
+        total_disaggregated = self.duckdb_conn.execute(
+            f"SELECT COUNT(*) FROM {temp_combined_table}"
+        ).fetchone()[0]
         coverage_pct = (
             (total_disaggregated / total_pesticide_records * 100)
             if total_pesticide_records > 0
@@ -164,8 +162,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         logger.info(f"  Total pesticide records across all years: {total_pesticide_records}")
         logger.info(f"  Successfully disaggregated: {total_disaggregated} ({coverage_pct:.1f}%)")
 
-        # Save results
-        self._save_data(combined_results, self.config.dataset, self.config.bucket, "gold")
+        # ✅ MIGRATION: Save results directly from DuckDB table
+        self.save_data_direct(temp_combined_table, self.config.dataset, self.config.bucket, "gold")
 
         logger.info("Pesticide disaggregation gold layer processing completed successfully")
 
@@ -351,7 +349,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         field_year: int,
         agricultural_fields_path: str,
         pesticide_applications_path: str,
-    ) -> Optional[pd.DataFrame]:
+    ) -> Optional[List[Dict[str, Any]]]:
         """Process a single pesticide-field year pair."""
         try:
             # Setup DuckDB with spatial extensions
@@ -1088,16 +1086,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             logger.error(f"Error in adjacent fields cluster strategy: {str(e)}")
             return 0
 
-    def _get_results(self) -> pd.DataFrame:
+    def _get_results(self) -> List[Dict[str, Any]]:
         """Get the disaggregated results."""
         try:
             results = self.duckdb_conn.execute(
                 "SELECT * FROM disaggregated_pesticide_applications"
-            ).fetchdf()
-            return results
+            ).fetchall()
+            # Convert to list of dictionaries
+            columns = [desc[0] for desc in self.duckdb_conn.description]
+            return [dict(zip(columns, row)) for row in results]
         except Exception as e:
             logger.error(f"Error getting results: {str(e)}")
-            return pd.DataFrame()
+            return []
 
     def __del__(self):
         """Clean up DuckDB connection."""

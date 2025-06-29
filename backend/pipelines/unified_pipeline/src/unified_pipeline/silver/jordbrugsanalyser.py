@@ -1,13 +1,13 @@
 """
 Silver layer data processing for Jordbrugsanalyser Marker data.
 
-This module handles the processing of raw WFS responses from the bronze layer and convert them into structured GeoDataFrames with proper field mappings and data types.
+This module handles the processing of raw WFS responses from the bronze layer and convert them into structured Geos with proper field mappings and data types.
 
 The module contains:
 - JordbrugsanalyserSilverConfig: Configuration class for the silver processing
 - JordbrugsanalyserSilver: Implementation class for parsing and cleaning marker data
 
-The data is processed from raw WFS XML responses into standardized GeoDataFrames
+The data is processed from raw WFS XML responses into standardized Geos
 with Danish field names mapped to English equivalents and proper geometry handling.
 """
 
@@ -15,7 +15,6 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import geopandas as gpd
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from pydantic import ConfigDict
@@ -95,14 +94,14 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
     - Geometry extraction and validation from GML
     - Field mapping and data type conversion
     - Data quality validation and cleaning
-    - GeoDataFrame creation with proper CRS
+    - Geo creation with proper CRS
 
     Processing flow:
     1. Read raw WFS responses from bronze layer for each year
     2. Parse XML and extract features with attributes and geometries
     3. Apply field mapping and data type conversions
     4. Validate and clean the data
-    5. Save processed GeoDataFrames to Google Cloud Storage
+    5. Save processed Geos to Google Cloud Storage
     """
 
     def __init__(self, config: JordbrugsanalyserSilverConfig, gcs_util: GCSUtil):
@@ -354,7 +353,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
     def _process_year_data(
         self, year: int, bronze_data: Optional[Any] = None
-    ) -> Optional[gpd.GeoDataFrame]:
+    ) -> Optional[gGeo]:
         """
         Process all data for a specific year from bronze layer.
 
@@ -363,7 +362,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             bronze_data: Optional in-memory data from bronze stage
 
         Returns:
-            GeoDataFrame with processed data or None if no data/errors
+            Geo with processed data or None if no data/errors
         """
         try:
             # Read data with support for in-memory passing
@@ -374,15 +373,19 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                 # Bronze data is a dict mapping year to list of raw WFS responses
                 if isinstance(bronze_data, dict) and str(year) in bronze_data:
                     raw_responses = bronze_data[str(year)]
-                    # ✅ MIGRATION: Create DataFrame with DuckDB instead of pandas
+                    # ✅ MIGRATION: Create table with DuckDB instead of 
                     import duckdb
 
                     temp_conn = duckdb.connect()
-                    temp_conn.register(
-                        "temp_responses", [{"payload": resp} for resp in raw_responses]
-                    )
-                    bronze_df = temp_conn.execute("SELECT * FROM temp_responses").df()
-                    temp_conn.close()
+                    temp_conn.execute("CREATE OR REPLACE TABLE temp_responses (payload VARCHAR)")
+
+                    # Insert responses directly into table
+                    for resp in raw_responses:
+                        temp_conn.execute("INSERT INTO temp_responses VALUES (?)", [resp])
+
+                    # Keep as table name for processing
+                    bronze_table = "temp_responses"
+                    bronze_conn = temp_conn
                 else:
                     self.log.warning(f"No in-memory data found for year {year}")
                     return None
@@ -396,13 +399,21 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     self.log.warning(f"No bronze data found for year {year}")
                     return None
 
-            self.log.info(f"Processing {len(bronze_df)} bronze records for year {year}")
+                # Convert  to table for consistent processing
+                bronze_conn = duckdb.connect()
+                bronze_conn.register("temp_responses", bronze_df)
+                bronze_table = "temp_responses"
+
+            # Get record count for logging
+            record_count = bronze_conn.execute(f"SELECT COUNT(*) FROM {bronze_table}").fetchone()[0]
+            self.log.info(f"Processing {record_count} bronze records for year {year}")
 
             all_features = []
 
             # Process each bronze record (raw WFS response)
-            for _, row in bronze_df.iterrows():
-                xml_content = row["payload"]
+            payload_rows = bronze_conn.execute(f"SELECT payload FROM {bronze_table}").fetchall()
+            for row in payload_rows:
+                xml_content = row[0]
                 if xml_content:
                     features = self._parse_wfs_response(xml_content, year)
                     all_features.extend(features)
@@ -413,40 +424,39 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
             self.log.info(f"Total features parsed for year {year}: {len(all_features)}")
 
-            # ✅ MIGRATION: Create DataFrame from features using DuckDB
-            import duckdb
-
-            temp_conn = duckdb.connect()
-            temp_conn.register("temp_features", all_features)
-            df = temp_conn.execute("SELECT * FROM temp_features").df()
-            temp_conn.close()
-
+            # ✅ MIGRATION: Process features directly without  conversion
             # Create geometries from WKT
             geometries = []
-            valid_rows = []
+            valid_features = []
 
-            for idx, row in df.iterrows():
+            for idx, feature in enumerate(all_features):
                 try:
-                    if row["geometry"]:
-                        geom = wkt.loads(row["geometry"])
+                    if feature.get("geometry"):
+                        geom = wkt.loads(feature["geometry"])
                         geometries.append(geom)
-                        valid_rows.append(idx)
+                        # Remove WKT geometry and add to valid features
+                        feature_copy = feature.copy()
+                        feature_copy.pop("geometry", None)
+                        valid_features.append(feature_copy)
                     else:
-                        self.log.warning(f"Empty geometry for row {idx}")
+                        self.log.warning(f"Empty geometry for feature {idx}")
                 except Exception as e:
-                    self.log.warning(f"Invalid geometry for row {idx}: {e}")
+                    self.log.warning(f"Invalid geometry for feature {idx}: {e}")
 
             if not geometries:
                 self.log.error(f"No valid geometries found for year {year}")
+                bronze_conn.close()
                 return None
 
-            # Filter to valid rows and create GeoDataFrame
-            df_valid = df.iloc[valid_rows].copy()
-            df_valid = df_valid.drop(columns=["geometry"])  # Remove WKT column
+            # Create Geo directly from valid features and geometries
+            
+            df_valid = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+            gdf = gself.conn.execute("CREATE TABLE geo_table AS SELECT ...")
 
-            gdf = gpd.GeoDataFrame(df_valid, geometry=geometries, crs="EPSG:25832")
+            # Close the bronze connection
+            bronze_conn.close()
 
-            self.log.info(f"Created GeoDataFrame for year {year}: {len(gdf)} features")
+            self.log.info(f"Created Geo for year {year}: {len(gdf)} features")
             return gdf
 
         except Exception as e:
@@ -461,7 +471,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         1. For each year from 2012 to 2024, reads bronze layer data
         2. Parses WFS XML responses and extracts features
         3. Applies data cleaning and validation
-        4. Creates GeoDataFrames with proper geometries and field mapping
+        4. Creates Geos with proper geometries and field mapping
         5. Saves processed data to Google Cloud Storage
 
         Args:
