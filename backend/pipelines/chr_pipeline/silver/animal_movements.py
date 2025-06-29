@@ -174,7 +174,8 @@ def create_chr_dyr_animal_movements_table(
             return None
 
         logging.info(f"Saving chr_dyr_animal_movements table with {rows} rows.")
-        saved_path = export.save_table(output_path, animals_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, animals_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save chr_dyr_animal_movements table - no path returned")
             return None
@@ -315,7 +316,8 @@ def create_animal_movements_table(
             return None
 
         logging.info(f"Saving animal_movements table with {rows} rows.")
-        saved_path = export.save_table(output_path, movements_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, movements_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save animal_movements table - no path returned")
             return None

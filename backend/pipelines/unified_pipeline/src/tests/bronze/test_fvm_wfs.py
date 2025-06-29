@@ -163,19 +163,29 @@ async def test_fetch_layer_data_error(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
 
 def test_create_dataframe(fvm_wfs_bronze: FVMWFSBronze) -> None:
-    """Test DataFrame creation from raw data."""
+    """Test  creation from raw data."""
     raw_data = ['{"test": "data1"}', '{"test": "data2"}']
 
-    df = fvm_wfs_bronze.create_dataframe(raw_data, "Markblokke", 2024)
+    table_name = fvm_wfs_bronze.create_dataframe(raw_data, "Markblokke", 2024)
 
-    assert len(df) == 2
-    assert "payload" in df.columns
-    assert "source" in df.columns
-    assert "layer_type" in df.columns
-    assert "year" in df.columns
-    assert "created_at" in df.columns
-    assert "updated_at" in df.columns
+    # Verify it returns a table name
+    assert isinstance(table_name, str)
+    assert table_name == "final_dataframe"
 
-    assert df["layer_type"].iloc[0] == "Markblokke"
-    assert df["year"].iloc[0] == 2024
-    assert df["source"].iloc[0] == "Danish FVM WFS Agricultural Data"
+    # Verify the table exists and has correct structure
+    result = fvm_wfs_bronze.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert result[0] == 2
+
+    # Check column structure
+    columns = fvm_wfs_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
+    column_names = {row[0] for row in columns}
+    expected_columns = {"payload", "source", "layer_type", "year", "created_at", "updated_at"}
+    assert expected_columns.issubset(column_names)
+
+    # Check data values
+    data = fvm_wfs_bronze.conn.execute(
+        f"SELECT layer_type, year, source FROM {table_name} LIMIT 1"
+    ).fetchone()
+    assert data[0] == "Markblokke"
+    assert data[1] == 2024
+    assert data[2] == "Danish FVM WFS Agricultural Data"

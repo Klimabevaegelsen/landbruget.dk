@@ -270,7 +270,7 @@ def process_chr_data(
             data = in_memory_data.get(source_info["mem_key"], {}).get("json", [])
             if data and isinstance(data, list):
                 logging.info(f"Found {len(data)} records in memory for {source_info['mem_key']}")
-                # Convert list of dicts to Pandas DataFrame for robust handling - REMOVED THIS STEP
+                # Convert list of dicts to Pandas  for robust handling - REMOVED THIS STEP
                 # Instead, write to temp JSONL and use read_json
                 temp_jsonl_path = None
                 temp_file = None

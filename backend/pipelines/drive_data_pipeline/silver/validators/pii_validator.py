@@ -1,11 +1,18 @@
-"""PII validator for detecting and handling sensitive data."""
+"""PII (Personally Identifiable Information) validator for Silver layer using DuckDB."""
 
 from enum import Enum
 from typing import Any
 
-import pandas as pd
+# Handle imports for both standalone and package usage
+try:
+    from ...utils.logging import get_logger
+    from ..duckdb_base import DuckDBProcessor
+except ImportError:
+    # Fallback for standalone usage
+    import logging
 
-from ...utils.logging import get_logger
+    get_logger = lambda: logging.getLogger(__name__)
+    from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult
 
 # Get logger
@@ -34,8 +41,8 @@ class PIIType(Enum):
     IP_ADDRESS = "ip_address"
 
 
-class PIIValidator(BaseValidator):
-    """Validator for detecting and handling PII."""
+class PIIValidator(BaseValidator, DuckDBProcessor):
+    """Validator for detecting and handling PII using DuckDB."""
 
     # Regular expressions for different PII types
     PII_PATTERNS = {
@@ -64,7 +71,9 @@ class PIIValidator(BaseValidator):
                       (e.g., 0.3 means 30% of values need to match to flag a column)
             column_name_hints: Dictionary mapping PII types to column name patterns
         """
-        super().__init__()
+        BaseValidator.__init__(self)
+        DuckDBProcessor.__init__(self)
+
         self.pii_types = pii_types or {
             PIIType.EMAIL,
             PIIType.PHONE,
@@ -97,166 +106,222 @@ class PIIValidator(BaseValidator):
                 else:
                     self.column_name_hints[pii_type] = hints
 
-    def validate(self, data: Any) -> ValidationResult:
-        """Validate data for PII.
+        logger.info("Initialized PIIValidator with DuckDB")
+
+    def validate(self, table_name_or_data: Any) -> ValidationResult:
+        """Validate data for PII using DuckDB.
 
         Args:
-            data: Data to validate (e.g., DataFrame)
+            table_name_or_data: DuckDB table name (str) or data to validate
 
         Returns:
             ValidationResult with PII detection results
         """
         result = ValidationResult(is_valid=True)
 
-        if not isinstance(data, pd.DataFrame):
-            self.add_error(result, "Data must be a pandas DataFrame")
-            return result
+        try:
+            # Handle different input types
+            if isinstance(table_name_or_data, str):
+                table_name = table_name_or_data
+            else:
+                # Register data as a table
+                table_name = "pii_validation_data"
+                self.register_table(table_name_or_data, table_name)
 
-        # Track PII columns by type
-        pii_columns = {}
+            # Get table information
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            if not columns_info:
+                self.add_error(result, "No columns found in data")
+                return result
 
-        # Check column names first
-        for pii_type in self.pii_types:
-            # Skip if no hints for this type
-            if pii_type not in self.column_name_hints:
-                continue
+            column_names = [col[0] for col in columns_info]
 
-            hints = self.column_name_hints[pii_type]
+            # Track PII columns by type
+            pii_columns = {}
 
-            for col in data.columns:
-                col_lower = col.lower()
-                for hint in hints:
-                    if hint.lower() in col_lower:
-                        # Add to PII columns
-                        if pii_type not in pii_columns:
-                            pii_columns[pii_type] = []
-
-                        pii_columns[pii_type].append(col)
-                        self.add_warning(
-                            result, f"Column '{col}' might contain {pii_type.value} based on name"
-                        )
-
-                # Check column contents
-        for pii_type in self.pii_types:
-            if pii_type not in self.PII_PATTERNS:
-                continue
-
-            pattern = self.PII_PATTERNS[pii_type]
-
-            for col in data.columns:
-                # Skip non-string columns
-                if data[col].dtype != "object":
+            # Check column names first
+            for pii_type in self.pii_types:
+                if pii_type not in self.column_name_hints:
                     continue
 
-                # Skip columns already identified by name
-                if pii_type in pii_columns and col in pii_columns[pii_type]:
-                    continue
+                hints = self.column_name_hints[pii_type]
 
-                # Skip date-related columns for phone detection to avoid false positives
-                if pii_type == PIIType.PHONE:
+                for col in column_names:
                     col_lower = col.lower()
-                    date_keywords = [
-                        "date",
-                        "dato",
-                        "time",
-                        "tid",
-                        "arrival",
-                        "ankomst",
-                        "departure",
-                        "afgang",
-                    ]
-                    if any(keyword in col_lower for keyword in date_keywords):
-                        logger.debug(f"Skipping phone detection for date column: {col}")
+                    for hint in hints:
+                        if hint.lower() in col_lower:
+                            # Add to PII columns
+                            if pii_type not in pii_columns:
+                                pii_columns[pii_type] = []
+
+                            pii_columns[pii_type].append(col)
+                            self.add_warning(
+                                result,
+                                f"Column '{col}' might contain {pii_type.value} based on name",
+                            )
+
+            # Check column contents using DuckDB regex
+            for pii_type in self.pii_types:
+                if pii_type not in self.PII_PATTERNS:
+                    continue
+
+                pattern = self.PII_PATTERNS[pii_type]
+
+                for col_name, col_type, *_ in columns_info:
+                    # Skip non-string columns
+                    if "VARCHAR" not in col_type.upper() and "TEXT" not in col_type.upper():
                         continue
 
-                # Check for PII in column values
-                try:
-                    # Count values that match the pattern
-                    match_count = data[col].astype(str).str.match(pattern).sum()
-                    match_ratio = match_count / len(data)
+                    # Skip columns already identified by name
+                    if pii_type in pii_columns and col_name in pii_columns[pii_type]:
+                        continue
 
-                    if match_ratio >= self.threshold:
-                        # Add to PII columns
-                        if pii_type not in pii_columns:
-                            pii_columns[pii_type] = []
+                    # Skip date-related columns for phone detection to avoid false positives
+                    if pii_type == PIIType.PHONE:
+                        col_lower = col_name.lower()
+                        date_keywords = [
+                            "date",
+                            "dato",
+                            "time",
+                            "tid",
+                            "arrival",
+                            "ankomst",
+                            "departure",
+                            "afgang",
+                        ]
+                        if any(keyword in col_lower for keyword in date_keywords):
+                            logger.debug(f"Skipping phone detection for date column: {col_name}")
+                            continue
 
-                        pii_columns[pii_type].append(col)
-                        self.add_warning(
-                            result,
-                            f"Column '{col}' contains {pii_type.value} "
-                            f"({match_count} matches, {match_ratio:.1%})",
-                        )
+                    # Check for PII in column values using DuckDB regex
+                    try:
+                        # Count total non-null values
+                        total_count = self.conn.execute(f"""
+                            SELECT COUNT(*) 
+                            FROM {table_name} 
+                            WHERE {col_name} IS NOT NULL AND {col_name} != ''
+                        """).fetchone()[0]
 
-                except Exception as e:
-                    logger.debug(f"Error checking column '{col}' for PII: {str(e)}")
+                        if total_count == 0:
+                            continue
 
-        # Mark as invalid if PII is found
-        if pii_columns and self.action != PIIAction.REPORT:
-            result.is_valid = False
+                        # Count values that match the pattern
+                        match_count = self.conn.execute(f"""
+                            SELECT COUNT(*) 
+                            FROM {table_name} 
+                            WHERE {col_name} ~ '{pattern}'
+                        """).fetchone()[0]
 
-            # Add metadata about PII columns
-            pii_metadata = {}
-            for pii_type, columns in pii_columns.items():
-                pii_metadata[pii_type.value] = columns
+                        match_ratio = match_count / total_count if total_count > 0 else 0
 
-            # Store PII metadata in result for handling
-            if not hasattr(result, "metadata"):
-                result.metadata = {}
+                        if match_ratio >= self.threshold:
+                            # Add to PII columns
+                            if pii_type not in pii_columns:
+                                pii_columns[pii_type] = []
 
-            result.metadata["pii_columns"] = pii_metadata
-            result.metadata["pii_action"] = self.action.value
+                            pii_columns[pii_type].append(col_name)
+                            self.add_warning(
+                                result,
+                                f"Column '{col_name}' contains {pii_type.value} "
+                                f"({match_count} matches, {match_ratio:.1%})",
+                            )
+
+                    except Exception as e:
+                        logger.debug(f"Error checking column '{col_name}' for PII: {str(e)}")
+
+            # Mark as invalid if PII is found
+            if pii_columns and self.action != PIIAction.REPORT:
+                result.is_valid = False
+
+                # Add metadata about PII columns
+                pii_metadata = {}
+                for pii_type, columns in pii_columns.items():
+                    pii_metadata[pii_type.value] = columns
+
+                result.metadata = {"pii_columns": pii_metadata}
+
+            logger.info(f"PII validation completed. Found PII in {len(pii_columns)} column types")
+
+        except Exception as e:
+            self.add_error(result, f"PII validation failed: {str(e)}")
 
         return result
 
-    def handle_pii(self, data: pd.DataFrame, result: ValidationResult) -> pd.DataFrame:
-        """Handle PII according to the configured action.
+    def handle_pii(self, table_name_or_data: Any, result: ValidationResult) -> str:
+        """Handle PII according to the configured action, returning DuckDB table name.
 
         Args:
-            data: DataFrame to process
+            table_name_or_data: DuckDB table name (str) or data to process
             result: ValidationResult from validate()
 
         Returns:
-            Processed DataFrame with PII handled
+            DuckDB table name with PII handled
         """
-        # Check if we have PII information in the result
-        if not hasattr(result, "metadata") or "pii_columns" not in result.metadata:
-            return data
+        try:
+            # Handle different input types
+            if isinstance(table_name_or_data, str):
+                source_table = table_name_or_data
+            else:
+                # Register data as a table
+                source_table = "pii_handling_data"
+                self.register_table(table_name_or_data, source_table)
 
-        # Create a copy to avoid modifying the original
-        df = data.copy()
+            # If no PII detected or action is REPORT, return original table
+            if not hasattr(result, "metadata") or "pii_columns" not in result.metadata:
+                return source_table
 
-        pii_columns = result.metadata["pii_columns"]
-        action = PIIAction(result.metadata["pii_action"])
+            if self.action == PIIAction.REPORT:
+                return source_table
 
-        # Apply the action to each PII column
-        for pii_type_str, columns in pii_columns.items():
-            pii_type = PIIType(pii_type_str)
+            pii_columns = result.metadata["pii_columns"]
+            handled_table = f"{source_table}_pii_handled"
 
-            for col in columns:
-                if col not in df.columns:
-                    continue
+            # Get all columns
+            columns_info = self.conn.execute(f"DESCRIBE {source_table}").fetchall()
+            all_columns = [col[0] for col in columns_info]
 
-                if action == PIIAction.DELETE:
-                    # Delete the column
-                    df = df.drop(columns=[col])
-                    logger.info(f"Deleted column '{col}' containing {pii_type.value}")
+            # Build select statement based on action
+            select_parts = []
 
-                elif action == PIIAction.MASK:
-                    # Mask the PII
-                    if df[col].dtype == "object":
-                        if pii_type in self.PII_PATTERNS:
-                            pattern = self.PII_PATTERNS[pii_type]
-                            df[col] = df[col].astype(str).replace(pattern, "***", regex=True)
-                        else:
-                            # If no pattern available, mask the entire value
-                            df[col] = "***"
+            for col_name in all_columns:
+                # Check if this column contains PII
+                is_pii_column = False
+                for pii_type_columns in pii_columns.values():
+                    if col_name in pii_type_columns:
+                        is_pii_column = True
+                        break
 
-                        logger.info(f"Masked values in column '{col}' containing {pii_type.value}")
+                if is_pii_column:
+                    if self.action == PIIAction.MASK:
+                        # Replace with masked value
+                        select_parts.append(f"'***MASKED***' AS {col_name}")
+                    elif self.action == PIIAction.HASH:
+                        # Hash the value using DuckDB's hash function
+                        select_parts.append(f"hash({col_name}) AS {col_name}")
+                    elif self.action == PIIAction.DELETE:
+                        # Skip this column (don't include in select)
+                        continue
+                else:
+                    # Keep original column
+                    select_parts.append(col_name)
 
-                elif action == PIIAction.HASH:
-                    # Hash the PII
-                    if df[col].dtype == "object":
-                        df[col] = df[col].astype(str).apply(lambda x: hash(x) if x else x)
-                        logger.info(f"Hashed values in column '{col}' containing {pii_type.value}")
+            # Create the handled table
+            if select_parts:  # Only if we have columns to select
+                self.conn.execute(f"""
+                    CREATE TABLE {handled_table} AS
+                    SELECT {", ".join(select_parts)}
+                    FROM {source_table}
+                """)
 
-        return df
+                logger.info(
+                    f"Applied PII handling ({self.action.value}) to create table {handled_table}"
+                )
+                return handled_table
+            else:
+                # All columns were deleted
+                logger.warning("All columns contained PII and were deleted")
+                return source_table
+
+        except Exception as e:
+            logger.error(f"Failed to handle PII: {str(e)}")
+            return source_table if isinstance(table_name_or_data, str) else "pii_handling_data"

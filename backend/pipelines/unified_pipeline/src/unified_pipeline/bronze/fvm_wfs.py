@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 
 import aiohttp
 
-# ✅ MIGRATION: Removed pandas import - using DuckDB for DataFrame operations
+# ✅ MIGRATION: Removed pandas import - using DuckDB for  operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -319,7 +319,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
 
     def create_dataframe(self, raw_data: List[str], layer_type: str, year: int):
         """
-        Create a DataFrame from the raw WFS data using DuckDB.
+        Create a  from the raw WFS data using DuckDB.
 
         Args:
             raw_data (List[str]): List of raw WFS response strings
@@ -327,27 +327,38 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             year (int): Year of the data
 
         Returns:
-            DataFrame: DataFrame containing the raw data with metadata
+            str: Table name containing the raw data with metadata
         """
-        # ✅ MIGRATION: Use DuckDB to create DataFrame instead of pandas
+        # ✅ MIGRATION: Use DuckDB with proper Python list handling
         current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
 
-        # Register the raw data
-        self.conn.register("temp_wfs_data", {"payload": raw_data})
+        # Create a table by inserting values one by one to avoid complex escaping
+        self.conn.execute("CREATE OR REPLACE TABLE temp_wfs_data (payload VARCHAR)")
 
-        # Create the final DataFrame with metadata columns
-        df = self.conn.execute(f"""
+        # Use prepared statements to safely insert the WFS response strings
+        for wfs_str in raw_data:
+            self.conn.execute("INSERT INTO temp_wfs_data VALUES (?)", [wfs_str])
+
+        # ✅ MIGRATION: Create the final table with metadata columns directly
+        self.conn.execute(
+            """
+            CREATE OR REPLACE TABLE final_dataframe AS
             SELECT 
                 payload,
-                '{self.config.name}' as source,
-                '{layer_type}' as layer_type,
-                {year} as year,
-                '{current_timestamp}' as created_at,
-                '{current_timestamp}' as updated_at
+                ? as source,
+                ? as layer_type,
+                ? as year,
+                ? as created_at,
+                ? as updated_at
             FROM temp_wfs_data
-        """).df()
+        """,
+            [self.config.name, layer_type, year, current_timestamp, current_timestamp],
+        )
 
-        return df
+        # Clean up the temporary table
+        self.conn.execute("DROP TABLE temp_wfs_data")
+
+        return "final_dataframe"
 
     async def _process_layer_type(
         self, session: aiohttp.ClientSession, layer_type: str, years: List[int], dataset_name: str
@@ -387,9 +398,11 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                     layer_data[year] = raw_data
 
                     # Save individual year data
-                    df = self.create_dataframe([raw_data], layer_type, year)
+                    table_name = self.create_dataframe([raw_data], layer_type, year)
                     dataset_with_year = f"{dataset_name}_{year}"
-                    self._save_data(df, dataset_with_year, self.config.bucket, stage="bronze")
+                    self._save_data(
+                        table_name, dataset_with_year, self.config.bucket, stage="bronze"
+                    )
 
                     self.log.info(f"Saved {layer_name} to {dataset_with_year}")
                 else:

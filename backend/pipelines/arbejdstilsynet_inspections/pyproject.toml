@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "python-dotenv",
-    "pandas",
+    "",
     "gcsfs",
     "google-cloud-storage",
     "pyarrow",

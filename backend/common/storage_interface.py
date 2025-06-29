@@ -2,7 +2,6 @@ import json
 import os
 from io import BytesIO
 
-import pandas as pd
 from google.cloud import storage
 
 

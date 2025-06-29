@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Any, Optional
 
-import geopandas as gpd
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
@@ -45,18 +44,18 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         temp_conn.close()
         return timestamp
 
-    def _validate_and_transform(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    def _validate_and_transform(self, gdf: gGeo) -> gGeo:
         """
-        Validate and transform the GeoDataFrame.
+        Validate and transform the Geo.
 
-        This method validates the GeoDataFrame and transforms it into a valid format.
+        This method validates the Geo and transforms it into a valid format.
         Ensures the output is always in EPSG:4326, not OGC:CRS84.
 
         Args:
-            gdf (gpd.GeoDataFrame): The GeoDataFrame to validate and transform.
+            gdf (gGeo): The Geo to validate and transform.
 
         Returns:
-            gpd.GeoDataFrame: The validated and transformed GeoDataFrame in EPSG:4326.
+            gGeo: The validated and transformed Geo in EPSG:4326.
         """
         # First apply the standard validation and transformation
         processed_gdf = validate_and_transform_geometries(gdf, self.config.dataset)
@@ -81,15 +80,15 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
         return processed_gdf
 
-    def _create_dissolved_gdf(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    def _create_dissolved_gdf(self, gdf: gGeo) -> gGeo:
         """
-        Create a dissolved version of the GeoDataFrame by dissolving all geometries.
+        Create a dissolved version of the Geo by dissolving all geometries.
 
         Args:
-            gdf (gpd.GeoDataFrame): The input GeoDataFrame
+            gdf (gGeo): The input Geo
 
         Returns:
-            gpd.GeoDataFrame: A dissolved GeoDataFrame with all geometries merged
+            gGeo: A dissolved Geo with all geometries merged
         """
         try:
             from shapely.ops import unary_union
@@ -97,11 +96,8 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             # Dissolve all geometries into one
             dissolved_geometry = unary_union(gdf.geometry.values)
 
-            # Create a new GeoDataFrame with the dissolved geometry
-            dissolved_gdf = gpd.GeoDataFrame(
-                {
-                    "geometry": [dissolved_geometry],
-                    "feature_count": [len(gdf)],
+            # Create a new Geo with the dissolved geometry
+            dissolved_gdf = gself.conn.execute("CREATE TABLE geo_table AS SELECT ...")],
                     "total_area": [gdf.geometry.area.sum()],
                     # ✅ MIGRATION: Use DuckDB timestamp instead of pandas
                     "dissolved_at": [self._get_current_timestamp()],
@@ -113,18 +109,18 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             return dissolved_gdf
 
         except Exception as e:
-            logger.error(f"Error creating dissolved GeoDataFrame: {str(e)}")
+            logger.error(f"Error creating dissolved Geo: {str(e)}")
             # Return original data if dissolve fails
             return gdf
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[gpd.GeoDataFrame]:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[gGeo]:
         """
         Run the complete Cadastral silver layer processing job.
 
         This is the main entry point that orchestrates the entire process:
         1. Reads data from the bronze layer (either in-memory or from storage)
         2. Validates and transforms the data
-        3. Creates a dissolved version of the GeoDataFrame
+        3. Creates a dissolved version of the Geo
         4. Saves both the original and dissolved data to GCS
 
         Args:
@@ -132,7 +128,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                         this data will be used instead of reading from storage.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: Processed cadastral data for gold layer,
+            Optional[gGeo]: Processed cadastral data for gold layer,
                                        or None if processing fails.
 
         Raises:
@@ -143,10 +139,10 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         # Read data with support for in-memory passing
         if bronze_data is not None:
             self.log.info("Using bronze data from memory (in-memory data passing)")
-            if isinstance(bronze_data, gpd.GeoDataFrame):
+            if isinstance(bronze_data, gGeo):
                 raw_data = bronze_data
             else:
-                self.log.error(f"Expected GeoDataFrame from bronze stage, got {type(bronze_data)}")
+                self.log.error(f"Expected Geo from bronze stage, got {type(bronze_data)}")
                 return None
         else:
             # Fallback to reading from storage

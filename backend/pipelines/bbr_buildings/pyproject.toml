@@ -17,13 +17,11 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "duckdb>=0.9.0",
     "ibis-framework[duckdb,geospatial]>=7.0.0",
-    "geopandas>=0.14.0",
     "shapely>=2.0.0",
     "pyogrio>=0.7.0",
     "pydantic>=2.4.0",
     "python-dotenv>=1.0.0",
     "pyarrow>=14.0.0",
-    "pandas>=2.0.0",
     "google-cloud-storage>=2.10.0",
     "lxml>=4.9.0",
 ]
@@ -55,7 +53,6 @@ select = ["E", "F", "B", "I", "N", "UP", "ANN", "A"]
 ignore = ["ANN101", "ANN401"]
 
 [tool.ruff.isort]
-known-third-party = ["requests", "beautifulsoup4", "duckdb", "ibis", "geopandas", "shapely", "pyogrio", "pydantic", "dotenv", "pyarrow", "pandas", "google"]
 
 [tool.mypy]
 python_version = "3.11"

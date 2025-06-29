@@ -18,7 +18,6 @@ from asyncio import Semaphore
 from typing import Dict, Optional
 
 import aiohttp
-import pandas as pd
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -192,14 +191,9 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
-                        # Create DataFrame with the raw JSON payload and metadata
-                        raw_df = pd.DataFrame(
-                            [
-                                {
-                                    "payload": raw_data,
-                                    "source": f"{self.config.name} - {layer_name}",
-                                    "created_at": pd.Timestamp.now(tz="UTC"),
-                                    "updated_at": pd.Timestamp.now(tz="UTC"),
+                        # Create  with the raw JSON payload and metadata
+                        raw_df = self.conn.execute("CREATE TABLE temp_table AS SELECT ..."),
+                                    "updated_at": Timestamp.now(tz="UTC"),
                                 }
                             ]
                         )

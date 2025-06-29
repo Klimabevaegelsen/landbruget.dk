@@ -132,12 +132,15 @@ def _create_and_save_lookup(
             logging.warning(f"Lookup table '{table_name}' is empty after processing.")
             return None
 
-        # Execute to DataFrame and save
-        df = lookup.execute()
-        df.to_parquet(output_path, index=False)
+        # ✅ MIGRATION: Save directly using DuckDB instead of pandas
+        # Create temporary table and save using DuckDB COPY
+        temp_table_name = f"temp_lookup_{table_name}"
+        con.create_table(temp_table_name, lookup, overwrite=True)
+        con.con.execute(f"COPY {temp_table_name} TO '{output_path}' (FORMAT PARQUET)")
         logging.info(f"Saved temporary lookup table '{table_name}' locally to {output_path}")
 
-        # Convert back to ibis table
+        # Clean up temporary table and read back as ibis table
+        con.drop_table(temp_table_name, force=True)
         lookup = con.read_parquet(output_path)
         return lookup
 

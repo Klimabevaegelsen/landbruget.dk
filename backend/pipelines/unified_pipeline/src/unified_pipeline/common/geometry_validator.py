@@ -193,10 +193,9 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
 
 
 # Keep the original function for backward compatibility during migration
-import geopandas as gpd
 
 
-def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) -> gpd.GeoDataFrame:
+def validate_and_transform_geometries(gdf: gGeo, dataset_name: str) -> gGeo:
     """
     DEPRECATED: GeoPandas-based geometry validation.
 
@@ -204,11 +203,11 @@ def validate_and_transform_geometries(gdf: gpd.GeoDataFrame, dataset_name: str) 
     New code should use validate_and_transform_geometries_duckdb() instead.
 
     Args:
-        gdf: GeoDataFrame with geometries in any CRS
+        gdf: Geo with geometries in any CRS
         dataset_name: Name of dataset for logging
 
     Returns:
-        GeoDataFrame with valid geometries in EPSG:4326
+        Geo with valid geometries in EPSG:4326
 
     Raises:
         ValueError: If geometries cannot be made valid

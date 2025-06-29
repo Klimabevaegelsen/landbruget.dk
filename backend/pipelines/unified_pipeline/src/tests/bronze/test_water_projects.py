@@ -4,9 +4,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
-import pandas as pd
 import pytest
 from tenacity import stop_after_attempt
+
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -445,35 +445,55 @@ async def test_fetch_raw_data_with_error(
 
 
 def test_create_dataframe(water_projects_bronze: WaterProjectsBronze) -> None:
-    """Test the create_dataframe method converts raw data to a DataFrame with metadata."""
+    """Test the create_dataframe method converts raw data to a table with metadata."""
     raw_data = [
         ("N2000_projekter:Hydrologi_E", "<xml>data1</xml>"),
         ("Vandprojekter:Fosfor_E_samlet", "<xml>data2</xml>"),
         ("Klima_lavbund_demarkation___offentlige_projekter:0", '{"features": [{"id": 1}]}'),
     ]
 
-    result_df = water_projects_bronze.create_dataframe(raw_data)
+    table_name = water_projects_bronze.create_dataframe(raw_data)
 
-    assert isinstance(result_df, pd.DataFrame)
-    assert set(result_df.columns) == {"payload", "layer", "source", "created_at", "updated_at"}
-    assert len(result_df) == 3
+    # Verify it returns a table name
+    assert isinstance(table_name, str)
+    assert table_name == "final_dataframe"
+
+    # Verify the table exists and has correct structure
+    result = water_projects_bronze.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert result[0] == 3
+
+    # Check column structure
+    columns = water_projects_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
+    column_names = {row[0] for row in columns}
+    expected_columns = {"payload", "layer", "source", "created_at", "updated_at"}
+    assert expected_columns.issubset(column_names)
 
     # Check payload and layer columns match input data
-    assert result_df["payload"].tolist() == [
+    payload_data = water_projects_bronze.conn.execute(
+        f"SELECT payload, layer FROM {table_name} ORDER BY layer"
+    ).fetchall()
+    expected_payloads = [
+        '{"features": [{"id": 1}]}',
         "<xml>data1</xml>",
         "<xml>data2</xml>",
-        '{"features": [{"id": 1}]}',
     ]
-    assert result_df["layer"].tolist() == [
+    expected_layers = [
+        "Klima_lavbund_demarkation___offentlige_projekter:0",
         "N2000_projekter:Hydrologi_E",
         "Vandprojekter:Fosfor_E_samlet",
-        "Klima_lavbund_demarkation___offentlige_projekter:0",
     ]
 
-    # Check other metadata columns
-    assert all(result_df["source"] == water_projects_bronze.config.name)
-    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["created_at"])
-    assert all(isinstance(ts, pd.Timestamp) for ts in result_df["updated_at"])
+    actual_payloads = [row[0] for row in payload_data]
+    actual_layers = [row[1] for row in payload_data]
+    assert actual_payloads == expected_payloads
+    assert actual_layers == expected_layers
+
+    # Check source column
+    sources = water_projects_bronze.conn.execute(
+        f"SELECT DISTINCT source FROM {table_name}"
+    ).fetchall()
+    assert len(sources) == 1
+    assert sources[0][0] == water_projects_bronze.config.name
 
 
 @pytest.mark.asyncio
@@ -490,10 +510,10 @@ async def test_run_success(water_projects_bronze: WaterProjectsBronze) -> None:
     water_projects_bronze._fetch_raw_data.assert_called_once()
     water_projects_bronze._save_raw_data.assert_called_once()
 
-    # Verify the DataFrame was created correctly
+    # Verify the  was created correctly
     args, kwargs = water_projects_bronze._save_raw_data.call_args
     df = args[0]
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, )
     assert len(df) == 1
     assert df["payload"].iloc[0] == "<xml>data</xml>"
     assert df["layer"].iloc[0] == "N2000_projekter:Hydrologi_E"

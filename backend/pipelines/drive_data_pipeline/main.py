@@ -22,8 +22,11 @@ from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
 
-# Load .env file directly
+# Load .env file directly - check current directory first, then parent
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if not os.path.exists(env_path):
+    # Try parent directory
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
 
 

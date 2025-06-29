@@ -3,14 +3,14 @@ Silver layer processing for Water Projects data.
 
 This module transforms raw data (from the bronze layer) into cleaner,
 more structured data for analytical purposes. It handles the extraction
-of GeoJSON features from API responses, converts them to GeoDataFrames,
+of GeoJSON features from API responses, converts them to Geos,
 and applies transformations such as column renaming and geometry validation.
 
 The module consists of two main components:
 - WaterProjectsSilverConfig: Configuration for Silver processing
 - WaterProjectsSilver: Implementation of Silver processing logic
 
-The process reads in bronze layer data, transforms it into GeoDataFrames,
+The process reads in bronze layer data, transforms it into Geos,
 validates geometries, and stores the processed data in GCS.
 """
 
@@ -19,8 +19,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Optional
 
-# import geopandas as gpd  # MIGRATED: Replaced with DuckDB-spatial operations
-# import pandas as pd  # MIGRATED: Replaced with DuckDB operations
+#   # MIGRATED: Replaced with DuckDB-spatial operations
+#   # MIGRATED: Replaced with DuckDB operations
 # from shapely import MultiPolygon, Polygon, unary_union, wkt  # MIGRATED: Replaced with DuckDB ST_* functions
 # from shapely.validation import explain_validity  # MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -80,10 +80,10 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
     """
     Silver layer processing for Water Projects data.
     This class transforms raw water projects data from the bronze layer into
-    structured GeoDataFrames, validates geometries, and saves the processed data
+    structured Geos, validates geometries, and saves the processed data
     to Google Cloud Storage (GCS).
     It handles both XML and JSON data formats, extracting features and converting
-    them into GeoDataFrames with appropriate geometries and attributes.
+    them into Geos with appropriate geometries and attributes.
 
     The processing includes:
     1. Reading raw data from GCS
@@ -227,7 +227,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 geometry_wkt = f"POLYGON(({points}))"
 
             # Calculate area using DuckDB-spatial
-            self.conn.register("temp_geom_calc", [{"geometry_wkt": geometry_wkt}])
+            self.conn.execute("CREATE OR REPLACE TABLE temp_geom_calc (geometry_wkt VARCHAR)")
+            self.conn.execute("INSERT INTO temp_geom_calc VALUES (?)", [geometry_wkt])
             area_result = self.conn.execute("""
                 SELECT ST_Area(ST_GeomFromText(geometry_wkt)) / 10000 as area_ha
                 FROM temp_geom_calc
@@ -292,7 +293,12 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                 elif key in ["startdato", "slutdato"]:
                                     # ✅ MIGRATION: Use DuckDB for date parsing instead of pandas
                                     try:
-                                        self.conn.register("temp_date", [{"date_str": value}])
+                                        self.conn.execute(
+                                            "CREATE OR REPLACE TABLE temp_date (date_str VARCHAR)"
+                                        )
+                                        self.conn.execute(
+                                            "INSERT INTO temp_date VALUES (?)", [value]
+                                        )
                                         result = self.conn.execute(
                                             "SELECT CAST(date_str AS DATE) as parsed_date FROM temp_date"
                                         ).fetchone()
@@ -356,7 +362,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     continue
 
                 # Calculate area using DuckDB-spatial
-                self.conn.register("temp_geom", [{"geometry_wkt": geometry_wkt}])
+                self.conn.execute("CREATE OR REPLACE TABLE temp_geom (geometry_wkt VARCHAR)")
+                self.conn.execute("INSERT INTO temp_geom VALUES (?)", [geometry_wkt])
                 area_result = self.conn.execute("""
                     SELECT ST_Area(ST_GeomFromText(geometry_wkt)) / 10000 as area_ha
                     FROM temp_geom
@@ -404,23 +411,30 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
         and creates a DuckDB table with geometries.
 
         Args:
-            raw_data: DataFrame containing raw data from the bronze layer.
+            raw_data:  containing raw data from the bronze layer.
 
         Returns:
             Optional[str]: Name of DuckDB table containing processed features with
                           geometries or None if processing fails or no features
                           are extracted.
         """
-        if raw_data is None or raw_data.empty:
+        # ✅ MIGRATION: Handle only table names now
+        if isinstance(raw_data, str):
+            # Keep as table name and process directly
+            table_name = raw_data
+            raw_data_rows = self.conn.execute(f"SELECT payload, layer FROM {table_name}").fetchall()
+        else:
+            self.log.error(f"Expected table name (string), got {type(raw_data)}")
+            return None
+
+        if not raw_data_rows:
             self.log.warning("No raw data to process")
             return None
 
-        self.log.info("Processing raw data into from bronze")
+        self.log.info("Processing raw data from bronze")
         features = []
-        for index, row in raw_data.iterrows():
+        for index, (data, layer) in enumerate(raw_data_rows):
             try:
-                data = row["payload"]
-                layer = row["layer"]
                 service_type = self.config.service_types.get(layer, "wfs")
                 if service_type == "arcgis":
                     features.extend(self._process_json_data(data, layer))
@@ -434,7 +448,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             return None
         self.log.info(f"Extracted {len(features):,} features from raw data")
 
-        # ✅ MIGRATION: Create DuckDB table instead of DataFrame
+        # ✅ MIGRATION: Create DuckDB table instead of 
         self.conn.register("temp_features", features)
         table_name = "water_projects_processed"
         self.conn.execute(f"""
@@ -577,7 +591,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 self.log.info("Using bronze data from memory (in-memory data passing)")
                 # Bronze data is expected to be a list of tuples (layer, raw_data)
                 if isinstance(bronze_data, list):
-                    # ✅ MIGRATION: Create DataFrame using DuckDB instead of pandas
+                    # ✅ MIGRATION: Create  using DuckDB instead of pandas
                     current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
 
                     raw_data_list = [
@@ -591,7 +605,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                         for layer, data in bronze_data
                     ]
                     self.conn.register("temp_raw_data", raw_data_list)
-                    raw_data = self.conn.execute("SELECT * FROM temp_raw_data").df()
+                    # ✅ MIGRATION: Keep as table instead of converting to 
+                    raw_data = "temp_raw_data"
                 else:
                     self.log.error(
                         f"Expected list of tuples from bronze stage, got {type(bronze_data)}"

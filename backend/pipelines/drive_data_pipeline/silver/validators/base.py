@@ -4,7 +4,14 @@ import abc
 from dataclasses import dataclass
 from typing import Any
 
-from ...utils.logging import get_logger
+# Handle imports for both standalone and package usage
+try:
+    from ...utils.logging import get_logger
+except ImportError:
+    # Fallback for standalone usage
+    import logging
+
+    get_logger = lambda: logging.getLogger(__name__)
 
 # Get logger
 logger = get_logger()
@@ -17,7 +24,7 @@ class ValidationResult:
     is_valid: bool
     errors: list[str] = None
     warnings: list[str] = None
-    
+
     def __post_init__(self):
         """Initialize lists if None."""
         if self.errors is None:
@@ -32,7 +39,7 @@ class BaseValidator(abc.ABC):
     def __init__(self):
         """Initialize the validator."""
         logger.debug(f"Initialized {self.__class__.__name__}")
-    
+
     @abc.abstractmethod
     def validate(self, data: Any) -> ValidationResult:
         """Validate the data.
@@ -44,7 +51,7 @@ class BaseValidator(abc.ABC):
             ValidationResult with the result of the validation
         """
         pass
-    
+
     def add_error(self, result: ValidationResult, error: str):
         """Add an error to the validation result.
 
@@ -55,7 +62,7 @@ class BaseValidator(abc.ABC):
         result.errors.append(error)
         result.is_valid = False
         logger.warning(f"Validation error: {error}")
-    
+
     def add_warning(self, result: ValidationResult, warning: str):
         """Add a warning to the validation result.
 
@@ -78,7 +85,7 @@ class SchemaValidator(BaseValidator):
         """
         super().__init__()
         self.required_columns = required_columns or set()
-    
+
     def validate(self, data: Any) -> ValidationResult:
         """Validate the data schema.
 
@@ -89,19 +96,17 @@ class SchemaValidator(BaseValidator):
             ValidationResult with the result of the validation
         """
         result = ValidationResult(is_valid=True)
-        
+
         # Get columns from data
         columns = self._get_columns(data)
-        
+
         # Check required columns
         for col in self.required_columns:
             if col not in columns:
-                self.add_error(
-                    result, f"Required column '{col}' is missing"
-                )
-        
+                self.add_error(result, f"Required column '{col}' is missing")
+
         return result
-    
+
     def _get_columns(self, data: Any) -> list[str]:
         """Get column names from data.
 
@@ -112,10 +117,10 @@ class SchemaValidator(BaseValidator):
             List of column names
         """
         # Handle different data types
-        if hasattr(data, 'columns'):
+        if hasattr(data, "columns"):
             # This covers pandas DataFrames
             return data.columns.tolist()
-        elif hasattr(data, 'column_names'):
+        elif hasattr(data, "column_names"):
             # This covers some Ibis tables
             return data.column_names
         else:
@@ -134,7 +139,7 @@ class DataTypeValidator(BaseValidator):
         """
         super().__init__()
         self.expected_types = expected_types
-    
+
     def validate(self, data: Any) -> ValidationResult:
         """Validate the data types.
 
@@ -145,12 +150,12 @@ class DataTypeValidator(BaseValidator):
             ValidationResult with the result of the validation
         """
         result = ValidationResult(is_valid=True)
-        
+
         # This is a placeholder - actual implementation will depend on
         # whether we're using pandas, DuckDB, Ibis, or another library
-        
+
         # Example implementation for pandas DataFrame
-        if hasattr(data, 'dtypes'):
+        if hasattr(data, "dtypes"):
             for col, expected_type in self.expected_types.items():
                 if col in data.columns:
                     actual_type = str(data[col].dtype)
@@ -160,9 +165,9 @@ class DataTypeValidator(BaseValidator):
                             f"Column '{col}' has type '{actual_type}' "
                             f"but expected '{expected_type}'",
                         )
-        
+
         return result
-    
+
     def _is_compatible_type(self, actual: str, expected: str) -> bool:
         """Check if actual type is compatible with expected type.
 
@@ -175,4 +180,4 @@ class DataTypeValidator(BaseValidator):
         """
         # Simple string matching for now
         # More sophisticated type compatibility could be implemented
-        return expected in actual 
+        return expected in actual

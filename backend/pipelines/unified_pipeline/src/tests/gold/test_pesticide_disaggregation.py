@@ -6,8 +6,6 @@ Tests the EXACT preservation of the original 92% coverage strategy.
 
 from unittest.mock import Mock
 
-import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 
@@ -34,7 +32,7 @@ class TestPesticideDisaggregationGold:
     @pytest.fixture
     def sample_agricultural_fields(self):
         """Create sample agricultural fields data matching expected schema."""
-        return gpd.GeoDataFrame(
+        return gGeo(
             {
                 "field_id": ["field_001", "field_002", "field_003", "field_004"],
                 "block_id": ["block_001", "block_002", "block_003", "block_004"],
@@ -57,7 +55,7 @@ class TestPesticideDisaggregationGold:
     @pytest.fixture
     def sample_pesticide_applications(self):
         """Create sample pesticide applications data."""
-        return pd.DataFrame(
+        return (
             {
                 "OriginalPesticideRowID": [1, 2, 3, 4, 5],
                 "CompanyRegistrationNumber": [
@@ -136,7 +134,7 @@ class TestPesticideDisaggregationGold:
     def test_area_tolerance_enforcement(self, config, mock_gcs_util, sample_agricultural_fields):
         """Test that 2% area tolerance is strictly enforced."""
         # Create pesticide data that exceeds tolerance
-        pesticide_data = pd.DataFrame(
+        pesticide_data = (
             {
                 "OriginalPesticideRowID": [1, 2],
                 "CompanyRegistrationNumber": ["12345678", "12345678"],
@@ -174,7 +172,7 @@ class TestPesticideDisaggregationGold:
 
     def test_nopesticides_filtering(self, config, mock_gcs_util, sample_agricultural_fields):
         """Test that nopesticides=1 records are correctly filtered out."""
-        pesticide_data = pd.DataFrame(
+        pesticide_data = (
             {
                 "OriginalPesticideRowID": [1, 2, 3],
                 "CompanyRegistrationNumber": ["12345678", "12345678", "12345678"],
@@ -261,7 +259,7 @@ class TestPesticideDisaggregationGold:
     def test_coverage_validation_failure(self, config, mock_gcs_util):
         """Test that pipeline fails if coverage drops below 92%."""
         # Create data that will result in low coverage
-        fields_df = gpd.GeoDataFrame(
+        fields_df = gGeo(
             {
                 "field_id": ["field_001"],
                 "cvr_number": ["12345678"],
@@ -275,7 +273,7 @@ class TestPesticideDisaggregationGold:
         )
 
         # Create many pesticide records that won't match
-        pesticide_data = pd.DataFrame(
+        pesticide_data = (
             {
                 "OriginalPesticideRowID": list(range(1, 101)),  # 100 records
                 "CompanyRegistrationNumber": ["99999999"] * 100,  # Non-matching CVR
@@ -335,7 +333,7 @@ class TestPesticideDisaggregationGold:
     def test_organic_field_identification(self, config, mock_gcs_util):
         """Test organic field identification logic."""
         # Create fields with organic farming indicators
-        fields_df = gpd.GeoDataFrame(
+        fields_df = gGeo(
             {
                 "field_id": ["field_001", "field_002", "field_003"],
                 "cvr_number": ["12345678", "12345678", "12345678"],
@@ -351,7 +349,7 @@ class TestPesticideDisaggregationGold:
         )
 
         processor = PesticideDisaggregationGold(config, mock_gcs_util)
-        processor._setup_duckdb(fields_df, pd.DataFrame())
+        processor._setup_duckdb(fields_df, ())
 
         organic_ids = processor._get_organic_marker_field_ids()
 

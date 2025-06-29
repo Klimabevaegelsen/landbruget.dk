@@ -6,8 +6,16 @@ from pathlib import Path
 from typing import Any
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
-from ...bronze.metadata import FileMetadata
-from ...utils.logging import get_logger
+# Handle imports for both standalone and package usage
+try:
+    from ...bronze.metadata import FileMetadata
+    from ...utils.logging import get_logger
+except ImportError:
+    # Fallback for standalone usage
+    import logging
+
+    get_logger = lambda: logging.getLogger(__name__)
+    FileMetadata = None
 
 # Get logger
 logger = get_logger()
@@ -71,7 +79,11 @@ class BaseTransformer(abc.ABC):
         import os
         import tempfile
 
-        from ...bronze.metadata import FileMetadata
+        # Handle imports for both standalone and package usage (duplicate import)
+        try:
+            from ...bronze.metadata import FileMetadata
+        except ImportError:
+            FileMetadata = None
 
         try:
             # Create a temporary file

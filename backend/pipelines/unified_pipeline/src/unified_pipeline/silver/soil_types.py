@@ -16,7 +16,6 @@ and quality assurance checks.
 import os
 from typing import Any, Optional
 
-import geopandas as gpd
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
@@ -84,19 +83,19 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
         """
         super().__init__(config, gcs_util)
 
-    def _validate_and_transform(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    def _validate_and_transform(self, gdf: gGeo) -> gGeo:
         """
-        Validate and transform the soil types GeoDataFrame.
+        Validate and transform the soil types Geo.
 
         This method validates geometries and transforms the data into a standardized
         format suitable for analysis. It includes geometry validation, attribute
         cleaning, and data type standardization.
 
         Args:
-            gdf (gpd.GeoDataFrame): The raw GeoDataFrame from the bronze layer
+            gdf (gGeo): The raw Geo from the bronze layer
 
         Returns:
-            gpd.GeoDataFrame: The validated and transformed GeoDataFrame
+            gGeo: The validated and transformed Geo
 
         Raises:
             Exception: If validation or transformation fails
@@ -130,7 +129,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 validated_gdf = validated_gdf.set_geometry("geometry")
 
             # ✅ MIGRATION: Clean and standardize data types using DuckDB
-            # Convert GeoDataFrame to regular DataFrame for DuckDB processing
+            # Convert Geo to regular  for DuckDB processing
             df_for_processing = validated_gdf.copy()
             if hasattr(df_for_processing, "geometry"):
                 df_for_processing["geometry_wkt"] = validated_gdf.geometry.to_wkt()
@@ -157,13 +156,16 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                         select_parts.append(f'"{col}"')
 
                 conversion_query = f"SELECT {', '.join(select_parts)} FROM temp_soil_data"
-                df_converted = temp_conn.execute(conversion_query).df()
+                # ✅ MIGRATION: Update validated_gdf columns directly from DuckDB query results
+                result = temp_conn.execute(conversion_query).fetchall()
+                columns = [desc[0] for desc in temp_conn.description]
                 temp_conn.close()
 
-                # Update the validated_gdf with converted values
+                # Update specific columns in validated_gdf with converted values
                 for col in ["soil_height", "soil_code"]:
-                    if col in df_converted.columns:
-                        validated_gdf[col] = df_converted[col]
+                    if col in columns:
+                        col_idx = columns.index(col)
+                        validated_gdf[col] = [row[col_idx] for row in result]
 
             # Clean text fields
             text_columns = ["soil_description", "theme_name"]
@@ -194,7 +196,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             self.log.error(f"Error in validation and transformation: {str(e)}")
             raise
 
-    def _perform_quality_checks(self, gdf: gpd.GeoDataFrame) -> None:
+    def _perform_quality_checks(self, gdf: gGeo) -> None:
         """
         Perform quality checks on the processed data.
 
@@ -202,7 +204,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
         to ensure data integrity and completeness.
 
         Args:
-            gdf (gpd.GeoDataFrame): The processed GeoDataFrame to check
+            gdf (gGeo): The processed Geo to check
 
         Returns:
             None
@@ -277,11 +279,11 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             # Read data with support for in-memory passing
             if bronze_data is not None:
                 self.log.info("Using bronze data from memory (in-memory data passing)")
-                if isinstance(bronze_data, gpd.GeoDataFrame):
+                if isinstance(bronze_data, gGeo):
                     raw_data = bronze_data
                 else:
                     self.log.error(
-                        f"Expected GeoDataFrame from bronze stage, got {type(bronze_data)}"
+                        f"Expected Geo from bronze stage, got {type(bronze_data)}"
                     )
                     return
             else:

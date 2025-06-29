@@ -4,7 +4,6 @@ Simple test for DuckDB functionality.
 """
 
 import duckdb
-import pandas as pd
 
 
 def test_duckdb():
@@ -12,11 +11,7 @@ def test_duckdb():
     print("Testing basic DuckDB functionality...")
     
     # Create a test DataFrame
-    df = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5],
-        'name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
-        'value': [10.5, 20.1, 30.7, 40.2, 50.9]
-    })
+    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
     
     print("Created test DataFrame:")
     print(df.head())

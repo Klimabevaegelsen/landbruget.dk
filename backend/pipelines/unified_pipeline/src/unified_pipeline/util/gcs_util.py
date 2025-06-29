@@ -9,10 +9,8 @@ a singleton pattern to ensure only one GCS client exists throughout the applicat
 import json
 import os
 import tempfile
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
-import geopandas as gpd
-import pandas as pd
 from google.auth import exceptions
 from google.cloud import storage
 from google.cloud.storage import Blob, Client
@@ -21,6 +19,10 @@ from simple_singleton import Singleton
 
 from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.util.log_util import Logger
+
+# Type aliases for DuckDB-only architecture (no pandas/geopandas)
+gGeo = Any  # Should be DuckDB relation, not GeoDataFrame
+gread_parquet = None  # Not used in DuckDB-only architecture
 
 
 class GCSUtil(metaclass=Singleton):
@@ -328,19 +330,17 @@ class GCSUtil(metaclass=Singleton):
 
     def download_geopandas_from_gcs(self, bucket_name: str, blob_name: str):
         """
-        Download a parquet file from GCS and return as GeoDataFrame.
+        Download a parquet file from GCS and return as Geo.
 
         Args:
             bucket_name (str): Name of the GCS bucket
             blob_name (str): Path to the parquet file in the bucket
 
         Returns:
-            GeoDataFrame: The downloaded data as a GeoPandas DataFrame
+            Geo: The downloaded data as a GeoPandas
         """
         import os
         import tempfile
-
-        import geopandas as gpd
 
         # Create temporary file
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
@@ -350,8 +350,8 @@ class GCSUtil(metaclass=Singleton):
             # Download file to temporary location
             self.download_file(bucket_name, blob_name, temp_path)
 
-            # Read as GeoDataFrame
-            gdf = gpd.read_parquet(temp_path)
+            # Read as Geo
+            gdf = gread_parquet(temp_path)
             self.log.info(f"Successfully loaded {len(gdf)} records from {blob_name}")
             return gdf
 
@@ -361,13 +361,13 @@ class GCSUtil(metaclass=Singleton):
                 os.unlink(temp_path)
 
     def upload_pandas_to_gcs(
-        self, df: pd.DataFrame, bucket_name: str, blob_name: str, file_format: str = "parquet"
+        self, df: Any, bucket_name: str, blob_name: str, file_format: str = "parquet"
     ) -> None:
         """
-        Upload a pandas DataFrame to GCS.
+        Upload a pandas  to GCS.
 
         Args:
-            df: DataFrame to upload
+            df:  to upload
             bucket_name: Name of the GCS bucket
             blob_name: Path to save the file in the bucket
             file_format: Format to save the file ('parquet' or 'csv')
@@ -387,20 +387,20 @@ class GCSUtil(metaclass=Singleton):
                 raise ValueError(f"Unsupported file format: {file_format}")
 
             blob.upload_from_filename(temp_path)
-            self.log.info(f"Uploaded DataFrame ({len(df)} rows) to gs://{bucket_name}/{blob_name}")
+            self.log.info(f"Uploaded  ({len(df)} rows) to gs://{bucket_name}/{blob_name}")
 
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
     def upload_geopandas_to_gcs(
-        self, gdf: gpd.GeoDataFrame, bucket_name: str, blob_name: str, file_format: str = "parquet"
+        self, gdf: gGeo, bucket_name: str, blob_name: str, file_format: str = "parquet"
     ) -> None:
         """
-        Upload a GeoPandas GeoDataFrame to GCS.
+        Upload a GeoPandas Geo to GCS.
 
         Args:
-            gdf: GeoDataFrame to upload
+            gdf: Geo to upload
             bucket_name: Name of the GCS bucket
             blob_name: Path to save the file in the bucket
             file_format: Format to save the file ('parquet' or 'geojson')
@@ -420,9 +420,7 @@ class GCSUtil(metaclass=Singleton):
                 raise ValueError(f"Unsupported file format: {file_format}")
 
             blob.upload_from_filename(temp_path)
-            self.log.info(
-                f"Uploaded GeoDataFrame ({len(gdf)} rows) to gs://{bucket_name}/{blob_name}"
-            )
+            self.log.info(f"Uploaded Geo ({len(gdf)} rows) to gs://{bucket_name}/{blob_name}")
 
         finally:
             if os.path.exists(temp_path):

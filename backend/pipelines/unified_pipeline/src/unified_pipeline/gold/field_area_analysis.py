@@ -14,7 +14,6 @@ import tempfile
 from typing import Any, Dict, List, Optional
 
 import duckdb
-import pandas as pd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -337,12 +336,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         This now uses the new GCSDataAccess layer for:
         - 5x faster downloads with gcsfs
-        - Direct DuckDB table creation without DataFrame conversion
+        - Direct DuckDB table creation without  conversion
         - Automatic cleanup of temp files
         """
 
         if dataset_name == self.config.soil_types_dataset:
-            # ✅ OPTIMIZED: Direct table creation without DataFrame conversion
+            # ✅ OPTIMIZED: Direct table creation without  conversion
             self.gcs_access.query_parquet_direct(
                 gcs_path,
                 """SELECT 
@@ -433,7 +432,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 FROM water_df
             """)
 
-    def _process_field_batch_spatial(self, fields_batch: pd.DataFrame) -> pd.DataFrame:
+    def _process_field_batch_spatial(self, fields_batch: str) -> str:
         """Process field batch with spatial analysis using unified pipeline data."""
 
         # Register the fields batch with DuckDB
@@ -687,9 +686,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             GROUP BY field_id, block_id
         """)
 
-        # Combine all results into final table using DuckDB
+        # ✅ MIGRATION: Combine all results into final table using DuckDB directly
         self.log.info("    🔗 Combining all results...")
-        results = self.conn.execute("""
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE final_results AS
             SELECT 
                 f.field_id,
                 f.block_id,
@@ -709,16 +709,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
             LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
             LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
-        """).df()
+        """)
 
-        return results
+        return "final_results"
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """
         ✅ MIGRATED: Run the field area analysis gold processing with optimized patterns.
 
         This now uses:
-        - Direct DuckDB table operations (no DataFrame conversions)
+        - Direct DuckDB table operations (no  conversions)
         - Optimized GCS access with gcsfs
         - Direct table export to GCS
         - Memory-efficient batch processing
@@ -764,9 +764,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self._load_reference_data_into_duckdb_streaming(dataset_paths)
 
             # ✅ OPTIMIZED: Process all fields directly in DuckDB without batching
-            # This is now possible because we're not converting to DataFrames
+            # This is now possible because we're not converting to s
             self.log.info(
-                f"🚀 Processing {fields_count:,} fields directly in DuckDB (no DataFrame conversions)"
+                f"🚀 Processing {fields_count:,} fields directly in DuckDB (no  conversions)"
             )
 
             # Create the main fields table for processing
@@ -849,7 +849,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 f"  Fields with BNBO data: {fields_with_bnbo:,} ({fields_with_bnbo / total_fields * 100:.1f}%)"
             )
 
-            # ✅ OPTIMIZED: Save directly from DuckDB table to GCS without DataFrame conversion
+            # ✅ OPTIMIZED: Save directly from DuckDB table to GCS without  conversion
             self.log.info("💾 Saving results directly to GCS...")
             self.save_data_direct(
                 "final_field_analysis", self.config.dataset, self.config.bucket, "gold"

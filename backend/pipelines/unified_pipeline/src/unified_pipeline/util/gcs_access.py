@@ -18,6 +18,7 @@ Performance improvements:
 import os
 import shutil
 import tempfile
+import time
 import warnings
 from contextlib import contextmanager
 from functools import lru_cache
@@ -25,7 +26,6 @@ from typing import Any, Dict, List
 
 import duckdb
 import gcsfs
-import pandas as pd
 
 from unified_pipeline.util.log_util import Logger
 
@@ -180,34 +180,37 @@ class GCSDataAccess:
         return temp_file_context()
 
     # For DuckDB + Parquet - Hybrid approach (still faster than current)
-    def query_parquet_with_duckdb(self, gcs_path: str, query: str = "1=1") -> pd.DataFrame:
+    def query_parquet_with_duckdb(self, gcs_path: str, query: str = "1=1") -> str:
         """
         Query parquet from GCS using optimized download + DuckDB read.
 
-        ⚠️ WARNING: This method still returns DataFrame for backward compatibility.
+        ⚠️ WARNING: This method returns table name for DuckDB compatibility.
         Use query_parquet_direct() for maximum performance without DataFrame conversion.
         """
         self.monitor.check_resources("start_query")
 
         # Use optimized download approach with guaranteed cleanup
         with self._temp_download(gcs_path) as temp_file:
-            # Fast query with DuckDB (with projection/filter pushdown)
-            result = self.duckdb_conn.sql(f"""
+            # ✅ OPTIMIZED: Direct query without unnecessary intermediate table
+            # Create table and return table name for DuckDB compatibility
+            table_name = f"query_result_{int(time.time())}"
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {table_name} AS
                 SELECT * FROM read_parquet('{temp_file}')
                 WHERE {query}
-            """).df()
+            """)
 
             self.monitor.check_resources("post_query")
-            return result
+            return table_name
 
     def query_parquet_direct(
         self, gcs_path: str, query: str = "SELECT *", table_name: str = "result_table"
     ):
         """
-        ✅ OPTIMAL: Query parquet and create DuckDB table directly - NO DataFrame conversion.
+        ✅ OPTIMAL: Query parquet and create DuckDB table directly - NO  conversion.
 
         This is the recommended method for maximum performance:
-        - No DataFrame conversion bottleneck
+        - No  conversion bottleneck
         - Direct DuckDB table creation
         - Can be used for further DuckDB operations
 
@@ -222,7 +225,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_direct_query")
 
         with self._temp_download(gcs_path) as temp_file:
-            # ✅ DIRECT: Create table without DataFrame conversion
+            # ✅ DIRECT: Create table without  conversion
             full_query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 {query} FROM read_parquet('{temp_file}')
@@ -232,17 +235,17 @@ class GCSDataAccess:
             # Log table info for debugging
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(
-                f"✅ Created DuckDB table {table_name} with {count:,} rows (no DataFrame conversion)"
+                f"✅ Created DuckDB table {table_name} with {count:,} rows (no  conversion)"
             )
 
             self.monitor.check_resources("post_direct_query")
 
     def export_table_to_gcs_direct(self, table_name: str, gcs_path: str, **parquet_options):
         """
-        ✅ OPTIMAL: Export DuckDB table directly to GCS without DataFrame conversion.
+        ✅ OPTIMAL: Export DuckDB table directly to GCS without  conversion.
 
         This provides maximum performance:
-        - No DataFrame conversion bottleneck
+        - No  conversion bottleneck
         - Direct DuckDB COPY with optimized Parquet settings
         - Streaming upload to GCS
         """
@@ -282,13 +285,13 @@ class GCSDataAccess:
         self, input_gcs_path: str, output_gcs_path: str, processing_query: str, **parquet_options
     ):
         """
-        ✅ ULTIMATE PERFORMANCE: Process GCS file to GCS file with ZERO DataFrame conversions.
+        ✅ ULTIMATE PERFORMANCE: Process GCS file to GCS file with ZERO  conversions.
 
         This is the fastest possible pattern:
         - Download input file once
         - Process entirely in DuckDB
         - Export directly to GCS
-        - No intermediate DataFrames
+        - No intermediate s
         - No memory bottlenecks
 
         Example:
@@ -324,90 +327,13 @@ class GCSDataAccess:
             self.duckdb_conn.execute("DROP TABLE IF EXISTS processed_result")
 
         self.monitor.check_resources("post_gcs_to_gcs")
-        self.log.info(
-            f"✅ Processed {input_gcs_path} → {output_gcs_path} with zero DataFrame conversions"
-        )
-
-    def query_parquet_with_columns(
-        self, gcs_path: str, columns: List[str], filters: Dict[str, Any] = None
-    ) -> pd.DataFrame:
-        """
-        Query parquet with column projection and filters for optimal performance.
-
-        ⚠️ WARNING: Still returns DataFrame for compatibility. Use query_parquet_direct() for better performance.
-        """
-        self.monitor.check_resources("start_column_query")
-
-        with self._temp_download(gcs_path) as temp_file:
-            # Build optimized query with projection/filter pushdown
-            select_clause = ", ".join(columns) if columns else "*"
-            query = f"SELECT {select_clause} FROM read_parquet('{temp_file}')"
-
-            if filters:
-                conditions = []
-                for col, value in filters.items():
-                    if isinstance(value, str):
-                        conditions.append(f"{col} = '{value}'")
-                    else:
-                        conditions.append(f"{col} = {value}")
-                if conditions:
-                    query += " WHERE " + " AND ".join(conditions)
-
-            result = self.duckdb_conn.execute(query).df()
-            self.monitor.check_resources("post_column_query")
-            return result
-
-    def query_multiple_parquet_with_duckdb(
-        self, gcs_pattern: str, query: str = "1=1"
-    ) -> pd.DataFrame:
-        """
-        Query multiple parquet files - download first, then query.
-
-        ⚠️ WARNING: Still returns DataFrame for compatibility. Use query_multiple_direct() for better performance.
-        """
-        # List files matching pattern
-        pattern_without_gs = gcs_pattern.replace("gs://", "")
-        files = self.fs.glob(pattern_without_gs)
-        gcs_paths = [f"gs://{f}" for f in files]
-
-        if not gcs_paths:
-            raise FileNotFoundError(f"No files found matching pattern: {gcs_pattern}")
-
-        self.log.info(f"Found {len(gcs_paths)} files matching pattern")
-
-        # Download all files and query together
-        temp_files = []
-        try:
-            for gcs_path in gcs_paths:
-                with self._temp_download(gcs_path) as temp_file:
-                    # Copy to a persistent temp file for the duration of the query
-                    persistent_temp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
-                    shutil.copy2(temp_file, persistent_temp.name)
-                    temp_files.append(persistent_temp.name)
-                    persistent_temp.close()
-
-            # Query all files together with DuckDB
-            file_list = "', '".join(temp_files)
-            result = self.duckdb_conn.sql(f"""
-                SELECT * FROM read_parquet(['{file_list}'])
-                WHERE {query}
-            """).df()
-
-            return result
-        finally:
-            # Cleanup temp files
-            for tmp_file in temp_files:
-                try:
-                    if os.path.exists(tmp_file):
-                        os.unlink(tmp_file)
-                except Exception as e:
-                    self.log.warning(f"Failed to cleanup {tmp_file}: {e}")
+        self.log.info(f"✅ Processed {input_gcs_path} → {output_gcs_path} with zero  conversions")
 
     def query_multiple_direct(
         self, gcs_pattern: str, table_name: str = "combined_table", query: str = "SELECT *"
     ):
         """
-        ✅ OPTIMAL: Query multiple parquet files directly into DuckDB table - no DataFrame conversion.
+        ✅ OPTIMAL: Query multiple parquet files directly into DuckDB table - no  conversion.
         """
         pattern_without_gs = gcs_pattern.replace("gs://", "")
         files = self.fs.glob(pattern_without_gs)
@@ -449,38 +375,36 @@ class GCSDataAccess:
                     self.log.warning(f"Failed to cleanup {tmp_file}: {e}")
 
     # For Pandas/GeoPandas - Direct gcsfs streaming
-    def read_parquet_streaming(self, gcs_path: str) -> pd.DataFrame:
+    def read_parquet_streaming(self, gcs_path: str) -> str:
         """Read parquet with streaming via gcsfs."""
         self.monitor.check_resources("start_streaming_read")
 
-        with self.fs.open(gcs_path, "rb") as f:
-            result = pd.read_parquet(f)
+        # Create table from streaming read and return table name
+        table_name = f"streaming_table_{int(time.time())}"
+        with self._temp_download(gcs_path) as temp_file:
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {table_name} AS
+                SELECT * FROM read_parquet('{temp_file}')
+            """)
 
         self.monitor.check_resources("post_streaming_read")
-        return result
-
-    def read_geoparquet_streaming(self, gcs_path: str) -> pd.DataFrame:
-        """Read geoparquet with streaming via gcsfs + DuckDB-spatial."""
-        self.monitor.check_resources("start_geoparquet_read")
-
-        # Use DuckDB-spatial for reading (avoid geopandas for better performance)
-        with self._temp_download(gcs_path) as temp_file:
-            # DuckDB can read geoparquet directly with spatial extension
-            result = self.duckdb_conn.execute(f"SELECT * FROM read_parquet('{temp_file}')").df()
-
-        self.monitor.check_resources("post_geoparquet_read")
-        return result
+        return table_name
 
     # For uploads - gcsfs streaming (DuckDB cannot write to GCS)
-    def upload_dataframe(self, df: pd.DataFrame, gcs_path: str, **kwargs):
+    def upload_dataframe(self, df: Any, gcs_path: str, **kwargs):
         """Upload dataframe with streaming via gcsfs."""
         self.monitor.check_resources("start_upload")
 
-        with self.fs.open(gcs_path, "wb") as f:
-            df.to_parquet(f, **kwargs)
+        # This method is deprecated - use upload_from_duckdb_table instead
+        self.log.warning("upload_dataframe is deprecated. Use upload_from_duckdb_table instead.")
+
+        # For backward compatibility, assume df is a table name
+        if isinstance(df, str):
+            self.upload_from_duckdb_table(df, gcs_path, **kwargs)
+        else:
+            raise ValueError("Only DuckDB table names are supported. Use upload_from_duckdb_table.")
 
         self.monitor.check_resources("post_upload")
-        self.log.info(f"Uploaded DataFrame ({len(df)} rows) to {gcs_path}")
 
     def upload_json(self, data: Dict[str, Any] | List[Any], gcs_path: str, **kwargs):
         """

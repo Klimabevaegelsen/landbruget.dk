@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from tenacity import stop_after_attempt
+
 from unified_pipeline.bronze.agricultural_fields import (
     AgriculturalFieldsBronze,
     AgriculturalFieldsBronzeConfig,
@@ -237,13 +238,24 @@ async def test_run_with_exception(agricultural_fields_bronze: AgriculturalFields
 
 
 def test_create_raw_dataframe(agricultural_fields_bronze: AgriculturalFieldsBronze) -> None:
-    """Test creating a raw DataFrame."""
+    """Test creating a DuckDB table from raw data."""
     data = [
         "{'id': 1, 'name': 'Field1', 'geometry': 'Polygon'}",
         "{'id': 2, 'name': 'Field2', 'geometry': 'Polygon'}",
     ]  # noqa: E501
-    df = agricultural_fields_bronze.create_dataframe(data)
+    table_name = agricultural_fields_bronze.create_dataframe(data, 2024)
 
-    assert not df.empty
-    assert len(df) == 2
-    assert set(df.columns) == {"payload", "created_at", "source", "updated_at"}
+    # ✅ MIGRATION: Method now returns table name instead of 
+    assert isinstance(table_name, str)
+    assert table_name  # Should be non-empty string
+
+    # Verify the table was created in DuckDB
+    result = agricultural_fields_bronze.conn.execute(
+        f"SELECT COUNT(*) FROM {table_name}"
+    ).fetchone()
+    assert result[0] == 2
+
+    # Verify the table has the expected columns
+    columns_result = agricultural_fields_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
+    column_names = {row[0] for row in columns_result}
+    assert {"payload", "created_at", "source", "updated_at"}.issubset(column_names)

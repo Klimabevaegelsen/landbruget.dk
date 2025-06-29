@@ -3,14 +3,14 @@ Silver layer data processing for DAGI (Danish Administrative Geographic Division
 
 This module handles the transformation of raw DAGI data from the bronze layer
 into clean, structured geographic data in the silver layer. It processes raw JSON
-from the DAWA API and standardizes them into consistent GeoDataFrame formats.
+from the DAWA API and standardizes them into consistent Geo formats.
 
 The module contains:
 - DAGISilverConfig: Configuration class for the DAGI silver processing
 - DAGISilver: Implementation class for transforming and processing DAGI data
 
 The data processing includes:
-- Parsing raw JSON into GeoDataFrames
+- Parsing raw JSON into Geos
 - Standardizing column names and data types
 - Validating geometries and coordinate systems
 - Adding consistent metadata fields
@@ -20,7 +20,6 @@ The data processing includes:
 import json
 from typing import Any, Dict, Optional
 
-import geopandas as gpd
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from pydantic import Field
@@ -95,10 +94,10 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
     Silver layer implementation for DAGI (Danish Administrative Geographic Division) data.
 
     Processes raw JSON data from the bronze layer and transforms them into clean,
-    standardized GeoDataFrames suitable for analysis and downstream processing.
+    standardized Geos suitable for analysis and downstream processing.
 
     Processing includes:
-    - Parsing raw JSON into GeoDataFrames
+    - Parsing raw JSON into Geos
     - Geometry validation and coordinate system transformation
     - Column standardization and type conversion
     - Data quality validation and cleaning
@@ -111,16 +110,16 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
     def _parse_json_to_geodataframe(
         self, raw_json: str, layer_type: str
-    ) -> Optional[gpd.GeoDataFrame]:
+    ) -> Optional[gGeo]:
         """
-        Parse raw JSON data into a GeoDataFrame.
+        Parse raw JSON data into a Geo.
 
         Args:
             raw_json: Raw JSON string from bronze layer
             layer_type: Type of administrative layer
 
         Returns:
-            GeoDataFrame or None if parsing fails
+            Geo or None if parsing fails
         """
         try:
             data = json.loads(raw_json)
@@ -134,8 +133,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 self.log.warning(f"Empty features list for {layer_type}")
                 return None
 
-            # Create GeoDataFrame from GeoJSON features
-            gdf = gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
+            # Create Geo from GeoJSON features
+            gdf = gGeo.from_features(features, crs="EPSG:4326")
 
             self.log.info(
                 f"Parsed {len(gdf)} features for {layer_type} with columns: {list(gdf.columns)}"
@@ -150,16 +149,16 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error parsing JSON for {layer_type}: {e}")
             return None
 
-    def _standardize_columns(self, gdf: gpd.GeoDataFrame, layer_type: str) -> gpd.GeoDataFrame:
+    def _standardize_columns(self, gdf: gGeo, layer_type: str) -> gGeo:
         """
         Standardize column names and ensure required columns exist.
 
         Args:
-            gdf: Input GeoDataFrame
+            gdf: Input Geo
             layer_type: Type of administrative layer
 
         Returns:
-            GeoDataFrame with standardized columns
+            Geo with standardized columns
         """
         try:
             # Make a copy to avoid modifying the original
@@ -195,16 +194,16 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error standardizing columns for {layer_type}: {e}")
             raise
 
-    def _validate_data_quality(self, gdf: gpd.GeoDataFrame, layer_type: str) -> gpd.GeoDataFrame:
+    def _validate_data_quality(self, gdf: gGeo, layer_type: str) -> gGeo:
         """
         Validate and clean data quality issues.
 
         Args:
-            gdf: Input GeoDataFrame
+            gdf: Input Geo
             layer_type: Type of administrative layer
 
         Returns:
-            Cleaned GeoDataFrame
+            Cleaned Geo
         """
         try:
             original_count = len(gdf)
@@ -256,16 +255,16 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error validating data quality for {layer_type}: {e}")
             raise
 
-    def _add_metadata(self, gdf: gpd.GeoDataFrame, layer_type: str) -> gpd.GeoDataFrame:
+    def _add_metadata(self, gdf: gGeo, layer_type: str) -> gGeo:
         """
-        Add metadata fields to the GeoDataFrame.
+        Add metadata fields to the Geo.
 
         Args:
-            gdf: Input GeoDataFrame
+            gdf: Input Geo
             layer_type: Type of administrative layer
 
         Returns:
-            GeoDataFrame with additional metadata
+            Geo with additional metadata
         """
         try:
             result = gdf.copy()
@@ -303,16 +302,16 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error adding metadata to {layer_type}: {e}")
             raise
 
-    def _process_layer(self, raw_data, layer_type: str) -> Optional[gpd.GeoDataFrame]:
+    def _process_layer(self, raw_data, layer_type: str) -> Optional[gGeo]:
         """
         Process a single DAGI layer through the silver transformation pipeline.
 
         Args:
-            raw_data: Raw data DataFrame from bronze layer
+            raw_data: Raw data  from bronze layer
             layer_type: Type of administrative layer
 
         Returns:
-            Processed and standardized GeoDataFrame or None if processing fails
+            Processed and standardized Geo or None if processing fails
         """
         try:
             self.log.info(f"Processing DAGI layer: {layer_type} with {len(raw_data)} raw records")
@@ -361,7 +360,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
         Run the DAGI silver layer processing for all configured layers.
 
         This method processes all DAGI layers from the bronze layer,
-        transforming raw JSON data into structured GeoDataFrames
+        transforming raw JSON data into structured Geos
         and saving them in the silver layer.
 
         Args:
@@ -386,7 +385,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             # Bronze data is a dict mapping layer names to raw JSON data
                             if isinstance(bronze_data, dict) and layer_name in bronze_data:
                                 raw_json = bronze_data[layer_name]
-                                # ✅ MIGRATION: Create DataFrame with DuckDB instead of pandas
+                                # ✅ MIGRATION: Create  with DuckDB instead of pandas
                                 import duckdb
 
                                 temp_conn = duckdb.connect()
@@ -395,20 +394,32 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                                 ).fetchone()[0]
                                 temp_conn.close()
 
+                                # ✅ MIGRATION: Create table directly in DuckDB instead of converting to 
                                 temp_conn2 = duckdb.connect()
-                                temp_conn2.register(
-                                    "temp_bronze",
+                                temp_conn2.execute(
+                                    """
+                                    CREATE TABLE temp_bronze AS 
+                                    SELECT 
+                                        ? as payload,
+                                        ? as source,
+                                        ? as created_at,
+                                        ? as updated_at
+                                """,
                                     [
-                                        {
-                                            "payload": raw_json,
-                                            "source": f"{self.config.name} - {layer_name}",
-                                            "created_at": current_timestamp,
-                                            "updated_at": current_timestamp,
-                                        }
+                                        raw_json,
+                                        f"{self.config.name} - {layer_name}",
+                                        current_timestamp,
+                                        current_timestamp,
                                     ],
                                 )
-                                bronze_df = temp_conn2.execute("SELECT * FROM temp_bronze").df()
-                                temp_conn2.close()
+
+                                # ❌ ELIMINATED: No more wasteful  conversion
+                                # bronze_df = temp_conn2.execute("SELECT * FROM temp_bronze")
+
+                                # ✅ MIGRATION: Pass table name instead of 
+                                bronze_df = "temp_bronze"
+                                # Keep connection alive for processing
+                                self._temp_conn = temp_conn2
                             else:
                                 self.log.warning(f"No in-memory data found for layer {layer_name}")
                                 continue
