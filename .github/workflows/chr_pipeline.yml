@@ -545,12 +545,26 @@ jobs:
     - name: Set up environment variables
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/chr_pipeline
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
