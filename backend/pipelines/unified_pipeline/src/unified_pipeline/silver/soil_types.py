@@ -16,13 +16,12 @@ and quality assurance checks.
 import os
 from typing import Any, Optional
 
-
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.gcs_util import GCSUtil
 
 load_dotenv()
@@ -67,7 +66,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
     Processing flow:
     1. Read data from the bronze layer
-    2. Validate and clean geometries
+    2. Validate and clean geometries using DuckDB-spatial
     3. Standardize attribute names and values
     4. Perform quality checks
     5. Save processed data to the silver layer
@@ -83,233 +82,226 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
         """
         super().__init__(config, gcs_util)
 
-    def _validate_and_transform(self, gdf: gGeo) -> gGeo:
+    def _validate_and_transform_with_duckdb(self, wfs_url: str) -> str:
         """
-        Validate and transform the soil types Geo.
-
-        This method validates geometries and transforms the data into a standardized
-        format suitable for analysis. It includes geometry validation, attribute
-        cleaning, and data type standardization.
+        Fetch WFS data and validate geometries using DuckDB-spatial.
 
         Args:
-            gdf (gGeo): The raw Geo from the bronze layer
+            wfs_url (str): The WFS URL to fetch data from
 
         Returns:
-            gGeo: The validated and transformed Geo
+            str: Name of the DuckDB table containing validated data
 
         Raises:
-            Exception: If validation or transformation fails
+            Exception: If WFS fetch or validation fails
         """
         try:
-            self.log.info("Starting soil types data validation and transformation")
+            self.log.info("Fetching soil types data from WFS using DuckDB-spatial")
 
-            # Validate and fix geometries using the common validator
-            validated_gdf = validate_and_transform_geometries(gdf, self.config.dataset)
+            # ✅ MIGRATION: Use DuckDB-spatial to fetch WFS data directly
+            table_name = "soil_types_raw"
 
-            # Standardize column names to lowercase with underscores
-            column_mapping = {
-                "JORDHT": "soil_height",
-                "JORD_TEKST": "soil_description",
-                "TEMANAVN": "theme_name",
-                "KODE": "soil_code",
-                "geom": "geometry",
-            }
+            # Use DuckDB spatial extension to read WFS data
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT * FROM ST_Read('{wfs_url}')
+            """)
 
-            # Rename columns if they exist
-            for old_name, new_name in column_mapping.items():
-                if old_name in validated_gdf.columns:
-                    validated_gdf = validated_gdf.rename(columns={old_name: new_name})
+            # Check if we got any data
+            count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            if count == 0:
+                raise Exception("No data retrieved from WFS endpoint")
 
-            # Ensure geometry column is named 'geometry'
-            if "geom" in validated_gdf.columns and "geometry" not in validated_gdf.columns:
-                validated_gdf = validated_gdf.rename(columns={"geom": "geometry"})
+            self.log.info(f"Fetched {count:,} features from WFS endpoint")
 
-            # Set the geometry column
-            if "geometry" in validated_gdf.columns:
-                validated_gdf = validated_gdf.set_geometry("geometry")
+            # ✅ MIGRATION: Standardize column names using DuckDB
+            processed_table = "soil_types_processed"
 
-            # ✅ MIGRATION: Clean and standardize data types using DuckDB
-            # Convert Geo to regular  for DuckDB processing
-            df_for_processing = validated_gdf.copy()
-            if hasattr(df_for_processing, "geometry"):
-                df_for_processing["geometry_wkt"] = validated_gdf.geometry.to_wkt()
-                df_for_processing = df_for_processing.drop("geometry", axis=1)
+            # Get column names to check what we have
+            columns = [row[0] for row in self.conn.execute(f"DESCRIBE {table_name}").fetchall()]
+            self.log.info(f"Available columns: {columns}")
 
-            # Use DuckDB for numeric conversions
-            if (
-                "soil_height" in df_for_processing.columns
-                or "soil_code" in df_for_processing.columns
-            ):
-                import duckdb
+            # Build column mapping for standardization
+            select_parts = []
+            for col in columns:
+                if col.upper() == "JORDHT":
+                    select_parts.append(f"TRY_CAST({col} AS DOUBLE) as soil_height")
+                elif col.upper() == "JORD_TEKST":
+                    select_parts.append(f"TRIM({col}) as soil_description")
+                elif col.upper() == "TEMANAVN":
+                    select_parts.append(f"TRIM({col}) as theme_name")
+                elif col.upper() == "KODE":
+                    select_parts.append(f"TRY_CAST({col} AS DOUBLE) as soil_code")
+                elif col.lower() in ["geom", "geometry", "wkb_geometry"]:
+                    select_parts.append(f"{col} as geometry")
+                else:
+                    # Keep other columns as-is
+                    select_parts.append(f"{col}")
 
-                temp_conn = duckdb.connect()
-                temp_conn.register("temp_soil_data", df_for_processing)
+            # Create processed table with standardized columns
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {processed_table} AS
+                SELECT 
+                    {", ".join(select_parts)},
+                    current_timestamp as processed_at,
+                    'validated' as data_quality
+                FROM {table_name}
+            """)
 
-                # Build conversion query
-                select_parts = []
-                for col in df_for_processing.columns:
-                    if col == "soil_height":
-                        select_parts.append("TRY_CAST(soil_height AS DOUBLE) as soil_height")
-                    elif col == "soil_code":
-                        select_parts.append("TRY_CAST(soil_code AS DOUBLE) as soil_code")
-                    else:
-                        select_parts.append(f'"{col}"')
+            # ✅ MIGRATION: Use DuckDB-spatial geometry validation
+            validate_and_transform_geometries_duckdb(
+                self.conn, processed_table, self.config.dataset
+            )
 
-                conversion_query = f"SELECT {', '.join(select_parts)} FROM temp_soil_data"
-                # ✅ MIGRATION: Update validated_gdf columns directly from DuckDB query results
-                result = temp_conn.execute(conversion_query).fetchall()
-                columns = [desc[0] for desc in temp_conn.description]
-                temp_conn.close()
+            # Clean up temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-                # Update specific columns in validated_gdf with converted values
-                for col in ["soil_height", "soil_code"]:
-                    if col in columns:
-                        col_idx = columns.index(col)
-                        validated_gdf[col] = [row[col_idx] for row in result]
+            final_count = self.conn.execute(f"SELECT COUNT(*) FROM {processed_table}").fetchone()[0]
+            self.log.info(f"Validation completed. Processed {final_count:,} features")
 
-            # Clean text fields
-            text_columns = ["soil_description", "theme_name"]
-            for col in text_columns:
-                if col in validated_gdf.columns:
-                    validated_gdf[col] = validated_gdf[col].astype(str).str.strip()
-                    # ✅ MIGRATION: Replace 'nan' strings with actual NaN using native pandas
-                    validated_gdf[col] = validated_gdf[col].replace("nan", None)
-
-            # ✅ MIGRATION: Add processing metadata using DuckDB timestamp
-            import duckdb
-
-            temp_conn = duckdb.connect()
-            current_timestamp = temp_conn.execute("SELECT current_timestamp").fetchone()[0]
-            temp_conn.close()
-            validated_gdf["processed_at"] = current_timestamp
-            validated_gdf["data_quality"] = "validated"
-
-            # Remove any completely empty rows
-            validated_gdf = validated_gdf.dropna(subset=["geometry"])
-
-            self.log.info(f"Validation completed. Processed {len(validated_gdf):,} features")
-            self.log.info(f"Final columns: {list(validated_gdf.columns)}")
-
-            return validated_gdf
+            return processed_table
 
         except Exception as e:
-            self.log.error(f"Error in validation and transformation: {str(e)}")
+            self.log.error(f"Error in DuckDB-spatial validation and transformation: {str(e)}")
             raise
 
-    def _perform_quality_checks(self, gdf: gGeo) -> None:
+    def _perform_quality_checks(self, table_name: str) -> None:
         """
-        Perform quality checks on the processed data.
+        Perform quality checks on the processed soil types data using DuckDB.
 
-        This method runs various quality assurance checks on the processed data
-        to ensure data integrity and completeness.
+        This method validates data completeness, geometry validity, and attribute
+        consistency to ensure the processed data meets quality standards.
 
         Args:
-            gdf (gGeo): The processed Geo to check
+            table_name (str): Name of the DuckDB table to check
 
-        Returns:
-            None
+        Raises:
+            Exception: If critical quality issues are found
         """
         try:
-            self.log.info("Performing quality checks on soil types data")
+            self.log.info("Performing quality checks on processed soil types data")
 
-            # Check for empty geometries
-            empty_geoms = gdf.geometry.is_empty.sum()
-            if empty_geoms > 0:
-                self.log.warning(f"Found {empty_geoms} empty geometries")
+            # Check total feature count
+            total_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.log.info(f"Total features after processing: {total_count:,}")
 
-            # Check for invalid geometries
-            invalid_geoms = (~gdf.geometry.is_valid).sum()
-            if invalid_geoms > 0:
-                self.log.warning(f"Found {invalid_geoms} invalid geometries")
+            if total_count == 0:
+                raise Exception("No features remain after processing - data quality check failed")
 
-            # Check data completeness
-            total_features = len(gdf)
+            # Check geometry validity
+            invalid_geom_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name} 
+                WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
+            """).fetchone()[0]
 
-            if "soil_description" in gdf.columns:
-                missing_descriptions = gdf["soil_description"].isna().sum()
+            if invalid_geom_count > 0:
+                self.log.warning(f"Found {invalid_geom_count} features with invalid geometries")
+                if invalid_geom_count / total_count > 0.1:  # More than 10% invalid
+                    raise Exception("Too many invalid geometries - data quality check failed")
+
+            # Check for required attributes
+            null_soil_code = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name} WHERE soil_code IS NULL
+            """).fetchone()[0]
+
+            if null_soil_code > 0:
+                self.log.info(f"Features with missing soil_code: {null_soil_code}")
+
+            # Check coordinate bounds (should be in Denmark after transformation to WGS84)
+            bounds = self.conn.execute(f"""
+                SELECT 
+                    MIN(ST_XMin(geometry)) as min_x,
+                    MAX(ST_XMax(geometry)) as max_x,
+                    MIN(ST_YMin(geometry)) as min_y,
+                    MAX(ST_YMax(geometry)) as max_y
+                FROM {table_name}
+                WHERE geometry IS NOT NULL
+            """).fetchone()
+
+            if bounds:
+                min_x, max_x, min_y, max_y = bounds
                 self.log.info(
-                    f"Missing soil descriptions: {missing_descriptions}/{total_features} "
-                    f"({missing_descriptions / total_features * 100:.1f}%)"
+                    f"Coordinate bounds: X({min_x:.3f}, {max_x:.3f}), Y({min_y:.3f}, {max_y:.3f})"
                 )
 
-            if "soil_code" in gdf.columns:
-                missing_codes = gdf["soil_code"].isna().sum()
-                self.log.info(
-                    f"Missing soil codes: {missing_codes}/{total_features} "
-                    f"({missing_codes / total_features * 100:.1f}%)"
-                )
+                # Check if coordinates are reasonable for Denmark in WGS84
+                if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
+                    self.log.warning("Coordinates appear to be outside Denmark bounds")
 
-            # Check for duplicate soil codes
-            if "soil_code" in gdf.columns:
-                unique_codes = gdf["soil_code"].nunique()
-                total_codes = gdf["soil_code"].notna().sum()
-                self.log.info(
-                    f"Unique soil codes: {unique_codes} out of {total_codes} non-null values"
-                )
+            # Check attribute distributions
+            soil_type_count = self.conn.execute(f"""
+                SELECT COUNT(DISTINCT soil_code) FROM {table_name} WHERE soil_code IS NOT NULL
+            """).fetchone()[0]
 
-            self.log.info("Quality checks completed")
+            self.log.info(f"Unique soil types: {soil_type_count}")
+
+            self.log.info("Quality checks completed successfully")
 
         except Exception as e:
-            self.log.error(f"Error in quality checks: {str(e)}")
-            # Don't raise here as quality checks are informational
+            self.log.error(f"Quality check failed: {str(e)}")
+            raise
 
     async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
-        Run the complete soil types silver layer processing job.
+        Run the soil types data processing pipeline using DuckDB-spatial.
 
-        This is the main entry point that orchestrates the entire silver layer process:
-        1. Reads data from the bronze layer (either in-memory or from storage)
-        2. Validates and transforms the data
-        3. Performs quality checks
-        4. Saves the processed data to the silver layer
+        This method orchestrates the entire process of reading bronze data,
+        processing it with DuckDB-spatial, and saving the results.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
-                        this data will be used instead of reading from storage.
+                        should contain WFS metadata including the URL.
 
         Returns:
             None
 
         Raises:
-            Exception: If there are issues at any step in the process
+            Exception: If any step in the pipeline fails
         """
         try:
-            self.log.info("Starting soil types silver layer processing")
+            self.log.info("Starting soil types silver layer processing with DuckDB-spatial")
 
             # Read data with support for in-memory passing
             if bronze_data is not None:
                 self.log.info("Using bronze data from memory (in-memory data passing)")
-                if isinstance(bronze_data, gGeo):
-                    raw_data = bronze_data
+                if isinstance(bronze_data, dict) and "wfs_url" in bronze_data:
+                    wfs_url = bronze_data["wfs_url"]
+                    self.log.info(f"Using WFS URL from bronze data: {wfs_url}")
                 else:
                     self.log.error(
-                        f"Expected Geo from bronze stage, got {type(bronze_data)}"
+                        f"Expected dict with wfs_url from bronze stage, got {type(bronze_data)}"
                     )
                     return
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
-                raw_data = self._read_bronze_data_from_storage(
+                bronze_metadata = self._read_bronze_data_from_storage(
                     self.config.dataset, self.config.bucket
                 )
-                if raw_data is None:
-                    self.log.error("Failed to read raw data from storage")
+                if bronze_metadata is None:
+                    self.log.error("Failed to read bronze metadata from storage")
                     return
 
-            self.log.info(f"Loaded {len(raw_data):,} records from bronze layer")
+                # Extract WFS URL from stored metadata
+                if isinstance(bronze_metadata, dict) and "wfs_url" in bronze_metadata:
+                    wfs_url = bronze_metadata["wfs_url"]
+                else:
+                    self.log.error("Bronze metadata does not contain wfs_url")
+                    return
 
-            # Validate and transform the data
-            processed_data = self._validate_and_transform(raw_data)
+            # ✅ MIGRATION: Process data using DuckDB-spatial
+            processed_table = self._validate_and_transform_with_duckdb(wfs_url)
 
             # Perform quality checks
-            self._perform_quality_checks(processed_data)
+            self._perform_quality_checks(processed_table)
 
             # Save the processed data using new unified method
             self._save_data(
-                data=processed_data,
+                data=processed_table,
                 dataset=self.config.dataset,
                 bucket=self.config.bucket,
                 stage="silver",
+                conn=self.conn,
             )
 
             self.log.info("Soil types silver layer processing completed successfully")

@@ -10,7 +10,6 @@ authors = [
 ]
 dependencies = [
     "python-dotenv",
-    "",
     "gcsfs",
     "google-cloud-storage",
     "pyarrow",
@@ -20,8 +19,8 @@ dependencies = [
     "uvicorn",
     "pydantic",
     "numpy",
-    "duckdb==1.2.2",  # Kept for now
-    'ibis-framework[duckdb]>=10.5.0' # Aligned with CHR pipeline
+    "duckdb==1.2.2", # Kept for now # Aligned with CHR pipeline
+    'ibis-framework[duckdb]>=10.5.0',
 ]
 
 [build-system]

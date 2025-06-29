@@ -1,17 +1,17 @@
-from ..base import BronzeBase
 """
 Bronze layer data ingestion for BNBO status data.
 
-This module handles the extraction of BNBO status data from the WFS service.
-It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+This module handles the extraction of BNBO (Boringsnære Beskyttelsesområder)
+status data from a WFS (Web Feature Service) endpoint. It fetches raw data
+from the Danish Environmental Portal and saves it to Google Cloud Storage
 for further processing in the silver layer.
 
 The module contains:
 - BNBOStatusBronzeConfig: Configuration class for the data source
 - BNBOStatusBronze: Implementation class for fetching and processing data
 
-The data is fetched in parallel batches to optimize performance, with proper
-error handling and retry logic for robustness.
+The data is fetched from the WFS endpoint using aiohttp and asyncio for
+concurrent processing and saved as JSON format for efficient storage.
 """
 
 import asyncio
@@ -21,8 +21,6 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-
-# ✅ MIGRATION: Removed pandas import - using DuckDB for  operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -31,7 +29,7 @@ from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
-class BNBOStatusBronzeConfig(BronzeBase):
+class BNBOStatusBronzeConfig(BaseJobConfig):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source in the bronze layer.
 
@@ -77,7 +75,7 @@ class BNBOStatusBronzeConfig(BronzeBase):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class BNBOStatusBronze(BronzeBase):
+class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
 
@@ -338,7 +336,13 @@ class BNBOStatusBronze(BronzeBase):
             table_name = self.create_dataframe(raw_data)
 
             # Save using new unified method - table-based
-            self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "bronze")
+            self._save_data(
+                data=table_name,
+                dataset=self.config.dataset,
+                bucket=self.config.bucket,
+                stage="bronze",
+                conn=self.conn,
+            )
             self.log.info("Saved raw data successfully")
             self.log.info("BNBO Status bronze job completed successfully")
 

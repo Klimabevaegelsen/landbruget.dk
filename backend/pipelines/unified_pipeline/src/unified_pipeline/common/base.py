@@ -1099,7 +1099,6 @@ class BaseSource(Generic[T], ABC):
 
         # ✅ OPTIMIZED: Direct export from DuckDB table to GCS
         self.gcs_access.upload_from_duckdb_table(
-            self.duckdb_conn if hasattr(self, "duckdb_conn") else self.conn,
             table_name,
             gcs_path,
             compression="zstd",

@@ -1,4 +1,3 @@
-from ..base import SilverBase
 """
 Silver layer processing for BNBO Status data.
 
@@ -19,15 +18,14 @@ import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
 # ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
-from shapely import MultiPolygon, Polygon
-
+# ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
-class BNBOStatusSilverConfig(SilverBase):
+class BNBOStatusSilverConfig(BaseJobConfig):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source.
 
@@ -58,7 +56,7 @@ class BNBOStatusSilverConfig(SilverBase):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
 
 
-class BNBOStatusSilver(SilverBase):
+class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     """
     Silver layer processor for BNBO status data.
 
@@ -148,10 +146,10 @@ class BNBOStatusSilver(SilverBase):
 
     def _parse_geometry(self, geom_elem: ET.Element) -> Optional[dict[str, Any]]:
         """
-        Parse GML geometry into WKT format and calculate area.
+        Parse GML geometry into WKT format using pure coordinate-based approach.
 
-        This method extracts polygon coordinates from GML elements and constructs
-        Shapely geometry objects. It also calculates the area in hectares.
+        ✅ OPTIMIZED: This method now creates WKT directly from coordinates without
+        using shapely, and uses DuckDB ST_Area for area calculation.
 
         Args:
             geom_elem (ET.Element): The XML element containing GML geometry data.
@@ -170,7 +168,7 @@ class BNBOStatusSilver(SilverBase):
                 self.log.error("No MultiSurface element found")
                 return None
 
-            polygons = []
+            polygon_wkts = []
             for surface_member in multi_surface.findall(f".//{self.config.gml_ns}surfaceMember"):
                 polygon = surface_member.find(f".//{self.config.gml_ns}Polygon")
                 if polygon is None:
@@ -184,18 +182,36 @@ class BNBOStatusSilver(SilverBase):
                     pos = [float(x) for x in pos_list.text.strip().split()]
                     coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 2)]
                     if len(coords) >= 4:
-                        polygons.append(Polygon(coords))
+                        # Create WKT polygon directly from coordinates
+                        coord_pairs = [f"{x} {y}" for x, y in coords]
+                        polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
+                        polygon_wkts.append(polygon_wkt)
                 except Exception as e:
                     self.log.error(f"Failed to parse coordinates: {str(e)}")
                     continue
 
-            if not polygons:
+            if not polygon_wkts:
                 return None
 
-            geom = MultiPolygon(polygons) if len(polygons) > 1 else polygons[0]
-            area_ha = geom.area / 10000  # Convert square meters to hectares
+            # Create final WKT (MultiPolygon if multiple, single Polygon otherwise)
+            if len(polygon_wkts) == 1:
+                final_wkt = polygon_wkts[0]
+            else:
+                # Create MultiPolygon WKT
+                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
+                final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
 
-            return {"wkt": geom.wkt, "area_ha": area_ha}
+            # ✅ OPTIMIZED: Use DuckDB ST_Area for area calculation instead of shapely
+            try:
+                area_result = self.conn.execute(
+                    "SELECT ST_Area(ST_GeomFromText(?)) as area", [final_wkt]
+                ).fetchone()
+                area_ha = area_result[0] / 10000 if area_result and area_result[0] else 0.0
+            except Exception as e:
+                self.log.warning(f"Could not calculate area with DuckDB: {e}, defaulting to 0")
+                area_ha = 0.0
+
+            return {"wkt": final_wkt, "area_ha": area_ha}
 
         except Exception as e:
             self.log.error(f"Error parsing geometry: {str(e)}")
@@ -276,55 +292,50 @@ class BNBOStatusSilver(SilverBase):
             self.log.warning("No raw data to process")
             return None
 
-        # ✅ MIGRATION: Convert to  if it's not already using DuckDB
-        if not hasattr(raw_data, "iterrows"):  # Check if it's -like
-            # Use DuckDB to create 
-            self.conn.register("temp_raw_data", raw_data)
-            # ✅ MIGRATION: Work with table name instead of 
-            raw_df_table = "temp_raw_data"
+        # ✅ MIGRATION: Handle DuckDB table name (string) from bronze layer
+        if isinstance(raw_data, str):
+            # raw_data is a DuckDB table name from bronze layer
+            raw_df_table = raw_data
             # Get row count to check if empty
-            row_count = self.conn.execute("SELECT COUNT(*) FROM temp_raw_data").fetchone()[0]
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {raw_data}").fetchone()[0]
             if row_count == 0:
                 self.log.warning("No raw data to process")
                 return None
             # Get data for iteration - only fetch when needed
-            raw_df = self.conn.execute("SELECT * FROM temp_raw_data").fetchall()
+            raw_df = self.conn.execute(f"SELECT * FROM {raw_data}").fetchall()
             columns = [desc[0] for desc in self.conn.description]
         else:
-            raw_df = raw_data
-            if raw_df.empty:
-                self.log.warning("No raw data to process")
-                return None
+            # Handle other data types (fallback)
+            self.log.warning(f"Unexpected raw_data type: {type(raw_data)}")
+            return None
 
         self.log.info("Processing XML data from bronze layer using DuckDB-spatial")
 
         features = []
-        # ✅ MIGRATION: Handle both  and fetchall() results
-        if not hasattr(raw_data, "iterrows"):  # This is fetchall() result
-            for index, row_tuple in enumerate(raw_df):
-                try:
-                    # Convert tuple to dict using column names
-                    row = dict(zip(columns, row_tuple))
-                    # Parse the XML data
-                    xml_data = row["payload"]
-                    root = ET.fromstring(xml_data)
+        # ✅ MIGRATION: Process fetchall() results from DuckDB table
+        for index, row_tuple in enumerate(raw_df):
+            try:
+                # Convert tuple to dict using column names
+                row = dict(zip(columns, row_tuple))
+                # Parse the XML data
+                xml_data = row["payload"]
+                root = ET.fromstring(xml_data)
 
-                    # Get the namespace
-                    namespace = self.get_first_namespace(root)
-                    if namespace is None:
-                        err_msg = f"Error processing row {index}: No namespace found in XML"
-                        self.log.error(err_msg)
-                        raise Exception(err_msg)
-                    for member in root.findall(".//ns:member", namespaces={"ns": namespace}):
-                        for feature in member:
-                            parsed = self._parse_feature(feature)
-                            if parsed and parsed.get("geometry"):
-                                features.append(parsed)
+                # Get the namespace
+                namespace = self.get_first_namespace(root)
+                if namespace is None:
+                    err_msg = f"Error processing row {index}: No namespace found in XML"
+                    self.log.error(err_msg)
+                    raise Exception(err_msg)
+                for member in root.findall(".//ns:member", namespaces={"ns": namespace}):
+                    for feature in member:
+                        parsed = self._parse_feature(feature)
+                        if parsed and parsed.get("geometry"):
+                            features.append(parsed)
 
-                except Exception as e:
-                    self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
-                    raise e
-        # ✅ MIGRATION: Removed  handling - only table names supported now
+            except Exception as e:
+                self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
+                raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
 

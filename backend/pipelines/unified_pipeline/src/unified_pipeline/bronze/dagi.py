@@ -191,13 +191,8 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
-                        # Create  with the raw JSON payload and metadata
-                        raw_df = self.conn.execute("CREATE TABLE temp_table AS SELECT ..."),
-                                    "updated_at": Timestamp.now(tz="UTC"),
-                                }
-                            ]
-                        )
-                        self._save_data(raw_df, dataset_name, self.config.bucket, stage="bronze")
+                        # Save raw data directly
+                        self._save_data(raw_data, dataset_name, self.config.bucket, stage="bronze")
                         self.log.info(f"Saved raw data for {layer_name}")
                     except Exception as e:
                         self.log.error(f"Failed to save {layer_name}: {e}")
