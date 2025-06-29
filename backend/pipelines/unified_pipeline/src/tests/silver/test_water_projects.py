@@ -8,7 +8,10 @@ from datetime import datetime
 from unittest.mock import MagicMock, PropertyMock, call, patch
 
 import pytest
+from geopandas import GeoDataFrame as gGeo
+from pandas import Timestamp
 from shapely.geometry import MultiPolygon, Polygon
+
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -205,11 +208,10 @@ def sample_json_string() -> str:
 @pytest.fixture
 def sample_bronze_df() -> dict:
     """Return a sample dict with bronze data."""
-    return (
-        {
-            "layer": ["test_layer1", "test_layer2"],
-            "payload": [
-                """
+    return {
+        "layer": ["test_layer1", "test_layer2"],
+        "payload": [
+            """
             <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
                                 xmlns:gml="http://www.opengis.net/gml/3.2"
                                 xmlns:test="http://test.namespace">
@@ -239,37 +241,36 @@ def sample_bronze_df() -> dict:
                 </wfs:member>
             </wfs:FeatureCollection>
             """,  # noqa: E501
-                json.dumps(
-                    {
-                        "features": [
-                            {
-                                "attributes": {
-                                    "projektnavn": "Test Project",
-                                    "enhedskontakt": "Test Contact",
-                                    "projektstart": 1577836800000,  # 2020-01-01 00:00:00
-                                    "projektslut": 1609459200000,  # 2021-01-01 00:00:00
-                                    "status": "Active",
-                                    "OBJECTID": 1,
-                                    "GlobalID": "abc123",
-                                },
-                                "geometry": {
-                                    "rings": [
-                                        [
-                                            [10.0, 10.0],
-                                            [20.0, 10.0],
-                                            [20.0, 20.0],
-                                            [10.0, 20.0],
-                                            [10.0, 10.0],
-                                        ]
+            json.dumps(
+                {
+                    "features": [
+                        {
+                            "attributes": {
+                                "projektnavn": "Test Project",
+                                "enhedskontakt": "Test Contact",
+                                "projektstart": 1577836800000,  # 2020-01-01 00:00:00
+                                "projektslut": 1609459200000,  # 2021-01-01 00:00:00
+                                "status": "Active",
+                                "OBJECTID": 1,
+                                "GlobalID": "abc123",
+                            },
+                            "geometry": {
+                                "rings": [
+                                    [
+                                        [10.0, 10.0],
+                                        [20.0, 10.0],
+                                        [20.0, 20.0],
+                                        [10.0, 20.0],
+                                        [10.0, 10.0],
                                     ]
-                                },
-                            }
-                        ]
-                    }
-                ),
-            ],
-        }
-    )
+                                ]
+                            },
+                        }
+                    ]
+                }
+            ),
+        ],
+    }
 
 
 @pytest.fixture
@@ -621,9 +622,7 @@ def test_process_json_data_invalid_geometry(silver_source: WaterProjectsSilver) 
     assert len(result) == 0
 
 
-def test_process_data_success(
-    silver_source: WaterProjectsSilver, sample_bronze_df: dict
-) -> None:
+def test_process_data_success(silver_source: WaterProjectsSilver, sample_bronze_df: dict) -> None:
     """Test _process_data with valid bronze data."""
     with (
         patch.object(silver_source, "_process_xml_data") as mock_process_xml,
@@ -668,7 +667,7 @@ def test_process_data_empty_dataframe(silver_source: WaterProjectsSilver) -> Non
 
 
 def test_process_data_no_features_extracted(
-    silver_source: WaterProjectsSilver, sample_bronze_df: 
+    silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
     """Test _process_data when no features are extracted."""
     with (
@@ -686,7 +685,7 @@ def test_process_data_no_features_extracted(
 
 
 def test_process_data_processing_error(
-    silver_source: WaterProjectsSilver, sample_bronze_df: 
+    silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
     """Test _process_data when processing raises an exception for XML data but JSON data still processes."""  # noqa: E501
     with patch.object(silver_source, "_process_xml_data") as mock_process_xml:
@@ -726,9 +725,7 @@ def test_create_dissolved_df_multipolygon(silver_source: WaterProjectsSilver) ->
         "unified_pipeline.util.geometry_validator.validate_and_transform_geometries"
     ) as mock_validate:
         # Setup mock to return a Geo with the polygons
-        mock_validate.return_value = gGeo(
-            geometry=[polygon1, polygon2], crs="EPSG:4326"
-        )
+        mock_validate.return_value = gGeo(geometry=[polygon1, polygon2], crs="EPSG:4326")
 
         result = silver_source._create_dissolved_df(gdf, "test_dataset")
 
@@ -791,20 +788,16 @@ def test_create_dissolved_df_exception(
 async def test_run_success(silver_source: WaterProjectsSilver) -> None:
     """Test run with successful processing."""
     # Mock data for testing
-    bronze_df = (
-        {
-            "layer": ["test_layer"],
-            "payload": [
-                "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
-            ],
-        }
-    )
+    bronze_df = {
+        "layer": ["test_layer"],
+        "payload": [
+            "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
+        ],
+    }
     processed_gdf = gGeo(
         {"id": [1]}, geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:25832"
     )
-    dissolved_gdf = gGeo(
-        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326"
-    )
+    dissolved_gdf = gGeo(geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326")
 
     # Setup mocks
     with (
@@ -853,14 +846,12 @@ async def test_run_no_bronze_data(silver_source: WaterProjectsSilver) -> None:
 async def test_run_processing_failure(silver_source: WaterProjectsSilver) -> None:
     """Test run when processing fails."""
     # Mock data for testing
-    bronze_df = (
-        {
-            "layer": ["test_layer"],
-            "payload": [
-                "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
-            ],
-        }
-    )
+    bronze_df = {
+        "layer": ["test_layer"],
+        "payload": [
+            "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
+        ],
+    }
 
     # Setup mocks
     with (
