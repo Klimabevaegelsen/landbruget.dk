@@ -21,6 +21,7 @@ dependencies = [
     "numpy",
     "duckdb==1.2.2", # Kept for now # Aligned with CHR pipeline
     'ibis-framework[duckdb]>=10.5.0',
+    "simple-singleton>=2.0.0",
 ]
 
 [build-system]

@@ -16,6 +16,7 @@ dependencies = [
     "pyarrow",
     "duckdb",
     "gcsfs>=2025.3.2",
+    "simple-singleton>=2.0.0",
 ]
 
 [project.optional-dependencies]

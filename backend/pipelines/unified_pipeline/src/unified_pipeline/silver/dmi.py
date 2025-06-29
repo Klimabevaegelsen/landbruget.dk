@@ -106,7 +106,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
         # Fallback to storage if no in-memory data
         try:
             # List all bronze data files for this parameter
-            pattern = f"bronze/dmi/*/{parameter_id}_data.json"
+            pattern = f"gs://{self.config.bucket}/bronze/dmi/*/{parameter_id}_data.json"
             bronze_files = self.gcs_access.list_files(pattern)
 
             if not bronze_files:
