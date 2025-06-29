@@ -1,0 +1,12 @@
+{
+  "pipeline": "dst_pipeline",
+  "stage": "silver",
+  "generated_at": "2025-06-29T11:20:49.644836",
+  "tables": [
+    "dst_fro"
+  ],
+  "files_generated": [
+    "docs/schemas/silver/dst_fro.md",
+    "docs/schemas/silver/overview.md"
+  ]
+}
