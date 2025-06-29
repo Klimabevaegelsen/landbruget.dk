@@ -234,10 +234,13 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
 
             # Create WKT geometry directly from coordinates using DuckDB-spatial format
             if len(polygons) > 1:
-                # Create MultiPolygon WKT
+                # Create MultiPolygon WKT - each polygon needs double parentheses
                 polygon_parts = []
                 for coords in polygons:
                     points = " ".join([f"{x} {y}" for x, y in coords])
+                    # Each polygon in a multipolygon needs to be wrapped in double parentheses
+                    # - outer parentheses for the polygon
+                    # - inner parentheses for the exterior ring (we don't handle interior rings here)
                     polygon_parts.append(f"(({points}))")
                 geometry_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
             else:
@@ -367,19 +370,24 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     continue
 
                 # Convert geometry using DuckDB-spatial
-                polygons_wkt = []
+                # In ArcGIS/GeoJSON format, rings represent exterior and interior rings of a polygon
+                # First ring is exterior, subsequent rings are holes (interior rings)
+                if not geom["rings"]:
+                    continue
+
+                rings_wkt = []
                 for ring in geom["rings"]:
                     coords = [(x, y) for x, y in ring]
                     if len(coords) >= 4:
                         points = " ".join([f"{x} {y}" for x, y in coords])
-                        polygons_wkt.append(f"(({points}))")
+                        rings_wkt.append(f"({points})")
 
-                if len(polygons_wkt) > 1:
-                    geometry_wkt = f"MULTIPOLYGON({', '.join(polygons_wkt)})"
-                elif len(polygons_wkt) == 1:
-                    geometry_wkt = f"POLYGON({polygons_wkt[0]})"
-                else:
+                if not rings_wkt:
                     continue
+
+                # Create single polygon with exterior ring and interior rings (holes)
+                # Format: POLYGON((exterior_ring), (interior_ring1), (interior_ring2), ...)
+                geometry_wkt = f"POLYGON({', '.join(rings_wkt)})"
 
                 # Calculate area using DuckDB-spatial
                 self.conn.execute("CREATE OR REPLACE TABLE temp_geom (geometry_wkt VARCHAR)")

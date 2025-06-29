@@ -103,6 +103,25 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """DEPRECATED: Use _process_single_year_with_dst_yields instead for memory efficiency."""
         raise NotImplementedError("This method has been replaced by year-by-year processing")
 
+    def _get_latest_silver_path(self, dataset: str) -> str:
+        """Override base method to handle both data.parquet and {dataset}.parquet naming patterns."""
+        try:
+            # Try the new pattern first: {dataset}.parquet
+            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/{dataset}.parquet"
+            files = self.gcs_access.list_files(pattern)
+            if files:
+                return sorted(files)[-1]  # Latest by timestamp
+
+            # Fall back to old pattern: data.parquet
+            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
+            files = self.gcs_access.list_files(pattern)
+            if files:
+                return sorted(files)[-1]  # Latest by timestamp
+
+            raise FileNotFoundError(f"No silver data found for {dataset}")
+        except Exception as e:
+            raise FileNotFoundError(f"No silver data found for {dataset}: {e}")
+
     def _load_silver_data_to_table(
         self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
     ) -> bool:
@@ -112,11 +131,19 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.register(table_name, silver_data[dataset])
             return True
 
-        # Load from GCS using base class method
+        # Load from GCS using direct download and load into our connection
         try:
             gcs_path = self._get_latest_silver_path(dataset)
-            self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", table_name)
-            self.log.info(f"Loaded {dataset} from GCS into table {table_name}")
+
+            # Download to temp file and load into our connection
+            with self.gcs_access._temp_download(gcs_path) as temp_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS
+                    SELECT * FROM read_parquet('{temp_file}')
+                """)
+
+            count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.log.info(f"Loaded {dataset} from GCS into table {table_name} ({count:,} rows)")
             return True
         except FileNotFoundError:
             self.log.error(f"No silver data found for {dataset}")
@@ -219,28 +246,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.info(f"Using in-memory data for {dataset_name}")
                 # Register the  and create table
                 self.conn.register(f"temp_{dataset_name}", silver_data[dataset_name])
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE current_year_fields AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        area_ha,
-                        crop_type,
-                        organic_farming,
-                        {year} as year,
-                        ST_GeomFromText(geometry) as geometry
-                    FROM temp_{dataset_name}
-                    WHERE geometry IS NOT NULL
-                """)
-            else:
-                # Load from GCS using optimized access
-                gcs_path = f"gs://{self.config.bucket}/silver/{dataset_name}/latest/data.parquet"
-                try:
-                    # Use optimized GCS access to create table directly
-                    temp_table = self.gcs_access.query_parquet_direct(
-                        gcs_path,
-                        f"""SELECT 
+                # Check if block_id column exists (added after 2007, available from 2008)
+                if year >= 2008:
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE current_year_fields AS
+                        SELECT 
                             field_id,
                             block_id,
                             cvr_number,
@@ -248,11 +258,67 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             crop_type,
                             organic_farming,
                             {year} as year,
-                            ST_GeomFromText(geometry) as geometry
-                        FROM read_parquet_table 
-                        WHERE geometry IS NOT NULL""",
-                        "current_year_fields",
-                    )
+                            ST_GeomFromWKB(geometry) as geometry
+                        FROM temp_{dataset_name}
+                        WHERE geometry IS NOT NULL
+                    """)
+                else:
+                    # For years before 2008, block_id doesn't exist
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE current_year_fields AS
+                        SELECT 
+                            field_id,
+                            NULL as block_id,
+                            cvr_number,
+                            area_ha,
+                            crop_type,
+                            organic_farming,
+                            {year} as year,
+                            ST_GeomFromWKB(geometry) as geometry
+                        FROM temp_{dataset_name}
+                        WHERE geometry IS NOT NULL
+                    """)
+            else:
+                # Load from GCS using direct download and load into our connection
+                try:
+                    gcs_path = self._get_latest_silver_path(dataset_name)
+
+                    # Download to temp file and load into our connection
+                    with self.gcs_access._temp_download(gcs_path) as temp_file:
+                        # Check if block_id column exists (added after 2007, available from 2008)
+                        if year >= 2008:
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE current_year_fields AS
+                                SELECT 
+                                    field_id,
+                                    block_id,
+                                    cvr_number,
+                                    area_ha,
+                                    crop_type,
+                                    organic_farming,
+                                    {year} as year,
+                                    ST_GeomFromWKB(geometry) as geometry
+                                FROM read_parquet('{temp_file}')
+                                WHERE geometry IS NOT NULL
+                            """)
+                        else:
+                            # For years before 2008, block_id doesn't exist
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE current_year_fields AS
+                                SELECT 
+                                    field_id,
+                                    NULL as block_id,
+                                    cvr_number,
+                                    area_ha,
+                                    crop_type,
+                                    organic_farming,
+                                    {year} as year,
+                                    ST_GeomFromWKB(geometry) as geometry
+                                FROM read_parquet('{temp_file}')
+                                WHERE geometry IS NOT NULL
+                            """)
+
+                    # Geometry filtering is already done in the CREATE TABLE query above
 
                 except Exception as e:
                     self.log.warning(f"Could not load {dataset_name} from GCS: {e}")
@@ -401,8 +467,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             except Exception as debug_e:
                 self.log.warning(f"Debug info failed: {debug_e}")
 
-            # Create optimized DST zones table with spatial geometry
-            # Simply filter out NULL geometries and convert WKT strings to geometry objects
+                # Create optimized DST zones table with spatial geometry
+            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
                 SELECT 
@@ -412,7 +478,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
                 WHERE geometry IS NOT NULL 
-                  AND geometry != ''
+                AND geometry != ''
+                AND geometry != 'NULL'
             """)
 
             # Verify we have valid zones

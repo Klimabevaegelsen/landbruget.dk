@@ -1,5 +1,3 @@
-from ..base import SilverBase
-
 """
 Silver layer processing for Agricultural Fields data.
 
@@ -20,11 +18,12 @@ import json
 from typing import Any, Optional
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
-class AgriculturalFieldsSilverConfig(SilverBase):
+class AgriculturalFieldsSilverConfig(BaseJobConfig):
     """
     Configuration for Agricultural Fields Silver data processing.
 
@@ -66,7 +65,7 @@ class AgriculturalFieldsSilverConfig(SilverBase):
     }
 
 
-class AgriculturalFieldsSilver(SilverBase):
+class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
     """
     Silver layer processor for agricultural fields data using DuckDB-spatial.
 
@@ -178,10 +177,11 @@ class AgriculturalFieldsSilver(SilverBase):
                 # Get column names from the first feature
                 columns = list(all_features[0].keys())
 
-                # Create the table schema
+                # Create the table schema with properly quoted column names
+                quoted_column_definitions = [f'"{col}" VARCHAR' for col in columns]
                 processing_conn.execute(f"""
                     CREATE OR REPLACE TABLE temp_features (
-                        {", ".join([f"{col} VARCHAR" for col in columns])}
+                        {", ".join(quoted_column_definitions)}
                     )
                 """)
 
@@ -191,17 +191,19 @@ class AgriculturalFieldsSilver(SilverBase):
                     batch = all_features[i : i + batch_size]
 
                     # Use parameterized queries instead of string concatenation
-                for feature in batch:
-                    values = [feature.get(col) for col in columns]
-                    placeholders = ", ".join(["?" for _ in columns])
+                    for feature in batch:
+                        values = [feature.get(col) for col in columns]
+                        placeholders = ", ".join(["?" for _ in columns])
+                        # Properly quote column names to handle special characters
+                        quoted_columns = [f'"{col}"' for col in columns]
 
-                    processing_conn.execute(
-                        f"""
-                        INSERT INTO temp_features ({", ".join(columns)})
-                        VALUES ({placeholders})
-                    """,
-                        values,
-                    )
+                        processing_conn.execute(
+                            f"""
+                            INSERT INTO temp_features ({", ".join(quoted_columns)})
+                            VALUES ({placeholders})
+                        """,
+                            values,
+                        )
                 processing_conn.execute(
                     "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
                 )
