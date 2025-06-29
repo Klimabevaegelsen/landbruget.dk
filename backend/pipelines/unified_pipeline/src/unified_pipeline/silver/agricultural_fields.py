@@ -1,4 +1,5 @@
 from ..base import SilverBase
+
 """
 Silver layer processing for Agricultural Fields data.
 
@@ -19,7 +20,6 @@ import json
 from typing import Any, Optional
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
-from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -169,8 +169,46 @@ class AgriculturalFieldsSilver(SilverBase):
                     self.log.warning("No valid features extracted from payloads")
                     return None, None
 
-                # ✅ MIGRATION: Convert to table using DuckDB (no  conversion)
-                processing_conn.register("temp_features", all_features)
+                # ✅ MIGRATION: Convert to table using DuckDB (no pandas conversion)
+                # Create table directly from the list of dictionaries
+                if not all_features:
+                    self.log.warning("No features to process")
+                    return None, None
+
+                # Get column names from the first feature
+                columns = list(all_features[0].keys())
+
+                # Create the table schema
+                processing_conn.execute(f"""
+                    CREATE OR REPLACE TABLE temp_features (
+                        {", ".join([f"{col} VARCHAR" for col in columns])}
+                    )
+                """)
+
+                # Insert data in batches
+                batch_size = 1000
+                for i in range(0, len(all_features), batch_size):
+                    batch = all_features[i : i + batch_size]
+
+                    # Create VALUES clause for this batch
+                    values_list = []
+                    for feature in batch:
+                        values = []
+                        for col in columns:
+                            value = feature.get(col)
+                            if value is None:
+                                values.append("NULL")
+                            else:
+                                escaped_value = str(value).replace("'", "''")
+                                values.append(f"'{escaped_value}'")
+                        values_list.append(f"({', '.join(values)})")
+
+                    values_clause = ", ".join(values_list)
+
+                    processing_conn.execute(f"""
+                        INSERT INTO temp_features ({", ".join(columns)})
+                        VALUES {values_clause}
+                    """)
                 processing_conn.execute(
                     "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
                 )
@@ -223,7 +261,7 @@ class AgriculturalFieldsSilver(SilverBase):
                     WHERE is_valid_geometry = true
                 """)
 
-                # ✅ MIGRATION: Return table name instead of 
+                # ✅ MIGRATION: Return table name instead of
                 row_count = processing_conn.execute(
                     f"SELECT COUNT(*) FROM {final_table_name} WHERE is_valid_geometry = true"
                 ).fetchone()[0]
@@ -286,8 +324,8 @@ class AgriculturalFieldsSilver(SilverBase):
                                         table_name = f"bronze_raw_{dataset}_{year}"
                                         if isinstance(raw_data_table, list):
                                             # List of JSON strings
-                                            
-                                            df = ({"payload": raw_data_table})
+
+                                            df = {"payload": raw_data_table}
                                             self.conn.register(table_name, df)
                                             raw_data = table_name
                                         else:
