@@ -2,7 +2,7 @@
 
 **Pipeline:** dst_pipeline
 **Stage:** silver
-**Generated:** 2025-06-29 11:21:12
+**Generated:** 2025-06-29 11:22:46
 
 ## Table Overview
 
@@ -36,5 +36,5 @@
 | value | 0.0 | 6516.3 | 2993 | 68.44 | 12.8% |
 | crop_category | All crops | Rapeseed | 5 |  | 0.0% |
 | table_source | HALM1 | HALM1 | 1 |  | 0.0% |
-| processed_at | 2025-06-29T11:21:12.695744 | 2025-06-29T11:21:12.695744 | 1 |  | 0.0% |
+| processed_at | 2025-06-29T11:22:46.899357 | 2025-06-29T11:22:46.899357 | 1 |  | 0.0% |
 | source_system | Danmarks Statistik API | Danmarks Statistik API | 1 |  | 0.0% |

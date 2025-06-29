@@ -173,7 +173,7 @@ def get_data_buffer() -> Dict[str, Dict[str, List[Any]]]:
 
 
 def finalize_export(clear_buffer: bool = True):
-    """Write buffered data to consolidated files."""
+    """Write buffered data to consolidated files with memory-efficient processing."""
     if not _data_buffer:
         logger.warning("No data buffered for export.")
         return
@@ -181,32 +181,61 @@ def finalize_export(clear_buffer: bool = True):
     storage_mode = "GCS (GitHub Actions)" if USE_GCS else "local filesystem"
     logger.info(f"Starting export using {storage_mode}")
 
+    # Check if we're in a memory-constrained environment (like GitHub Actions)
+    is_memory_constrained = os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true"
+
+    if is_memory_constrained:
+        logger.info("Memory-constrained environment detected - using streaming export")
+
     total_files = 0
     for buffer_key, format_data in _data_buffer.items():
         data_type = buffer_key
 
-        # Process JSON data
+        # Process JSON data with memory-efficient streaming
         json_data_list = format_data.get("json", [])
         if json_data_list:
             filename = f"{data_type}.json"
-            if USE_GCS:
-                try:
-                    logger.info(f"Writing {len(json_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}")
-                    json_content = json.dumps(json_data_list, indent=2, default=str)
-                    _save_to_gcs(filename, json_content, "json")
-                    total_files += 1
-                except Exception as e:
-                    logger.error(f"Error writing JSON to GCS {filename}: {e}")
-            else:
-                filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
-                try:
-                    logger.info(f"Writing {len(json_data_list)} records locally to {filepath}")
-                    _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), "json")
-                    total_files += 1
-                except Exception as e:
-                    logger.error(f"Error writing JSON file {filepath}: {e}")
 
-        # Process XML data
+            # Log data size before processing
+            data_count = len(json_data_list)
+            logger.info(f"Processing {data_count} records for {filename}")
+
+            # Use streaming approach for large datasets
+            if is_memory_constrained and data_count > 1000:
+                logger.info(f"Using streaming export for large dataset: {filename}")
+                if USE_GCS:
+                    try:
+                        _save_to_gcs_streaming(filename, json_data_list)
+                        total_files += 1
+                    except Exception as e:
+                        logger.error(f"Error in streaming GCS export for {filename}: {e}")
+                else:
+                    filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
+                    try:
+                        _save_locally_streaming(filepath, json_data_list)
+                        total_files += 1
+                    except Exception as e:
+                        logger.error(f"Error in streaming local export for {filename}: {e}")
+            else:
+                # Use original approach for smaller datasets
+                if USE_GCS:
+                    try:
+                        logger.info(f"Writing {data_count} records to GCS bucket '{GCS_BUCKET}': {filename}")
+                        json_content = json.dumps(json_data_list, indent=2, default=str)
+                        _save_to_gcs(filename, json_content, "json")
+                        total_files += 1
+                    except Exception as e:
+                        logger.error(f"Error writing JSON to GCS {filename}: {e}")
+                else:
+                    filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
+                    try:
+                        logger.info(f"Writing {data_count} records locally to {filepath}")
+                        _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), "json")
+                        total_files += 1
+                    except Exception as e:
+                        logger.error(f"Error writing JSON file {filepath}: {e}")
+
+        # Process XML data (unchanged - typically smaller)
         xml_data_list = format_data.get("xml", [])
         if xml_data_list:
             filename = f"{data_type}.xml"
@@ -231,6 +260,72 @@ def finalize_export(clear_buffer: bool = True):
     logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{EXPORT_TIMESTAMP}/")
     if clear_buffer:
         _data_buffer.clear()
+
+
+def _save_to_gcs_streaming(filename: str, data_list: List[Any]):
+    """Save large datasets to GCS using streaming to avoid memory issues."""
+    bucket = gcs_client.bucket(GCS_BUCKET)
+    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}")
+
+    # Estimate data size for logging
+    import sys
+
+    estimated_size_mb = sys.getsizeof(data_list) / (1024 * 1024)
+    logger.info(
+        f"Starting streaming upload to GCS for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
+    )
+
+    # Use blob.open() for streaming writes
+    with blob.open("w", content_type="application/json") as f:
+        f.write("[\n")
+
+        for i, item in enumerate(data_list):
+            if i > 0:
+                f.write(",\n")
+
+            # Serialize one item at a time to avoid memory buildup
+            json.dump(item, f, indent=2, default=str)
+
+            # Log progress more frequently for very large datasets
+            if i > 0 and i % 1000 == 0:
+                logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
+
+        f.write("\n]")
+
+    logger.info(f"Completed streaming upload to GCS for {filename}")
+
+
+def _save_locally_streaming(filepath: Path, data_list: List[Any]):
+    """Save large datasets locally using streaming to avoid memory issues."""
+    # Add timestamp to the path
+    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    timestamped_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Estimate data size for logging
+    import sys
+
+    estimated_size_mb = sys.getsizeof(data_list) / (1024 * 1024)
+    logger.info(
+        f"Starting streaming write to {timestamped_path} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
+    )
+
+    with open(timestamped_path, "w", encoding="utf-8") as f:
+        f.write("[\n")
+
+        for i, item in enumerate(data_list):
+            if i > 0:
+                f.write(",\n")
+
+            # Serialize one item at a time to avoid memory buildup
+            json.dump(item, f, indent=2, default=str)
+
+            # Log progress more frequently for very large datasets
+            if i > 0 and i % 1000 == 0:
+                logger.info(f"Streamed {i}/{len(data_list)} records to file ({(i / len(data_list) * 100):.1f}%)")
+
+        f.write("\n]")
+
+    logger.info(f"Completed streaming write to {timestamped_path}")
 
 
 # --- Cleanup Function (Optional) ---
