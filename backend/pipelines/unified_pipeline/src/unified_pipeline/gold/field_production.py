@@ -9,8 +9,6 @@ Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 """
 
 import os
-import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import ConfigDict
@@ -20,8 +18,7 @@ from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
-# Import the DST mapping table from the DST pipeline
-sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent / "dst_pipeline"))
+# DST functionality is now integrated into the unified pipeline
 
 
 class FieldProductionGoldConfig(BaseJobConfig):
