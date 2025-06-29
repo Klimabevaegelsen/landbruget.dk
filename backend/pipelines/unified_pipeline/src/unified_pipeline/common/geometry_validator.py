@@ -58,12 +58,31 @@ def validate_and_transform_geometries_duckdb(
 
         # Convert string geometries to spatial objects if needed
         logger.info(f"{dataset_name}: Converting geometries to spatial objects")
-        conn.execute(f"""
-            UPDATE {table_name} SET 
-                {geometry_column} = ST_GeomFromText({geometry_column})
+
+        # Check the actual type of the geometry column
+        geom_type_result = conn.execute(f"""
+            SELECT DISTINCT typeof({geometry_column}) as geom_type
+            FROM {table_name} 
             WHERE {geometry_column} IS NOT NULL 
-                AND typeof({geometry_column}) = 'VARCHAR'
-        """)
+            LIMIT 5
+        """).fetchall()
+
+        geom_types = [row[0] for row in geom_type_result]
+        logger.info(f"{dataset_name}: Geometry column types found: {geom_types}")
+
+        # Only convert if we have VARCHAR geometries
+        if "VARCHAR" in geom_types:
+            logger.info(f"{dataset_name}: Converting VARCHAR geometries to spatial objects")
+            conn.execute(f"""
+                UPDATE {table_name} SET 
+                    {geometry_column} = ST_GeomFromText({geometry_column})
+                WHERE {geometry_column} IS NOT NULL 
+                    AND typeof({geometry_column}) = 'VARCHAR'
+            """)
+        else:
+            logger.info(
+                f"{dataset_name}: Geometries are already spatial objects, skipping conversion"
+            )
 
         # Validate geometries and fix invalid ones
         invalid_count = conn.execute(f"""

@@ -125,6 +125,22 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Required DAGI layers for DST mapping
             required_layers = ["landsdele", "regioner", "kommuner"]
 
+            # Map layer-specific column mappings based on actual DAGI silver data structure
+            layer_column_mapping = {
+                "kommuner": {"code_col": "code", "name_col": "name", "region_col": "region_code"},
+                "regioner": {"code_col": "code", "name_col": "name", "region_col": "nuts2"},
+                "landsdele": {
+                    "code_col": "code",  # landsdele actually has a code column
+                    "name_col": "name",
+                    "region_col": "region_code",
+                },
+                "postnumre": {
+                    "code_col": "code",  # postnumre uses 'code', not 'nr'
+                    "name_col": "name",
+                    "region_col": "NULL",  # postnumre doesn't have a region column
+                },
+            }
+
             for layer in required_layers:
                 try:
                     if bronze_data and layer in bronze_data:
@@ -166,15 +182,26 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry
+                            # Create standardized table with spatial geometry - use layer-specific column mapping
+                            if layer == "kommuner":
+                                code_column = "kode"
+                            elif layer == "regioner":
+                                code_column = "kode"
+                            elif layer == "landsdele":
+                                code_column = "nuts3"  # landsdele uses nuts3 as the primary code
+                            elif layer == "postnumre":
+                                code_column = "nr"
+                            else:
+                                code_column = "kode"  # fallback
+
                             self.conn.execute(f"""
                                 CREATE TABLE {layer} AS
                                 SELECT 
-                                    COALESCE(kode, nr, nuts3) as code,
-                                    COALESCE(navn, name) as name,
+                                    {code_column} as code,
+                                    navn as name,
                                     regionskode as region_code,
                                     regionsnavn as region_name,
-                                    nuts2,
+                                    COALESCE(nuts2, '') as nuts2,
                                     ST_GeomFromText(geometry_wkt) as geometry,
                                     geometry_wkt,
                                     ST_Area(ST_GeomFromText(geometry_wkt)) as area_m2,
@@ -190,25 +217,80 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                         # Fallback to reading from silver layer
                         dataset_name = f"dagi_{layer}"
                         self.log.info(f"Reading DAGI {layer} from silver layer")
-                        df = self._read_silver_data(dataset_name, self.config.bucket)
+                        data_result = self._read_silver_data(dataset_name)
 
-                        if df is not None and not df.empty:
-                            # Register with DuckDB
-                            self.conn.register(f"{layer}_silver", df)
+                        if data_result is not None:
+                            # Handle the new return format from base class
+                            if isinstance(data_result, dict) and "gcs_access" in data_result:
+                                # New format: dict with gcs_access instance and table_name
+                                gcs_access = data_result["gcs_access"]
+                                source_table = data_result["table_name"]
+                                # Use the GCS connection for all operations
+                                conn = gcs_access.duckdb_conn
+                                has_data = True
+                            elif isinstance(data_result, str):
+                                # Old format: just a table name - use base class connection
+                                source_table = data_result
+                                conn = self.conn
+                                has_data = True
+                            else:
+                                self.log.warning(
+                                    f"Unsupported data format for DAGI {layer}: {type(data_result)}"
+                                )
+                                continue
+                        else:
+                            has_data = False
 
-                            # Create standardized table
-                            self.conn.execute(f"""
+                        if has_data:
+                            # If using GCS connection, copy data to base class connection for consistency
+                            if isinstance(data_result, dict) and "gcs_access" in data_result:
+                                # Copy data from GCS connection to base class connection
+                                temp_table = f"temp_{layer}_data"
+
+                                # Get the data from GCS connection
+                                rows = conn.execute(f"SELECT * FROM {source_table}").fetchall()
+                                columns = [desc[0] for desc in conn.description]
+
+                                # Create table in base connection with same structure
+                                column_defs = []
+                                for col in columns:
+                                    column_defs.append(f'"{col}" VARCHAR')
+
+                                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                                self.conn.execute(
+                                    f"CREATE TABLE {temp_table} ({', '.join(column_defs)})"
+                                )
+
+                                # Insert data row by row
+                                if rows:
+                                    placeholders = ", ".join(["?" for _ in columns])
+                                    for row in rows:
+                                        self.conn.execute(
+                                            f"INSERT INTO {temp_table} VALUES ({placeholders})", row
+                                        )
+
+                                # Now use the temp table as source for the standardized table
+                                source_table = temp_table
+
+                            # Get column mapping for this layer
+                            col_mapping = layer_column_mapping.get(layer, {})
+                            code_col = col_mapping.get("code_col", "code")
+                            name_col = col_mapping.get("name_col", "name")
+                            region_col = col_mapping.get("region_col", "NULL")
+
+                            # Create standardized table using actual column names and geometry column
+                            conn.execute(f"""
                                 CREATE TABLE {layer} AS
                                 SELECT 
-                                    code,
-                                    name,
-                                    region_code,
-                                    ST_GeomFromText(geometry) as geometry,
-                                    geometry as geometry_wkt,
-                                    ST_Area(ST_GeomFromText(geometry)) as area_m2,
-                                    ST_X(ST_Centroid(ST_GeomFromText(geometry))) as centroid_x,
-                                    ST_Y(ST_Centroid(ST_GeomFromText(geometry))) as centroid_y
-                                FROM {layer}_silver
+                                    {code_col} as code,
+                                    {name_col} as name,
+                                    {region_col} as region_code,
+                                    geometry,
+                                    ST_AsText(geometry) as geometry_wkt,
+                                    ST_Area(geometry) as area_m2,
+                                    ST_X(ST_Centroid(geometry)) as centroid_x,
+                                    ST_Y(ST_Centroid(geometry)) as centroid_y
+                                FROM {source_table}
                                 WHERE geometry IS NOT NULL
                             """)
 
