@@ -1,12 +1,16 @@
 {
   "pipeline": "dst_pipeline",
   "stage": "silver",
-  "generated_at": "2025-06-29T11:22:46.899357",
+  "generated_at": "2025-06-29T11:46:44.054038",
   "tables": [
+    "dst_hst77",
+    "dst_gartn1",
     "dst_fro",
     "dst_halm1"
   ],
   "files_generated": [
+    "docs/schemas/silver/dst_hst77.md",
+    "docs/schemas/silver/dst_gartn1.md",
     "docs/schemas/silver/dst_fro.md",
     "docs/schemas/silver/dst_halm1.md",
     "docs/schemas/silver/overview.md"

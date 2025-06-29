@@ -2,7 +2,7 @@
 
 **Pipeline:** dst_pipeline
 **Stage:** silver
-**Generated:** 2025-06-29 11:21:12
+**Generated:** 2025-06-29 11:46:44
 
 ## Table Overview
 
@@ -34,5 +34,5 @@
 | value | 0.0 | 117550.0 | 2598 | 419.69 | 45.3% |
 | crop_category | Cabbage varieties | Root and fruit vegetables | 5 |  | 0.0% |
 | table_source | GARTN1 | GARTN1 | 1 |  | 0.0% |
-| processed_at | 2025-06-29T11:21:12.695744 | 2025-06-29T11:21:12.695744 | 1 |  | 0.0% |
+| processed_at | 2025-06-29T11:46:44.054038 | 2025-06-29T11:46:44.054038 | 1 |  | 0.0% |
 | source_system | Danmarks Statistik API | Danmarks Statistik API | 1 |  | 0.0% |
