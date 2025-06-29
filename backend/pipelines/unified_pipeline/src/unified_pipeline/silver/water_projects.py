@@ -233,21 +233,21 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 return None
 
             # Create WKT geometry directly from coordinates using DuckDB-spatial format
-            if len(polygons) > 1:
-                # Create MultiPolygon WKT - each polygon needs double parentheses
-                polygon_parts = []
-                for coords in polygons:
-                    points = " ".join([f"{x} {y}" for x, y in coords])
-                    # Each polygon in a multipolygon needs to be wrapped in double parentheses
-                    # - outer parentheses for the polygon
-                    # - inner parentheses for the exterior ring (we don't handle interior rings here)
-                    polygon_parts.append(f"(({points}))")
-                geometry_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+            # Use the same approach as BNBO status pipeline for consistency
+            polygon_wkts = []
+            for coords in polygons:
+                # Create coordinate pairs with comma separation (standard WKT format)
+                coord_pairs = [f"{x} {y}" for x, y in coords]
+                polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
+                polygon_wkts.append(polygon_wkt)
+
+            # Create final WKT (MultiPolygon if multiple, single Polygon otherwise)
+            if len(polygon_wkts) == 1:
+                geometry_wkt = polygon_wkts[0]
             else:
-                # Create single Polygon WKT
-                coords = polygons[0]
-                points = " ".join([f"{x} {y}" for x, y in coords])
-                geometry_wkt = f"POLYGON(({points}))"
+                # Create MultiPolygon WKT - strip POLYGON part and join
+                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
+                geometry_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
 
             # Calculate area using DuckDB-spatial
             self.conn.execute("CREATE OR REPLACE TABLE temp_geom_calc (geometry_wkt VARCHAR)")
