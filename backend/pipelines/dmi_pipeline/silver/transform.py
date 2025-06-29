@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import duckdb
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -61,11 +62,11 @@ class DataTransformer:
                     }
                 )
 
-            # Convert features to a format DuckDB can understand
-            df = pd.DataFrame(features)
+            # ✅ MIGRATION: Register features directly with DuckDB instead of using pandas
+            # Register the features list directly with DuckDB
+            con.register("features_raw", features)
 
-            # Register the DataFrame as a table
-            con.register("features", df)
+            # ✅ MIGRATION: Use the features_raw table directly
 
             # Create a table from the extracted features
             con.execute("""
@@ -76,7 +77,7 @@ class DataTransformer:
                     valid_time,
                     created,
                     ST_GeomFromGeoJSON(geometry) as geometry
-                FROM features
+                FROM features_raw
                 WHERE value IS NOT NULL
             """)
 

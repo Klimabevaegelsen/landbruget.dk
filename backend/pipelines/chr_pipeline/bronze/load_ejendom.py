@@ -24,7 +24,7 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
 ENDPOINTS = {"ejendom": "https://ws.fvst.dk/service/CHR_ejendomWS?wsdl"}
 
 # Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"  # TODO: Confirm if this needs changing
+DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # --- Credential Handling ---
 
@@ -47,7 +47,6 @@ def get_fvm_credentials() -> Tuple[str, str]:
 
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     """Create a Zeep SOAP client with WSSE authentication."""
-    # Note: Consider moving this to a shared utility module later
     session = Session()
     session.verify = certifi.where()  # Ensure CA certificates are used
     transport = Transport(session=session)
@@ -65,13 +64,12 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
 
 def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_ejendom") -> Dict[str, str]:
     """Create the common GLRCHRWSInfoInbound structure."""
-    # Note: Consider moving this to a shared utility module later
     return {
         "BrugerNavn": username,
         "KlientId": DEFAULT_CLIENT_ID,
         "SessionId": session_id,
         "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",  # Add UUID for uniqueness
+        "TrackID": f"{track_id}-{uuid.uuid4()}",
     }
 
 
@@ -80,7 +78,6 @@ def _create_base_request(username: str, session_id: str = "1", track_id: str = "
 
 def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
     """Fetch raw response from a SOAP endpoint using Zeep."""
-    # Note: Consider moving this to a shared utility module later
     try:
         operation = getattr(client.service, operation_name)
         # Pass request_data as a single positional argument (arg0) based on previous findings
@@ -127,12 +124,7 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
 
     request_structure = {
         "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_ejendom_vet_events"),
-        "Request": {
-            "ChrNummer": str(chr_number)
-            # DyreArtKode and DyreArtTekst are also possible here according to WSDL,
-            # but likely not needed for a general event list for the property.
-            # Add if specific filtering by species is required later.
-        },
+        "Request": {"ChrNummer": str(chr_number)},
     }
 
     operation_name = "hentVeterinaereHaendelser"

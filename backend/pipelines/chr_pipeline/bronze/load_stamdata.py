@@ -26,7 +26,7 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata"
 ENDPOINTS = {"stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?wsdl"}
 
 # Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"  # TODO: Confirm if this needs changing
+DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # --- Credential Handling ---
 
@@ -72,7 +72,7 @@ def _create_base_request(username: str, session_id: str = "1", track_id: str = "
         "KlientId": DEFAULT_CLIENT_ID,
         "SessionId": session_id,
         "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",  # Add UUID for uniqueness
+        "TrackID": f"{track_id}-{uuid.uuid4()}",
     }
 
 
@@ -99,8 +99,6 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 
 # --- Stamdata Loading Functions ---
 
-# Removed load_species function as listDyreArt operation does not exist in CHR_stamdataWS
-
 
 def load_species_usage_combinations(client: Client, username: str) -> Optional[Any]:
     """Load raw species and usage combinations (ListDyrearterMedBrugsarter)."""
@@ -117,8 +115,6 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
         logger.warning("No response received for ListDyrearterMedBrugsarter")
     return response
 
-
-# Removed load_usage_types_for_species function as listBrugsArt operation does not exist in CHR_stamdataWS
 
 # --- Helper Functions from original (keep if needed for parsing here, otherwise move) ---
 
@@ -187,8 +183,6 @@ if __name__ == "__main__":
                 logger.error(f"Error serializing or logging response: {e}")
         else:
             logger.warning("load_species_usage_combinations returned None or empty.")
-
-        # Removed tests for load_species and load_usage_types_for_species
 
         logger.info("\n--- Stamdata Load Test Complete --- ")
 

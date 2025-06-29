@@ -18,9 +18,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Create app directory
 WORKDIR /app
 
+# Install uv
+RUN pip install --no-cache-dir uv
+
 # Copy requirements and install dependencies
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e .
+RUN uv pip install --system --no-cache -e .
 
 # Copy application code
 COPY . .

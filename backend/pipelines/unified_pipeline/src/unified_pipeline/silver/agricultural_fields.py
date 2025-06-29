@@ -17,8 +17,7 @@ validates geometries, and stores the processed data in GCS.
 import json
 from typing import Any, Optional
 
-import pandas as pd
-
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
@@ -102,9 +101,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB-spatial initialized for agricultural fields processing")
 
-    async def _process_payloads_with_duckdb(
-        self, raw_df: pd.DataFrame, dataset: str, year: int
-    ) -> Optional[pd.DataFrame]:
+    async def _process_payloads_with_duckdb(self, raw_df, dataset: str, year: int):
         """
         Process raw payloads using DuckDB-spatial for all geometric operations.
 
@@ -169,8 +166,13 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     self.log.warning("No valid features extracted from payloads")
                     return None
 
-                # Convert to DataFrame and register with DuckDB
-                features_df = pd.DataFrame(all_features)
+                # ✅ MIGRATION: Convert to DataFrame using DuckDB
+                import duckdb
+
+                temp_conn = duckdb.connect()
+                temp_conn.register("temp_features", all_features)
+                features_df = temp_conn.execute("SELECT * FROM temp_features").df()
+                temp_conn.close()
                 self.conn.register("features_raw", features_df)
 
                 # Apply column mapping and create spatial geometries using DuckDB-spatial
@@ -276,9 +278,14 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                             # Bronze data is expected to be a complex dict structure with multi-year data
                             if isinstance(bronze_data, dict) and dataset_with_year in bronze_data:
                                 raw_data = bronze_data[dataset_with_year]
-                                # Convert to DataFrame if it's not already
-                                if not isinstance(raw_data, pd.DataFrame):
-                                    raw_data = pd.DataFrame({"payload": raw_data})
+                                # ✅ MIGRATION: Check and convert raw data using DuckDB
+                                if not hasattr(raw_data, "columns"):  # Not a DataFrame-like object
+                                    import duckdb
+
+                                    temp_conn = duckdb.connect()
+                                    temp_conn.register("temp_raw", {"payload": raw_data})
+                                    raw_data = temp_conn.execute("SELECT * FROM temp_raw").df()
+                                    temp_conn.close()
                             else:
                                 self.log.warning(f"No in-memory data found for {dataset_with_year}")
                                 continue

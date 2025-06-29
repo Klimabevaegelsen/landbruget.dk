@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Optional
 
-import pandas as pd
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
@@ -27,45 +27,64 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
     def __init__(self, config: SpfSuSilverConfig, gcs_util: GCSUtil) -> None:
         super().__init__(config, gcs_util)
 
-    def _validate_and_transform(self, data: list[dict]) -> pd.DataFrame:
-        """Parse and flatten bronze JSON data into a DataFrame using Pydantic schema."""
+    def _validate_and_transform(self, data: list[dict]):
+        """Parse and flatten bronze JSON data into DataFrames using Pydantic schema and DuckDB."""
+        # ✅ MIGRATION: Use DuckDB for DataFrame creation instead of pandas
+        import duckdb
+
+        temp_conn = duckdb.connect()
+
         parsed = [SpfSuResponse.parse_obj(item) for item in data]
+
+        # Farm owner details
         farm_owner_details = [item.ownerDetailInfo.dict() for item in parsed]
+        temp_conn.register("temp_farm_owner_details", farm_owner_details)
+        farm_owner_details_df = temp_conn.execute("SELECT * FROM temp_farm_owner_details").df()
         self._save_data(
-            pd.DataFrame(farm_owner_details),
+            farm_owner_details_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_owner_details",
         )
 
+        # Farm certificate
         farm_certificate = [item.ownerDetailInfo.danishCertificate.dict() for item in parsed]
+        temp_conn.register("temp_farm_certificate", farm_certificate)
+        farm_certificate_df = temp_conn.execute("SELECT * FROM temp_farm_certificate").df()
         self._save_data(
-            pd.DataFrame(farm_certificate),
+            farm_certificate_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_certificate",
         )
 
+        # Farm general health summary
         farm_general_health_summary = [item.ownerDetailInfo.healthData.dict() for item in parsed]
+        temp_conn.register("temp_farm_health", farm_general_health_summary)
+        farm_health_df = temp_conn.execute("SELECT * FROM temp_farm_health").df()
         self._save_data(
-            pd.DataFrame(farm_general_health_summary),
+            farm_health_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_general_health_summary",
         )
 
+        # Farm salmonella data
         farm_salmonella_data = [item.ownerDetailInfo.salmonellaData.dict() for item in parsed]
+        temp_conn.register("temp_farm_salmonella", farm_salmonella_data)
+        farm_salmonella_df = temp_conn.execute("SELECT * FROM temp_farm_salmonella").df()
         self._save_data(
-            pd.DataFrame(farm_salmonella_data),
+            farm_salmonella_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_salmonella_data",
         )
 
+        # Farm disease control status
         farm_disease_control_status = []
         for data in parsed:
             for item in data.healthStatus.healthControlInfo:
@@ -77,40 +96,53 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
                         "next_sample": item.nextSample,
                     }
                 )
+        temp_conn.register("temp_disease_control", farm_disease_control_status)
+        disease_control_df = temp_conn.execute("SELECT * FROM temp_disease_control").df()
         self._save_data(
-            pd.DataFrame(farm_disease_control_status),
+            disease_control_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_disease_control_status",
         )
 
+        # Farm veterinarians
         farm_veterinarians = [item.healthStatus.veterinarians for item in parsed]
+        temp_conn.register("temp_veterinarians", farm_veterinarians)
+        veterinarians_df = temp_conn.execute("SELECT * FROM temp_veterinarians").df()
         self._save_data(
-            pd.DataFrame(farm_veterinarians),
+            veterinarians_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_veterinarians",
         )
 
+        # Delivery options
         deliveryOptions = [item.healthStatus.deliveryOptions for item in parsed]
+        temp_conn.register("temp_delivery", deliveryOptions)
+        delivery_df = temp_conn.execute("SELECT * FROM temp_delivery").df()
         self._save_data(
-            pd.DataFrame(deliveryOptions),
+            delivery_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "deliveryOptions",
         )
 
+        # Reception options
         receptionOptions = [item.healthStatus.receptionOptions for item in parsed]
+        temp_conn.register("temp_reception", receptionOptions)
+        reception_df = temp_conn.execute("SELECT * FROM temp_reception").df()
         self._save_data(
-            pd.DataFrame(receptionOptions),
+            reception_df,
             self.config.dataset,
             self.config.bucket,
             "silver",
             "receptionOptions",
         )
+
+        temp_conn.close()
 
     async def run(self, bronze_data: Optional[Any] = None) -> None:
         """

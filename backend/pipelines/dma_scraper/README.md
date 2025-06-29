@@ -16,7 +16,7 @@ DMA Scraper (main.py) ──► fetch_company_data.py ──► Process & transf
 ## Prerequisites
 
 - Python 3.9+
-- Required packages: listed in `requirements.txt`
+- Required packages: listed in `pyproject.toml`
 
 ## Directory Structure
 
@@ -43,7 +43,7 @@ Copy `.env.example` to `.env` at the root of the `dma_scraper` folder and fill i
 Install dependencies:
 
 ```bash
-pip install . e
+uv pip install -e .
 ```
 
 Run locally:

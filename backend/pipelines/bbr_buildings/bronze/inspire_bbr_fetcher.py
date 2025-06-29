@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-import pandas as pd
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 import requests
 from bs4 import BeautifulSoup
 
@@ -366,8 +366,13 @@ class InspireBBRFetcher:
         final_buildings.extend(enriched_agriculture)  # All agriculture with BBR codes
         final_buildings.extend(enriched_education)  # Education buildings only
 
-        # Convert to DataFrame
-        df = pd.DataFrame(final_buildings)
+        # ✅ MIGRATION: Convert to DataFrame using DuckDB
+        import duckdb
+
+        temp_conn = duckdb.connect()
+        temp_conn.register("temp_buildings", final_buildings)
+        df = temp_conn.execute("SELECT * FROM temp_buildings").df()
+        temp_conn.close()
 
         # Extract building IDs for geometry lookup
         building_ids = df["building_uuid"].dropna().unique().tolist()

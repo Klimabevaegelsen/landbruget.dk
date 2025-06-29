@@ -594,10 +594,13 @@ class SilverProcessor:
                 )
                 return None
 
-            # Read the parquet file
-            import pandas as pd
+            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+            import duckdb
 
-            df = pd.read_parquet(output_path)
+            # Use DuckDB to read parquet file
+            temp_conn = duckdb.connect()
+            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+            temp_conn.close()
 
             # Apply the schema
             df_with_schema = self.schema_adapter.apply_schema(
@@ -642,10 +645,13 @@ class SilverProcessor:
             Path to the PII-handled file or None if failed
         """
         try:
-            # Read the parquet file
-            import pandas as pd
+            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+            import duckdb
 
-            df = pd.read_parquet(output_path)
+            # Use DuckDB to read parquet file
+            temp_conn = duckdb.connect()
+            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+            temp_conn.close()
 
             # Validate for PII
             validation_result = self.pii_validator.validate(df)

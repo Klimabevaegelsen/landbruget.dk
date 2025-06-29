@@ -20,7 +20,8 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for DataFrame operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -216,27 +217,36 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: list[str], year: int) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: list[str], year: int):
         """
-        Create a DataFrame from the raw data.
-        This method takes a list of strings and converts it into a pandas DataFrame.
+        Create a DataFrame from the raw data using DuckDB.
+        This method takes a list of strings and converts it into a DuckDB DataFrame.
 
         Args:
             raw_data (list[str]): List of strings.
             year (int): The year this data represents.
 
         Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata.
+            DataFrame: DataFrame containing the raw data with metadata.
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = self.config.name
-        df["year"] = year
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
+        # ✅ MIGRATION: Use DuckDB to create DataFrame instead of pandas
+        # Create a temporary table with the data
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Register the raw data
+        self.conn.register("temp_raw_data", {"payload": raw_data})
+
+        # Create the final DataFrame with metadata columns
+        df = self.conn.execute(f"""
+            SELECT 
+                payload,
+                '{self.config.name}' as source,
+                {year} as year,
+                '{current_timestamp}' as created_at,
+                '{current_timestamp}' as updated_at
+            FROM temp_raw_data
+        """).df()
+
         return df
 
     async def _process_data(self, url: str, dataset: str, year: int) -> list[str]:

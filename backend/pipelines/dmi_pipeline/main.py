@@ -179,6 +179,9 @@ async def main():
         gcs_bucket = os.getenv("GCS_BUCKET")
         if gcs_bucket:
             logger.info(f"Using GCS storage: {gcs_bucket}")
+            # Import storage classes
+            from backend.common.storage_interface import GCSStorage
+
             storage_backend = GCSStorage(gcs_bucket)
             # For GCS, we use string paths instead of Path objects
             bronze_path = f"bronze/dmi/{timestamp}"
@@ -186,6 +189,9 @@ async def main():
         else:
             logger.info("Using local storage")
             base_data_path = os.getenv("DATA_PATH", "./data")
+            # Import storage classes
+            from backend.common.storage_interface import LocalStorage
+
             storage_backend = LocalStorage(base_data_path)
             bronze_path = f"bronze/dmi/{timestamp}"
             silver_path = f"silver/dmi/{timestamp}"

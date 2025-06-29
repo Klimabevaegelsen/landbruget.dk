@@ -202,8 +202,8 @@ clean:
 # Development targets
 dev-setup:
 	@echo "Setting up development environment..."
-	pip install -e .
-	pip install pytest pytest-cov black isort mypy
+	uv pip install -e .
+uv pip install pytest pytest-cov black isort mypy
 
 # Run formatters
 format:
