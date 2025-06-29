@@ -1,0 +1,12 @@
+{
+  "processing_timestamp": "20250629_112246",
+  "processed_tables": [
+    "FRO",
+    "HALM1"
+  ],
+  "total_tables": 2,
+  "processing_status": "completed",
+  "layer": "silver",
+  "pipeline_name": "dst_api_pipeline",
+  "source_system": "Danmarks Statistik API"
+}
