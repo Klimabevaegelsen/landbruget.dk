@@ -103,6 +103,9 @@ class GCSDataAccess:
         # Create a fresh connection for this instance
         self.duckdb_conn = duckdb.connect()
 
+        # Initialize logger for this instance
+        self.log = logger
+
         # Configure DuckDB with spatial and gcsfs
         try:
             self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
@@ -478,6 +481,88 @@ class GCSDataAccess:
 
         self.monitor.check_resources("post_upload")
         self.log.info(f"Uploaded DataFrame ({len(df)} rows) to {gcs_path}")
+
+    def upload_json(self, data: Dict[str, Any] | List[Any], gcs_path: str, **kwargs):
+        """
+        ✅ OPTIMIZED: Upload JSON data with streaming via gcsfs.
+
+        Uses streaming approach for optimal performance:
+        - No temp file creation
+        - Direct streaming to GCS
+        - Memory efficient for large JSON objects
+
+        Args:
+            data: Dictionary or list to upload as JSON
+            gcs_path: GCS path (gs://bucket/path/file.json)
+            **kwargs: Additional options for json.dumps (indent, ensure_ascii, etc.)
+        """
+        self.monitor.check_resources("start_json_upload")
+
+        # Set sensible defaults for JSON serialization
+        json_kwargs = {
+            "indent": 2,
+            "ensure_ascii": False,  # Allow unicode characters
+            "default": str,  # Handle datetime and other non-serializable types
+            **kwargs,
+        }
+
+        try:
+            # ✅ STREAMING: Write JSON directly to GCS without temp files
+            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+                import json
+
+                json.dump(data, f, **json_kwargs)
+
+            self.monitor.check_resources("post_json_upload")
+            self.log.info(f"✅ Uploaded JSON data to {gcs_path} (streaming)")
+
+        except Exception as e:
+            self.log.error(f"Failed to upload JSON to {gcs_path}: {e}")
+            raise
+
+    def upload_json_string(self, json_string: str, gcs_path: str):
+        """
+        ✅ OPTIMIZED: Upload pre-serialized JSON string with streaming.
+
+        Use this when you already have a JSON string and want maximum performance.
+        """
+        self.monitor.check_resources("start_json_string_upload")
+
+        try:
+            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+                f.write(json_string)
+
+            self.monitor.check_resources("post_json_string_upload")
+            self.log.info(f"✅ Uploaded JSON string to {gcs_path} (streaming)")
+
+        except Exception as e:
+            self.log.error(f"Failed to upload JSON string to {gcs_path}: {e}")
+            raise
+
+    def download_json(self, gcs_path: str) -> Dict[str, Any] | List[Any]:
+        """
+        ✅ OPTIMIZED: Download JSON data with streaming via gcsfs.
+
+        Uses streaming approach for optimal performance:
+        - No temp file creation
+        - Direct streaming from GCS
+        - Memory efficient for large JSON objects
+        """
+        self.monitor.check_resources("start_json_download")
+
+        try:
+            with self.fs.open(gcs_path, "r", encoding="utf-8") as f:
+                import json
+
+                data = json.load(f)
+
+            self.monitor.check_resources("post_json_download")
+            self.log.info(f"✅ Downloaded JSON data from {gcs_path} (streaming)")
+            return data
+
+        except Exception as e:
+            self.log.error(f"Failed to download JSON from {gcs_path}: {e}")
+            raise
 
     def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **parquet_options):
         """Upload DuckDB table directly to GCS without DataFrame conversion."""

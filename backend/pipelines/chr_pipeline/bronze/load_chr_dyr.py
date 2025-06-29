@@ -56,9 +56,12 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
     # Connection timeout: 30 seconds to establish connection
     # Read timeout: 300 seconds (5 minutes) to wait for response
     # This is especially important for cattle movement data which can be large
-    adapter = requests.adapters.HTTPAdapter(timeout=requests.adapters.Timeout(connect=30, read=300))
+    adapter = requests.adapters.HTTPAdapter()
     session.mount("http://", adapter)
     session.mount("https://", adapter)
+
+    # Set timeouts on the session instead
+    session.timeout = (30, 300)  # (connect_timeout, read_timeout)
 
     transport = Transport(session=session)
     try:
