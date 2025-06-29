@@ -476,10 +476,11 @@ class BaseSource(Generic[T], ABC):
                 if isinstance(bronze_data, list) and len(bronze_data) > 0:
                     if isinstance(bronze_data[0], str):
                         # List of strings (e.g., XML payloads) - create table directly in DuckDB
-                        self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT unnest({bronze_data}) as payload
-                        """)
+                        # First create the table structure
+                        self.conn.execute(f"CREATE TABLE {table_name} (payload VARCHAR)")
+                        # Insert data using parameterized queries to avoid SQL injection
+                        for item in bronze_data:
+                            self.conn.execute(f"INSERT INTO {table_name} VALUES (?)", [item])
                         return table_name
                     else:
                         # List of dicts - use DuckDB JSON functions

@@ -132,17 +132,57 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.register(table_name, silver_data[dataset])
             return True
 
-        # Load from GCS using optimized access
-        gcs_path = f"gs://{self.config.bucket}/silver/{dataset}/latest/data.parquet"
+        # Load from GCS using optimized access with proper timestamped path discovery
         try:
-            self.gcs_access.query_parquet_direct(
-                gcs_path, "SELECT * FROM read_parquet_table", table_name
-            )
+            gcs_path = self._get_latest_silver_path_for_dataset(dataset)
+            if not gcs_path:
+                self.log.error(f"No silver data found for {dataset}")
+                return False
+
+            self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", table_name)
             self.log.info(f"Loaded {dataset} from GCS into table {table_name}")
             return True
         except Exception as e:
             self.log.error(f"Failed to load {dataset}: {e}")
             return False
+
+    def _get_latest_silver_path_for_dataset(self, dataset: str) -> Optional[str]:
+        """Get the latest silver data path for a specific dataset, handling different file naming patterns."""
+        try:
+            # List all timestamped directories for this dataset
+            prefix = f"silver/{dataset}/"
+            blobs = list(
+                self.gcs_util.get_gcs_client().list_blobs(self.config.bucket, prefix=prefix)
+            )
+
+            if not blobs:
+                self.log.warning(f"No files found for dataset {dataset}")
+                return None
+
+            # Find timestamped directories and their files
+            timestamped_files = []
+            for blob in blobs:
+                # Look for parquet files in timestamped directories
+                # Pattern: silver/{dataset}/{timestamp}/{filename}.parquet
+                path_parts = blob.name.split("/")
+                if len(path_parts) >= 4 and path_parts[-1].endswith(".parquet"):
+                    timestamp = path_parts[2]  # Extract timestamp
+                    timestamped_files.append((timestamp, f"gs://{self.config.bucket}/{blob.name}"))
+
+            if not timestamped_files:
+                self.log.warning(f"No parquet files found for dataset {dataset}")
+                return None
+
+            # Sort by timestamp and get the latest
+            timestamped_files.sort(key=lambda x: x[0], reverse=True)
+            latest_path = timestamped_files[0][1]
+
+            self.log.info(f"Found latest {dataset} data at: {latest_path}")
+            return latest_path
+
+        except Exception as e:
+            self.log.error(f"Error finding latest data for {dataset}: {e}")
+            return None
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """Run field production estimation gold processing using pure DuckDB."""
