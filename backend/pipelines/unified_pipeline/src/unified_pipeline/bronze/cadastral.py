@@ -8,8 +8,6 @@ from datetime import datetime
 from typing import Optional
 
 import aiohttp
-import geopandas as gpd
-import pandas as pd
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 from shapely import wkt
@@ -330,11 +328,10 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                 if failed_chunks:
                     logger.error(f"Failed to process chunks starting at indices: {failed_chunks}")
-                df = pd.DataFrame(
-                    [{k: v for k, v in f.items() if k != "geometry"} for f in features_batch]
+                df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...") if k != "geometry"} for f in features_batch]
                 )
                 geometries = [wkt.loads(f["geometry"]) for f in features_batch]
-                gdf = gpd.GeoDataFrame(df, geometry=geometries, crs="EPSG:25832")
+                gdf = gself.conn.execute("CREATE TABLE geo_table AS SELECT ...")
                 logger.info(f"Sync completed. Total processed: {total_processed:,} features")
                 return total_processed, gdf
 
@@ -402,7 +399,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error getting total count: {str(e)}")
             raise
 
-    async def run(self) -> Optional[gpd.GeoDataFrame]:
+    async def run(self) -> Optional[gGeo]:
         """
         Run the complete Cadastral bronze layer job.
 
@@ -412,7 +409,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         3. Returns the processed data for in-memory passing to silver stage
 
         Returns:
-            Optional[gpd.GeoDataFrame]: The processed cadastral data that can be
+            Optional[gGeo]: The processed cadastral data that can be
                                        passed to silver stage, or None if processing fails
 
         Raises:

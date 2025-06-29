@@ -1,344 +1,340 @@
-"""Schema adapter for applying schemas to data."""
+"""Schema adapter for applying schemas to data using DuckDB."""
 
+# Handle imports for both standalone and package usage
+try:
+    from ...utils.logging import get_logger
+    from ..duckdb_base import DuckDBProcessor
+except ImportError:
+    # Fallback for standalone usage
+    import logging
 
-import ibis
-import pandas as pd
-
-from ...utils.logging import get_logger
-from ..duckdb_helper import DuckDBHelper
+    get_logger = lambda: logging.getLogger(__name__)
+    from silver.duckdb_base import DuckDBProcessor
 from .schema import ColumnSchema, DataType, TableSchema
 
 # Get logger
 logger = get_logger()
 
 
-class SchemaAdapter:
-    """Adapter for applying schema definitions to data."""
+class SchemaAdapter(DuckDBProcessor):
+    """Adapter for applying schema definitions to data using DuckDB."""
 
-    def __init__(self, duckdb_helper: DuckDBHelper | None = None):
-        """Initialize the schema adapter.
-
-        Args:
-            duckdb_helper: Optional DuckDBHelper instance
-        """
-        self.duckdb_helper = duckdb_helper or DuckDBHelper()
-        logger.info("Initialized SchemaAdapter")
+    def __init__(self):
+        """Initialize the schema adapter."""
+        super().__init__()
+        logger.info("Initialized SchemaAdapter with DuckDB")
 
     def apply_schema(
         self,
-        df: pd.DataFrame,
+        table_name_or_data: any,
         table_schema: TableSchema,
         infer_types: bool = True,
-    ) -> pd.DataFrame:
-        """Apply a table schema to a DataFrame.
+    ) -> str:
+        """Apply a table schema to data using DuckDB.
 
         Args:
-            df: DataFrame to apply schema to
+            table_name_or_data: DuckDB table name (str) or data to apply schema to
             table_schema: Schema to apply
             infer_types: Whether to infer types for columns not in schema
 
         Returns:
-            DataFrame with schema applied
+            DuckDB table name with schema applied
         """
-        logger.info(f"Applying schema '{table_schema.name}' to DataFrame")
+        logger.info(f"Applying schema '{table_schema.name}' using DuckDB")
 
-        # Create an Ibis table from the DataFrame
-        table_name = table_schema.name
-        ibis_table = self.duckdb_helper.dataframe_to_ibis(df, table_name)
+        # Handle different input types
+        if isinstance(table_name_or_data, str):
+            source_table = table_name_or_data
+        else:
+            # Register data as a table
+            source_table = f"schema_source_{table_schema.name}"
+            self.register_table(table_name_or_data, source_table)
+
+        # Create result table name
+        result_table = f"{table_schema.name}_with_schema"
 
         # Get the schema as a dictionary
         schema_dict = table_schema.column_dict
+
+        # Get source table columns
+        columns_info = self.conn.execute(f"DESCRIBE {source_table}").fetchall()
+        source_columns = [col[0] for col in columns_info]
+
+        # Build the transformation query
+        select_parts = []
 
         # Apply transformations for each column in the schema
         for col_schema in table_schema.columns:
             col_name = col_schema.name
+            source_col = col_schema.source_column or col_name
 
-            # If the column comes from a different source column, rename it
-            if col_schema.source_column and col_schema.source_column in df.columns:
-                source_col = col_schema.source_column
-                if col_name not in df.columns:
-                    # Rename the source column to the target column name
-                    ibis_table = ibis_table.mutate(
-                        **{col_name: ibis_table[source_col]}
+            # Skip if source column doesn't exist
+            if source_col not in source_columns:
+                if col_schema.default_value is not None:
+                    # Use default value
+                    default_val = self._format_default_value(
+                        col_schema.default_value, col_schema.data_type
                     )
-
-            # Skip if column doesn't exist and no transformation is specified
-            if col_name not in ibis_table.columns:
-                logger.warning(f"Column '{col_name}' not found in data")
+                    select_parts.append(f"{default_val} AS {col_name}")
+                else:
+                    logger.warning(
+                        f"Source column '{source_col}' not found for schema column '{col_name}'"
+                    )
                 continue
 
-            # Apply type conversions
-            ibis_table = self._apply_type_conversion(
-                ibis_table, col_name, col_schema
-            )
+            # Build the column transformation
+            column_expr = self._build_column_transformation(source_col, col_schema)
+            select_parts.append(f"{column_expr} AS {col_name}")
 
-            # Apply transformations if specified
-            if col_schema.transform:
-                ibis_table = self._apply_transformation(
-                    ibis_table, col_name, col_schema.transform
-                )
-
-            # Apply default values for nulls if specified
-            if col_schema.default_value is not None:
-                ibis_table = ibis_table.mutate(
-                    **{
-                        col_name: ibis_table[col_name].fillna(
-                            col_schema.default_value
-                        )
-                    }
-                )
-
-        # Select only the columns in the schema
-        schema_columns = list(schema_dict.keys())
-        
         # Add any columns not in the schema if infer_types is True
         if infer_types:
-            extra_columns = [
-                col for col in ibis_table.columns if col not in schema_columns
-            ]
+            schema_source_columns = {
+                col_schema.source_column or col_schema.name for col_schema in table_schema.columns
+            }
+            extra_columns = [col for col in source_columns if col not in schema_source_columns]
             if extra_columns:
-                logger.info(
-                    f"Including {len(extra_columns)} columns not in schema"
-                )
-                all_columns = schema_columns + extra_columns
-                ibis_table = ibis_table[all_columns]
+                logger.info(f"Including {len(extra_columns)} columns not in schema")
+                select_parts.extend(extra_columns)
+
+        # Create the result table
+        if select_parts:
+            self.conn.execute(f"""
+                CREATE TABLE {result_table} AS
+                SELECT {", ".join(select_parts)}
+                FROM {source_table}
+            """)
         else:
-            # Only include columns in the schema
-            ibis_table = ibis_table[schema_columns]
+            logger.error("No columns to select after schema application")
+            return source_table
 
-        # Convert back to DataFrame
-        result_df = self.duckdb_helper.ibis_to_dataframe(ibis_table)
-        
-        logger.info(f"Successfully applied schema to DataFrame with {len(result_df)} rows")
-        return result_df
+        logger.info(f"Successfully applied schema to create table {result_table}")
+        return result_table
 
-    def _apply_type_conversion(
-        self, table: ibis.expr.types.Table, col_name: str, col_schema: ColumnSchema
-    ) -> ibis.expr.types.Table:
-        """Apply type conversion to a column.
+    def _build_column_transformation(self, source_col: str, col_schema: ColumnSchema) -> str:
+        """Build the SQL expression for column transformation.
 
         Args:
-            table: Ibis table
-            col_name: Column name
-            col_schema: Column schema
+            source_col: Source column name
+            col_schema: Column schema definition
 
         Returns:
-            Ibis table with type conversion applied
+            SQL expression for the column transformation
         """
-        target_type = col_schema.data_type
-        
+        expr = source_col
+
+        # Apply custom transformation if specified
+        if col_schema.transform:
+            # Replace placeholder with actual column name
+            expr = col_schema.transform.replace("${column}", source_col)
+
+        # Apply type conversion
+        expr = self._apply_type_conversion(expr, col_schema.data_type)
+
+        # Apply default value for nulls if specified
+        if col_schema.default_value is not None:
+            default_val = self._format_default_value(col_schema.default_value, col_schema.data_type)
+            expr = f"COALESCE({expr}, {default_val})"
+
+        return expr
+
+    def _apply_type_conversion(self, expr: str, target_type: DataType) -> str:
+        """Apply type conversion to an expression.
+
+        Args:
+            expr: SQL expression
+            target_type: Target data type
+
+        Returns:
+            SQL expression with type conversion
+        """
         # Map schema types to DuckDB types
         type_map = {
-            DataType.STRING: "string",
-            DataType.INTEGER: "int64",
-            DataType.FLOAT: "double",
-            DataType.BOOLEAN: "boolean",
-            DataType.DATE: "date",
-            DataType.TIMESTAMP: "timestamp",
-            # Geometry type requires special handling
-            DataType.GEOMETRY: "string",  # Store as WKT string initially
-        }
-        
-        if target_type in type_map:
-            duckdb_type = type_map[target_type]
-            try:
-                # Special handling for date/timestamp
-                if target_type == DataType.DATE:
-                    # Try to parse as date
-                    table = table.mutate(
-                        **{col_name: table[col_name].cast('date')}
-                    )
-                elif target_type == DataType.TIMESTAMP:
-                    # Try to parse as timestamp
-                    table = table.mutate(
-                        **{col_name: table[col_name].cast('timestamp')}
-                    )
-                else:
-                    # Standard type cast
-                    table = table.mutate(
-                        **{col_name: table[col_name].cast(duckdb_type)}
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to convert column '{col_name}' to {target_type}: {str(e)}"
-                )
-        
-        return table
-
-    def _apply_transformation(
-        self, table: ibis.expr.types.Table, col_name: str, transform: str
-    ) -> ibis.expr.types.Table:
-        """Apply a transformation to a column.
-
-        Args:
-            table: Ibis table
-            col_name: Column name
-            transform: Transformation expression
-
-        Returns:
-            Ibis table with transformation applied
-        """
-        try:
-            # This is a simple implementation - in a real system, you would
-            # need a more sophisticated expression parser/evaluator
-            
-            # Try to parse the transform as a SQL expression
-            # For example, "UPPER(field_name)" or "field1 + field2"
-            sql = f"SELECT *, {transform} AS {col_name}_new FROM data"
-            
-            # Execute the SQL to transform the column
-            conn = self.duckdb_helper.conn
-            conn.register("data", table.compile().compile())
-            result = conn.query(sql).to_arrow_table()
-            
-            # Convert back to Ibis table
-            new_table = ibis.backends.duckdb.from_pyarrow(
-                result, self.duckdb_helper.ibis_conn
-            )
-            
-            # Replace the original column with the transformed column
-            table = new_table.mutate(
-                **{col_name: new_table[f"{col_name}_new"]}
-            )
-            
-            # Drop the temporary column
-            columns = [c for c in table.columns if c != f"{col_name}_new"]
-            table = table[columns]
-            
-            logger.debug(f"Applied transformation to column '{col_name}'")
-            
-        except Exception as e:
-            logger.warning(
-                f"Failed to apply transformation to column '{col_name}': {str(e)}"
-            )
-        
-        return table
-
-    def validate_data_against_schema(
-        self, df: pd.DataFrame, table_schema: TableSchema
-    ) -> dict[str, list[str]]:
-        """Validate data against a schema.
-
-        Args:
-            df: DataFrame to validate
-            table_schema: Schema to validate against
-
-        Returns:
-            Dictionary of validation errors by column
-        """
-        validation_errors = {}
-        
-        # Get the schema as a dictionary
-        schema_dict = table_schema.column_dict
-        
-        # Check for required columns
-        for col_name, col_schema in schema_dict.items():
-            if not col_schema.nullable and col_name not in df.columns:
-                if col_name not in validation_errors:
-                    validation_errors[col_name] = []
-                validation_errors[col_name].append(
-                    f"Required column '{col_name}' is missing"
-                )
-        
-        # Validate each column
-        for col_name, col_schema in schema_dict.items():
-            if col_name not in df.columns:
-                continue
-            
-            col_errors = []
-            
-            # Check non-null constraint
-            if not col_schema.nullable and df[col_name].isna().any():
-                col_errors.append("Contains NULL values but is defined as non-nullable")
-            
-            # Check numeric constraints
-            if col_schema.data_type in (DataType.INTEGER, DataType.FLOAT):
-                # Check minimum value
-                if col_schema.min_value is not None:
-                    min_val = df[col_name].min()
-                    if not pd.isna(min_val) and min_val < col_schema.min_value:
-                        col_errors.append(
-                            f"Contains values less than minimum ({col_schema.min_value})"
-                        )
-                
-                # Check maximum value
-                if col_schema.max_value is not None:
-                    max_val = df[col_name].max()
-                    if not pd.isna(max_val) and max_val > col_schema.max_value:
-                        col_errors.append(
-                            f"Contains values greater than maximum ({col_schema.max_value})"
-                        )
-            
-            # Check uniqueness
-            if col_schema.unique and not df[col_name].is_unique:
-                col_errors.append("Contains duplicate values but should be unique")
-            
-            # Check pattern constraint for strings
-            if (
-                col_schema.pattern
-                and col_schema.data_type == DataType.STRING
-                and not df[col_name].str.contains(col_schema.pattern).all()
-            ):
-                col_errors.append(
-                    f"Contains values that don't match pattern '{col_schema.pattern}'"
-                )
-            
-            # Add errors to the result
-            if col_errors:
-                validation_errors[col_name] = col_errors
-        
-        return validation_errors
-
-    def get_table_schema_sql(self, table_schema: TableSchema) -> str:
-        """Generate SQL CREATE TABLE statement from a schema.
-
-        Args:
-            table_schema: Schema to generate SQL for
-
-        Returns:
-            SQL CREATE TABLE statement
-        """
-        # Map schema types to SQL types
-        type_map = {
             DataType.STRING: "VARCHAR",
-            DataType.INTEGER: "INTEGER",
+            DataType.INTEGER: "BIGINT",
             DataType.FLOAT: "DOUBLE",
             DataType.BOOLEAN: "BOOLEAN",
             DataType.DATE: "DATE",
             DataType.TIMESTAMP: "TIMESTAMP",
             DataType.GEOMETRY: "VARCHAR",  # Store as WKT string
         }
-        
-        # Build column definitions
-        columns = []
-        for col in table_schema.columns:
-            # Get SQL type
-            sql_type = type_map.get(col.data_type, "VARCHAR")
-            
-            # Build column definition
-            col_def = f'"{col.name}" {sql_type}'
-            
-            # Add NOT NULL constraint
-            if not col.nullable:
-                col_def += " NOT NULL"
-            
-            # Add UNIQUE constraint
-            if col.unique:
-                col_def += " UNIQUE"
-            
-            columns.append(col_def)
-        
-        # Add primary key
-        if table_schema.primary_key:
-            if isinstance(table_schema.primary_key, str):
-                columns.append(f'PRIMARY KEY ("{table_schema.primary_key}")')
+
+        if target_type in type_map:
+            duckdb_type = type_map[target_type]
+
+            # Special handling for different types
+            if target_type == DataType.DATE:
+                return f"TRY_CAST({expr} AS DATE)"
+            elif target_type == DataType.TIMESTAMP:
+                return f"TRY_CAST({expr} AS TIMESTAMP)"
+            elif target_type == DataType.BOOLEAN:
+                # Handle various boolean representations
+                return f"""
+                    CASE 
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('true', '1', 'yes', 'ja', 't', 'y') THEN true
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('false', '0', 'no', 'nej', 'f', 'n') THEN false
+                        ELSE TRY_CAST({expr} AS BOOLEAN)
+                    END
+                """
             else:
-                pk_cols = '", "'.join(table_schema.primary_key)
-                columns.append(f'PRIMARY KEY ("{pk_cols}")')
-        
-        # Build CREATE TABLE statement
-        sql = f'CREATE TABLE "{table_schema.name}" (\n'
-        sql += ',\n'.join(f'  {col}' for col in columns)
-        sql += '\n)'
-        
-        return sql 
+                return f"TRY_CAST({expr} AS {duckdb_type})"
+
+        return expr
+
+    def _format_default_value(self, default_value: any, data_type: DataType) -> str:
+        """Format a default value for SQL.
+
+        Args:
+            default_value: The default value
+            data_type: The target data type
+
+        Returns:
+            SQL-formatted default value
+        """
+        if default_value is None:
+            return "NULL"
+
+        if data_type in [DataType.STRING, DataType.GEOMETRY]:
+            return f"'{default_value}'"
+        elif data_type == DataType.DATE:
+            return f"DATE '{default_value}'"
+        elif data_type == DataType.TIMESTAMP:
+            return f"TIMESTAMP '{default_value}'"
+        elif data_type == DataType.BOOLEAN:
+            return "true" if default_value else "false"
+        else:
+            return str(default_value)
+
+    def validate_data_against_schema(
+        self, table_name_or_data: any, table_schema: TableSchema
+    ) -> dict[str, list[str]]:
+        """Validate data against a schema using DuckDB.
+
+        Args:
+            table_name_or_data: DuckDB table name (str) or data to validate
+            table_schema: Schema to validate against
+
+        Returns:
+            Dictionary of validation errors by column
+        """
+        validation_errors = {}
+
+        try:
+            # Handle different input types
+            if isinstance(table_name_or_data, str):
+                table_name = table_name_or_data
+            else:
+                # Register data as a table
+                table_name = f"validation_{table_schema.name}"
+                self.register_table(table_name_or_data, table_name)
+
+            # Get table information
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            available_columns = [col[0] for col in columns_info]
+
+            # Check each column in the schema
+            for col_schema in table_schema.columns:
+                col_name = col_schema.name
+                source_col = col_schema.source_column or col_name
+
+                column_errors = []
+
+                # Check if required column exists
+                if source_col not in available_columns:
+                    if col_schema.default_value is None:
+                        column_errors.append(f"Required column '{source_col}' is missing")
+                    continue
+
+                # Validate data type compatibility
+                try:
+                    # Try to convert a sample of the data
+                    sample_query = f"""
+                        SELECT COUNT(*) as total_count,
+                               COUNT(CASE WHEN TRY_CAST({source_col} AS {self._get_duckdb_type(col_schema.data_type)}) IS NOT NULL THEN 1 END) as valid_count
+                        FROM {table_name}
+                        WHERE {source_col} IS NOT NULL
+                        LIMIT 1000
+                    """
+
+                    result = self.conn.execute(sample_query).fetchone()
+                    total_count, valid_count = result
+
+                    if (
+                        total_count > 0 and valid_count < total_count * 0.95
+                    ):  # Allow 5% conversion failures
+                        invalid_count = total_count - valid_count
+                        column_errors.append(
+                            f"Data type validation failed: {invalid_count}/{total_count} values cannot be converted to {col_schema.data_type.value}"
+                        )
+
+                except Exception as e:
+                    column_errors.append(f"Type validation error: {str(e)}")
+
+                # Check for null values if column is required
+                if not col_schema.nullable:
+                    try:
+                        null_count = self.conn.execute(f"""
+                            SELECT COUNT(*) FROM {table_name} 
+                            WHERE {source_col} IS NULL
+                        """).fetchone()[0]
+
+                        if null_count > 0:
+                            column_errors.append(
+                                f"Found {null_count} null values in non-nullable column"
+                            )
+
+                    except Exception as e:
+                        column_errors.append(f"Null check error: {str(e)}")
+
+                if column_errors:
+                    validation_errors[col_name] = column_errors
+
+        except Exception as e:
+            validation_errors["_general"] = [f"Schema validation failed: {str(e)}"]
+
+        return validation_errors
+
+    def _get_duckdb_type(self, data_type: DataType) -> str:
+        """Get DuckDB type string for a DataType.
+
+        Args:
+            data_type: Schema data type
+
+        Returns:
+            DuckDB type string
+        """
+        type_map = {
+            DataType.STRING: "VARCHAR",
+            DataType.INTEGER: "BIGINT",
+            DataType.FLOAT: "DOUBLE",
+            DataType.BOOLEAN: "BOOLEAN",
+            DataType.DATE: "DATE",
+            DataType.TIMESTAMP: "TIMESTAMP",
+            DataType.GEOMETRY: "VARCHAR",
+        }
+        return type_map.get(data_type, "VARCHAR")
+
+    def get_table_schema_sql(self, table_schema: TableSchema) -> str:
+        """Generate CREATE TABLE SQL for a schema.
+
+        Args:
+            table_schema: Schema to generate SQL for
+
+        Returns:
+            CREATE TABLE SQL statement
+        """
+        columns = []
+        for col_schema in table_schema.columns:
+            col_def = f"{col_schema.name} {self._get_duckdb_type(col_schema.data_type)}"
+
+            if not col_schema.nullable:
+                col_def += " NOT NULL"
+
+            if col_schema.default_value is not None:
+                default_val = self._format_default_value(
+                    col_schema.default_value, col_schema.data_type
+                )
+                col_def += f" DEFAULT {default_val}"
+
+            columns.append(col_def)
+
+        return f"CREATE TABLE {table_schema.name} (\n    {',\n    '.join(columns)}\n)"

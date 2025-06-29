@@ -456,9 +456,10 @@ class SilverProcessor:
 
             else:
                 # Single DataFrame
-                import pandas as pd
 
-                if not isinstance(transformed_data, pd.DataFrame) or transformed_data.empty:
+                if transformed_data is None or (
+                    hasattr(transformed_data, "empty") and transformed_data.empty
+                ):
                     logger.warning(f"No valid data extracted from {original_filename}")
                     return False
 

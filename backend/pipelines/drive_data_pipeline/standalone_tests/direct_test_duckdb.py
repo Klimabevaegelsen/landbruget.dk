@@ -14,7 +14,6 @@ sys.path.insert(0, str(project_root))
 # Third-party imports
 import duckdb
 import ibis
-import pandas as pd
 
 # Import the logger directly
 from utils.logging import get_logger
@@ -140,11 +139,7 @@ def test_duckdb_helper():
     helper = DuckDBHelper()
     
     # Create a test DataFrame
-    df = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5],
-        'name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
-        'value': [10.5, 20.1, 30.7, 40.2, 50.9]
-    })
+    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
     
     print("Created test DataFrame:")
     print(df.head())

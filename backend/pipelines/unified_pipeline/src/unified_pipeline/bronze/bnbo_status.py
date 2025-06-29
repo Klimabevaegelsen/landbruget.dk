@@ -1,3 +1,4 @@
+from ..base import BronzeBase
 """
 Bronze layer data ingestion for BNBO status data.
 
@@ -21,7 +22,7 @@ from typing import Optional
 
 import aiohttp
 
-# ✅ MIGRATION: Removed pandas import - using DuckDB for DataFrame operations
+# ✅ MIGRATION: Removed pandas import - using DuckDB for  operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -30,7 +31,7 @@ from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
-class BNBOStatusBronzeConfig(BaseJobConfig):
+class BNBOStatusBronzeConfig(BronzeBase):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source in the bronze layer.
 
@@ -76,7 +77,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
 
-class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
+class BNBOStatusBronze(BronzeBase):
     """
     Bronze layer processor for BNBO status data.
 
@@ -268,32 +269,43 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
 
     def create_dataframe(self, raw_data: list[str]):
         """
-        Create a DataFrame from the raw data using DuckDB.
-        This method takes a list of strings and converts it into a DuckDB DataFrame.
+        Create a  from the raw data using DuckDB.
+        This method takes a list of strings and converts it into a DuckDB .
 
         Args:
             raw_data (list[str]): List of strings.
 
         Returns:
-            DataFrame: DataFrame containing the raw data with metadata.
+            :  containing the raw data with metadata.
         """
-        # ✅ MIGRATION: Use DuckDB to create DataFrame instead of pandas
+        # ✅ MIGRATION: Use DuckDB with proper Python list handling
         current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
 
-        # Register the raw data
-        self.conn.register("temp_bnbo_data", {"payload": raw_data})
+        # Create a table by inserting values one by one to avoid complex escaping
+        self.conn.execute("CREATE OR REPLACE TABLE temp_bnbo_data (payload VARCHAR)")
 
-        # Create the final DataFrame with metadata columns
-        df = self.conn.execute(f"""
+        # Use prepared statements to safely insert the data strings
+        for data_str in raw_data:
+            self.conn.execute("INSERT INTO temp_bnbo_data VALUES (?)", [data_str])
+
+        # ✅ MIGRATION: Create the final table with metadata columns directly
+        self.conn.execute(
+            """
+            CREATE OR REPLACE TABLE final_dataframe AS
             SELECT 
                 payload,
-                '{self.config.name}' as source,
-                '{current_timestamp}' as created_at,
-                '{current_timestamp}' as updated_at
+                ? as source,
+                ? as created_at,
+                ? as updated_at
             FROM temp_bnbo_data
-        """).df()
+        """,
+            [self.config.name, current_timestamp, current_timestamp],
+        )
 
-        return df
+        # Clean up the temporary table
+        self.conn.execute("DROP TABLE temp_bnbo_data")
+
+        return "final_dataframe"
 
     async def run(self) -> Optional[list[str]]:
         """
@@ -322,11 +334,11 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
                 return None
             self.log.info("Fetched raw data successfully")
 
-            # Create DataFrame for storage (backward compatibility)
-            df = self.create_dataframe(raw_data)
+            # Create table for storage
+            table_name = self.create_dataframe(raw_data)
 
-            # Save using new unified method
-            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
+            # Save using new unified method - table-based
+            self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "bronze")
             self.log.info("Saved raw data successfully")
             self.log.info("BNBO Status bronze job completed successfully")
 

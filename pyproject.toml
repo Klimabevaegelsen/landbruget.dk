@@ -6,7 +6,6 @@ requires-python = ">=3.11"
 dynamic = ["readme"]
 dependencies = [
     # Core Data Processing
-    "pandas~=2.3.0",
     "numpy~=2.2.2",
     "pyarrow~=20.0.0",
     
@@ -14,7 +13,6 @@ dependencies = [
     "ibis-framework[duckdb]~=10.6.0",
     "duckdb~=1.3.1",
     # Note: spatial extension is loaded at runtime with: duckdb.install_extension("spatial")
-    "geopandas~=1.1.1",  # Keep as backup for now
     "shapely~=2.0.6",
     "pyproj~=3.7.0",
     "fiona~=1.10.1",

@@ -1,44 +1,57 @@
-"""Silver layer storage management."""
+"""Silver storage manager for handling data storage operations."""
 
 import re
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+# Handle imports for both standalone and package usage
+try:
+    from ..utils.error_handling import StorageError
+    from ..utils.helpers import generate_timestamp
+    from ..utils.logging import get_logger
+except ImportError:
+    # Fallback for standalone usage
+    import logging
+    import time
 
-from ..utils.helpers import generate_timestamp
-from ..utils.logging import get_logger
-from ..utils.storage import DriveStorageManager, StorageError
+    get_logger = lambda: logging.getLogger(__name__)
+    generate_timestamp = lambda: int(time.time())
+
+    class StorageError(Exception):
+        pass
+
+
+from .duckdb_base import DuckDBProcessor
 
 # Get logger
 logger = get_logger()
 
 
-class SilverStorageManager:
-    """Storage manager for the Silver layer."""
+class SilverStorageManager(DuckDBProcessor):
+    """Manager for Silver layer storage operations using DuckDB."""
 
     def __init__(
         self,
-        storage_manager: DriveStorageManager,
+        storage_manager: Any,  # DriveStorageManager
         base_path: Path,
     ):
         """Initialize the Silver storage manager.
 
         Args:
-            storage_manager: Storage manager for file operations
-            base_path: Base path for Silver layer storage (ignored for GCS, used for local)
+            storage_manager: Storage manager instance
+            base_path: Base path for storage
         """
+        super().__init__()
         self.storage_manager = storage_manager
         self.base_path = base_path
-        # Use standard pipeline folder structure
-        self.pipeline_name = "drive_data"
-        logger.info(f"Initialized Silver storage manager for pipeline: {self.pipeline_name}")
+        self._current_timestamp = None
+        logger.info(f"Initialized SilverStorageManager with base path: {base_path}")
 
     def create_run_directory(self, timestamp: str | None = None) -> Path:
-        """Create a timestamped run directory following the required path structure.
+        """Create a run directory for the current processing run.
 
         Args:
-            timestamp: Optional timestamp string (if not provided, one will be generated)
+            timestamp: Optional timestamp string
 
         Returns:
             Path to the created run directory (just stores timestamp for later use)
@@ -106,11 +119,11 @@ class SilverStorageManager:
         logger.info(f"Created Silver output directory: {output_dir}")
         return output_dir
 
-    def save_parquet(self, df: Any, output_dir: Path, filename: str) -> Path:
-        """Save dataframe to Parquet format.
+    def save_parquet(self, table_name_or_data: Any, output_dir: Path, filename: str) -> Path:
+        """Save DuckDB table or data to Parquet format.
 
         Args:
-            df: DuckDB/Ibis dataframe to save
+            table_name_or_data: DuckDB table name (str) or data to save
             output_dir: Directory to save the file
             filename: Base filename without extension
 
@@ -130,50 +143,79 @@ class SilverStorageManager:
             # Ensure the output directory exists
             self.storage_manager.ensure_directory_exists(output_dir)
 
-            # Convert ALL problematic columns to string to avoid PyArrow conversion errors
-            for col in df.columns:
-                # Skip numeric and datetime columns
-                if pd.api.types.is_numeric_dtype(df[col]) or pd.api.types.is_datetime64_any_dtype(
-                    df[col]
-                ):
-                    continue
+            # Handle different input types
+            if isinstance(table_name_or_data, str):
+                # It's a table name - export directly from DuckDB
+                table_name = table_name_or_data
+                self.export_to_parquet(table_name, file_path)
+            else:
+                # It's data - register it first, then export
+                temp_table = f"temp_save_{filename}"
+                self.register_table(table_name_or_data, temp_table)
 
-                # Convert all other columns to string
-                df[col] = df[col].astype(str)
+                # Clean problematic columns that might cause PyArrow issues
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {temp_table}_clean AS
+                    SELECT * FROM {temp_table}
+                """)
 
-            try:
-                # Try to save as Parquet
-                df.to_parquet(
-                    file_path,
-                    index=False,
-                    engine="pyarrow",
-                    compression="snappy",
-                    allow_truncated_timestamps=True,
-                )
-            except Exception as parquet_error:
-                # If Parquet fails, save as CSV as a fallback
-                logger.warning(
-                    f"Failed to save as Parquet: {str(parquet_error)}, falling back to CSV"
-                )
-                csv_path = output_dir / f"{filename}.csv"
-                csv_path = self._convert_to_snake_case(csv_path)
-                df.to_csv(csv_path, index=False, encoding="utf-8")
-                logger.info(f"Saved CSV file to {csv_path}")
-                return csv_path
+                # Convert problematic columns to strings
+                columns_info = self.conn.execute(f"DESCRIBE {temp_table}_clean").fetchall()
+                for col_name, col_type, *_ in columns_info:
+                    # Skip numeric and datetime columns
+                    if any(
+                        t in col_type.upper()
+                        for t in ["INTEGER", "DOUBLE", "FLOAT", "DATE", "TIMESTAMP"]
+                    ):
+                        continue
+
+                    # Convert other columns to string to avoid PyArrow issues
+                    self.conn.execute(f"""
+                        UPDATE {temp_table}_clean 
+                        SET {col_name} = CAST({col_name} AS VARCHAR)
+                    """)
+
+                self.export_to_parquet(f"{temp_table}_clean", file_path)
+
+                # Clean up temporary tables
+                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}_clean")
 
             logger.info(f"Saved Parquet file to {file_path}")
             return file_path
 
         except Exception as e:
-            error_msg = f"Failed to save Parquet file {filename}: {str(e)}"
-            logger.error(error_msg)
-            raise StorageError(error_msg) from e
+            # Fallback to CSV if Parquet fails
+            logger.warning(f"Failed to save as Parquet: {str(e)}, falling back to CSV")
+            try:
+                csv_path = output_dir / f"{filename}.csv"
+                csv_path = self._convert_to_snake_case(csv_path)
 
-    def save_geoparquet(self, df: Any, output_dir: Path, filename: str) -> Path:
-        """Save dataframe to GeoParquet format.
+                if isinstance(table_name_or_data, str):
+                    table_name = table_name_or_data
+                else:
+                    temp_table = f"temp_save_{filename}"
+                    self.register_table(table_name_or_data, temp_table)
+                    table_name = temp_table
+
+                self.conn.execute(f"""
+                    COPY {table_name} TO '{csv_path}' 
+                    (FORMAT CSV, HEADER true)
+                """)
+
+                logger.info(f"Saved CSV file to {csv_path}")
+                return csv_path
+
+            except Exception as csv_error:
+                error_msg = f"Failed to save file {filename}: Parquet failed ({str(e)}), CSV failed ({str(csv_error)})"
+                logger.error(error_msg)
+                raise StorageError(error_msg) from csv_error
+
+    def save_geoparquet(self, table_name_or_data: Any, output_dir: Path, filename: str) -> Path:
+        """Save DuckDB spatial table or data to GeoParquet format.
 
         Args:
-            df: DuckDB/Ibis/GeoPandas dataframe to save
+            table_name_or_data: DuckDB table name (str) or spatial data to save
             output_dir: Directory to save the file
             filename: Base filename without extension
 
@@ -193,8 +235,19 @@ class SilverStorageManager:
             # Ensure the output directory exists
             self.storage_manager.ensure_directory_exists(output_dir)
 
-            # Save using GeoPandas
-            df.to_parquet(file_path)
+            # Handle different input types
+            if isinstance(table_name_or_data, str):
+                # It's a table name - export directly from DuckDB
+                table_name = table_name_or_data
+                self.export_to_geoparquet(table_name, file_path)
+            else:
+                # It's data - register it first, then export
+                temp_table = f"temp_geosave_{filename}"
+                self.register_table(table_name_or_data, temp_table)
+                self.export_to_geoparquet(temp_table, file_path)
+
+                # Clean up temporary table
+                self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
             logger.info(f"Saved GeoParquet file to {file_path}")
             return file_path

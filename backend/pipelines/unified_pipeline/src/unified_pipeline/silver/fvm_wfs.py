@@ -2,8 +2,8 @@
 Silver layer processing for FVM WFS Agricultural data.
 
 This module transforms raw WFS data (from the bronze layer) into cleaner,
-more structured GeoDataFrames for analytical purposes. It handles the extraction
-of GeoJSON features from WFS responses, converts them to GeoDataFrames,
+more structured Geos for analytical purposes. It handles the extraction
+of GeoJSON features from WFS responses, converts them to Geos,
 and applies transformations such as column renaming and geometry validation.
 
 The module processes three types of FVM data:
@@ -134,12 +134,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     Silver layer processor for FVM WFS agricultural data.
 
     This class transforms raw FVM WFS data from the bronze layer into
-    structured GeoDataFrames. It handles extracting GeoJSON features from WFS responses,
+    structured Geos. It handles extracting GeoJSON features from WFS responses,
     validates geometries, standardizes column names, and saves the processed data.
 
     The processing includes:
     1. Reading raw WFS data from GCS
-    2. Extracting GeoJSON features from each payload and converting to GeoDataFrames
+    2. Extracting GeoJSON features from each payload and converting to Geos
     3. Validating and transforming geometries
     4. Standardizing column names using the mapping from config
     5. Saving processed data to GCS for each year
@@ -159,7 +159,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         self, payload_json: str, column_mapping: Dict[str, str]
     ):
         """
-        Extract GeoJSON features from a raw WFS payload and convert to DataFrame using DuckDB.
+        Extract GeoJSON features from a raw WFS payload and convert to  using DuckDB.
 
         This method parses a JSON string payload containing features from the FVM WFS response,
         converts them to spatial table using DuckDB-spatial operations with standardized
@@ -170,8 +170,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             column_mapping: Dictionary mapping original column names to standardized names
 
         Returns:
-            A DataFrame containing the extracted features with standardized column names,
-            or an empty DataFrame if extraction fails or no features are found
+            A  containing the extracted features with standardized column names,
+            or an empty  if extraction fails or no features are found
 
         Note:
             The source data uses EPSG:25832 coordinate system (UTM Zone 32N)
@@ -208,7 +208,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 column_mappings.append(f'"{old_col}" as "{new_col}"')
 
             # Create spatial table with transformed geometry as WKT string
-            # Return DuckDB relation instead of pandas DataFrame to avoid Shapely conversion
+            # Return DuckDB relation instead of pandas  to avoid Shapely conversion
             result_query = f"""
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
@@ -256,7 +256,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """Convert GeoJSON geometry to WKT format for DuckDB-spatial."""
         return self._geometry_to_wkt(geojson_dict)
 
-    async def _add_block_ids_via_spatial_join(self, marker_gdf, year: int):
+    async def _add_block_ids_via_spatial_join(self, marker_data, year: int):
         """
         Add block IDs to Marker data via spatial join with Markblokke data using DuckDB-spatial.
 
@@ -266,14 +266,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         for optimal performance.
 
         Args:
-            marker_gdf: Marker GeoDataFrame without block IDs
+            marker_data: Either a table name (string) or Marker Geo without block IDs
             year: Year of the data
 
         Returns:
-            Marker GeoDataFrame with block_id field added via DuckDB spatial join
+            Table name (string) with block_id field added via DuckDB spatial join
         """
-        if marker_gdf.empty:
-            return marker_gdf
+        # ✅ MIGRATION: Handle both table names and s
+        if isinstance(marker_data, str):
+            # marker_data is a table name
+            marker_table = marker_data
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()[0]
+            if row_count == 0:
+                return marker_data
+        else:
+            # marker_data is a /Geo
+            if marker_data.empty:
+                return marker_data
+            self.conn.register("temp_marker_input", marker_data)
+            marker_table = "temp_marker_input"
+            row_count = len(marker_data)
 
         try:
             # Read corresponding Markblokke data for spatial join
@@ -285,11 +297,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             if markblokke_df is None or markblokke_df.empty:
                 self.log.warning(f"No Markblokke data found for {year}, cannot add block IDs")
                 # Add empty block_id column using DuckDB
-                if isinstance(marker_gdf, dict) or hasattr(marker_gdf, "to_dict"):
-                    self.conn.register("marker_temp", marker_gdf)
-                    result = self.conn.execute("SELECT *, NULL as block_id FROM marker_temp").df()
-                    return result
-                return marker_gdf
+                result_table = f"marker_with_null_block_{year}"
+                self.conn.execute(
+                    f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                )
+                return result_table
 
             self.log.info(f"Markblokke data columns for {year}: {list(markblokke_df.columns)}")
             self.log.info(f"Markblokke data shape: {markblokke_df.shape}")
@@ -306,50 +318,60 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     f"No block ID column found in Markblokke data for {year}. Available columns: {list(markblokke_df.columns)}"
                 )
                 # Add empty block_id column using DuckDB
-                if isinstance(marker_gdf, dict) or hasattr(marker_gdf, "to_dict"):
-                    self.conn.register("marker_temp", marker_gdf)
-                    result = self.conn.execute("SELECT *, NULL as block_id FROM marker_temp").df()
-                    return result
-                return marker_gdf
+                result_table = f"marker_with_null_block_{year}"
+                self.conn.execute(
+                    f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                )
+                return result_table
 
             self.log.info(f"Using {block_id_column} as block ID column")
 
-            # Check geometry column name and format
-            geom_col = "geometry_wkt" if "geometry_wkt" in marker_gdf.columns else "geometry"
+            # Register markblokke data with DuckDB
+            self.conn.register("blocks", markblokke_df)
+
+            # Get geometry column names
+            marker_columns = self.conn.execute(f"DESCRIBE {marker_table}").fetchall()
+            marker_col_names = [col[0] for col in marker_columns]
+
+            geom_col = "geometry_wkt" if "geometry_wkt" in marker_col_names else "geometry"
             markblokke_geom_col = (
                 "geometry_wkt" if "geometry_wkt" in markblokke_df.columns else "geometry"
             )
 
-            # Check if geometries are Shapely objects (old format) or WKT strings (new format)
-            sample_geom = marker_gdf[geom_col].iloc[0] if not marker_gdf.empty else None
-            if sample_geom is not None and hasattr(sample_geom, "wkt"):
-                self.log.info("Converting Shapely geometries to WKT for DuckDB compatibility")
-                # Convert Shapely to WKT
-                marker_df_wkt = marker_gdf.copy()
-                marker_df_wkt[geom_col] = marker_gdf[geom_col].apply(
-                    lambda x: x.wkt if hasattr(x, "wkt") and x is not None else None
-                )
+            # Check if geometries need conversion from Shapely to WKT
+            sample_geom_query = (
+                f"SELECT {geom_col} FROM {marker_table} WHERE {geom_col} IS NOT NULL LIMIT 1"
+            )
+            sample_result = self.conn.execute(sample_geom_query).fetchone()
 
-                markblokke_df_wkt = markblokke_df.copy()
-                markblokke_df_wkt[markblokke_geom_col] = markblokke_df[markblokke_geom_col].apply(
-                    lambda x: x.wkt if hasattr(x, "wkt") and x is not None else None
-                )
+            if sample_result and sample_result[0] is not None:
+                sample_geom = sample_result[0]
+                if hasattr(sample_geom, "wkt"):
+                    self.log.info("Converting Shapely geometries to WKT for DuckDB compatibility")
+                    # Convert Shapely to WKT in the table
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {marker_table}_wkt AS
+                        SELECT *, 
+                            CASE WHEN {geom_col} IS NOT NULL THEN ST_AsText({geom_col}) ELSE NULL END as {geom_col}_wkt
+                        FROM {marker_table}
+                    """)
+                    marker_table = f"{marker_table}_wkt"
+                    geom_col = f"{geom_col}_wkt"
 
-                self.conn.register("markers", marker_df_wkt)
-                self.conn.register("blocks", markblokke_df_wkt)
-            else:
-                self.log.info("Geometries are already WKT strings")
-                # Geometries are already WKT strings, register directly
-                self.conn.register("markers", marker_gdf)
-                self.conn.register("blocks", markblokke_df)
+                    # Also convert markblokke geometries if needed
+                    markblokke_df_wkt = markblokke_df.copy()
+                    markblokke_df_wkt[f"{markblokke_geom_col}_wkt"] = markblokke_df[
+                        markblokke_geom_col
+                    ].apply(lambda x: x.wkt if hasattr(x, "wkt") and x is not None else x)
+                    self.conn.register("blocks", markblokke_df_wkt)
+                    markblokke_geom_col = f"{markblokke_geom_col}_wkt"
 
             # Perform spatial join using DuckDB-spatial with WKT geometries
-            # Use ST_Intersects for better coverage than ST_Within
             spatial_join_query = f"""
                 SELECT 
                     m.*,
                     b.{block_id_column} as block_id
-                FROM markers m
+                FROM {marker_table} m
                 LEFT JOIN blocks b ON ST_Intersects(
                     ST_GeomFromText(m.{geom_col}), 
                     ST_GeomFromText(b.{markblokke_geom_col})
@@ -358,50 +380,48 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             """
 
             self.log.info(
-                f"Executing DuckDB-spatial join for {len(marker_gdf)} markers with {len(markblokke_df)} blocks in {year}"
+                f"Executing DuckDB-spatial join for {row_count} markers with {len(markblokke_df)} blocks in {year}"
             )
 
             # Execute the spatial join
-            result_df = self.conn.execute(spatial_join_query).df()
+            result_table = f"spatial_join_result_{year}"
+            self.conn.execute(f"CREATE OR REPLACE TABLE {result_table} AS {spatial_join_query}")
+            result_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
 
             # Add markers that didn't have geometry (NULL geometries)
-            if len(result_df) < len(marker_gdf):
-                self.log.info(
-                    f"Adding {len(marker_gdf) - len(result_df)} markers without valid geometry"
-                )
+            if result_count < row_count:
+                self.log.info(f"Adding {row_count - result_count} markers without valid geometry")
 
-                # Get markers with NULL geometry
-                null_geom_markers = self.conn.execute("""
+                # Get markers with NULL geometry and add to final result
+                final_table = f"final_result_{year}"
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {final_table} AS
+                    SELECT * FROM {result_table}
+                    UNION ALL
                     SELECT *, NULL as block_id
-                    FROM markers
-                    WHERE geometry IS NULL
-                """).df()
+                    FROM {marker_table}
+                    WHERE {geom_col} IS NULL
+                """)
 
-                if not null_geom_markers.empty:
-                    # Combine results using DuckDB UNION
-                    self.conn.register("spatial_results", result_df)
-                    self.conn.register("null_geom_results", null_geom_markers)
-                    result_df = self.conn.execute("""
-                        SELECT * FROM spatial_results
-                        UNION ALL
-                        SELECT * FROM null_geom_results
-                    """).df()
+                result_count = self.conn.execute(f"SELECT COUNT(*) FROM {final_table}").fetchone()[
+                    0
+                ]
+                result_table = final_table
 
             self.log.info(
-                f"Added block IDs via DuckDB spatial join for {len(result_df)} markers in {year}"
+                f"Added block IDs via DuckDB spatial join for {result_count} markers in {year}"
             )
 
             # Log statistics about the join success
-            total_markers = len(marker_gdf) if hasattr(marker_gdf, "__len__") else 0
-            markers_with_blocks = (
-                result_df["block_id"].notna().sum() if "block_id" in result_df.columns else 0
-            )
-            if total_markers > 0:
+            markers_with_blocks = self.conn.execute(
+                f"SELECT COUNT(*) FROM {result_table} WHERE block_id IS NOT NULL"
+            ).fetchone()[0]
+            if row_count > 0:
                 self.log.info(
-                    f"Spatial join success rate: {markers_with_blocks}/{total_markers} ({markers_with_blocks / total_markers * 100:.1f}%)"
+                    f"Spatial join success rate: {markers_with_blocks}/{row_count} ({markers_with_blocks / row_count * 100:.1f}%)"
                 )
 
-            return result_df
+            return result_table
 
         except Exception as e:
             self.log.error(f"Error adding block IDs via spatial join for {year}: {e}")
@@ -410,35 +430,41 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.error(f"Traceback: {traceback.format_exc()}")
             # Add empty block_id column as fallback using DuckDB
             try:
-                if isinstance(marker_gdf, dict) or hasattr(marker_gdf, "to_dict"):
-                    self.conn.register("marker_fallback", marker_gdf)
-                    result = self.conn.execute(
-                        "SELECT *, NULL as block_id FROM marker_fallback"
-                    ).df()
-                    return result
+                fallback_table = f"marker_fallback_result_{year}"
+                self.conn.execute(
+                    f"CREATE OR REPLACE TABLE {fallback_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                )
+                return fallback_table
             except:
                 pass
-            return marker_gdf
+            return marker_data if isinstance(marker_data, str) else "temp_marker_input"
 
     async def _process_data(self, raw_df, layer_type: str, year: int):
         """
-        Process raw data into a clean GeoDataFrame.
+        Process raw data into a clean Geo.
 
         This method takes raw data from the bronze layer, extracts GeoJSON features from each
-        payload in parallel, and combines them into a single GeoDataFrame. It also handles
+        payload in parallel, and combines them into a single Geo. It also handles
         column name cleaning and geometry validation.
 
         Args:
-            raw_df: DataFrame containing raw payloads from the bronze layer
+            raw_df:  containing raw payloads from the bronze layer
             layer_type: Type of layer being processed (Markblokke, Marker, Smaabiotoper)
             year: Year of the data being processed
 
         Returns:
-            A GeoDataFrame containing all processed features with validated geometries,
-            or an empty GeoDataFrame if processing fails
+            A Geo containing all processed features with validated geometries,
+            or an empty Geo if processing fails
         """
         async with AsyncTimer(f"Processing {layer_type} data for {year}"):
-            payloads = raw_df["payload"].tolist()
+            # Handle case where raw_df might be a table name
+            if isinstance(raw_df, str):
+                # raw_df is a table name, extract payloads using DuckDB
+                payloads_result = self.conn.execute(f"SELECT payload FROM {raw_df}").fetchall()
+                payloads = [row[0] for row in payloads_result]
+            else:
+                # raw_df is a 
+                payloads = raw_df["payload"].tolist()
 
             # Get appropriate column mapping based on layer type
             if layer_type == "Markblokke":
@@ -458,11 +484,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Filter out empty relations and register them for UNION
             valid_relations = []
             for i, relation in enumerate(geo_relations_list):
-                # Check if relation has data by converting to df and checking if empty
-                temp_df = relation.df()
-                if not temp_df.empty:
-                    table_name = f"temp_relation_{i}"
-                    self.conn.register(table_name, temp_df)
+                # Check if relation has data by registering and counting rows
+                table_name = f"temp_relation_{i}"
+                self.conn.register(table_name, relation)
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                if row_count > 0:
                     valid_relations.append(table_name)
 
             if not valid_relations:
@@ -488,9 +514,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Register the combined relation and get column info
             self.conn.register("combined_temp", combined_relation)
 
-            # Get column names and clean them
-            temp_df = combined_relation.df()  # Only for getting column names
-            columns = temp_df.columns.tolist()
+            # Get column names using DuckDB DESCRIBE
+            columns_info = self.conn.execute("DESCRIBE combined_temp").fetchall()
+            columns = [col[0] for col in columns_info]  # Extract column names
             cleaned_columns = [
                 col.replace(".", "_").replace("()", "_").replace("(", "_").replace(")", "_")
                 for col in columns
@@ -512,21 +538,47 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 FROM combined_temp
             """
 
-            final_relation = self.conn.execute(final_query)
+            # ✅ MIGRATION: Create table instead of  conversion
+            self.conn.execute(f"CREATE OR REPLACE TABLE final_processed AS {final_query}")
 
-            # Convert final relation to DataFrame for return
-            final_df = final_relation.df()
+            # Check if we have data
+            row_count = self.conn.execute("SELECT COUNT(*) FROM final_processed").fetchone()[0]
 
             # For Marker data: Add block IDs via spatial join if not present
-            if layer_type == "Marker" and not final_df.empty:
+            if layer_type == "Marker" and row_count > 0:
                 # Check if block_id field exists and has data
-                if "block_id" not in final_df.columns or final_df["block_id"].isna().all():
+                columns_info = self.conn.execute("DESCRIBE final_processed").fetchall()
+                column_names = [col[0] for col in columns_info]
+
+                has_block_id = "block_id" in column_names
+                if has_block_id:
+                    block_id_count = self.conn.execute(
+                        "SELECT COUNT(*) FROM final_processed WHERE block_id IS NOT NULL"
+                    ).fetchone()[0]
+                    has_block_data = block_id_count > 0
+                else:
+                    has_block_data = False
+
+                if not has_block_id or not has_block_data:
                     self.log.info(
                         f"Block ID not available in Marker data for {year}, attempting spatial join with Markblokke"
                     )
-                    final_df = await self._add_block_ids_via_spatial_join(final_df, year)
+                    # ❌ ELIMINATED: No more wasteful  conversion
+                    # temp_df = self.conn.execute("SELECT * FROM final_processed")
+                    # ✅ MIGRATION: Pass table name instead of 
+                    result_table = await self._add_block_ids_via_spatial_join(
+                        "final_processed", year
+                    )
 
-            return final_df
+                    # If result is a table name, use it; otherwise register the result
+                    if isinstance(result_table, str):
+                        self.conn.execute(
+                            f"CREATE OR REPLACE TABLE final_processed AS SELECT * FROM {result_table}"
+                        )
+                    else:
+                        self.conn.register("final_processed", result_table)
+
+            return "final_processed"
 
     async def _process_layer_type(
         self,
@@ -561,11 +613,17 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     layer_data = bronze_data.get(layer_type.lower(), {})
                     if year in layer_data:
                         raw_data = layer_data[year]
-                        # ✅ MIGRATION: Convert to DataFrame if it's not already using DuckDB
-                        if not hasattr(raw_data, "iterrows"):  # Check if it's DataFrame-like
-                            # Use DuckDB to create DataFrame
-                            self.conn.register("temp_raw_data", [{"payload": raw_data}])
-                            raw_data = self.conn.execute("SELECT * FROM temp_raw_data").df()
+                        # ✅ MIGRATION: Convert to  if it's not already using DuckDB
+                        if not hasattr(raw_data, "iterrows"):  # Check if it's -like
+                            # Use DuckDB to create  - avoid dict registration
+                            self.conn.execute(
+                                "CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR)"
+                            )
+                            self.conn.execute(
+                                "INSERT INTO temp_raw_data VALUES (?)", [str(raw_data)]
+                            )
+                            # ✅ MIGRATION: Keep as table instead of converting to 
+                            raw_data = "temp_raw_data"
                     else:
                         self.log.warning(f"No in-memory data found for {layer_type} {year}")
                         continue
@@ -588,23 +646,33 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     self.log.warning(f"No processed data for {silver_dataset_with_year}, skipping")
                     continue
 
-                # Check if relation has data by registering and counting
-                temp_table_name = f"temp_check_{layer_type.lower()}_{year}"
-                self.conn.register(temp_table_name, geo_relation)
-                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {temp_table_name}").fetchone()[
-                    0
-                ]
+                # Check if relation has data
+                if isinstance(geo_relation, str):
+                    # geo_relation is a table name
+                    row_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM {geo_relation}"
+                    ).fetchone()[0]
+                    table_name = f"silver_{layer_type.lower()}_{year}"
+                    self.conn.execute(
+                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {geo_relation}"
+                    )
+                else:
+                    # geo_relation is a relation object, register it
+                    temp_table_name = f"temp_check_{layer_type.lower()}_{year}"
+                    self.conn.register(temp_table_name, geo_relation)
+                    row_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM {temp_table_name}"
+                    ).fetchone()[0]
+
+                    # Register as final table for export
+                    table_name = f"silver_{layer_type.lower()}_{year}"
+                    self.conn.register(table_name, geo_relation)
 
                 if row_count == 0:
                     self.log.warning(f"No processed data for {silver_dataset_with_year}, skipping")
                     continue
 
                 self.log.info(f"Processed {row_count:,} features for {silver_dataset_with_year}")
-
-                # Save processed data using DuckDB relation directly
-                # Register the relation as a table for export
-                table_name = f"silver_{layer_type.lower()}_{year}"
-                self.conn.register(table_name, geo_relation)
 
                 # Export directly to GCS using DuckDB COPY command
                 gcs_path = f"gs://{self.config.bucket}/silver/{silver_dataset_with_year}/{silver_dataset_with_year}.parquet"
@@ -650,7 +718,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Execute the silver processing job for all FVM WFS data.
 
         This method orchestrates the processing of raw multi-year data from the bronze
-        layer into structured GeoDataFrames. It processes Markblokke, Marker, and
+        layer into structured Geos. It processes Markblokke, Marker, and
         Smaabiotoper data for all available years and saves the results to Google Cloud Storage.
 
         Args:
@@ -659,7 +727,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         The processing workflow for each layer type and year:
         1. Read raw data from GCS or use in-memory data
-        2. Process raw WFS data into GeoDataFrames with standardized column names
+        2. Process raw WFS data into Geos with standardized column names
         3. Add year and layer type information to the processed data
         4. Validate geometries and apply any needed transformations
         5. Save processed data back to GCS with year information

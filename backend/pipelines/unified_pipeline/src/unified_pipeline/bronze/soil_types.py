@@ -16,7 +16,6 @@ for efficient storage and processing.
 import asyncio
 from typing import Optional
 
-import geopandas as gpd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
@@ -85,7 +84,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         """
         super().__init__(config, gcs_util)
 
-    async def _fetch_soil_types_data(self) -> Optional[gpd.GeoDataFrame]:
+    async def _fetch_soil_types_data(self) -> Optional[gGeo]:
         """
         Fetch soil types data from the WFS endpoint.
 
@@ -94,7 +93,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         validation.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: GeoDataFrame containing the soil types data,
+            Optional[gGeo]: Geo containing the soil types data,
                                        or None if the fetch fails
 
         Raises:
@@ -120,7 +119,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
                 # Use geopandas to read from WFS
                 # Note: geopandas.read_file is not async, so we run it in a thread pool
                 loop = asyncio.get_event_loop()
-                gdf = await loop.run_in_executor(None, lambda: gpd.read_file(full_url))
+                gdf = await loop.run_in_executor(None, lambda: gread_file(full_url))
 
                 if gdf is None or gdf.empty:
                     self.log.warning("No data returned from WFS endpoint")
@@ -138,8 +137,8 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
 
                 # Add metadata columns
                 gdf["source"] = self.config.name
-                gdf["created_at"] = gpd.pd.Timestamp.now()
-                gdf["updated_at"] = gpd.pd.Timestamp.now()
+                gdf["created_at"] = gTimestamp.now()
+                gdf["updated_at"] = gTimestamp.now()
 
                 return gdf
 
@@ -147,7 +146,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error fetching soil types data: {str(e)}")
             raise Exception(f"Failed to fetch soil types data from WFS: {str(e)}")
 
-    async def run(self) -> Optional[gpd.GeoDataFrame]:
+    async def run(self) -> Optional[gGeo]:
         """
         Run the soil types data processing pipeline.
 
@@ -157,7 +156,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         processed data for in-memory passing to the silver stage.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: The processed soil types data that can be
+            Optional[gGeo]: The processed soil types data that can be
                                        passed to silver stage, or None if processing fails
 
         Raises:

@@ -366,12 +366,12 @@ class InspireBBRFetcher:
         final_buildings.extend(enriched_agriculture)  # All agriculture with BBR codes
         final_buildings.extend(enriched_education)  # Education buildings only
 
-        # ✅ MIGRATION: Convert to DataFrame using DuckDB
+        # ✅ MIGRATION: Convert to  using DuckDB
         import duckdb
 
         temp_conn = duckdb.connect()
         temp_conn.register("temp_buildings", final_buildings)
-        df = temp_conn.execute("SELECT * FROM temp_buildings").df()
+        df = temp_conn.execute("SELECT * FROM temp_buildings")
         temp_conn.close()
 
         # Extract building IDs for geometry lookup

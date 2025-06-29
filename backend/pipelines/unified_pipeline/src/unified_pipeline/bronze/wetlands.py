@@ -20,7 +20,6 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -262,26 +261,45 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                 self.log.error(f"Error occured while fetching chunk: {e}")
                 raise e
 
-    def create_dataframe(self, raw_data: list[str]) -> pd.DataFrame:
+    def create_dataframe(self, raw_data: list[str]):
         """
-        Create a DataFrame from the raw data.
-        This method takes a list of strings and converts it into a pandas DataFrame.
+        Create a  from the raw data using DuckDB.
+        This method takes a list of strings and converts it into a DuckDB table.
 
         Args:
             raw_data (list[str]): List of strings.
 
         Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata.
+            str: Table name containing the raw data with metadata.
         """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
+        # ✅ MIGRATION: Use DuckDB with proper Python list handling
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Create a table by inserting values one by one to avoid complex escaping
+        self.conn.execute("CREATE OR REPLACE TABLE temp_wetlands_data (payload VARCHAR)")
+
+        # Use prepared statements to safely insert the data strings
+        for data_str in raw_data:
+            self.conn.execute("INSERT INTO temp_wetlands_data VALUES (?)", [data_str])
+
+        # ✅ MIGRATION: Create the final table with metadata columns directly
+        self.conn.execute(
+            """
+            CREATE OR REPLACE TABLE final_dataframe AS
+            SELECT 
+                payload,
+                ? as source,
+                ? as created_at,
+                ? as updated_at
+            FROM temp_wetlands_data
+        """,
+            [self.config.name, current_timestamp, current_timestamp],
         )
-        df["source"] = self.config.name
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
-        return df
+
+        # Clean up the temporary table
+        self.conn.execute("DROP TABLE temp_wetlands_data")
+
+        return "final_dataframe"
 
     async def run(self) -> Optional[list[str]]:
         """
@@ -307,11 +325,11 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                 return None
             self.log.info("Fetched raw data successfully")
 
-            # Create DataFrame for storage (backward compatibility)
-            df = self.create_dataframe(raw_data)
+            # Create  for storage (backward compatibility)
+            table_name = self.create_dataframe(raw_data)
 
             # Save using new unified method
-            self._save_data(df, self.config.dataset, self.config.bucket, stage="bronze")
+            self._save_data(table_name, self.config.dataset, self.config.bucket, stage="bronze")
             self.log.info("Saved raw data successfully")
             self.log.info("Wetlands bronze job completed successfully")
 

@@ -18,8 +18,7 @@ from collections import Counter
 from typing import Any, Optional
 
 # ✅ MIGRATION: Removed geopandas import - using DuckDB-spatial for all operations
-# import geopandas as gpd
-# ✅ MIGRATION: Removed shapely import - using DuckDB-spatial for geometry operations
+# # ✅ MIGRATION: Removed shapely import - using DuckDB-spatial for geometry operations
 # from shapely import Polygon
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -159,12 +158,12 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         conn = self.conn
 
         # Get geometry statistics using DuckDB-spatial
-        stats_df = conn.execute(f"""
+        stats_data = conn.execute(f"""
             SELECT 
-                ST_XMax(geometry) - ST_XMin(geometry) as width,
-                ST_YMax(geometry) - ST_YMin(geometry) as height,
                 (ST_XMax(geometry) - ST_XMin(geometry)) * (ST_YMax(geometry) - ST_YMin(geometry)) as area,
                 ST_NPoints(geometry) as vertices,
+                ST_XMax(geometry) - ST_XMin(geometry) as width,
+                ST_YMax(geometry) - ST_YMin(geometry) as height,
                 CASE 
                     WHEN ABS(ROUND((ST_XMax(geometry) - ST_XMin(geometry)) / 10) * 10 - (ST_XMax(geometry) - ST_XMin(geometry))) < 0.01
                          AND ABS(ROUND((ST_YMax(geometry) - ST_YMin(geometry)) / 10) * 10 - (ST_YMax(geometry) - ST_YMin(geometry))) < 0.01
@@ -173,20 +172,26 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 END as grid_aligned
             FROM {table_name}
             WHERE geometry IS NOT NULL
-        """).df()
+        """).fetchall()
 
         # Unique dimensions analysis
-        dimensions = Counter(zip(stats_df["width"], stats_df["height"]))
+        dimensions = Counter([(row[2], row[3]) for row in stats_data])  # width, height
 
         self.log.info("Geometry Statistics:")
-        self.log.info(f"Total features: {len(stats_df)}")
+        self.log.info(f"Total features: {len(stats_data)}")
         self.log.info("\nUnique dimensions (width x height, count):")
         for (width, height), count in dimensions.most_common():
             self.log.info(f"{width:.1f}m x {height:.1f}m: {count} features")
 
-        self.log.info(f"\nNon-grid-aligned features: {sum(~stats_df['grid_aligned'])}")
-        self.log.info(f"Average vertices per feature: {stats_df['vertices'].mean():.1f}")
-        self.log.info(f"Total area covered: {stats_df['area'].sum() / 1_000_000:.2f} km²")
+        non_grid_aligned = sum(1 for row in stats_data if not row[4])  # grid_aligned is index 4
+        avg_vertices = (
+            sum(row[1] for row in stats_data) / len(stats_data) if stats_data else 0
+        )  # vertices is index 1
+        total_area = sum(row[0] for row in stats_data) if stats_data else 0  # area is index 0
+
+        self.log.info(f"\nNon-grid-aligned features: {non_grid_aligned}")
+        self.log.info(f"Average vertices per feature: {avg_vertices:.1f}")
+        self.log.info(f"Total area covered: {total_area / 1_000_000:.2f} km²")
 
     def _parse_geometry(self, geom_elem: ET.Element) -> Optional[str]:
         """
@@ -302,16 +307,16 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             return None
 
     @timed(name="Processing XML data")  # type: ignore
-    def _process_xml_data(self, raw_data) -> Optional[str]:
+    def _process_xml_data(self, raw_data_input) -> Optional[str]:
         """
         Process raw XML data into a DuckDB table.
 
         This method parses XML data containing wetland features and converts it to
-        a DuckDB table with attributes and geometries. It processes each row in the
-        input DataFrame independently and combines the results.
+        a DuckDB table with attributes and geometries. It can handle both 
+        and table name inputs.
 
         Args:
-            raw_data: DataFrame containing raw XML data in the 'payload' column
+            raw_data_input:  or table name containing raw XML data
 
         Returns:
             Optional[str]: Name of the DuckDB table containing wetland features,
@@ -320,17 +325,25 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         Raises:
             Exception: If there are errors during processing that cannot be handled
         """
-        if raw_data is None or raw_data.empty:
-            self.log.warning("No raw data to process")
+        # ✅ MIGRATION: Handle only table names now
+        if isinstance(raw_data_input, str):
+            # Input is a table name
+            table_name = raw_data_input
+            # Get XML data from table
+            xml_data_rows = self.conn.execute(f"SELECT payload FROM {table_name}").fetchall()
+            if not xml_data_rows:
+                self.log.warning("No raw data to process")
+                return None
+            self.log.info("Processing XML data from DuckDB table")
+        else:
+            self.log.error(f"Expected table name (string), got {type(raw_data_input)}")
             return None
 
-        self.log.info("Processing XML data from bronze layer")
-
         features = []
-        for index, row in raw_data.iterrows():
+        for i, row in enumerate(xml_data_rows):
             try:
                 # Parse the XML data
-                xml_data = row["payload"]
+                xml_data = row[0]  # row is a tuple from fetchall()
                 root = ET.fromstring(xml_data)
 
                 for member in root.findall(
@@ -344,7 +357,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         self.log.info(f"Processed {len(features):,} features")
 
             except Exception as e:
-                self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
+                self.log.error(f"Error processing row {i}: {str(e)}", exc_info=True)
                 raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
@@ -562,21 +575,24 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 self.log.info("Using bronze data from memory (in-memory data passing)")
                 # Bronze data is expected to be a list of raw XML strings
                 if isinstance(bronze_data, list):
-                    # ✅ MIGRATION: Create DataFrame using DuckDB instead of pandas
+                    # ✅ MIGRATION: Create table using DuckDB instead of wasteful  conversion
                     conn = self.conn
                     current_timestamp = conn.execute("SELECT current_timestamp").fetchone()[0]
 
-                    raw_data_list = [
-                        {
-                            "payload": xml_data,
-                            "source": self.config.dataset,
-                            "created_at": current_timestamp,
-                            "updated_at": current_timestamp,
-                        }
-                        for xml_data in bronze_data
-                    ]
-                    conn.register("temp_raw_data", raw_data_list)
-                    raw_data = conn.execute("SELECT * FROM temp_raw_data").df()
+                    # Create table directly without  conversion
+                    conn.execute(
+                        "CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR, source VARCHAR, created_at TIMESTAMP, updated_at TIMESTAMP)"
+                    )
+
+                    # Insert data directly into table
+                    for xml_data in bronze_data:
+                        conn.execute(
+                            "INSERT INTO temp_raw_data VALUES (?, ?, ?, ?)",
+                            [xml_data, self.config.dataset, current_timestamp, current_timestamp],
+                        )
+
+                    # Use table name instead of 
+                    raw_data_table = "temp_raw_data"
                 else:
                     self.log.error(
                         f"Expected list of XML strings from bronze stage, got {type(bronze_data)}"
@@ -591,7 +607,16 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     return
 
             self.log.info("Read raw data successfully")
-            table_name = self._process_xml_data(raw_data)
+
+            # Determine what to pass to processing method
+            if bronze_data is not None and isinstance(bronze_data, list):
+                # Use the table we created from bronze data
+                processing_input = raw_data_table
+            else:
+                # Use the  from storage (backward compatibility)
+                processing_input = raw_data
+
+            table_name = self._process_xml_data(processing_input)
             if table_name is None:
                 self.log.error("Failed to process raw data")
                 return

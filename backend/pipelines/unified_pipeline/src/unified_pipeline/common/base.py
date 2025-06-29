@@ -13,8 +13,6 @@ from datetime import datetime
 from typing import Any, Dict, Generic, Optional, TypeVar
 
 import duckdb
-import geopandas as gpd
-import pandas as pd
 from pydantic import BaseModel
 
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
@@ -235,12 +233,28 @@ class BaseSource(Generic[T], ABC):
         pass
 
     @timed(name="Saving processed data")  # type: ignore
-    def _save_data(self, data: Any, dataset: str, bucket: str, stage: str) -> None:
+    def _save_data(
+        self,
+        data: Any,
+        dataset: str,
+        bucket: str,
+        stage: str,
+        subdataset: str = None,
+        conn: Any = None,
+    ) -> None:
         """
-        Save data with support for gold stage.
+        Save data with support for bronze, silver, and gold stages.
 
-        ✅ MIGRATION: Enhanced to use DuckDB for efficient data operations
-        while maintaining compatibility with existing pandas/geopandas workflows.
+        ✅ MIGRATION: Enhanced to handle both table names and DataFrames
+        for efficient DuckDB-first operations while maintaining compatibility.
+
+        Args:
+            data: Data to save - can be DataFrame, table name (str), dict, or list
+            dataset: Primary dataset name
+            bucket: GCS bucket name
+            stage: Pipeline stage (bronze/silver/gold)
+            subdataset: Optional subdataset name for multi-table outputs
+            conn: Optional DuckDB connection when data is a table name
         """
 
         valid_stages = ["bronze", "silver", "gold"]
@@ -250,49 +264,107 @@ class BaseSource(Generic[T], ABC):
         # Use pipeline start time (not save time) for consistent timestamping
         timestamp = self.date_pattern
 
+        # Handle table name input (new DuckDB-first approach)
+        if isinstance(data, str) and conn is not None:
+            # ✅ MIGRATION: Direct table operations - no DataFrame conversion needed
+            table_name = data
+
+            # Determine final dataset name
+            final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+
+            # Create path with timestamp subdirectory
+            filename = f"{final_dataset}.parquet"
+            path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
+
+            if self.config.save_local:
+                # ✅ MIGRATION: Save directly from table using DuckDB (no DataFrame conversion)
+                local_path = f"/tmp/{filename}"
+                try:
+                    conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+                    self.log.info(f"✅ Table saved directly using DuckDB: {local_path}")
+                except Exception as e:
+                    self.log.error(f"Failed to save table {table_name}: {e}")
+                    raise
+            else:
+                # ✅ MIGRATION: Save to GCS directly from table (no DataFrame conversion)
+                try:
+                    # Create temporary file for GCS upload
+                    import tempfile
+
+                    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                        temp_path = tmp_file.name
+
+                    # Export table to temporary file
+                    conn.execute(f"COPY {table_name} TO '{temp_path}' (FORMAT PARQUET)")
+
+                    # Upload to GCS
+                    self.gcs_util.upload_file_to_gcs(
+                        local_file_path=temp_path, bucket_name=bucket, blob_name=path
+                    )
+
+                    # Clean up temporary file
+                    import os
+
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+
+                    self.log.info(f"✅ Table saved directly to GCS: gs://{bucket}/{path}")
+                except Exception as e:
+                    self.log.error(f"Failed to save table {table_name} to GCS: {e}")
+                    raise
+
+            return
+
+        # Handle traditional DataFrame/data inputs (backward compatibility)
+        final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+
         # Determine file extension and format
-        if isinstance(data, (gpd.GeoDataFrame, pd.DataFrame)):
+        if isinstance(data, str):
+            # Data is a table name in DuckDB
             file_extension = "parquet"
-            filename = f"{dataset}.{file_extension}"
+            filename = f"{final_dataset}.{file_extension}"
         elif isinstance(data, (dict, list)):
             file_extension = "json"
-            filename = f"{dataset}.{file_extension}"
+            filename = f"{final_dataset}.{file_extension}"
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            # For backward compatibility, try to handle as table name
+            file_extension = "parquet"
+            filename = f"{final_dataset}.{file_extension}"
 
         # Create path with timestamp subdirectory
-        path = f"{stage}/{dataset}/{timestamp}/{filename}"
+        path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
-            # ✅ MIGRATION: Save locally using DuckDB when possible
+            # ✅ MIGRATION: Save locally using DuckDB
             local_path = f"/tmp/{filename}"
 
-            if isinstance(data, (gpd.GeoDataFrame, pd.DataFrame)):
-                # ✅ MIGRATION: Use DuckDB for efficient local parquet export
-                try:
-                    temp_table = f"temp_save_{dataset}_{stage}"
-                    self.conn.register(temp_table, data)
-                    self.conn.execute(f"COPY {temp_table} TO '{local_path}' (FORMAT PARQUET)")
-                    self.log.info(f"✅ Data saved locally using DuckDB: {local_path}")
-                except Exception as e:
-                    # Fallback to pandas for compatibility
-                    self.log.warning(f"DuckDB save failed, using pandas fallback: {e}")
-                    data.to_parquet(local_path)
-                    self.log.info(f"Data saved locally using pandas: {local_path}")
+            if isinstance(data, str):
+                # Data is a table name - save directly from DuckDB
+                self.conn.execute(f"COPY {data} TO '{local_path}' (FORMAT PARQUET)")
+                self.log.info(f"✅ Data saved locally using DuckDB: {local_path}")
             elif isinstance(data, (dict, list)):
                 with open(local_path, "w") as f:
                     json.dump(data, f, indent=2, default=str)
                 self.log.info(f"Data saved locally to {local_path}")
+            else:
+                # Try to save as table name
+                self.conn.execute(f"COPY {data} TO '{local_path}' (FORMAT PARQUET)")
+                self.log.info(f"✅ Data saved locally using DuckDB: {local_path}")
         else:
-            # Save to GCS - keep existing GCS utility methods for now
-            if isinstance(data, gpd.GeoDataFrame):
-                self.gcs_util.upload_geopandas_to_gcs(
-                    gdf=data, bucket_name=bucket, blob_name=path, file_format="parquet"
-                )
-            elif isinstance(data, pd.DataFrame):
-                self.gcs_util.upload_pandas_to_gcs(
-                    df=data, bucket_name=bucket, blob_name=path, file_format="parquet"
-                )
+            # Save to GCS using DuckDB
+            if isinstance(data, str):
+                # Data is a table name - save to temp file then upload
+                import tempfile
+
+                with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                    temp_path = tmp_file.name
+
+                self.conn.execute(f"COPY {data} TO '{temp_path}' (FORMAT PARQUET)")
+                self.gcs_util.upload_file(bucket, temp_path, path)
+
+                import os
+
+                os.unlink(temp_path)
             elif isinstance(data, (dict, list)):
                 self.gcs_util.upload_json_to_gcs(data=data, bucket_name=bucket, blob_name=path)
 
@@ -339,14 +411,19 @@ class BaseSource(Generic[T], ABC):
 
                         try:
                             self.gcs_util.download_file(bucket, latest_file.name, temp_path)
-                            # Use DuckDB to read parquet and convert to pandas for compatibility
-                            df = self.conn.execute(
-                                f"SELECT * FROM read_parquet('{temp_path}')"
-                            ).df()
+                            # ✅ MIGRATION: Use DuckDB to read parquet with table creation
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE bronze_data_temp AS
+                                SELECT * FROM read_parquet('{temp_path}')
+                            """)
+                            # ✅ MIGRATION: Return table name instead of DataFrame
+                            row_count = self.conn.execute(
+                                "SELECT COUNT(*) FROM bronze_data_temp"
+                            ).fetchone()[0]
                             self.log.info(
-                                f"✅ Successfully loaded {len(df)} records using DuckDB from {latest_file.name}"
+                                f"✅ Successfully loaded {row_count} records using DuckDB from {latest_file.name}"
                             )
-                            return df
+                            return "bronze_data_temp"
                         finally:
                             if os.path.exists(temp_path):
                                 os.unlink(temp_path)
@@ -368,7 +445,7 @@ class BaseSource(Generic[T], ABC):
     @timed(name="Reading bronze data")  # type: ignore
     def _read_bronze_data(
         self, dataset: str, bucket_name: str, bronze_data: Optional[Any] = None
-    ) -> Optional[pd.DataFrame]:
+    ) -> Optional[str]:
         """
         Read data from the bronze layer, preferring in-memory data if available.
 
@@ -382,8 +459,8 @@ class BaseSource(Generic[T], ABC):
             bronze_data: Optional in-memory data from bronze stage
 
         Returns:
-            Optional[pd.DataFrame]: A DataFrame containing the bronze layer data,
-                                   or None if no data is found
+            Optional[str]: A table name containing the bronze layer data,
+                          or None if no data is found
 
         Raises:
             Exception: If there are issues reading the data
@@ -391,19 +468,50 @@ class BaseSource(Generic[T], ABC):
         # Prefer in-memory data if available
         if bronze_data is not None:
             self.log.info("Using bronze data from memory (in-memory data passing)")
-            if isinstance(bronze_data, pd.DataFrame):
+            if isinstance(bronze_data, str):
+                # Already a table name
                 return bronze_data
+            elif hasattr(bronze_data, "to_dict"):
+                # Convert DataFrame-like object to table
+                table_name = f"bronze_data_{dataset}"
+                # Assume it's already a table name if it's a string
+                if isinstance(bronze_data, str):
+                    return bronze_data
+                else:
+                    # Try to register as table
+                    self.conn.register(table_name, bronze_data)
+                    return table_name
             elif isinstance(bronze_data, (dict, list)):
-                # Convert JSON data to DataFrame if needed
+                # Convert JSON data to table
+                table_name = f"bronze_data_{dataset}"
                 if isinstance(bronze_data, list) and len(bronze_data) > 0:
                     if isinstance(bronze_data[0], str):
-                        # List of strings (e.g., XML payloads)
-                        return pd.DataFrame({"payload": bronze_data})
+                        # List of strings (e.g., XML payloads) - create table directly in DuckDB
+                        self.conn.execute(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT unnest({bronze_data}) as payload
+                        """)
+                        return table_name
                     else:
-                        # List of dicts
-                        return pd.DataFrame(bronze_data)
+                        # List of dicts - use DuckDB JSON functions
+                        import json
+
+                        json_data = json.dumps(bronze_data)
+                        self.conn.execute(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT * FROM read_json_auto('{json_data}')
+                        """)
+                        return table_name
                 elif isinstance(bronze_data, dict):
-                    return pd.DataFrame([bronze_data])
+                    # Single dict - create table with one row
+                    import json
+
+                    json_data = json.dumps([bronze_data])
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS 
+                        SELECT * FROM read_json_auto('{json_data}')
+                    """)
+                    return table_name
             else:
                 self.log.warning(f"Unsupported bronze_data type: {type(bronze_data)}")
                 return None
@@ -412,9 +520,7 @@ class BaseSource(Generic[T], ABC):
         self.log.info("Reading bronze data from storage (fallback)")
         return self._read_bronze_data_from_storage(dataset, bucket_name)
 
-    def _read_bronze_data_from_storage(
-        self, dataset: str, bucket_name: str
-    ) -> Optional[pd.DataFrame]:
+    def _read_bronze_data_from_storage(self, dataset: str, bucket_name: str) -> Optional[str]:
         """
         Read bronze data from storage using the latest timestamped directory.
 
@@ -423,8 +529,8 @@ class BaseSource(Generic[T], ABC):
             bucket_name: The name of the GCS bucket
 
         Returns:
-            Optional[pd.DataFrame]: A DataFrame containing the bronze layer data,
-                                   or None if no data is found
+            Optional[str]: A table name containing the bronze layer data,
+                          or None if no data is found
         """
         if self.config.save_local:
             # Read from local storage - find latest timestamped directory
@@ -456,15 +562,38 @@ class BaseSource(Generic[T], ABC):
                 if os.path.exists(file_path):
                     self.log.info(f"Reading bronze data from local path: {file_path}")
                     if filename.endswith(".parquet"):
-                        # ✅ MIGRATION: Use DuckDB for efficient parquet reading
-                        return self.conn.execute(f"SELECT * FROM read_parquet('{file_path}')").df()
+                        # ✅ MIGRATION: Use DuckDB for efficient parquet reading with table creation
+                        table_name = f"local_bronze_data_{dataset}"
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            SELECT * FROM read_parquet('{file_path}')
+                        """)
+                        # ✅ MIGRATION: Return table name instead of DataFrame
+                        return table_name
                     else:
                         with open(file_path, "r") as f:
                             data = json.load(f)
+                        table_name = f"local_bronze_data_{dataset}"
                         if isinstance(data, list):
-                            return pd.DataFrame({"payload": data})
+                            # Create table from list using DuckDB
+                            import json
+
+                            json_str = json.dumps(data)
+                            self.conn.execute(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{json_str}')
+                            """)
+                            return table_name
                         else:
-                            return pd.DataFrame([data])
+                            # Create table from single item using DuckDB
+                            import json
+
+                            json_str = json.dumps([data])
+                            self.conn.execute(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{json_str}')
+                            """)
+                            return table_name
 
             self.log.error(f"No data files found in {latest_dir_path}")
             return None
@@ -495,15 +624,20 @@ class BaseSource(Generic[T], ABC):
                     parquet_path = self.gcs_util.read_dataframe_from_gcs(
                         bucket_name, latest_blob.name
                     )
-                    # Read parquet file using DuckDB and convert to pandas DataFrame for compatibility
-                    df = self.conn.execute(f"SELECT * FROM read_parquet('{parquet_path}')").df()
+                    # ✅ MIGRATION: Read parquet file using DuckDB with table creation
+                    table_name = f"gcs_bronze_data_{dataset}"
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{parquet_path}')
+                    """)
+                    # ✅ MIGRATION: Return table name instead of DataFrame
                     # Clean up temporary file
                     import shutil
 
                     temp_dir = os.path.dirname(parquet_path)
                     if os.path.exists(temp_dir):
                         shutil.rmtree(temp_dir)
-                    return df
+                    return table_name
                 elif latest_blob.name.endswith(".json"):
                     # Download JSON file and parse
                     temp_file = f"/tmp/bronze_temp_{dataset}.json"
@@ -512,10 +646,27 @@ class BaseSource(Generic[T], ABC):
                         data = json.load(f)
                     os.remove(temp_file)  # Clean up temp file
 
+                    table_name = f"gcs_bronze_data_{dataset}"
                     if isinstance(data, list):
-                        return pd.DataFrame({"payload": data})
+                        # Create table from list using DuckDB
+                        import json
+
+                        json_str = json.dumps(data)
+                        self.conn.execute(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT * FROM read_json_auto('{json_str}')
+                        """)
+                        return table_name
                     else:
-                        return pd.DataFrame([data])
+                        # Create table from single item using DuckDB
+                        import json
+
+                        json_str = json.dumps([data])
+                        self.conn.execute(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT * FROM read_json_auto('{json_str}')
+                        """)
+                        return table_name
                 else:
                     self.log.error(f"Unsupported file type: {latest_blob.name}")
                     return None
@@ -526,7 +677,7 @@ class BaseSource(Generic[T], ABC):
 
     # Legacy methods - keeping for backward compatibility during transition
     @timed(name="Saving raw data")  # type: ignore
-    def _save_raw_data(self, df: pd.DataFrame, dataset: str, bucket_name: str) -> None:
+    def _save_raw_data(self, table_name: str, dataset: str, bucket_name: str) -> None:
         """
         Legacy method for saving raw data.
 
@@ -534,7 +685,7 @@ class BaseSource(Generic[T], ABC):
         This method is kept for backward compatibility during the refactoring transition.
         """
         self.log.warning("_save_raw_data is deprecated. Use _save_data() instead.")
-        self._save_data(df, dataset, bucket=bucket_name, stage="bronze")
+        self._save_data(table_name, dataset, bucket=bucket_name, stage="bronze")
 
     def _save_raw_json(
         self, raw_data: list[str], dataset: str, bucket_name: str, filename="data"
@@ -659,23 +810,38 @@ class BaseSource(Generic[T], ABC):
             # Create a temporary table from the data to analyze
             temp_table_name = f"temp_{dataset}_{stage}_{self.date_pattern}"
 
-            if isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
-                # Register DataFrame as a temporary table in DuckDB
-                self.conn.register(temp_table_name, data)
+            if isinstance(data, str):
+                # Data is already a table name
+                temp_table_name = data
             elif isinstance(data, (dict, list)):
-                # Convert dict/list to DataFrame and register
+                # Convert dict/list to table using DuckDB
                 if isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
-                        temp_df = pd.DataFrame(data)
+                        import json
+
+                        json_data = json.dumps(data)
+                        self.conn.execute(f"""
+                            CREATE TABLE {temp_table_name} AS 
+                            SELECT * FROM read_json_auto('{json_data}')
+                        """)
                     else:
-                        temp_df = pd.DataFrame({"value": data})
+                        # List of values
+                        values_str = ", ".join([f"'{v}'" for v in data])
+                        self.conn.execute(f"""
+                            CREATE TABLE {temp_table_name} AS 
+                            SELECT unnest([{values_str}]) as value
+                        """)
                 elif isinstance(data, dict):
-                    temp_df = pd.DataFrame([data])
+                    import json
+
+                    json_data = json.dumps([data])
+                    self.conn.execute(f"""
+                        CREATE TABLE {temp_table_name} AS 
+                        SELECT * FROM read_json_auto('{json_data}')
+                    """)
                 else:
                     self.log.warning(f"Cannot generate schema for data type: {type(data)}")
                     return None
-
-                self.conn.register(temp_table_name, temp_df)
             else:
                 self.log.warning(f"Cannot generate schema for data type: {type(data)}")
                 return None
@@ -745,8 +911,9 @@ class BaseSource(Generic[T], ABC):
             # Create temporary table
             temp_table_name = f"temp_{dataset}_{stage}_llm"
 
-            if isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
-                self.conn.register(temp_table_name, data)
+            if isinstance(data, str):
+                # Data is already a table name
+                temp_table_name = data
             else:
                 self.log.warning(f"Cannot create schema for data type: {type(data)}")
                 return None
@@ -873,17 +1040,6 @@ class BaseSource(Generic[T], ABC):
             self.log.warning(f"Standardized schema documentation failed (non-critical): {e}")
             # Don't fail the pipeline if documentation fails
 
-    def read_silver_data_optimized(self, dataset: str) -> pd.DataFrame:
-        """
-        Read silver data using optimal method based on size.
-
-        ⚠️ WARNING: Still returns DataFrame for compatibility. Use read_silver_data_direct() for better performance.
-        """
-        gcs_path = self._get_latest_silver_path(dataset)
-
-        # For all datasets, use DuckDB + gcsfs (fastest method)
-        return self.gcs_access.query_parquet_with_duckdb(gcs_path)
-
     def read_silver_data_direct(self, dataset: str, table_name: str = None) -> str:
         """
         ✅ OPTIMAL: Read silver data directly into DuckDB table - NO DataFrame conversion.
@@ -906,15 +1062,6 @@ class BaseSource(Generic[T], ABC):
         # Create table directly in DuckDB without DataFrame conversion
         self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", table_name)
         return table_name
-
-    def read_silver_data_with_filter(self, dataset: str, filter_condition: str) -> pd.DataFrame:
-        """
-        Read silver data with server-side filtering for maximum performance.
-
-        ⚠️ WARNING: Still returns DataFrame for compatibility. Use read_silver_data_with_filter_direct() for better performance.
-        """
-        gcs_path = self._get_latest_silver_path(dataset)
-        return self.gcs_access.query_parquet_with_duckdb(gcs_path, filter_condition)
 
     def read_silver_data_with_filter_direct(
         self, dataset: str, filter_condition: str, table_name: str = None

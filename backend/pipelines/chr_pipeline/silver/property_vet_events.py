@@ -129,7 +129,8 @@ def create_property_vet_events_table(
             return None
 
         logging.info(f"Saving property_vet_events table with {rows} rows.")
-        saved_path = export.save_table(output_path, vet_events_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, vet_events_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save property_vet_events table - no path returned")
             return None

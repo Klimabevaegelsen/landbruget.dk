@@ -28,60 +28,76 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
         super().__init__(config, gcs_util)
 
     def _validate_and_transform(self, data: list[dict]):
-        """Parse and flatten bronze JSON data into DataFrames using Pydantic schema and DuckDB."""
-        # ✅ MIGRATION: Use DuckDB for DataFrame creation instead of pandas
+        """Parse and flatten bronze JSON data into tables using Pydantic schema and DuckDB."""
+        # ✅ MIGRATION: Use DuckDB for table creation instead of wasteful  conversions
         import duckdb
 
         temp_conn = duckdb.connect()
 
         parsed = [SpfSuResponse.parse_obj(item) for item in data]
 
-        # Farm owner details
+        # ✅ MIGRATION: Farm owner details - direct table operations (no  conversion)
         farm_owner_details = [item.ownerDetailInfo.dict() for item in parsed]
         temp_conn.register("temp_farm_owner_details", farm_owner_details)
-        farm_owner_details_df = temp_conn.execute("SELECT * FROM temp_farm_owner_details").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE farm_owner_details_final AS SELECT * FROM temp_farm_owner_details"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            farm_owner_details_df,
+            "farm_owner_details_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_owner_details",
+            temp_conn,
         )
 
-        # Farm certificate
+        # ✅ MIGRATION: Farm certificate - direct table operations (no  conversion)
         farm_certificate = [item.ownerDetailInfo.danishCertificate.dict() for item in parsed]
         temp_conn.register("temp_farm_certificate", farm_certificate)
-        farm_certificate_df = temp_conn.execute("SELECT * FROM temp_farm_certificate").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE farm_certificate_final AS SELECT * FROM temp_farm_certificate"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            farm_certificate_df,
+            "farm_certificate_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_certificate",
+            temp_conn,
         )
 
-        # Farm general health summary
+        # ✅ MIGRATION: Farm general health summary - direct table operations (no  conversion)
         farm_general_health_summary = [item.ownerDetailInfo.healthData.dict() for item in parsed]
         temp_conn.register("temp_farm_health", farm_general_health_summary)
-        farm_health_df = temp_conn.execute("SELECT * FROM temp_farm_health").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE farm_health_final AS SELECT * FROM temp_farm_health"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            farm_health_df,
+            "farm_health_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_general_health_summary",
+            temp_conn,
         )
 
-        # Farm salmonella data
+        # ✅ MIGRATION: Farm salmonella data - direct table operations (no  conversion)
         farm_salmonella_data = [item.ownerDetailInfo.salmonellaData.dict() for item in parsed]
         temp_conn.register("temp_farm_salmonella", farm_salmonella_data)
-        farm_salmonella_df = temp_conn.execute("SELECT * FROM temp_farm_salmonella").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE farm_salmonella_final AS SELECT * FROM temp_farm_salmonella"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            farm_salmonella_df,
+            "farm_salmonella_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_salmonella_data",
+            temp_conn,
         )
 
         # Farm disease control status
@@ -97,49 +113,61 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
                     }
                 )
         temp_conn.register("temp_disease_control", farm_disease_control_status)
-        disease_control_df = temp_conn.execute("SELECT * FROM temp_disease_control").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE disease_control_final AS SELECT * FROM temp_disease_control"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            disease_control_df,
+            "disease_control_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_disease_control_status",
+            temp_conn,
         )
 
-        # Farm veterinarians
+        # ✅ MIGRATION: Farm veterinarians - direct table operations (no  conversion)
         farm_veterinarians = [item.healthStatus.veterinarians for item in parsed]
         temp_conn.register("temp_veterinarians", farm_veterinarians)
-        veterinarians_df = temp_conn.execute("SELECT * FROM temp_veterinarians").df()
+        temp_conn.execute(
+            "CREATE OR REPLACE TABLE veterinarians_final AS SELECT * FROM temp_veterinarians"
+        )
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            veterinarians_df,
+            "veterinarians_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "farm_veterinarians",
+            temp_conn,
         )
 
-        # Delivery options
+        # ✅ MIGRATION: Delivery options - direct table operations (no  conversion)
         deliveryOptions = [item.healthStatus.deliveryOptions for item in parsed]
         temp_conn.register("temp_delivery", deliveryOptions)
-        delivery_df = temp_conn.execute("SELECT * FROM temp_delivery").df()
+        temp_conn.execute("CREATE OR REPLACE TABLE delivery_final AS SELECT * FROM temp_delivery")
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            delivery_df,
+            "delivery_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "deliveryOptions",
+            temp_conn,
         )
 
-        # Reception options
+        # ✅ MIGRATION: Reception options - direct table operations (no  conversion)
         receptionOptions = [item.healthStatus.receptionOptions for item in parsed]
         temp_conn.register("temp_reception", receptionOptions)
-        reception_df = temp_conn.execute("SELECT * FROM temp_reception").df()
+        temp_conn.execute("CREATE OR REPLACE TABLE reception_final AS SELECT * FROM temp_reception")
+        # ❌ ELIMINATED: No more wasteful  conversion
         self._save_data(
-            reception_df,
+            "reception_final",
             self.config.dataset,
             self.config.bucket,
             "silver",
             "receptionOptions",
+            temp_conn,
         )
 
         temp_conn.close()
@@ -176,7 +204,7 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
                 self.log.error("Bronze data not found")
                 return
             self.log.info("Bronze data found and loaded")
-            # Extract the data from the DataFrame - bronze data is stored as JSON strings
+            # Extract the data from the  - bronze data is stored as JSON strings
             try:
                 if "payload" in bronze_df.columns:
                     # Handle case where data is stored as JSON strings in payload column
@@ -190,7 +218,7 @@ class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
                     # Handle case where data is stored directly
                     data = bronze_df.to_dict("records")
             except Exception as e:
-                self.log.error(f"Failed to extract data from bronze DataFrame: {e}")
+                self.log.error(f"Failed to extract data from bronze : {e}")
                 return
 
         self.log.info("Bronze data read successfully")

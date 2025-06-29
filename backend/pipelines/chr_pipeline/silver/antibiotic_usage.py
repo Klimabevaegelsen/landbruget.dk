@@ -23,8 +23,7 @@ def create_antibiotic_usage_table(
     logging.info("Starting creation of antibiotic_usage table.")
     if vetstat_raw is None:
         logging.warning("Cannot create antibiotic_usage: vetstat_raw table missing. Creating empty table with schema.")
-        # ✅ MIGRATION: Create empty table using Ibis instead of pandas
-        # Create empty table with proper schema using DuckDB
+        # ✅ MIGRATION: Create empty table using DuckDB directly instead of pandas
         empty_table_sql = """
             SELECT 
                 CAST(NULL AS VARCHAR) as entity_id,
@@ -46,11 +45,12 @@ def create_antibiotic_usage_table(
                 CAST(NULL AS VARCHAR) as region_name
             WHERE 1=0
         """
-        empty_df = con.sql(empty_table_sql).to_pandas()
+        con.con.execute(f"CREATE TABLE empty_antibiotic_usage AS {empty_table_sql}")
         output_path = silver_dir / "antibiotic_usage.parquet"
-        saved_path = export.save_table(output_path, empty_df, is_geo=False)
-        if saved_path is None:
-            logging.error("Failed to save empty antibiotic_usage table - no path returned")
+        con.con.execute(f"COPY empty_antibiotic_usage TO '{output_path}' (FORMAT PARQUET)")
+        saved_path = output_path
+        if not saved_path.exists():
+            logging.error("Failed to save empty antibiotic_usage table - file not created")
             return None
         logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
@@ -60,7 +60,7 @@ def create_antibiotic_usage_table(
         logging.warning(
             "Cannot create antibiotic_usage: vetstat_raw table exists but has no columns (likely empty source). Creating empty table with schema."
         )
-        # ✅ MIGRATION: Reuse the empty table creation logic from the None check
+        # ✅ MIGRATION: Create empty table using DuckDB directly instead of pandas
         empty_table_sql = """
             SELECT 
                 CAST(NULL AS VARCHAR) as entity_id,
@@ -82,11 +82,12 @@ def create_antibiotic_usage_table(
                 CAST(NULL AS VARCHAR) as region_name
             WHERE 1=0
         """
-        empty_df = con.sql(empty_table_sql).to_pandas()
+        con.con.execute(f"CREATE TABLE empty_antibiotic_usage_2 AS {empty_table_sql}")
         output_path = silver_dir / "antibiotic_usage.parquet"
-        saved_path = export.save_table(output_path, empty_df, is_geo=False)
-        if saved_path is None:
-            logging.error("Failed to save empty antibiotic_usage table - no path returned")
+        con.con.execute(f"COPY empty_antibiotic_usage_2 TO '{output_path}' (FORMAT PARQUET)")
+        saved_path = output_path
+        if not saved_path.exists():
+            logging.error("Failed to save empty antibiotic_usage table - file not created")
             return None
         logging.info(f"Saved empty antibiotic_usage table with schema to {saved_path}")
         return None
@@ -282,7 +283,8 @@ def create_antibiotic_usage_table(
             return None
 
         logging.info(f"Saving antibiotic_usage table with {rows} rows.")
-        saved_path = export.save_table(output_path, usage_final.execute(), is_geo=False)
+        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+        saved_path = export.save_table(output_path, usage_final, is_geo=False)
         if saved_path is None:
             logging.error("Failed to save antibiotic_usage table - no path returned")
             return None

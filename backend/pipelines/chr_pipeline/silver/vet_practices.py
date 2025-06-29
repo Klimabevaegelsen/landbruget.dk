@@ -74,7 +74,8 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
         return None
 
     logging.info(f"Saving vet_practices table with {rows} rows.")
-    saved_path = export.save_table(output_path, vet_practices_final.execute(), is_geo=False)
+    # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
+    saved_path = export.save_table(output_path, vet_practices_final, is_geo=False)
     if saved_path is None:
         logging.error("Failed to save vet_practices table - no path returned")
         return None

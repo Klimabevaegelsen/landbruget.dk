@@ -18,8 +18,6 @@ dependencies = [
     "python-dotenv~=1.1.1",
     "cryptography",
     "tqdm~=4.67.1",
-    "pandas~=2.3.0",
-    "geopandas~=1.1.1",
     "pyarrow~=20.0.0",
     'ibis-framework[duckdb,geospatial]~=10.6.0',
     "gcsfs~=2025.5.1",
