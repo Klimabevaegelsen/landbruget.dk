@@ -6,25 +6,25 @@ requires-python = ">=3.11"
 dynamic = ["readme"]
 dependencies = [
     # Core Data Processing
-    "pandas~=2.2.3",
+    "pandas~=2.3.0",
     "numpy~=2.2.2",
-    "pyarrow<17.0.0,>=3.0.0",
+    "pyarrow~=20.0.0",
     
     # Geospatial Processing - User prefers duckdb-spatial over geopandas
     "ibis-framework[duckdb]~=10.6.0",
     "duckdb~=1.3.1",
     # Note: spatial extension is loaded at runtime with: duckdb.install_extension("spatial")
-    "geopandas~=1.0.1",  # Keep as backup for now
+    "geopandas~=1.1.1",  # Keep as backup for now
     "shapely~=2.0.6",
     "pyproj~=3.7.0",
     "fiona~=1.10.1",
     
     # Cloud Services
-    "google-cloud-storage~=2.19.0",
+    "google-cloud-storage~=3.1.1",
     "google-cloud-bigquery~=3.29.0",
-    "google-cloud-secret-manager~=2.22.1",
+    "google-cloud-secret-manager~=2.24.0",
     "fsspec~=2024.12.0",
-    "gcsfs~=2024.12.0",
+    "gcsfs~=2025.5.1",
     
     # Web Framework
     "fastapi~=0.115.7",
@@ -36,7 +36,7 @@ dependencies = [
     "requests~=2.32.3",
     "zeep~=4.3.1",
     "paramiko~=3.5.0",
-    "certifi~=2024.12.14",
+    "certifi~=2025.6.15",
     "pyOpenSSL~=25.0.0",
     
     # Data Pipeline and Validation
@@ -47,7 +47,7 @@ dependencies = [
     "pdfplumber~=0.11.5",
     
     # Utilities
-    "python-dotenv~=1.0.1",
+    "python-dotenv~=1.1.1",
     "tqdm~=4.67.1",
     "psutil~=6.1.1",
     "cryptography~=44.0.0",
