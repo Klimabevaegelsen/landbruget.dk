@@ -9,16 +9,11 @@ except ImportError:
     # Fallback for when unified_pipeline is not available
     GCSDataAccess = None
 
-# Fallback imports for compatibility
+# DuckDB is required - no fallback
 try:
     import duckdb
 except ImportError:
-    duckdb = None
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
+    raise ImportError("DuckDB is required for storage operations")
 
 try:
     from google.cloud import storage
@@ -54,13 +49,10 @@ class LocalStorage(StorageInterface):
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def save_parquet(self, data, dst_path):
-        """Save data as Parquet locally using DuckDB (optimized)."""
+        """Save data as Parquet locally using DuckDB."""
         full_path = os.path.join(self.base_dir, dst_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
-        # Use DuckDB for optimal performance instead of pandas
-        if not duckdb:
-            raise ImportError("DuckDB not available for optimized parquet export")
         conn = duckdb.connect()
 
         if isinstance(data, str):
@@ -106,12 +98,10 @@ class LocalStorage(StorageInterface):
                 # Regular list, try to register directly
                 conn.register("temp_data", data)
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
-        elif pd and isinstance(data, pd.DataFrame):
-            # Legacy pandas support - register with DuckDB and export
-            conn.register("temp_data", data)
-            conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
         else:
-            raise ValueError(f"Unsupported data type for parquet export: {type(data)}")
+            raise ValueError(
+                f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+            )
 
         conn.close()
 
@@ -153,7 +143,7 @@ class GCSStorage(StorageInterface):
             blob.upload_from_string(json.dumps(data), content_type="application/json")
 
     def save_parquet(self, data, dst_path):
-        """Save data as Parquet to GCS using optimized DuckDB approach."""
+        """Save data as Parquet to GCS using DuckDB approach."""
         gcs_path = f"gs://{self.bucket_name}/{dst_path}"
 
         if self.optimized:
@@ -161,7 +151,7 @@ class GCSStorage(StorageInterface):
             if isinstance(data, str):
                 # Assume it's a DuckDB table name
                 self.gcs_access.upload_from_duckdb_table(data, gcs_path)
-            elif duckdb:
+            else:
                 # Convert data to DuckDB table and upload
                 conn = self.gcs_access.duckdb_conn
                 if isinstance(data, dict):
@@ -201,24 +191,40 @@ class GCSStorage(StorageInterface):
                     else:
                         # Regular list, try to register directly
                         conn.register("temp_parquet_data", data)
-                elif pd and isinstance(data, pd.DataFrame):
-                    conn.register("temp_parquet_data", data)
                 else:
-                    raise ValueError(f"Unsupported data type for parquet export: {type(data)}")
+                    raise ValueError(
+                        f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                    )
 
                 self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
-            else:
-                raise ValueError("DuckDB not available for optimized parquet export")
         else:
-            # Fallback to legacy pandas approach
-            if not pd:
-                raise ImportError("pandas not available for legacy parquet export")
-            df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
-            buffer = BytesIO()
-            df.to_parquet(buffer, index=False)
-            buffer.seek(0)
-            blob = self.bucket.blob(dst_path)
-            blob.upload_from_string(buffer.getvalue(), content_type="application/octet-stream")
+            # Fallback: Use DuckDB to create parquet and upload as bytes
+            conn = duckdb.connect()
+
+            if isinstance(data, str):
+                # Table name - export to memory buffer
+                buffer = BytesIO()
+                conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
+                # Note: This approach would need modification for actual buffer writing
+                # For now, raise an error suggesting the optimized path
+                raise ValueError(
+                    "Non-optimized GCS storage requires optimized GCS access layer for DuckDB table uploads"
+                )
+            elif isinstance(data, (dict, list)):
+                # Convert to table first
+                if isinstance(data, dict):
+                    conn.register("temp_data", [data])
+                else:
+                    conn.register("temp_data", data)
+
+                # Same limitation as above
+                raise ValueError("Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations")
+            else:
+                raise ValueError(
+                    f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                )
+
+            conn.close()
 
     def read_json(self, src_path):
         """Read JSON data using optimized streaming approach."""

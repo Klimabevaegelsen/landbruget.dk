@@ -150,13 +150,21 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             ibis table expression or None if loading fails
         """
         try:
-            if not json_data or "value" not in json_data:
+            # Handle nested dataset structure from DST API
+            if "dataset" in json_data:
+                # Data is nested under 'dataset' key
+                dataset = json_data["dataset"]
+            else:
+                # Data is in direct JSONSTAT format
+                dataset = json_data
+
+            if not dataset or "value" not in dataset:
                 self.log.warning(f"No value data found in JSON for {table_name}")
                 return None
 
             # Extract dimensions and values from JSONSTAT format
-            dimensions = json_data.get("dimension", {})
-            values = json_data.get("value", [])
+            dimensions = dataset.get("dimension", {})
+            values = dataset.get("value", [])
 
             if not dimensions or not values:
                 self.log.warning(f"Missing dimensions or values in JSONSTAT data for {table_name}")
@@ -364,13 +372,17 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             if table is None:
                 return None
 
-            # Apply HALM1-specific transformations
+            # Apply HALM1-specific transformations (HALM1 uses ANVENDELSE and ENHED, not MÆNGDE4)
             processed = (
                 table.mutate(
+                    area_code=_.OMRÅDE_code.cast("string"),
+                    area_name=_.OMRÅDE.cast("string"),
                     crop_code=_.AFGRØDE_code.cast("string"),
                     crop_name=_.AFGRØDE.cast("string"),
-                    measure_code=_.MÆNGDE4_code.cast("string"),
-                    measure_name=_.MÆNGDE4.cast("string"),
+                    usage_code=_.ANVENDELSE_code.cast("string"),
+                    usage_name=_.ANVENDELSE.cast("string"),
+                    unit_code=_.ENHED_code.cast("string"),
+                    unit_name=_.ENHED.cast("string"),
                     time_period=_.Tid_code.cast("string"),
                     time_label=_.Tid.cast("string"),
                     straw_value=_.value.cast("double"),
@@ -380,10 +392,14 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                 .select(
                     [
                         "table_id",
+                        "area_code",
+                        "area_name",
                         "crop_code",
                         "crop_name",
-                        "measure_code",
-                        "measure_name",
+                        "usage_code",
+                        "usage_name",
+                        "unit_code",
+                        "unit_name",
                         "time_period",
                         "time_label",
                         "straw_value",
@@ -447,30 +463,32 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                     continue
 
                 if processed_data is not None:
-                    # ✅ OPTIMIZED: Save processed data directly without DataFrame conversion
                     # Create a DuckDB table from the Ibis expression
                     table_name = f"dst_{table_id.lower()}_processed"
-                    processed_data.cache().name(table_name)
+                    self.ibis_con.create_table(table_name, processed_data, overwrite=True)
 
-                    # Get record count for logging (without DataFrame conversion)
-                    record_count = self.conn.execute(
+                    # Get record count for logging using the underlying DuckDB connection
+                    record_count = self.ibis_con.con.execute(
                         f"SELECT COUNT(*) FROM {table_name}"
                     ).fetchone()[0]
 
-                    # Save directly using optimized method
-                    gcs_path = self.save_data_direct(
-                        table_name, f"dst_{table_id.lower()}", self.config.bucket, "silver"
+                    # Save using the base class method with the underlying DuckDB connection
+                    self._save_data(
+                        table_name,
+                        f"dst_{table_id.lower()}",
+                        self.config.bucket,
+                        "silver",
+                        conn=self.ibis_con.con,
                     )
 
-                    # Store table name for gold stage processing (not DataFrame)
+                    # Store table name for gold stage processing
                     all_processed_data[table_id] = table_name
                     self.log.info(
                         f"Successfully processed {record_count:,} records for table {table_id}"
                     )
-                    self.log.info(f"Saved to: {gcs_path}")
 
                     # Clean up the temporary table
-                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    self.ibis_con.con.execute(f"DROP TABLE IF EXISTS {table_name}")
                 else:
                     self.log.warning(f"Failed to process data for table {table_id}")
 
