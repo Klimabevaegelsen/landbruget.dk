@@ -55,7 +55,7 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
 
     # Performance optimization settings
     max_memory_gb: float = Field(
-        default=4.0, description="Maximum memory usage in GB for DuckDB operations"
+        default=12.0, description="Maximum memory usage in GB for DuckDB operations"
     )
     enable_parallel_processing: bool = Field(
         default=True, description="Enable parallel processing for large datasets"
@@ -648,16 +648,23 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         memory_limit_gb = self.config.max_memory_gb
         thread_count = 2 if not self.config.enable_parallel_processing else 4
 
+        # Debug logging for configuration
+        self.log.info(f"🔧 Config max_memory_gb: {self.config.max_memory_gb}")
+        self.log.info(f"🔧 Calculated memory_limit_gb: {memory_limit_gb}")
+        self.log.info(
+            f"🔧 Config enable_parallel_processing: {self.config.enable_parallel_processing}"
+        )
+        self.log.info(f"🔧 Calculated thread_count: {thread_count}")
+
         self.duckdb_conn.execute(f"SET memory_limit = '{memory_limit_gb}GB'")
         self.duckdb_conn.execute(f"SET threads = {thread_count}")
         self.duckdb_conn.execute("SET temp_directory = '/tmp'")
 
-        # Optimize for large datasets with limited memory
+        # Optimize for large datasets with GitHub runner resources
         self.duckdb_conn.execute("SET enable_progress_bar = false")  # Reduce output overhead
         self.duckdb_conn.execute(
             "SET preserve_insertion_order = false"
         )  # Allow reordering for efficiency
-        self.duckdb_conn.execute("SET enable_external_access = false")  # Security optimization
 
         self.log.info(f"🔧 DuckDB configured: {memory_limit_gb}GB memory, {thread_count} threads")
 
@@ -1173,7 +1180,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                       AND m.area_ha > 0.0
                       AND m.geometry IS NOT NULL
                     GROUP BY 1, 2
-                    HAVING COUNT(*) > 1  -- Multiple fields per CVR/Crop
+                    HAVING COUNT(*) > 1 AND COUNT(*) <= 50  -- Limit to reasonable groups per CVR (clustering within each farmer)
                 ),
                 SpatialClusters AS (
                     -- Use SPATIAL_JOIN to identify adjacent fields within 10m buffer within each CVR+crop group
@@ -1333,7 +1340,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                       AND m.crop_code IS NOT NULL 
                       AND m.area_ha > 0.0
                     GROUP BY 1, 2
-                    HAVING COUNT(*) > 1 AND COUNT(*) <= 10  -- Limit to small groups to avoid overwhelming
+                    HAVING COUNT(*) > 1 AND COUNT(*) <= 50  -- Limit to reasonable groups per CVR (clustering within each farmer)
                 ),
                 PendingForMultiFields AS (
                     SELECT 
