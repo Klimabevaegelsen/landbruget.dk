@@ -4,7 +4,7 @@ import geopandas as gpd
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 from shapely.geometry import box
-from src.sources.calculations.percolation import PercolationCalculator
+from backend.pipelines.nles5.percolation import PercolationCalculator
 from src.sources.parsers.dmi import DMIParser
 import os
 import json

@@ -1,11 +1,11 @@
 import pytest
 import geopandas as gpd
 import os
-from src.sources.calculations.nles5 import NLES5Calculator
+from backend.pipelines.nles5.nles5 import NLES5Calculator
 from src.sources.parsers.agricultural_fields import AgriculturalFields
 from src.sources.parsers.dmi import DMIParser
 from src.sources.static.fertilizer.parser import CatchCrops, FertilizerAccounts, FieldPlanFertilizer
-from src.sources.calculations.percolation import PercolationCalculator
+from backend.pipelines.nles5.percolation import PercolationCalculator
 from src.config import SOURCES
 from google.cloud import storage
 
