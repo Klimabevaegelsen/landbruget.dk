@@ -4,25 +4,55 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-venv/
 .env
-.env.*
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+.venv
+
+# Data files
+data/
+*.wsdl
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Project specific
+backend/pipelines/chr_pipeline/data/
+bin/
+
+# Sensitive files
+**/.env
+**/.env.*
 !.env.example
+**/vetstat.p12
+**/vetstat.*.p12
+backend/pipelines/sync_secrets.sh
+backend/pipelines/vetstat.p12
 
 # Data files
 *.geojson
@@ -33,9 +63,11 @@ venv/
 *.prj
 *.zip
 backend/data/
+data/bronze/
 temp_data/
 temp_carbon/
 cadastral_schema.txt
+
 # Node
 node_modules/
 build/
@@ -89,43 +121,24 @@ test_cadastral.log
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
+*.egg-info
 
-# Google Cloud credentials
-.gcp/
-*.json.gcp
-application_default_credentials.json
-*credentials*.json
-backend/mage/.gcp/
+# Local testing secrets (for act and other local testing)
+.secrets
+.secrets.*
+*.secrets
 
-# Mage specific
-backend/mage/.file_versions/
-backend/mage/.ssh_tunnel/
-backend/mage/__pycache__/
+# Analysis directories and generated content
+/src/
+/docs/
+/data_cache/
+/cvr_analysis_31373077/
+/scripts/
 
-# Terraform
-**/.terraform/*
-*.tfstate
-*.tfstate.*
-crash.log
-crash.*.log
-*.tfvars
-*.tfvars.json
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
-tfplan
-*.tfplan
-
-# Devenv [https://devenv.sh]
+# Devenv (devenv.sh)
+.devenv.flake.nix
 .devenv
 devenv.nix
-devenv.lock
-.devenv.flake.nix
 devenv.yaml
-.envrc
-# For direnv integration
-.direnv/
-.pre-commit-config.yaml
+devenv.lock
+.direnv
