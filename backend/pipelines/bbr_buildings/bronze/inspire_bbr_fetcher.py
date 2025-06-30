@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-import pandas as pd
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 import requests
 from bs4 import BeautifulSoup
 
@@ -48,7 +48,11 @@ class InspireBBRFetcher:
         )
 
     def fetch_data(
-        self, output_dir: Path, sample_size: int | None = None, return_data: bool = False
+        self,
+        output_dir: Path,
+        sample_size: int | None = None,
+        return_data: bool = False,
+        pipeline_start_time: datetime = None,
     ):
         """
         Fetch INSPIRE BBR data and enrich with GraphQL API.
@@ -65,7 +69,9 @@ class InspireBBRFetcher:
             sample_size: Optional sample size for testing
             return_data: Whether to return data for silver layer processing
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if pipeline_start_time is None:
+            pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         run_dir = output_dir / timestamp
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +108,7 @@ class InspireBBRFetcher:
                     self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB)")
 
             # Save metadata
-            self._save_metadata(run_dir, file_info, download_url, sample_size)
+            self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
 
             self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
 
@@ -129,6 +135,66 @@ class InspireBBRFetcher:
 
         except Exception as e:
             self.logger.error(f"Failed to fetch INSPIRE BBR data: {e}")
+            raise
+
+    def fetch_data_streaming(
+        self,
+        output_dir: Path,
+        building_queue,
+        sample_size: int | None = None,
+        pipeline_start_time: datetime = None,
+    ):
+        """
+        Fetch INSPIRE BBR data and stream building IDs to queue as they are processed.
+
+        This method processes buildings in chunks and immediately puts building IDs
+        into the queue for parallel geometry fetching.
+
+        Args:
+            output_dir: Directory to save metadata
+            building_queue: Queue to put building ID chunks for parallel processing
+            sample_size: Optional sample size for testing
+            pipeline_start_time: Pipeline start time for consistent timestamping
+        """
+        if pipeline_start_time is None:
+            pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+        run_dir = output_dir / timestamp
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger.info(f"Starting streaming INSPIRE BBR data fetch to {run_dir}")
+
+        try:
+            # Parse the FTP page to get the actual download link
+            download_url, file_info = self._parse_ftp_page()
+
+            if not download_url:
+                raise ValueError("Could not extract download URL from FTP page")
+
+            self.logger.info(f"Found download URL: {download_url}")
+
+            # Download the ZIP file
+            zip_path = run_dir / "DK_INSPIRE_BBR.zip"
+            self._download_file(download_url, zip_path, file_info.get("size"))
+
+            # Process data with streaming
+            self._extract_and_process_streaming(zip_path, sample_size, building_queue)
+
+            # Save metadata
+            self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
+
+            self.logger.info("Successfully completed streaming INSPIRE BBR data processing")
+
+            return {
+                "source": "inspire_bbr_streaming",
+                "sample_size": sample_size,
+                "file_info": file_info,
+                "download_url": download_url,
+                "timestamp": timestamp,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch INSPIRE BBR data in streaming mode: {e}")
             raise
 
     def _extract_and_process_with_graphql(self, zip_path: Path, sample_size: int | None):
@@ -220,8 +286,8 @@ class InspireBBRFetcher:
 
             query = f"""
             SELECT 
-                externalReference_reference1 as building_uuid,
-                inspireId_localId as inspire_id,
+                inspireId_localId as building_uuid,
+                externalReference_reference1 as external_ref,
                 currentUse,
                 buildingNature,
                 dateOfConstruction_dateOfEvent_anyPoint as construction_year,
@@ -242,7 +308,7 @@ class InspireBBRFetcher:
                 all_buildings.append(
                     {
                         "building_uuid": row[0],
-                        "inspire_id": row[1],
+                        "external_ref": row[1],
                         "current_use": row[2],
                         "building_nature": row[3],
                         "construction_year": row[4],
@@ -264,8 +330,8 @@ class InspireBBRFetcher:
         # Extract all residential, agriculture, and publicServices buildings
         query = f"""
         SELECT 
-            externalReference_reference1 as building_uuid,
-            inspireId_localId as inspire_id,
+            inspireId_localId as building_uuid,
+            externalReference_reference1 as external_ref,
             currentUse,
             buildingNature,
             dateOfConstruction_dateOfEvent_anyPoint as construction_year,
@@ -290,7 +356,7 @@ class InspireBBRFetcher:
             buildings.append(
                 {
                     "building_uuid": row[0],
-                    "inspire_id": row[1],
+                    "external_ref": row[1],
                     "current_use": row[2],
                     "building_nature": row[3],
                     "construction_year": row[4],
@@ -360,11 +426,17 @@ class InspireBBRFetcher:
         final_buildings.extend(enriched_agriculture)  # All agriculture with BBR codes
         final_buildings.extend(enriched_education)  # Education buildings only
 
-        # Convert to DataFrame
-        df = pd.DataFrame(final_buildings)
+        # ✅ MIGRATION: Use pure Python operations - NO PANDAS OR DUCKDB REGISTRATION!
 
-        # Extract building IDs for geometry lookup
-        building_ids = df["building_uuid"].dropna().unique().tolist()
+        # Extract building IDs directly from the list (no DuckDB needed for this simple operation)
+        building_ids = []
+        for building in final_buildings:
+            uuid = building.get("building_uuid")
+            if uuid and uuid != "other:unpopulated":
+                building_ids.append(uuid)
+
+        # Remove duplicates
+        building_ids = list(set(building_ids))
 
         self.logger.info(f"Final dataset: {len(final_buildings)} buildings")
         self.logger.info(f"  Residential: {len(residential_buildings)}")
@@ -372,7 +444,8 @@ class InspireBBRFetcher:
         self.logger.info(f"  Education: {len(enriched_education)}")
         self.logger.info(f"Building IDs for geometry lookup: {len(building_ids)}")
 
-        return {"attributes_df": df, "building_ids": building_ids}
+        # Return the list of buildings directly - no DataFrame conversion needed
+        return {"attributes_df": final_buildings, "building_ids": building_ids}
 
     def _enrich_buildings_with_graphql(self, buildings, category_name, filter_codes=None):
         """
@@ -389,18 +462,27 @@ class InspireBBRFetcher:
 
         self.logger.info(f"Enriching {len(buildings)} {category_name} buildings with GraphQL API")
 
-        # Extract UUIDs for GraphQL queries
-        uuids = [b["building_uuid"] for b in buildings if b["building_uuid"]]
+        # Extract UUIDs for GraphQL queries (now using actual BBR UUIDs from inspireId_localId)
+        valid_uuids = [
+            b["building_uuid"]
+            for b in buildings
+            if b["building_uuid"] and b["building_uuid"] != "other:unpopulated"
+        ]
 
-        if not uuids:
+        if not valid_uuids:
             self.logger.warning(f"No valid UUIDs found for {category_name} buildings")
             return buildings
 
-        # Query GraphQL API in batches
-        bbr_codes_data = self._query_graphql_for_bbr_codes(uuids, category_name)
+        self.logger.info(f"Found {len(valid_uuids)} valid BBR UUIDs for GraphQL queries")
 
-        # Create lookup dictionary
-        bbr_lookup = {item["building_uuid"]: item["bbr_code"] for item in bbr_codes_data}
+        # Query GraphQL API in batches
+        bbr_codes_data = self._query_graphql_for_bbr_codes(valid_uuids, category_name)
+
+        # Create lookup dictionary mapping UUIDs to BBR codes
+        bbr_lookup = {}
+        for item in bbr_codes_data:
+            uuid = item["building_uuid"]
+            bbr_lookup[uuid] = item["bbr_code"]
 
         # Enrich buildings with BBR codes
         enriched_buildings = []
@@ -437,7 +519,7 @@ class InspireBBRFetcher:
 
     def _query_graphql_for_bbr_codes(self, uuids, category_name, batch_size=50):
         """
-        Query GraphQL API to get BBR usage codes for building UUIDs.
+        Query GraphQL API to get BBR usage codes for building UUIDs using proper batch queries.
         """
         graphql_url = f"https://graphql.datafordeler.dk/BBR/v1?apikey={self.settings.datafordeler_graphql_api_key}"
 
@@ -448,23 +530,29 @@ class InspireBBRFetcher:
             f"Querying GraphQL API for {category_name} BBR codes ({total_batches} batches)"
         )
 
+        # Use current timestamp for temporal filtering (required by API)
+        current_timestamp = datetime.now().isoformat() + "Z"
+
+        # Debug: Log API key status and timestamp
+        api_key_status = "SET" if self.settings.datafordeler_graphql_api_key else "MISSING"
+        self.logger.info(f"API Key status: {api_key_status}, Using timestamp: {current_timestamp}")
+
         for batch_idx in range(0, len(uuids), batch_size):
             batch_uuids = uuids[batch_idx : batch_idx + batch_size]
             batch_num = (batch_idx // batch_size) + 1
 
             self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
 
-            # Create GraphQL query
-            uuid_list = ", ".join(f'"{uuid}"' for uuid in batch_uuids)
-            query = f"""
+            # Create GraphQL query with IN operator for efficient batching
+            uuids_list = '["' + '","'.join(batch_uuids) + '"]'
+            batch_query = f"""
             {{
               BBR_Bygning(
-                virkningstid: "2025-06-18T16:35:33.727Z", 
-                registreringstid: "2025-06-18T16:35:33.727Z", 
-                where: {{id_lokalId: {{in: [{uuid_list}]}}}}, 
-                first: 1000
+                registreringstid: "{current_timestamp}",
+                where: {{
+                  id_lokalId: {{ in: {uuids_list} }}
+                }}
               ) {{
-                pageInfo {{ hasNextPage }}
                 nodes {{ 
                   id_lokalId 
                   byg021BygningensAnvendelse 
@@ -473,29 +561,43 @@ class InspireBBRFetcher:
             }}
             """
 
+            # Debug: Log query for first few batches
+            if batch_num <= 2:
+                self.logger.info(f"    GraphQL batch query: {batch_query}")
+
             try:
                 response = requests.post(
                     graphql_url,
                     headers={"Content-Type": "application/json"},
-                    json={"query": query},
-                    timeout=30,
+                    json={"query": batch_query},
+                    timeout=60,  # Longer timeout for batch queries
                 )
 
+                # Debug: Log response details for first few batches
+                if batch_num <= 2:
+                    self.logger.info(f"    HTTP Status: {response.status_code}")
+                    self.logger.info(f"    Response: {response.text[:500]}")
+
                 if response.status_code != 200:
-                    self.logger.warning(f"    HTTP Error: {response.status_code}")
+                    self.logger.warning(
+                        f"    HTTP Error for batch {batch_num}: {response.status_code}"
+                    )
                     continue
 
                 data = response.json()
+
                 if "errors" in data:
-                    self.logger.warning(f"    GraphQL Errors: {data['errors']}")
+                    self.logger.warning(
+                        f"    GraphQL Errors for batch {batch_num}: {data['errors']}"
+                    )
                     continue
 
                 if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
-                    self.logger.warning("    No data returned")
+                    self.logger.info(f"    No buildings found for batch {batch_num}")
                     continue
 
                 batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
-                buildings_with_codes = [
+                batch_results = [
                     {
                         "building_uuid": b["id_lokalId"],
                         "bbr_code": b.get("byg021BygningensAnvendelse"),
@@ -504,17 +606,17 @@ class InspireBBRFetcher:
                     if b.get("byg021BygningensAnvendelse")
                 ]
 
-                all_results.extend(buildings_with_codes)
+                all_results.extend(batch_results)
 
                 self.logger.info(
-                    f"    ✅ {len(batch_buildings)} total, {len(buildings_with_codes)} with BBR codes"
+                    f"    ✅ Batch {batch_num}: {len(batch_results)} buildings with BBR codes"
                 )
 
-                # Rate limiting
+                # Rate limiting between batch requests (much less frequent now)
                 time.sleep(0.5)
 
             except Exception as e:
-                self.logger.warning(f"    Error: {e}")
+                self.logger.warning(f"    Error for batch {batch_num}: {e}")
                 continue
 
         self.logger.info(
@@ -523,7 +625,12 @@ class InspireBBRFetcher:
         return all_results
 
     def _save_metadata(
-        self, output_dir: Path, file_info: dict, download_url: str, sample_size: int | None
+        self,
+        output_dir: Path,
+        file_info: dict,
+        download_url: str,
+        sample_size: int | None,
+        pipeline_start_time: datetime,
     ) -> None:
         """
         Save metadata about the fetched data.
@@ -535,7 +642,7 @@ class InspireBBRFetcher:
             sample_size: Sample size if used for testing
         """
         metadata = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": pipeline_start_time.isoformat(),
             "source_url": self.settings.sdfe_ftp_base_url,
             "download_url": download_url,
             "file_info": file_info,
@@ -753,3 +860,266 @@ class InspireBBRFetcher:
         except Exception as e:
             self.logger.error(f"Failed to extract GPKG: {e}")
             raise
+
+    def _extract_and_process_streaming(
+        self, zip_path: Path, sample_size: int | None, building_queue
+    ):
+        """
+        Extract GPKG and process it with streaming to building queue.
+        """
+        try:
+            # Extract GPKG
+            run_dir = zip_path.parent
+            gpkg_path = self._extract_gpkg(zip_path, run_dir)
+
+            # Immediately clean up ZIP file
+            if zip_path.exists():
+                zip_path.unlink()
+                self.logger.info("Cleaned up ZIP file to save disk space")
+
+            # Process with DuckDB and stream results
+            self._load_and_stream_with_graphql(gpkg_path, sample_size, building_queue)
+
+            # Immediately clean up GPKG file after processing
+            if gpkg_path.exists():
+                size_gb = gpkg_path.stat().st_size / (1024**3)
+                gpkg_path.unlink()
+                self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB) after processing")
+
+        except Exception as e:
+            self.logger.error(f"Failed to extract and process with streaming: {e}")
+            raise
+
+    def _load_and_stream_with_graphql(
+        self, gpkg_path: Path, sample_size: int | None, building_queue
+    ):
+        """
+        Load INSPIRE BBR data and stream building IDs to queue as they are processed.
+
+        Uses DuckDB for all data operations, no pandas/geopandas.
+        """
+        try:
+            import duckdb
+
+            self.logger.info("Loading INSPIRE BBR data and streaming with GraphQL API...")
+
+            # Create DuckDB connection with spatial extension
+            conn = duckdb.connect(":memory:")
+            conn.execute("INSTALL spatial;")
+            conn.execute("LOAD spatial;")
+
+            # Load the GPKG data
+            self.logger.info("Loading building data from GPKG...")
+            conn.execute(f"""
+                CREATE TABLE buildings AS 
+                SELECT * FROM ST_Read('{gpkg_path}')
+            """)
+
+            # Get building counts for each category
+            total_counts = conn.execute("""
+                SELECT 
+                    currentUse,
+                    COUNT(*) as count
+                FROM buildings 
+                WHERE currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings', 'agriculture', 'publicServices')
+                GROUP BY currentUse
+                ORDER BY currentUse
+            """).fetchall()
+
+            self.logger.info("Building counts by category:")
+            for category, count in total_counts:
+                self.logger.info(f"  {category}: {count:,} buildings")
+
+            # Process each category and stream results
+            categories_to_process = [
+                ("residential", ["individualResidence", "collectiveResidence", "twoDwellings"]),
+                ("agriculture", ["agriculture"]),
+                ("publicServices", ["publicServices"]),
+            ]
+
+            for category_name, current_use_values in categories_to_process:
+                self.logger.info(f"Processing {category_name} buildings...")
+
+                # Create category-specific table
+                use_filter = "', '".join(current_use_values)
+
+                if sample_size and sample_size > 0:
+                    conn.execute(f"""
+                        CREATE OR REPLACE TABLE category_buildings AS
+                        SELECT inspireId_localId as building_uuid
+                        FROM buildings 
+                        WHERE currentUse IN ('{use_filter}')
+                        LIMIT {sample_size}
+                    """)
+                else:
+                    conn.execute(f"""
+                        CREATE OR REPLACE TABLE category_buildings AS
+                        SELECT inspireId_localId as building_uuid
+                        FROM buildings 
+                        WHERE currentUse IN ('{use_filter}')
+                    """)
+
+                # Get building UUIDs for this category
+                building_uuids = conn.execute(
+                    "SELECT building_uuid FROM category_buildings"
+                ).fetchall()
+                building_uuids = [row[0] for row in building_uuids]
+
+                self.logger.info(f"Found {len(building_uuids)} {category_name} buildings")
+
+                if not building_uuids:
+                    continue
+
+                # For residential buildings, stream immediately without GraphQL enrichment
+                if category_name == "residential":
+                    # Process in chunks of 50 to match the existing pattern
+                    chunk_size = 50
+                    for i in range(0, len(building_uuids), chunk_size):
+                        chunk_uuids = building_uuids[i : i + chunk_size]
+
+                        # Create basic attributes for residential buildings
+                        chunk_attributes = []
+                        for uuid in chunk_uuids:
+                            chunk_attributes.append(
+                                {
+                                    "building_uuid": uuid,
+                                    "category": "residential",
+                                    "bbr_usage_code": None,  # Residential doesn't need detailed codes
+                                    "detailed_usage": None,
+                                }
+                            )
+
+                        # Put chunk in queue for geometry fetching
+                        building_queue.put((chunk_uuids, chunk_attributes))
+                        self.logger.info(
+                            f"Streamed {len(chunk_uuids)} residential building IDs to queue"
+                        )
+
+                else:
+                    # For agriculture and publicServices, enrich with GraphQL API
+                    self._enrich_and_stream_category(
+                        building_uuids, category_name, building_queue, conn
+                    )
+
+            conn.close()
+            self.logger.info("Completed streaming all building categories")
+
+        except Exception as e:
+            self.logger.error(f"Failed to load and stream with GraphQL: {e}")
+            raise
+
+    def _enrich_and_stream_category(self, building_uuids, category_name, building_queue, conn):
+        """
+        Enrich a category of buildings with GraphQL API and stream results.
+
+        Args:
+            building_uuids: List of building UUIDs for this category
+            category_name: Category name ('agriculture' or 'publicServices')
+            building_queue: Queue to put enriched chunks
+            conn: DuckDB connection
+        """
+        self.logger.info(
+            f"Enriching {len(building_uuids)} {category_name} buildings with GraphQL API..."
+        )
+
+        # Process in chunks of 50 (matching existing GraphQL batch size)
+        batch_size = 50
+        total_batches = (len(building_uuids) + batch_size - 1) // batch_size
+
+        for i in range(0, len(building_uuids), batch_size):
+            batch_uuids = building_uuids[i : i + batch_size]
+            batch_num = (i // batch_size) + 1
+
+            self.logger.info(
+                f"Processing {category_name} batch {batch_num}/{total_batches} ({len(batch_uuids)} buildings)"
+            )
+
+            try:
+                # Query GraphQL API for this batch
+                graphql_data = self._query_graphql_for_bbr_codes(
+                    batch_uuids, category_name, len(batch_uuids)
+                )
+
+                # Process the GraphQL response
+                enriched_attributes = []
+                for uuid in batch_uuids:
+                    # Find the GraphQL data for this UUID
+                    building_data = None
+                    if graphql_data and "data" in graphql_data and "bbr" in graphql_data["data"]:
+                        for building in graphql_data["data"]["bbr"]:
+                            if building.get("bygningId") == uuid:
+                                building_data = building
+                                break
+
+                    # Create enriched attribute record
+                    if building_data:
+                        usage_code = building_data.get("bygningAnvendelse")
+
+                        # Filter publicServices for education buildings only
+                        if category_name == "publicServices":
+                            if usage_code and 420 <= int(usage_code) <= 441:
+                                enriched_attributes.append(
+                                    {
+                                        "building_uuid": uuid,
+                                        "category": "publicServices",
+                                        "bbr_usage_code": usage_code,
+                                        "detailed_usage": f"education_{usage_code}",
+                                    }
+                                )
+                            # Skip non-education public services
+                        else:  # agriculture
+                            enriched_attributes.append(
+                                {
+                                    "building_uuid": uuid,
+                                    "category": "agriculture",
+                                    "bbr_usage_code": usage_code,
+                                    "detailed_usage": f"agriculture_{usage_code}"
+                                    if usage_code
+                                    else "agriculture_unknown",
+                                }
+                            )
+                    else:
+                        # No GraphQL data found, include with unknown details
+                        if category_name != "publicServices":  # Skip unknown publicServices
+                            enriched_attributes.append(
+                                {
+                                    "building_uuid": uuid,
+                                    "category": category_name,
+                                    "bbr_usage_code": None,
+                                    "detailed_usage": f"{category_name}_unknown",
+                                }
+                            )
+
+                # Stream this enriched batch if it has any valid buildings
+                if enriched_attributes:
+                    chunk_uuids = [attr["building_uuid"] for attr in enriched_attributes]
+                    building_queue.put((chunk_uuids, enriched_attributes))
+                    self.logger.info(
+                        f"Streamed {len(enriched_attributes)} enriched {category_name} building IDs to queue"
+                    )
+                else:
+                    self.logger.info(
+                        f"No valid buildings in {category_name} batch {batch_num} after filtering"
+                    )
+
+            except Exception as e:
+                self.logger.error(f"Failed to enrich {category_name} batch {batch_num}: {e}")
+                # Still stream the UUIDs without enrichment to avoid losing buildings
+                basic_attributes = []
+                for uuid in batch_uuids:
+                    if category_name != "publicServices":  # Skip unknown publicServices
+                        basic_attributes.append(
+                            {
+                                "building_uuid": uuid,
+                                "category": category_name,
+                                "bbr_usage_code": None,
+                                "detailed_usage": f"{category_name}_unknown",
+                            }
+                        )
+
+                if basic_attributes:
+                    chunk_uuids = [attr["building_uuid"] for attr in basic_attributes]
+                    building_queue.put((chunk_uuids, basic_attributes))
+                    self.logger.info(
+                        f"Streamed {len(basic_attributes)} fallback {category_name} building IDs to queue"
+                    )

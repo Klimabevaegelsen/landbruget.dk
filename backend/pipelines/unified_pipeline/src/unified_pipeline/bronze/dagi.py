@@ -18,11 +18,11 @@ from asyncio import Semaphore
 from typing import Dict, Optional
 
 import aiohttp
-import pandas as pd
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
+from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
@@ -89,6 +89,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
         """Initialize the DAGI bronze layer with configuration."""
         super().__init__(config, gcs_util)
         self.semaphore = Semaphore(config.max_concurrent_requests)
+        self.gcs_access = GCSDataAccess()
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10), reraise=True
@@ -188,23 +189,20 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                 if not layer_data:
                     raise RuntimeError("No DAGI data could be fetched from any layer")
 
-                # Save each layer as raw data using new unified method
+                # Save each layer as raw data using GCS access for JSON strings
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
-                        # Create DataFrame with the raw JSON payload and metadata
-                        raw_df = pd.DataFrame(
-                            [
-                                {
-                                    "payload": raw_data,
-                                    "source": f"{self.config.name} - {layer_name}",
-                                    "created_at": pd.Timestamp.now(tz="UTC"),
-                                    "updated_at": pd.Timestamp.now(tz="UTC"),
-                                }
-                            ]
-                        )
-                        self._save_data(raw_df, dataset_name, self.config.bucket, stage="bronze")
-                        self.log.info(f"Saved raw data for {layer_name}")
+
+                        # For DAGI, raw_data is a JSON string, so we need to save it directly as JSON
+                        # Create the GCS path following the unified pattern
+                        timestamp = self.date_pattern
+                        filename = f"{dataset_name}.json"
+                        gcs_path = f"gs://{self.config.bucket}/bronze/{dataset_name}/{timestamp}/{filename}"
+
+                        # Save JSON string directly to GCS
+                        self.gcs_access.upload_json_string(raw_data, gcs_path)
+                        self.log.info(f"Saved raw data for {layer_name} to {gcs_path}")
                     except Exception as e:
                         self.log.error(f"Failed to save {layer_name}: {e}")
                         continue

@@ -33,11 +33,11 @@ on:
         default: 'INFO'
 
 jobs:
-  run-pipeline:
+  # Parallel fetching jobs for bronze layer
+  fetch-geodanmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # Increased timeout for full dataset processing
+    if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
     
-    # Add permissions for GCS access
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -45,16 +45,19 @@ jobs:
     env:
       ENVIRONMENT: production
 
+    outputs:
+      artifact-name: ${{ steps.upload-geodanmark.outputs.artifact-name }}
+      buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
+
     steps:
     - uses: actions/checkout@v4
 
-    - name: Free up disk space for large dataset processing
+    - name: Free up disk space for GeoDanmark download
       run: |
         echo "=== Initial disk usage ==="
         df -h
         
-        echo "=== Freeing up disk space ==="
-        # Remove unnecessary software to free up space
+        echo "=== Freeing up disk space for GeoDanmark processing ==="
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
@@ -62,28 +65,23 @@ jobs:
         sudo rm -rf /usr/local/.ghcup
         sudo rm -rf /usr/share/swift
         
-        # Clean up docker
         sudo docker system prune -af
         sudo docker image prune -af
-        
-        # Clean up apt cache
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
         
         echo "=== Disk usage after cleanup ==="
         df -h
         
-        # Check if we have enough space for full dataset processing
         AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
         echo "Available space: ${AVAILABLE_GB}GB"
         
-        if [ $AVAILABLE_GB -lt 20 ]; then
-          echo "❌ ERROR: Not enough disk space! Available: ${AVAILABLE_GB}GB, Required: ~20GB"
-          echo "💡 The pipeline processes 761MB→4.6GB but cleans up immediately"
+        if [ $AVAILABLE_GB -lt 15 ]; then
+          echo "❌ ERROR: Not enough disk space for GeoDanmark! Available: ${AVAILABLE_GB}GB, Required: ~15GB"
           exit 1
         fi
         
-        echo "✅ Sufficient disk space available: ${AVAILABLE_GB}GB"
+        echo "✅ Sufficient disk space for GeoDanmark: ${AVAILABLE_GB}GB"
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -98,7 +96,211 @@ jobs:
     - name: Install dependencies
       run: |
         cd backend/pipelines/bbr_buildings
-        # Install system dependencies required by the pipeline
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+        uv pip install --system -e .
+
+    - name: Set up environment variables
+      env:
+        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      run: |
+        cd backend/pipelines/bbr_buildings
+        echo "ENVIRONMENT=production" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        if [[ -n "$DATAFORDELER_USERNAME" ]]; then
+          echo "DATAFORDELER_USERNAME=$DATAFORDELER_USERNAME" >> .env
+        fi
+        if [[ -n "$DATAFORDELER_PASSWORD" ]]; then
+          echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
+        fi
+
+    - name: Fetch GeoDanmark Buildings
+      id: fetch-geodanmark
+      working-directory: backend/pipelines/bbr_buildings
+      env:
+        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      run: |
+        echo "🚀 Starting GeoDanmark WFS bulk download..."
+        
+        # Monitor disk space during execution
+        (while true; do
+          sleep 300  # Check every 5 minutes
+          echo "$(date): Disk usage: $(df -h . | tail -1)"
+          echo "$(date): Memory usage: $(free -h | grep Mem)"
+          
+          AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
+          if [ $AVAILABLE_MB -lt 2048 ]; then
+            echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
+          fi
+        done) &
+        MONITOR_PID=$!
+        
+        # Run GeoDanmark bulk fetcher directly
+        python run_geodanmark_fetch.py || {
+          EXIT_CODE=$?
+          kill $MONITOR_PID 2>/dev/null || true
+          exit $EXIT_CODE
+        }
+        
+        kill $MONITOR_PID 2>/dev/null || true
+        
+        echo "✅ GeoDanmark download completed!"
+        ls -lh data/
+
+    - name: Upload GeoDanmark Data
+      id: upload-geodanmark
+      uses: actions/upload-artifact@v4
+      with:
+        name: geodanmark-buildings-${{ github.run_id }}
+        path: |
+          backend/pipelines/bbr_buildings/data/geodanmark_buildings_complete.geoparquet
+        retention-days: 1
+        compression-level: 6
+
+  fetch-inspire-bbr:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    outputs:
+      artifact-name: ${{ steps.upload-inspire.outputs.artifact-name }}
+      buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Free up disk space for INSPIRE BBR processing
+      run: |
+        echo "=== Initial disk usage ==="
+        df -h
+        
+        echo "=== Freeing up disk space for INSPIRE BBR processing ==="
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/share/swift
+        
+        sudo docker system prune -af
+        sudo docker image prune -af
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        
+        echo "=== Disk usage after cleanup ==="
+        df -h
+        
+        AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+        echo "Available space: ${AVAILABLE_GB}GB"
+        
+        if [ $AVAILABLE_GB -lt 10 ]; then
+          echo "❌ ERROR: Not enough disk space for INSPIRE BBR! Available: ${AVAILABLE_GB}GB, Required: ~10GB"
+          exit 1
+        fi
+        
+        echo "✅ Sufficient disk space for INSPIRE BBR: ${AVAILABLE_GB}GB"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/bbr_buildings
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+        uv pip install --system -e .
+
+    - name: Set up environment variables
+      env:
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
+      run: |
+        cd backend/pipelines/bbr_buildings
+        echo "ENVIRONMENT=production" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        if [[ -n "$DATAFORDELER_GRAPHQL_API_KEY" ]]; then
+          echo "DATAFORDELER_GRAPHQL_API_KEY=$DATAFORDELER_GRAPHQL_API_KEY" >> .env
+        fi
+
+    - name: Fetch INSPIRE BBR Data
+      id: fetch-inspire
+      working-directory: backend/pipelines/bbr_buildings
+      env:
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
+      run: |
+        echo "🏢 Starting INSPIRE BBR data fetch with GraphQL enrichment..."
+        
+        # Create output directory
+        mkdir -p data/bronze
+        
+        # Run INSPIRE BBR fetcher directly
+        python run_inspire_fetch.py ${{ inputs.sample_size || 0 }} || {
+          echo "❌ INSPIRE BBR fetch failed"
+          exit 1
+        }
+        
+        echo "✅ INSPIRE BBR fetch completed!"
+        ls -lh data/
+
+    - name: Upload INSPIRE BBR Data
+      id: upload-inspire
+      uses: actions/upload-artifact@v4
+      with:
+        name: inspire-bbr-data-${{ github.run_id }}
+        path: |
+          backend/pipelines/bbr_buildings/data/inspire_building_ids.json
+          backend/pipelines/bbr_buildings/data/inspire_attributes.parquet
+          backend/pipelines/bbr_buildings/data/bronze/
+        retention-days: 1
+        compression-level: 6
+
+  # Bronze layer processing job - combines the parallel fetch results
+  process-bronze:
+    runs-on: ubuntu-latest
+    needs: [fetch-geodanmark, fetch-inspire-bbr]
+    if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    outputs:
+      bronze-output-dir: ${{ steps.process-bronze.outputs.bronze-output-dir }}
+      joined-buildings-count: ${{ steps.process-bronze.outputs.joined-buildings-count }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/bbr_buildings
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
         uv pip install --system -e .
@@ -112,13 +314,179 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
+    - name: Download GeoDanmark Data
+      uses: actions/download-artifact@v4
+      with:
+        name: geodanmark-buildings-${{ github.run_id }}
+        path: backend/pipelines/bbr_buildings/data/
+
+    - name: Download INSPIRE BBR Data
+      uses: actions/download-artifact@v4
+      with:
+        name: inspire-bbr-data-${{ github.run_id }}
+        path: backend/pipelines/bbr_buildings/
+
+    - name: Process Bronze Layer - Spatial Join
+      id: process-bronze
+      working-directory: backend/pipelines/bbr_buildings
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        echo "🔗 Starting spatial join of GeoDanmark and INSPIRE BBR data..."
+        echo "📊 GeoDanmark buildings: ${{ needs.fetch-geodanmark.outputs.buildings-count }}"
+        echo "📊 INSPIRE BBR buildings: ${{ needs.fetch-inspire-bbr.outputs.buildings-count }}"
+        
+        # Set up environment
+        echo "ENVIRONMENT=production" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=${{ secrets.GCS_BUCKET }}" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GOOGLE_CLOUD_PROJECT }}" >> .env
+        echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        
+        # Perform spatial join
+        python -c "
+        import duckdb
+        import json
+        from pathlib import Path
+        from datetime import datetime
+        import pandas as pd
+        import os
+        
+        # Load building IDs
+        with open('data/inspire_building_ids.json', 'r') as f:
+            building_ids = json.load(f)
+        
+        print(f'🔍 Joining {len(building_ids):,} INSPIRE BBR buildings with GeoDanmark data...')
+        
+        # Connect to DuckDB
+        conn = duckdb.connect()
+        conn.execute('INSTALL spatial')
+        conn.execute('LOAD spatial')
+        
+        # Load GeoDanmark data
+        geodanmark_path = 'data/geodanmark_buildings_complete.geoparquet'
+        
+        if len(building_ids) > 0:
+            # Convert building_ids to SQL-compatible format
+            uuid_list = \"', '\".join(building_ids)
+            
+            join_query = f'''
+            SELECT 
+                g.*,
+                \"matched\" as join_status
+            FROM read_parquet(\"{geodanmark_path}\") g
+            WHERE g.BBRUUID IN (\"{uuid_list}\")
+            '''
+            
+            try:
+                joined_buildings = conn.execute(join_query).fetchdf()
+                print(f'✅ Successfully joined {len(joined_buildings):,} buildings')
+                
+                # Create output directory with timestamp
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                output_dir = Path(f'data/bronze/{timestamp}')
+                output_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Save joined results
+                output_file = output_dir / 'joined_buildings.geoparquet'
+                joined_buildings.to_parquet(output_file)
+                print(f'💾 Saved joined results to {output_file}')
+                
+                # Copy INSPIRE attributes if available
+                inspire_attrs_path = Path('data/inspire_attributes.parquet')
+                if inspire_attrs_path.exists():
+                    inspire_attrs = pd.read_parquet(inspire_attrs_path)
+                    inspire_attrs.to_parquet(output_dir / 'inspire_attributes.parquet')
+                    print('💾 Saved INSPIRE attributes')
+                
+                # Output for next job
+                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                    f.write(f'bronze-output-dir={output_dir}\n')
+                    f.write(f'joined-buildings-count={len(joined_buildings)}\n')
+                
+            except Exception as e:
+                print(f'❌ Join failed: {e}')
+                exit(1)
+        else:
+            print('⚠️ No building IDs to join')
+            exit(1)
+        
+        conn.close()
+        print('🎉 Bronze layer processing completed successfully!')
+        "
+        
+        echo "✅ Bronze layer spatial join completed!"
+
+    - name: Upload Bronze Results to GCS
+      working-directory: backend/pipelines/bbr_buildings
+      run: |
+        if [ -d "data/bronze" ]; then
+          echo "📤 Uploading bronze results to GCS..."
+          gsutil -m cp -r data/bronze/* gs://${{ secrets.GCS_BUCKET }}/bbr_buildings/bronze/
+          echo "✅ Bronze results uploaded to GCS"
+        fi
+
+    - name: Upload Bronze Pipeline Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bbr-bronze-results-${{ github.run_id }}
+        path: |
+          backend/pipelines/bbr_buildings/data/bronze/
+        retention-days: 7
+
+  # Silver layer processing job
+  process-silver:
+    runs-on: ubuntu-latest
+    needs: [process-bronze]
+    if: ${{ inputs.layer == 'silver' || inputs.layer == 'both' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      ENVIRONMENT: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/bbr_buildings
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download Bronze Results
+      uses: actions/download-artifact@v4
+      with:
+        name: bbr-bronze-results-${{ github.run_id }}
+        path: backend/pipelines/bbr_buildings/data/bronze/
+
     - name: Set up environment variables
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-        DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
-        DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
       run: |
         cd backend/pipelines/bbr_buildings
         echo "ENVIRONMENT=production" >> .env
@@ -126,45 +494,24 @@ jobs:
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
-        if [[ -n "$DATAFORDELER_USERNAME" ]]; then
-          echo "DATAFORDELER_USERNAME=$DATAFORDELER_USERNAME" >> .env
-        fi
-        if [[ -n "$DATAFORDELER_PASSWORD" ]]; then
-          echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
-        fi
-        if [[ -n "$DATAFORDELER_GRAPHQL_API_KEY" ]]; then
-          echo "DATAFORDELER_GRAPHQL_API_KEY=$DATAFORDELER_GRAPHQL_API_KEY" >> .env
-        fi
 
-    - name: Run BBR Buildings Pipeline
+    - name: Run Silver Layer Processing
       working-directory: backend/pipelines/bbr_buildings
-      timeout-minutes: 150  # Set step-level timeout for full dataset
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        # Build command based on inputs
-        CMD="python main.py --layer ${{ inputs.layer }}"
+        echo "🥈 Starting silver layer processing..."
+        echo "📊 Processing ${{ needs.process-bronze.outputs.joined-buildings-count }} joined buildings"
         
-        # Note: Source parameter removed - pipeline always uses INSPIRE BBR + GeoDanmark WFS
-        
-        # Add input-dir parameter for silver layer (only when running silver alone)
-        if [[ "${{ inputs.layer }}" == "silver" ]]; then
-          LATEST_BRONZE_DIR=$(find data/bronze -maxdepth 1 -type d -name "20*" | sort -r | head -n 1)
-          if [[ -z "$LATEST_BRONZE_DIR" ]]; then
-            echo "Error: No bronze layer output found. Please run bronze layer first."
-            exit 1
-          fi
-          CMD="$CMD --input-dir $LATEST_BRONZE_DIR"
+        # Find the bronze output directory
+        BRONZE_DIR=$(find data/bronze -maxdepth 1 -type d -name "20*" | sort -r | head -n 1)
+        if [[ -z "$BRONZE_DIR" ]]; then
+          echo "❌ Error: No bronze layer output found"
+          exit 1
         fi
         
-        # Add sample size if specified (0 means full dataset)
-        if [[ "${{ inputs.sample_size }}" != "0" ]]; then
-          CMD="$CMD --sample-size ${{ inputs.sample_size }}"
-          echo "🧪 Running with sample size: ${{ inputs.sample_size }}"
-        else
-          echo "🔄 Processing full dataset (~2.9M buildings with GraphQL enrichment)"
-        fi
+        echo "📂 Using bronze data from: $BRONZE_DIR"
+        
+        # Build silver command
+        CMD="python main.py --layer silver --input-dir $BRONZE_DIR"
         
         # Add enhancement flag
         if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
@@ -175,76 +522,85 @@ jobs:
         CMD="$CMD --log-level ${{ inputs.log_level }}"
         
         echo "Running command: $CMD"
+        $CMD
         
-        # Monitor disk space during execution
-        (while true; do
-          sleep 300  # Check every 5 minutes
-          echo "$(date): Disk usage: $(df -h . | tail -1)"
-          echo "$(date): Memory usage: $(free -h | grep Mem)"
-          
-          # Check if we're running low on space (less than 2GB)
-          AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
-          if [ $AVAILABLE_MB -lt 2048 ]; then
-            echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
-          fi
-        done) &
-        MONITOR_PID=$!
-        
-        # Run the pipeline with timeout handling
-        timeout 8400 $CMD || {
-          EXIT_CODE=$?
-          kill $MONITOR_PID 2>/dev/null || true
-          if [ $EXIT_CODE -eq 124 ]; then
-            echo "Pipeline timed out after 140 minutes"
-            echo "Full dataset processing requires significant time"
-          fi
-          exit $EXIT_CODE
-        }
-        
-        # Stop monitoring
-        kill $MONITOR_PID 2>/dev/null || true
+        echo "✅ Silver layer processing completed!"
 
-    - name: Check final disk usage
-      if: always()
+    - name: Upload Silver Results to GCS
+      working-directory: backend/pipelines/bbr_buildings
       run: |
-        echo "Final disk usage:"
-        df -h
-        echo "Pipeline output size:"
-        if [ -d "backend/pipelines/bbr_buildings/data" ]; then
-          du -sh backend/pipelines/bbr_buildings/data/ || true
+        if [ -d "data/silver" ]; then
+          echo "📤 Uploading silver results to GCS..."
+          gsutil -m cp -r data/silver/* gs://${{ secrets.GCS_BUCKET }}/bbr_buildings/silver/
+          echo "✅ Silver results uploaded to GCS"
         fi
 
-    - name: Upload pipeline artifacts
-      if: always()
+    - name: Upload Silver Pipeline Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: bbr-buildings-pipeline-output
+        name: bbr-silver-results-${{ github.run_id }}
         path: |
-          backend/pipelines/bbr_buildings/output/
-          backend/pipelines/bbr_buildings/logs/
-          backend/pipelines/bbr_buildings/data/
+          backend/pipelines/bbr_buildings/data/silver/
         retention-days: 7
 
-    - name: Handle pipeline failure
-      if: failure()
+  # Summary job
+  pipeline-summary:
+    runs-on: ubuntu-latest
+    needs: [fetch-geodanmark, fetch-inspire-bbr, process-bronze, process-silver]
+    if: always() && (inputs.layer == 'both' || (inputs.layer == 'bronze' && needs.process-bronze.result == 'success') || (inputs.layer == 'silver' && needs.process-silver.result == 'success'))
+
+    steps:
+    - name: Pipeline Summary
       run: |
-        echo "BBR Buildings Pipeline failed. Please check the logs above for details."
-        echo "Common issues:"
-        echo "- Missing Datafordeleren credentials (USERNAME/PASSWORD for WFS, GRAPHQL_API_KEY for BBR codes)"
-        echo "- Network connectivity issues with SDFE FTP server or Datafordeleren APIs"
-        echo "- Insufficient disk space for large building datasets (761MB→4.6GB processing)"
-        echo "- Memory issues when processing millions of building records with GraphQL enrichment"
-        echo "- Pipeline timeout for full dataset processing with GraphQL API calls"
-        echo ""
-        echo "For troubleshooting:"
-        echo "1. Use sample_size parameter to test with smaller data (try 100-1000 for testing)"
-        echo "2. Check disk space and memory monitoring logs above"
-        echo "3. Verify all three credentials are set: DATAFORDELER_USERNAME, DATAFORDELER_PASSWORD, DATAFORDELER_GRAPHQL_API_KEY"
-        echo "4. Consider running bronze and silver layers separately for large datasets"
-        echo ""
-        echo "For large datasets, consider:"
-        echo "1. Using sample_size parameter to test GraphQL API connectivity first"
-        echo "2. Running bronze and silver layers separately to isolate issues"
-        echo "3. Using local processing for full datasets (2.9M buildings + GraphQL calls)"
-        echo "4. Using self-hosted runners with more disk space and better network connectivity"
-        exit 1 
+        echo "# BBR Buildings Pipeline Summary 📊" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Execution Results" >> $GITHUB_STEP_SUMMARY
+        echo "- **Pipeline Layer**: ${{ inputs.layer }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Sample Size**: ${{ inputs.sample_size == 0 && 'Full Dataset' || inputs.sample_size }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Log Level**: ${{ inputs.log_level }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ inputs.layer }}" == "bronze" || "${{ inputs.layer }}" == "both" ]]; then
+          echo "## Bronze Layer Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **GeoDanmark Buildings**: ${{ needs.fetch-geodanmark.outputs.buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **INSPIRE BBR Buildings**: ${{ needs.fetch-inspire-bbr.outputs.buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Joined Buildings**: ${{ needs.process-bronze.outputs.joined-buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+        echo "- **Fetch GeoDanmark**: ${{ needs.fetch-geodanmark.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Fetch INSPIRE BBR**: ${{ needs.fetch-inspire-bbr.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Process Bronze**: ${{ needs.process-bronze.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Process Silver**: ${{ needs.process-silver.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+        
+        # Check for failures
+        if [[ "${{ needs.fetch-geodanmark.result }}" == "failure" || "${{ needs.fetch-inspire-bbr.result }}" == "failure" || "${{ needs.process-bronze.result }}" == "failure" || "${{ needs.process-silver.result }}" == "failure" ]]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Pipeline Issues" >> $GITHUB_STEP_SUMMARY
+          echo "Some jobs failed. Check the individual job logs for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Common Issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Missing Datafordeleren credentials" >> $GITHUB_STEP_SUMMARY
+          echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
+          echo "- Insufficient disk space" >> $GITHUB_STEP_SUMMARY
+          echo "- WFS service limits or timeouts" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Pipeline Completed Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "All jobs completed successfully. Data has been uploaded to GCS." >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # Cleanup job
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [fetch-geodanmark, fetch-inspire-bbr, process-bronze, process-silver]
+    if: always()
+
+    steps:
+    - name: Cleanup Temporary Artifacts
+      run: |
+        echo "🧹 Cleaning up temporary artifacts..."
+        # Note: GitHub automatically cleans up artifacts after retention period
+        # This is just a placeholder for any additional cleanup needed
+        echo "✅ Cleanup completed" 

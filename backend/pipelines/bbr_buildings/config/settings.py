@@ -9,9 +9,28 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
 
-# Load environment variables from .env file
-env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-load_dotenv(env_path)
+# Load environment variables from .env file (local development only)
+# Try multiple possible locations for .env file
+possible_env_paths = [
+    # Current pipeline directory (where GitHub Actions creates it)
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    # Backend directory (original location)
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
+    ),
+    # Project root
+    os.path.join(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
+        ".env",
+    ),
+]
+
+for env_path in possible_env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        break
 
 
 class StorageType(str, Enum):
@@ -58,6 +77,17 @@ class Settings(BaseModel):
     # Processing Configuration
     max_workers: int = Field(4, description="Number of workers for parallel processing")
     chunk_size: int = Field(50000, description="Chunk size for data processing")
+
+    # Geometry Fetching Configuration
+    max_geometries_to_fetch: int | None = Field(
+        None, description="Maximum number of geometries to fetch (None = fetch all)"
+    )
+    geometry_batch_size: int = Field(
+        25, description="Initial batch size for geometry fetching (will be adapted)"
+    )
+    geometry_max_workers: int = Field(
+        8, description="Number of parallel workers for geometry fetching"
+    )
 
     # Logging settings
     log_level: LogLevel = Field(LogLevel.INFO, description="Logging level")

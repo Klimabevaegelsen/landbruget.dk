@@ -18,6 +18,7 @@ MAIN_DIR = $(SRC_DIR)/unified_pipeline
 TEST_DIR = $(SRC_DIR)/tests
 
 DOCKERFILE = Dockerfile
+DOCKER_COMPOSE_FILE = docker-compose.yml
 
 ##@ Commands
 .PHONY: help
@@ -201,8 +202,8 @@ clean:
 # Development targets
 dev-setup:
 	@echo "Setting up development environment..."
-	pip install -e .
-	pip install pytest pytest-cov black isort mypy
+	uv pip install -e .
+uv pip install pytest pytest-cov black isort mypy
 
 # Run formatters
 format:
@@ -256,3 +257,47 @@ debug:
 # Quick test for CI/CD
 ci-test: install test-merge
 	@echo "CI/CD test pipeline complete!"
+
+# Pesticide Disaggregation Pipeline Commands
+.PHONY: pesticide-disaggregation
+pesticide-disaggregation:  ## Run pesticide disaggregation gold layer
+	@echo "Running Pesticide Disaggregation pipeline..."
+	cd src && python -m unified_pipeline --source pesticide_disaggregation --stage gold
+
+.PHONY: pesticide-disaggregation-docker
+pesticide-disaggregation-docker:  ## Run pesticide disaggregation in Docker
+	@echo "Running Pesticide Disaggregation pipeline in Docker..."
+	docker compose up unified-pipeline
+
+.PHONY: pesticide-disaggregation-test
+pesticide-disaggregation-test:  ## Test pesticide disaggregation processor
+	@echo "Running Pesticide Disaggregation tests..."
+	cd src && python -m pytest tests/gold/test_pesticide_disaggregation.py -v
+
+.PHONY: pesticide-disaggregation-build
+pesticide-disaggregation-build:  ## Build Docker image for pesticide disaggregation
+	@echo "Building Docker image for pesticide disaggregation..."
+	docker build -t $(DOCKER_IMAGE_NAME):pesticide-disaggregation-$(DOCKER_TAG) .
+
+# Environment setup for pesticide disaggregation
+.PHONY: pesticide-env-help
+pesticide-env-help:  ## Show environment variables for pesticide disaggregation
+	@echo "Pesticide Disaggregation Environment Variables:"
+	@echo "  Required:"
+	@echo "    GCS_BUCKET                 - Google Cloud Storage bucket name"
+	@echo ""
+	@echo "  Optional:"
+	@echo "    PESTICIDE_YEAR            - Year of pesticide data (default: 2021)"
+	@echo "    AREA_TOLERANCE_PCT        - Area tolerance % (default: 2.0) DO NOT CHANGE"
+	@echo "    SAVE_LOCAL                - Save data locally (default: false)"
+	@echo "    DEV_MODE                  - Enable dev mode (default: false)"
+	@echo ""
+	@echo "  Docker specific:"
+	@echo "    GOOGLE_APPLICATION_CREDENTIALS_PATH - Path to GCS credentials"
+	@echo "    LOCAL_DATA_DIR            - Local data directory for mounting"
+	@echo "    LOG_DIR                   - Log directory for mounting"
+	@echo ""
+	@echo "Example usage:"
+	@echo "  export GCS_BUCKET=landbrugsdata-raw-data"
+	@echo "  export PESTICIDE_YEAR=2021"
+	@echo "  make pesticide-disaggregation"

@@ -23,12 +23,13 @@ from bronze.load_stamdata import ENDPOINTS as STAMDATA_ENDPOINTS
 from bronze.load_stamdata import create_soap_client as create_stamdata_client
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
+from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,6 @@ def setup_logging(log_level: str):
     """Configure logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Remove all existing handlers to start fresh
     root = logging.getLogger()
     for handler in root.handlers[:]:
         root.removeHandler(handler)
@@ -141,6 +141,11 @@ def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List
         logger.error("Invalid or empty Stamdata response")
         return []
 
+    # Save the raw response to the export buffer
+    from bronze.export import save_raw_data
+
+    save_raw_data(raw_response=response, data_type="stamdata_species_usage", identifier="all")
+
     combinations = []
     for combo in response.Response if isinstance(response.Response, list) else [response.Response]:
         try:
@@ -212,7 +217,6 @@ def fetch_herds(
                             # but we won't add them if the limit is hit.
                             continue  # Skip this herd if species limit reached
 
-                        # Add herd if not already seen (herd_to_species ensures uniqueness across all species)
                         if herd_number not in herd_to_species:
                             herd_to_species[herd_number] = species_code
                             # Increment count for this species
@@ -241,7 +245,6 @@ def fetch_herds(
                 if not has_more:
                     break  # No more pages for this combo
 
-                # Update start number for next page
                 if last_herd is not None:
                     start_number = last_herd + 1
                 else:  # Should not happen if has_more is False, but safety break
@@ -274,7 +277,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                 total=len(futures),
                 desc=desc or func.__name__,
                 unit="tasks",
-                mininterval=1.0,  # Update at most once per second
+                mininterval=1.0,
                 bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
             ):
                 try:
@@ -503,16 +506,99 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         def smart_cattle_task(client, username, herd_num, start_date, end_date):
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
-        results = process_parallel(
-            smart_cattle_task, cattle_movement_tasks, context["args"]["workers"], "Processing Smart Cattle Movements"
-        )
-        context["animal_movements_results"] = results
+        # Process in chunks to avoid overwhelming GitHub Actions runner
+        chunk_size = 50  # Process 50 herds at a time (reduced for better memory management)
+        total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
+
+        # Track overall statistics (no result accumulation to prevent memory issues)
+        total_successful = 0
+        total_movements = 0
+        processed_herds = []  # Only track herd numbers for context, not full results
+
+        for chunk_idx in range(total_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min(start_idx + chunk_size, len(cattle_movement_tasks))
+            chunk_tasks = cattle_movement_tasks[start_idx:end_idx]
+
+            if context["args"]["progress"]:
+                logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
+
+            chunk_results = process_parallel(
+                smart_cattle_task,
+                chunk_tasks,
+                context["args"]["workers"],
+                f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
+            )
+
+            # Track only herd numbers for context (no result accumulation to prevent memory issues)
+            # Full data is already saved to storage by load_cattle_movement_summaries
+            successful_herd_numbers = [
+                r.get("reporting_herd_number")
+                for r in chunk_results
+                if r and r.get("processed_successfully", False) and r.get("reporting_herd_number")
+            ]
+            processed_herds.extend(successful_herd_numbers)
+
+            # Update totals
+            total_successful += sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
+            total_movements += sum(
+                r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
+            )
+
+            # Log progress after each chunk
+            if context["args"]["progress"]:
+                logging.info(
+                    f"Chunk {chunk_idx + 1} completed: {sum(1 for r in chunk_results if r and r.get('processed_successfully', False))} successful, {total_movements} movements"
+                )
+                logging.info(
+                    f"Overall progress: {total_successful} successful herds, {total_movements} total movements"
+                )
+
+            # Progressive cleanup: Clear chunk results from memory after processing
+            # (Individual herd data is already saved directly to storage by load_cattle_movement_summaries)
+            del chunk_results
+            del successful_herd_numbers  # Also clear the herd numbers list
+
+            # Force garbage collection and memory monitoring for large datasets
+            import gc
+            import os
+
+            if chunk_idx % 3 == 0:  # Every 3 chunks
+                gc.collect()
+
+                # Log memory usage for monitoring
+                if context["args"]["progress"]:
+                    try:
+                        import psutil
+
+                        process = psutil.Process(os.getpid())
+                        memory_mb = process.memory_info().rss / 1024 / 1024
+                        logging.info(f"Memory usage after chunk {chunk_idx + 1}: {memory_mb:.1f} MB")
+                    except Exception:
+                        pass  # Ignore if psutil is not available
+
+        # Store only essential summary data for context (no full results to prevent memory issues)
+        context["animal_movements_results"] = {
+            "total_successful": total_successful,
+            "total_movements": total_movements,
+            "processed_herd_count": len(processed_herds),
+            "processed_herds_sample": processed_herds[:10],  # Only keep first 10 for debugging
+            "processing_completed": True,
+        }
+
+        # Finalize streaming files to flush any remaining data
+        try:
+            from bronze.load_chr_dyr import _finalize_streaming_files
+
+            _finalize_streaming_files()
+            if context["args"]["progress"]:
+                logging.info("✅ Finalized streaming cattle movement files")
+        except Exception as e:
+            logging.warning(f"Error finalizing streaming files: {e}")
 
         if context["args"]["progress"]:
-            successful = sum(1 for r in results if r)
-            total_movements = sum(len(r.get("movements", [])) for r in results if r)
             logging.info(
-                f"Completed Smart Cattle Movement tasks. Success: {successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
+                f"Completed Smart Cattle Movement tasks. Success: {total_successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
             )
 
     elif step == "vetstat":
@@ -639,7 +725,6 @@ def main():
                     **imported_context,
                 }
 
-            # Update args with imported values if not explicitly provided
             if not args.get("start_date") and imported_context.get("args", {}).get("start_date"):
                 context["args"]["start_date"] = imported_context["args"]["start_date"]
             if not args.get("end_date") and imported_context.get("args", {}).get("end_date"):
@@ -758,7 +843,21 @@ def main():
             # But don't clear buffer if we're exporting context (dependent jobs might need the data)
             clear_buffer_after_export = not bool(context_export_path)
             logging.warning("Finalizing bronze export...")
+
+            # Add debugging info about buffer size before export
+            buffer_data = get_data_buffer()
+            if buffer_data:
+                total_records = sum(
+                    len(data.get("json", [])) + len(data.get("xml", [])) for data in buffer_data.values()
+                )
+                logging.warning(f"Buffer contains {total_records} total records across {len(buffer_data)} data types")
+                for key, data in buffer_data.items():
+                    json_count = len(data.get("json", []))
+                    xml_count = len(data.get("xml", []))
+                    logging.warning(f"  {key}: {json_count} JSON records, {xml_count} XML records")
+
             finalize_export(clear_buffer=clear_buffer_after_export)
+            logging.warning("Bronze export finalization completed.")
         else:
             logging.warning("No bronze data to export - skipping bronze export finalization.")
 

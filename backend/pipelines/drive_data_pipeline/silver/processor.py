@@ -456,9 +456,10 @@ class SilverProcessor:
 
             else:
                 # Single DataFrame
-                import pandas as pd
 
-                if not isinstance(transformed_data, pd.DataFrame) or transformed_data.empty:
+                if transformed_data is None or (
+                    hasattr(transformed_data, "empty") and transformed_data.empty
+                ):
                     logger.warning(f"No valid data extracted from {original_filename}")
                     return False
 
@@ -594,10 +595,13 @@ class SilverProcessor:
                 )
                 return None
 
-            # Read the parquet file
-            import pandas as pd
+            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+            import duckdb
 
-            df = pd.read_parquet(output_path)
+            # Use DuckDB to read parquet file
+            temp_conn = duckdb.connect()
+            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+            temp_conn.close()
 
             # Apply the schema
             df_with_schema = self.schema_adapter.apply_schema(
@@ -642,10 +646,13 @@ class SilverProcessor:
             Path to the PII-handled file or None if failed
         """
         try:
-            # Read the parquet file
-            import pandas as pd
+            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+            import duckdb
 
-            df = pd.read_parquet(output_path)
+            # Use DuckDB to read parquet file
+            temp_conn = duckdb.connect()
+            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+            temp_conn.close()
 
             # Validate for PII
             validation_result = self.pii_validator.validate(df)

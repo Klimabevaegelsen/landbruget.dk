@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from tenacity import stop_after_attempt
+
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -250,12 +251,22 @@ async def test_run_exception(
 
 
 def test_create_dataframe(wetlands_bronze: WetlandsBronze) -> None:
-    """Test creating a raw DataFrame."""
+    """Test creating a raw table."""
     data = ["<wfs:FeatureCollection></wfs:FeatureCollection>"]
 
-    # Call the method to create the DataFrame
-    df = wetlands_bronze.create_dataframe(data)
+    # Call the method to create the table
+    table_name = wetlands_bronze.create_dataframe(data)
 
-    assert not df.empty
-    assert len(df) == 1
-    assert set(df.columns) == {"payload", "created_at", "source", "updated_at"}
+    # Verify it returns a table name
+    assert isinstance(table_name, str)
+    assert table_name == "final_dataframe"
+
+    # Verify the table exists and has correct structure
+    result = wetlands_bronze.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert result[0] == 1
+
+    # Check column structure
+    columns = wetlands_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
+    column_names = {row[0] for row in columns}
+    expected_columns = {"payload", "created_at", "source", "updated_at"}
+    assert expected_columns.issubset(column_names)

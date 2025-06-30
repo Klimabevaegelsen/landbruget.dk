@@ -96,7 +96,7 @@ class BronzeStorageManager:
                 remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
 
                 # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
-                folder_structure = run_dir / subfolder_name / timestamp
+                folder_structure = run_dir / subfolder_name.lower() / timestamp
                 if remaining_path:
                     folder_structure = folder_structure / remaining_path
             else:
@@ -239,7 +239,7 @@ class BronzeStorageManager:
                 remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
 
                 # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
-                folder_structure = run_dir / subfolder_name / timestamp
+                folder_structure = run_dir / subfolder_name.lower() / timestamp
                 if remaining_path:
                     folder_structure = folder_structure / remaining_path
             else:

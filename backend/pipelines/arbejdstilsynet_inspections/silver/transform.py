@@ -12,12 +12,35 @@ from google.cloud import storage
 
 
 class GCSStorage:
-    """Google Cloud Storage backend for arbejdstilsynet_inspections files."""
+    """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="silver/arbejdstilsynet_inspections"):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
+
+        # ✅ OPTIMIZED: Initialize optimized GCS access
+        self.gcs_access = None
+        if self.is_available:
+            try:
+                # Import optimized GCS access using proper Python path
+                import sys
+                from pathlib import Path
+
+                # Add the backend directory to Python path
+                backend_path = Path(__file__).parent.parent.parent.parent
+                unified_pipeline_path = backend_path / "pipelines" / "unified_pipeline" / "src"
+
+                if str(unified_pipeline_path) not in sys.path:
+                    sys.path.insert(0, str(unified_pipeline_path))
+
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                self.gcs_access = GCSDataAccess()
+                logging.info("✅ Arbejdstilsynet Silver GCSStorage: Initialized optimized GCS access")
+            except Exception as e:
+                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                self.gcs_access = None
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -29,7 +52,7 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, gcs_path=None):
-        """Upload a file to GCS bucket."""
+        """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
@@ -41,12 +64,28 @@ class GCSStorage:
             gcs_path = f"{self.prefix}/{timestamp}/{filename}"
 
         try:
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(local_path)
-            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path}")
-            return True
+            # ✅ OPTIMIZED: Use streaming upload if available
+            if self.gcs_access:
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+
+                # Stream file directly without loading into memory
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+
+                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                return True
+            else:
+                # Fallback to old method if optimized access failed
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_filename(local_path)
+                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                return True
+
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
             return False
@@ -72,14 +111,15 @@ class SilverPipeline:
         self.end_date = end_date
         self.gcs_bucket = gcs_bucket
 
-        # Constants and paths
-        self.now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Constants and paths - use pipeline start time consistently
+        self.pipeline_start_time = datetime.now()
+        self.timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+        self.now = self.timestamp  # Use same timestamp for consistency
         self.pipeline_root = os.path.dirname(os.path.abspath(__file__))
         self.data_root = os.path.join(self.pipeline_root, "..", "bronze", "data")
         self.silver_dir = os.path.join(self.pipeline_root, "..", "silver", "data")
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_dir = os.path.join(self.silver_dir, self.timestamp)
-        self.output_parquet = os.path.join(self.output_dir, "processed_data.parquet")
+        self.output_parquet = os.path.join(self.output_dir, "workplace_inspections.parquet")
         self.temp_dir = None
 
         # Column renaming and conventions
@@ -372,7 +412,7 @@ class SilverPipeline:
         """Save the transformed data to parquet."""
         try:
             # Save to temp location first
-            temp_output = os.path.join(self.temp_dir, "processed_data.parquet")
+            temp_output = os.path.join(self.temp_dir, "workplace_inspections.parquet")
             self.df.to_parquet(temp_output, index=False)
 
             # Move to final location
@@ -411,6 +451,64 @@ class SilverPipeline:
             self.logger.error(f"Error uploading to GCS: {str(e)}")
             return False
 
+    def generate_schema_documentation(self):
+        """Generate schema documentation for the processed data."""
+        try:
+            self.logger.info("Generating schema documentation for arbejdstilsynet inspections")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            # Find the project root (directory containing 'backend' folder)
+            current_file = Path(__file__).resolve()
+            project_root = None
+
+            # Go up the directory tree to find the project root
+            for parent in current_file.parents:
+                if (parent / "backend").is_dir():
+                    project_root = parent
+                    break
+
+            if project_root and str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            # Use the pipeline start time we already have
+            pipeline_start_time = self.pipeline_start_time
+
+            # Load the parquet file into DuckDB for schema documentation
+            import duckdb
+
+            doc_conn = duckdb.connect()
+
+            table_name = "arbejdstilsynet_processed"
+            doc_conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{self.output_parquet}')")
+
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=doc_conn,
+                pipeline_name="arbejdstilsynet_inspections",
+                pipeline_start_time=pipeline_start_time,
+                logger=self.logger,
+            )
+
+            # Generate documentation for the table
+            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            self.logger.info("Generated schema documentation for arbejdstilsynet inspections")
+
+            # Commit to GitHub
+            schema_manager.commit_to_github()
+            self.logger.info("Arbejdstilsynet schema documentation committed to GitHub")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
+            return True
+
     def cleanup(self):
         """Clean up temporary resources."""
         try:
@@ -439,6 +537,7 @@ class SilverPipeline:
                 self.filter_by_date,
                 self.check_for_pii,
                 self.save_output,
+                self.generate_schema_documentation,
             ]
 
             for step in steps:

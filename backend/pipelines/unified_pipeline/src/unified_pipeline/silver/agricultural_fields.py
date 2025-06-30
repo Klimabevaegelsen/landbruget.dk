@@ -3,27 +3,23 @@ Silver layer processing for Agricultural Fields data.
 
 This module transforms raw data (from the bronze layer) into cleaner,
 more structured data for analytical purposes. It handles the extraction
-of GeoJSON features from API responses, converts them to GeoDataFrames,
+of GeoJSON features from API responses, converts them using DuckDB-spatial,
 and applies transformations such as column renaming and geometry validation.
 
 The module consists of two main components:
 - AgriculturalFieldsSilverConfig: Configuration for Silver processing
-- AgriculturalFieldsSilver: Implementation of Silver processing logic
+- AgriculturalFieldsSilver: Implementation of Silver processing logic using DuckDB-spatial
 
-The process reads in bronze layer data, transforms it into GeoDataFrames,
+The process reads in bronze layer data, transforms it using DuckDB-spatial,
 validates geometries, and stores the processed data in GCS.
 """
 
-import asyncio
 import json
 from typing import Any, Optional
 
-import geopandas as gpd
-import pandas as pd
-
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.util.geometry_validator import validate_and_transform_geometries
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -36,6 +32,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
     storage parameters, and column mappings.
 
     Attributes:
+        dataset (str): Primary dataset name for silver data collection
         fields_dataset (str): Name of the agricultural fields dataset
         blocks_dataset (str): Name of the agricultural blocks dataset
         bucket (str): GCS bucket name for storing processed data
@@ -43,6 +40,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         column_mapping (dict): Dictionary mapping raw field names to standardized names
     """
 
+    dataset: str = "agricultural_fields"  # Primary dataset name for app.py silver data collection
     fields_dataset: str = "agricultural_fields"
     blocks_dataset: str = "agricultural_blocks"
     bucket: str = "landbrugsdata-raw-data"
@@ -57,7 +55,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "Journalnr": "journal_number",
         "CVR": "cvr_number",
         "Afgkode": "crop_code",
-        "Afgroede": "crop_type",
+        "Afgroede": "crop_name",
         "GB": "organic_farming",
         "GBanmeldt": "reported_area_ha",
         "Markblok": "block_id",
@@ -69,16 +67,17 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
 
 class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
     """
-    Silver layer processor for agricultural fields data.
+    Silver layer processor for agricultural fields data using DuckDB-spatial.
 
     This class transforms raw agricultural fields data from the bronze layer into
-    structured GeoDataFrames. It handles extracting GeoJSON features from API responses,
-    validates geometries, standardizes column names, and saves the processed data.
+    structured spatial data using DuckDB-spatial for all geometric operations.
+    It handles extracting GeoJSON features from API responses, validates geometries,
+    standardizes column names, and saves the processed data.
 
     The processing includes:
     1. Reading raw data from GCS
-    2. Extracting GeoJSON from each payload and converting to GeoDataFrames
-    3. Validating and transforming geometries
+    2. Extracting GeoJSON from each payload using DuckDB-spatial
+    3. Validating and transforming geometries using DuckDB-spatial
     4. Standardizing column names using the mapping from config
     5. Saving processed data to GCS
     """
@@ -92,139 +91,210 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
             gcs_util: Utility for GCS operations
         """
         super().__init__(config, gcs_util)
+        # Initialize DuckDB with spatial extension
+        self._setup_duckdb()
 
-    async def extract_geojson_from_payload(
-        self, payload_json: str, column_mapping: dict
-    ) -> gpd.GeoDataFrame:
+    def _setup_duckdb(self):
+        """Setup DuckDB connection with spatial extensions."""
+        # Install and load spatial extension
+        self.conn.execute("INSTALL spatial")
+        self.conn.execute("LOAD spatial")
+        self.log.info("✅ DuckDB-spatial initialized for agricultural fields processing")
+
+    async def _process_payloads_with_duckdb(self, raw_data_input, dataset: str, year: int):
         """
-        Extract GeoJSON features from a raw payload and convert to GeoDataFrame.
+        Process raw payloads using DuckDB-spatial for all geometric operations.
 
-        This method parses a JSON string payload containing features from the ArcGIS API,
-        converts them to proper GeoJSON format, and creates a GeoDataFrame with standardized
-        column names.
+        This method uses DuckDB-spatial to parse GeoJSON features from ArcGIS API responses,
+        handle coordinate transformations, and validate geometries.
 
         Args:
-            payload_json: JSON string containing features from ArcGIS API response
-            column_mapping: Dictionary mapping original column names to standardized names
-
-        Returns:
-            A GeoDataFrame containing the extracted features with standardized column names,
-            or an empty GeoDataFrame if extraction fails or no features are found
-
-        Note:
-            The source data uses EPSG:25832 coordinate system (ETRS89 / UTM zone 32N)
-        """
-        try:
-            payload = json.loads(payload_json)
-            features = payload.get("features", [])
-
-            # Convert features to GeoJSON format
-            geojson_features = []
-            for feature in features:
-                geojson_feature = {
-                    "type": "Feature",
-                    "properties": feature["attributes"],
-                    "geometry": {"type": "Polygon", "coordinates": feature["geometry"]["rings"]},
-                }
-                geojson_features.append(geojson_feature)
-
-            if geojson_features:
-                geo_df = gpd.GeoDataFrame.from_features(geojson_features, crs="EPSG:25832")
-                geo_df = geo_df.rename(columns=column_mapping)
-                return geo_df  # type: ignore[no-any-return]
-            else:
-                return gpd.GeoDataFrame()
-        except Exception as e:
-            self.log.error(f"Error parsing payload: {e}")
-            return gpd.GeoDataFrame()
-
-    async def _process_data(
-        self, raw_df: pd.DataFrame, dataset: str, year: int
-    ) -> gpd.GeoDataFrame:
-        """
-        Process raw data into a clean GeoDataFrame.
-
-        This method takes raw data from the bronze layer, extracts GeoJSON features from each
-        payload in parallel, and combines them into a single GeoDataFrame. It also handles
-        column name cleaning and geometry validation.
-
-        Args:
-            raw_df: DataFrame containing raw payloads from the bronze layer
-            dataset: Name of the dataset being processed (used for validation)
+            raw_data_input: Table name containing raw payloads from the bronze layer
+            dataset: Name of the dataset being processed
             year: Year of the data being processed
 
         Returns:
-            A GeoDataFrame containing all processed features with validated geometries,
-            or an empty GeoDataFrame if processing fails
-
-        Steps:
-        1. Extract GeoJSON features from each payload in parallel
-        2. Combine all extracted features into a single GeoDataFrame
-        3. Clean column names by replacing special characters with underscores
-        4. Validate and transform geometries using the dataset name
+            A tuple (table_name, connection) containing all processed features with validated geometries,
+            or (None, None) if processing fails
         """
-        async with AsyncTimer("Processing data"):
-            payloads = raw_df["payload"].tolist()
-            tasks = [
-                self.extract_geojson_from_payload(payload, self.config.column_mapping)
-                for payload in payloads
-            ]
-            geo_dfs_list = await asyncio.gather(*tasks)
-            # Filter out empty dataframes
-            geo_dfs_list = [gdf for gdf in geo_dfs_list if not gdf.empty]
+        async with AsyncTimer("Processing data with DuckDB-spatial"):
+            try:
+                # ✅ MIGRATION: Only handle table names now
+                if isinstance(raw_data_input, str):
+                    # Input is a table name
+                    table_name = raw_data_input
+                    processing_conn = self.conn
 
-            if not geo_dfs_list:
-                return gpd.GeoDataFrame()
-            geo_df = gpd.GeoDataFrame(pd.concat(geo_dfs_list, ignore_index=True))
+                    # Get payloads from table
+                    payloads = [
+                        row[0]
+                        for row in processing_conn.execute(
+                            f"SELECT payload FROM {table_name}"
+                        ).fetchall()
+                    ]
+                else:
+                    self.log.error(f"Expected table name (string), got {type(raw_data_input)}")
+                    return None, None
 
-            # Clean column names by replacing special characters with underscores
-            geo_df.columns = [
-                col.replace(".", "_").replace("()", "_").replace("(", "_").replace(")", "_")
-                for col in geo_df.columns
-            ]
+                all_features = []
 
-            # Add year information
-            if not geo_df.empty:
-                geo_df["year"] = year
+                for i, payload_json in enumerate(payloads):
+                    try:
+                        payload = json.loads(payload_json)
+                        features = payload.get("features", [])
 
-            # Validate and transform geometries
-            dataset_with_year = f"{dataset}_{year}"
-            geo_df = validate_and_transform_geometries(geo_df, dataset_with_year)
+                        for feature in features:
+                            # Extract properties and geometry
+                            properties = feature.get("attributes", {})
+                            geometry = feature.get("geometry", {})
 
-            return geo_df
+                            if geometry and "rings" in geometry:
+                                # Convert ArcGIS geometry to GeoJSON format
+                                geojson_geom = {"type": "Polygon", "coordinates": geometry["rings"]}
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+                                # Add properties with geometry
+                                feature_record = {
+                                    "payload_id": i,
+                                    "geometry_json": json.dumps(geojson_geom),
+                                    **properties,
+                                }
+                                all_features.append(feature_record)
+
+                    except Exception as e:
+                        self.log.warning(f"Error processing payload {i}: {e}")
+                        continue
+
+                if not all_features:
+                    self.log.warning("No valid features extracted from payloads")
+                    return None, None
+
+                # ✅ MIGRATION: Convert to table using DuckDB (no pandas conversion)
+                # Create table directly from the list of dictionaries
+                if not all_features:
+                    self.log.warning("No features to process")
+                    return None, None
+
+                # Get column names from the first feature
+                columns = list(all_features[0].keys())
+
+                # Create the table schema with properly quoted column names
+                quoted_column_definitions = [f'"{col}" VARCHAR' for col in columns]
+                processing_conn.execute(f"""
+                    CREATE OR REPLACE TABLE temp_features (
+                        {", ".join(quoted_column_definitions)}
+                    )
+                """)
+
+                # Insert data in batches
+                batch_size = 1000
+                for i in range(0, len(all_features), batch_size):
+                    batch = all_features[i : i + batch_size]
+
+                    # Use parameterized queries instead of string concatenation
+                    for feature in batch:
+                        values = [feature.get(col) for col in columns]
+                        placeholders = ", ".join(["?" for _ in columns])
+                        # Properly quote column names to handle special characters
+                        quoted_columns = [f'"{col}"' for col in columns]
+
+                        processing_conn.execute(
+                            f"""
+                            INSERT INTO temp_features ({", ".join(quoted_columns)})
+                            VALUES ({placeholders})
+                        """,
+                            values,
+                        )
+                processing_conn.execute(
+                    "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
+                )
+
+                # ✅ MIGRATION: Get column info without  conversion
+                columns_info = processing_conn.execute("DESCRIBE features_raw").fetchall()
+                available_columns = [row[0] for row in columns_info]
+
+                # Apply column mapping and create spatial geometries using DuckDB-spatial
+                select_columns = []
+
+                for old_col, new_col in self.config.column_mapping.items():
+                    if old_col in available_columns:
+                        select_columns.append(f'"{old_col}" as {new_col}')
+
+                # Add unmapped columns (except geometry_json and payload_id)
+                for col in available_columns:
+                    if col not in self.config.column_mapping and col not in [
+                        "geometry_json",
+                        "payload_id",
+                    ]:
+                        # Clean column name
+                        clean_col = (
+                            col.replace(".", "_")
+                            .replace("()", "_")
+                            .replace("(", "_")
+                            .replace(")", "_")
+                        )
+                        select_columns.append(f'"{col}" as {clean_col}')
+
+                select_clause = ", ".join(select_columns) if select_columns else "*"
+
+                # Create the final processed table with spatial geometries
+                final_table_name = f"processed_features_{dataset}_{year}"
+                processing_conn.execute(f"""
+                    CREATE OR REPLACE TABLE {final_table_name} AS
+                    SELECT 
+                        {select_clause},
+                        {year} as year,
+                        ST_GeomFromGeoJSON(geometry_json) as geometry,
+                        ST_IsValid(ST_GeomFromGeoJSON(geometry_json)) as is_valid_geometry
+                    FROM features_raw
+                    WHERE geometry_json IS NOT NULL
+                """)
+
+                # Transform geometries from EPSG:25832 to EPSG:4326 for consistency
+                processing_conn.execute(f"""
+                    UPDATE {final_table_name} 
+                    SET geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
+                    WHERE is_valid_geometry = true
+                """)
+
+                # ✅ MIGRATION: Return table name instead of
+                row_count = processing_conn.execute(
+                    f"SELECT COUNT(*) FROM {final_table_name} WHERE is_valid_geometry = true"
+                ).fetchone()[0]
+                self.log.info(f"Processed {row_count} valid features using DuckDB-spatial")
+
+                # Return table name and connection for further processing
+                return final_table_name, processing_conn
+
+            except Exception as e:
+                self.log.error(f"Error processing data with DuckDB-spatial: {e}")
+                return None, None
+
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
-        Execute the silver processing job for all available years.
+        Execute the silver processing job for all available years using DuckDB-spatial.
 
         This method orchestrates the processing of raw multi-year data from the bronze
-        layer into structured GeoDataFrames. It reads raw data for both agricultural
-        fields and blocks for all available years, processes each dataset separately,
-        and saves the results to Google Cloud Storage.
+        layer into structured spatial data using DuckDB-spatial for all operations.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
                         this data will be used instead of reading from storage.
 
-        The processing workflow for each dataset and year:
-        1. Read raw data from GCS using the configured bucket and year
-        2. Process raw data into GeoDataFrames with standardized column names
-        3. Add year information to the processed data
-        4. Validate geometries and apply any needed transformations
-        5. Save processed data back to GCS with year information
-
         Returns:
-            None
-
-        Note:
-            If any step fails for a particular year, the method logs an error and
-            continues with the next year to ensure maximum data availability.
+            Optional[Any]: Dictionary containing processed data by dataset and year
+                          for potential gold stage consumption, or None if processing fails.
         """
-        self.log.info("Running Agricultural Fields silver job for all available years")
-        async with AsyncTimer("Agricultural Fields Silver Job"):
+        self.log.info(
+            "Running Agricultural Fields silver job with DuckDB-spatial for all available years"
+        )
+
+        # Collect processed data for potential gold stage consumption
+        processed_data = {}
+
+        async with AsyncTimer("Agricultural Fields Silver Job (DuckDB-spatial)"):
             # Process agricultural fields for all years
             for dataset in [self.config.fields_dataset, self.config.blocks_dataset]:
-                self.log.info(f"Processing {dataset} for all years")
+                self.log.info(f"Processing {dataset} for all years using DuckDB-spatial")
 
                 for year in self.config.available_years:
                     try:
@@ -234,14 +304,39 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # Bronze data is expected to be a complex dict structure with multi-year data
-                            if isinstance(bronze_data, dict) and dataset_with_year in bronze_data:
-                                raw_data = bronze_data[dataset_with_year]
-                                # Convert to DataFrame if it's not already
-                                if not isinstance(raw_data, pd.DataFrame):
-                                    raw_data = pd.DataFrame({"payload": raw_data})
+                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: table_name}, "blocks": {year: table_name}}
+                            if isinstance(bronze_data, dict):
+                                # Map dataset names to bronze data keys
+                                bronze_key = "fields" if "fields" in dataset else "blocks"
+                                if bronze_key in bronze_data and year in bronze_data[bronze_key]:
+                                    # Bronze data should contain table names now
+                                    raw_data_table = bronze_data[bronze_key][year]
+                                    if isinstance(raw_data_table, str):
+                                        # It's already a table name
+                                        raw_data = raw_data_table
+                                    else:
+                                        # Convert raw data to table
+                                        table_name = f"bronze_raw_{dataset}_{year}"
+                                        if isinstance(raw_data_table, list):
+                                            # List of JSON strings
+
+                                            df = {"payload": raw_data_table}
+                                            self.conn.register(table_name, df)
+                                            raw_data = table_name
+                                        else:
+                                            self.log.error(
+                                                f"Unsupported bronze data type: {type(raw_data_table)}"
+                                            )
+                                            continue
+                                else:
+                                    self.log.warning(
+                                        f"No in-memory data found for {bronze_key} year {year}"
+                                    )
+                                    continue
                             else:
-                                self.log.warning(f"No in-memory data found for {dataset_with_year}")
+                                self.log.warning(
+                                    f"Unexpected bronze data structure: {type(bronze_data)}"
+                                )
                                 continue
                         else:
                             # Fallback to reading from storage
@@ -254,20 +349,40 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                 continue
 
                         self.log.info(f"Read raw data successfully for {dataset_with_year}")
-                        geo_df = await self._process_data(raw_data, dataset, year)
+                        table_name, temp_conn = await self._process_payloads_with_duckdb(
+                            raw_data, dataset, year
+                        )
 
-                        if geo_df is None or geo_df.empty:
+                        if table_name is None or temp_conn is None:
                             self.log.warning(f"No processed data for {dataset_with_year}, skipping")
                             continue
 
                         self.log.info(f"Processed raw data successfully for {dataset_with_year}")
+
+                        # ✅ MIGRATION: Save directly from table (no  conversion)
                         self._save_data(
-                            geo_df, dataset_with_year, self.config.bucket, stage="silver"
+                            table_name,
+                            dataset_with_year,
+                            self.config.bucket,
+                            stage="silver",
+                            conn=temp_conn,
                         )
                         self.log.info(f"Saved processed data successfully for {dataset_with_year}")
+
+                        # Store table name for potential gold stage consumption
+                        processed_data[dataset_with_year] = table_name
+
+                        # Clean up temporary connection if it was created for bronze data processing
+                        if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:
+                            temp_conn.close()
 
                     except Exception as e:
                         self.log.error(f"Error processing {dataset} for year {year}: {e}")
                         continue
 
-            self.log.info("Agricultural Fields silver job completed for all available years")
+            self.log.info(
+                "Agricultural Fields silver job completed for all available years using DuckDB-spatial"
+            )
+
+            # Return processed data for gold stage if any data was processed
+            return processed_data if processed_data else None

@@ -14,7 +14,8 @@ class BMDScraper:
         self.base_url = base_url
         self.output_dir = output_dir
         self.session = requests.Session()
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.pipeline_start_time = datetime.now()
+        self.timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
@@ -145,7 +146,7 @@ class BMDScraper:
     def save_metadata(self, download_url, full_url, file_path):
         """Save metadata about the downloaded file."""
         metadata = {
-            "fetch_timestamp": datetime.now().isoformat(),
+            "fetch_timestamp": self.pipeline_start_time.isoformat(),
             "source_url": full_url,
             "download_url_path": download_url,
             "base_url": self.base_url,
@@ -190,12 +191,35 @@ class BMDScraper:
 
 
 class GCSStorage:
-    """Google Cloud Storage backend for BMD files."""
+    """Google Cloud Storage backend for BMD files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="bronze/bmd"):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
+
+        # ✅ OPTIMIZED: Initialize optimized GCS access
+        self.gcs_access = None
+        if self.is_available:
+            try:
+                # Import optimized GCS access using proper Python path
+                import sys
+                from pathlib import Path
+
+                # Add the backend directory to Python path
+                backend_path = Path(__file__).parent.parent.parent.parent
+                unified_pipeline_path = backend_path / "pipelines" / "unified_pipeline" / "src"
+
+                if str(unified_pipeline_path) not in sys.path:
+                    sys.path.insert(0, str(unified_pipeline_path))
+
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                self.gcs_access = GCSDataAccess()
+                logging.info("✅ BMD GCSStorage: Initialized optimized GCS access")
+            except Exception as e:
+                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                self.gcs_access = None
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -208,7 +232,7 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, gcs_path=None):
-        """Upload a file to GCS bucket."""
+        """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
@@ -219,14 +243,30 @@ class GCSStorage:
             gcs_path = f"{self.prefix}/{relative_path}"
 
         try:
-            from google.cloud import storage
+            # ✅ OPTIMIZED: Use streaming upload if available
+            if self.gcs_access:
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(local_path)
-            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path}")
-            return True
+                # Stream file directly without loading into memory
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+
+                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                return True
+            else:
+                # Fallback to old method if optimized access failed
+                from google.cloud import storage
+
+                client = storage.Client()
+                bucket = client.bucket(self.bucket_name)
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_filename(local_path)
+                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                return True
+
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
             return False

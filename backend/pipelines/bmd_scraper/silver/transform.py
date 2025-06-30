@@ -25,6 +25,7 @@ class BMDTransformer:
     - Cleaning and normalizing fields with SQL
     - Type casting with SQL
     - Data validation
+    - PFAS detection based on active ingredients
     - Saving to Parquet format
     """
 
@@ -39,6 +40,12 @@ class BMDTransformer:
         self.input_file = input_file
         self.output_dir = output_dir
         self.timestamp = input_file.parent.name
+        # Get pipeline start time from timestamp directory name
+        try:
+            self.pipeline_start_time = datetime.strptime(self.timestamp, "%Y%m%d_%H%M%S")
+        except ValueError:
+            # Fallback if timestamp format is unexpected
+            self.pipeline_start_time = datetime.now()
         self.metadata = {}
         self.conn = None
 
@@ -57,6 +64,23 @@ class BMDTransformer:
             "Tilladt": "permitted",
             "Ikke godkendt": "not_approved",
             # Add more mappings as needed
+        }
+
+        # PFAS active ingredients list from https://www.dn.dk/media/115884/forbrug-af-pfas-pesticider-23-24.pdf
+        self.pfas_active_ingredients = {
+            "fluazinam",
+            "fluopyram",
+            "diflufenican",
+            "mefentrifluconazol",
+            "tau-fluvalinat",
+            "lambda-cyhalothrin",
+            "pyroxsulam",
+            "oxathiapiprolin",
+            "flonicamid",
+            "fludioxonil",
+            "triflusulfuron-methyl",
+            "gamma-cyhalothrin",
+            "picolinafen",
         }
 
         # Create the DuckDB connection to be used throughout the transformation
@@ -96,7 +120,7 @@ class BMDTransformer:
 
             # Store column information in metadata
             self.silver_metadata = {
-                "transform_timestamp": datetime.now().isoformat(),
+                "transform_timestamp": self.pipeline_start_time.isoformat(),
                 "source_file": str(self.input_file),
                 "bronze_timestamp": self.timestamp,
                 "row_count": row_count,
@@ -150,7 +174,7 @@ class BMDTransformer:
             # Create a new table with cleaned column names
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE cleaned_columns AS
-                SELECT {', '.join(column_selects)}
+                SELECT {", ".join(column_selects)}
                 FROM {table_name};
             """)
 
@@ -229,7 +253,7 @@ class BMDTransformer:
             # Create a table with array conversions
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE array_converted AS
-                SELECT {', '.join(array_conversions)}
+                SELECT {", ".join(array_conversions)}
                 FROM {table_name};
             """)
 
@@ -280,7 +304,7 @@ class BMDTransformer:
             # Create a table with trimmed text
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE trimmed_data AS
-                SELECT {', '.join(trims)}
+                SELECT {", ".join(trims)}
                 FROM {table_name};
             """)
 
@@ -348,7 +372,7 @@ class BMDTransformer:
                 # Create a table with parsed dates
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE date_parsed AS
-                    SELECT {', '.join(date_casts)}
+                    SELECT {", ".join(date_casts)}
                     FROM {table_name};
                 """)
 
@@ -362,6 +386,91 @@ class BMDTransformer:
 
         except Exception as e:
             logger.exception(f"Error parsing dates: {e}")
+            raise
+
+    def add_pfas_indicator(self, table_name: str) -> str:
+        """
+        Add a PFAS indicator column based on active ingredients.
+
+        Args:
+            table_name: Name of the DuckDB table to process
+
+        Returns:
+            Name of the DuckDB table with PFAS indicator column added
+        """
+        logger.info("Adding PFAS indicator column based on active ingredients")
+
+        try:
+            # Get column names to find the active ingredients column
+            result = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 1").description
+            columns = [desc[0] for desc in result]
+
+            # Find the active ingredients column (should be aktivstofnavn_e after cleaning)
+            active_ingredient_col = None
+            for col in columns:
+                if any(term in col.lower() for term in ["aktivstofnavn", "active_ingredient", "ingredient_name"]):
+                    active_ingredient_col = col
+                    break
+
+            # If not found with specific terms, check for column containing both "navn" and "aktivstof"
+            if not active_ingredient_col:
+                for col in columns:
+                    if "navn" in col.lower() and "aktivstof" in col.lower():
+                        active_ingredient_col = col
+                        break
+
+            if not active_ingredient_col:
+                logger.warning("No active ingredient column found, skipping PFAS detection")
+                return table_name
+
+            logger.info(f"Using column '{active_ingredient_col}' for PFAS detection")
+
+            # Create PFAS detection SQL using LIKE patterns for each PFAS ingredient
+            pfas_conditions = []
+            for pfas_ingredient in self.pfas_active_ingredients:
+                # Use LOWER and LIKE for case-insensitive partial matching
+                pfas_conditions.append(f"LOWER({active_ingredient_col}) LIKE '%{pfas_ingredient.lower()}%'")
+
+            pfas_check_sql = " OR ".join(pfas_conditions)
+
+            # Create new table with PFAS indicator
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE pfas_enhanced AS
+                SELECT *,
+                    CASE 
+                        WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
+                        WHEN {pfas_check_sql} THEN true
+                        ELSE false
+                    END AS contains_pfas
+                FROM {table_name};
+            """)
+
+            # Log PFAS detection statistics
+            pfas_count = self.conn.execute("""
+                SELECT COUNT(*) 
+                FROM pfas_enhanced 
+                WHERE contains_pfas = true
+            """).fetchone()[0]
+
+            total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
+
+            logger.info(
+                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
+            )
+
+            # Store PFAS detection metadata
+            self.silver_metadata["pfas_detection"] = {
+                "pfas_ingredients_checked": list(self.pfas_active_ingredients),
+                "active_ingredient_column": active_ingredient_col,
+                "pfas_products_count": pfas_count,
+                "total_products_count": total_count,
+                "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
+            }
+
+            return "pfas_enhanced"
+
+        except Exception as e:
+            logger.exception(f"Error adding PFAS indicator: {e}")
             raise
 
     def validate_data(self, table_name: str) -> Tuple[str, Dict[str, List[str]]]:
@@ -396,8 +505,8 @@ class BMDTransformer:
                 """).fetchone()[0]
 
                 if null_count > 0:
-                    missing_values.append(f"{col}: {null_count} missing values ({null_count/row_count:.1%})")
-                    logger.warning(f"Column {col} has {null_count} missing values ({null_count/row_count:.1%})")
+                    missing_values.append(f"{col}: {null_count} missing values ({null_count / row_count:.1%})")
+                    logger.warning(f"Column {col} has {null_count} missing values ({null_count / row_count:.1%})")
 
             if missing_values:
                 validation_issues["missing_values"] = missing_values
@@ -423,8 +532,8 @@ class BMDTransformer:
         Returns:
             Path to the saved Parquet file
         """
-        # Create the output filename with timestamp
-        output_filename = f"bmd_data_{self.timestamp}.parquet"
+        # Create the output filename with descriptive name (no timestamp - that's in the folder)
+        output_filename = "pesticide_products.parquet"
         output_path = self.output_dir / output_filename
 
         logger.info(f"Saving Parquet file to {output_path}")
@@ -438,7 +547,7 @@ class BMDTransformer:
 
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})
-                TO '{self.output_dir/f"bmd_data_{self.timestamp}.xlsx"}' (FORMAT 'xlsx')
+                TO '{self.output_dir / "pesticide_products.xlsx"}' (FORMAT 'xlsx')
             """)
             # Save metadata file
             metadata_path = self.output_dir / "metadata.json"
@@ -478,10 +587,13 @@ class BMDTransformer:
             # 4. Parse dates
             table_name = self.parse_dates(table_name)
 
-            # 5. Validate data
+            # 5. Add PFAS indicator
+            table_name = self.add_pfas_indicator(table_name)
+
+            # 6. Validate data
             table_name, validation_issues = self.validate_data(table_name)
 
-            # 6. Save to Parquet
+            # 7. Save to Parquet
             output_path = self.save_parquet(table_name)
 
             logger.info(f"Transformation completed successfully: {output_path}")

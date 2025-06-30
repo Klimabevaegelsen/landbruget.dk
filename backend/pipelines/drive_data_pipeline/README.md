@@ -38,7 +38,7 @@ This pipeline accesses a Google Drive folder containing multiple subfolders with
    ```
 3. Install dependencies:
    ```bash
-   pip install -e .
+   uv pip install -e .
    ```
 4. Copy `.env.example` to `.env` and fill in the required values:
    ```bash

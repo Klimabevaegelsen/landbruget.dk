@@ -240,6 +240,58 @@ def main():
     execution_time = datetime.now() - start_time
     logger.info(f"Pipeline execution completed in {execution_time}")
 
+    # Generate schema documentation if silver stage completed successfully
+    if silver_file and silver_file.exists():
+        try:
+            logger.info("Generating schema documentation for BMD silver data")
+
+            # Import schema documentation (with path adjustment)
+            from pathlib import Path
+
+            # Find the project root (directory containing 'backend' folder)
+            current_file = Path(__file__).resolve()
+            project_root = None
+
+            # Go up the directory tree to find the project root
+            for parent in current_file.parents:
+                if (parent / "backend").is_dir():
+                    project_root = parent
+                    break
+
+            if project_root and str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            from backend.common.schema_documentation import SchemaDocumentationManager
+
+            # Get pipeline start time from the silver file's parent directory name
+            timestamp_str = silver_file.parent.name
+            pipeline_start_time = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+
+            # Create DuckDB connection and load the parquet file
+            import duckdb
+
+            conn = duckdb.connect()
+
+            table_name = "bmd_processed"
+            conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{silver_file}')")
+
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=conn, pipeline_name="bmd_scraper", pipeline_start_time=pipeline_start_time, logger=logger
+            )
+
+            # Generate documentation for BMD table
+            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            logger.info("Generated schema documentation for BMD data")
+
+            # Commit to GitHub
+            schema_manager.commit_to_github()
+            logger.info("BMD schema documentation committed to GitHub")
+
+        except Exception as e:
+            logger.error(f"Failed to generate BMD schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
+
     # Return success/failure code
     if args.stage == "bronze" and bronze_file:
         sys.exit(0)

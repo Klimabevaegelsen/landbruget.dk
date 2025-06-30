@@ -23,9 +23,9 @@ COPY . .
 # Use production extras if ENVIRONMENT is set to production
 ARG ENVIRONMENT=container
 RUN if [ "$ENVIRONMENT" = "production" ]; then \
-    pip install --no-cache-dir -e ".[production]"; \
+    uv pip install --system --no-cache -e ".[production]"; \
     else \
-    pip install --no-cache-dir -e .; \
+    uv pip install --system --no-cache -e .; \
     fi
 
 # Create output directories

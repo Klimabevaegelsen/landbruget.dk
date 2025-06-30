@@ -5,8 +5,6 @@ Tests for the WetlandsSilver class.
 import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, call, patch
 
-import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import Polygon
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
@@ -80,14 +78,14 @@ def sample_xml() -> str:
 
 
 @pytest.fixture
-def sample_dataframe(sample_xml: str) -> pd.DataFrame:
-    """Return a sample DataFrame with XML payloads."""
-    return pd.DataFrame({"payload": [sample_xml]})
+def sample_dataframe(sample_xml: str) -> :
+    """Return a sample  with XML payloads."""
+    return ({"payload": [sample_xml]})
 
 
 @pytest.fixture
-def simple_geodataframe() -> gpd.GeoDataFrame:
-    """Return a simple GeoDataFrame for testing the dissolve function."""
+def simple_geodataframe() -> gGeo:
+    """Return a simple Geo for testing the dissolve function."""
     data = {
         "id": ["1", "2", "3", "4"],
         "gridcode": [1, 1, 2, 2],
@@ -99,7 +97,7 @@ def simple_geodataframe() -> gpd.GeoDataFrame:
             Polygon([(1, 2), (2, 2), (2, 3), (1, 3)]),  # Shares edge with polygon 3
         ],
     }
-    return gpd.GeoDataFrame(data, crs="EPSG:25832")
+    return gGeo(data, crs="EPSG:25832")
 
 
 def test_analyze_geometry(silver_source: WetlandsSilver) -> None:
@@ -125,7 +123,7 @@ def test_analyze_geometry(silver_source: WetlandsSilver) -> None:
 
 def test_log_geometry_statistics(silver_source: WetlandsSilver) -> None:
     """Test logging geometry statistics."""
-    gdf = gpd.GeoDataFrame(
+    gdf = gGeo(
         {
             "geometry": [
                 Polygon([(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)]),
@@ -331,7 +329,7 @@ def test_parse_feature_exception_handling(
 
 def test_process_xml_data_empty(silver_source: WetlandsSilver) -> None:
     """Test processing empty XML data."""
-    result = silver_source._process_xml_data(pd.DataFrame())
+    result = silver_source._process_xml_data(())
     assert result is None
 
 
@@ -341,17 +339,17 @@ def test_process_xml_data_error(mock_fromstring: MagicMock, silver_source: Wetla
     mock_fromstring.side_effect = Exception("Test error")
 
     with pytest.raises(Exception):
-        silver_source._process_xml_data(pd.DataFrame({"payload": ["<invalid>"]}))
+        silver_source._process_xml_data(({"payload": ["<invalid>"]}))
 
 
 def test_process_xml_data_success(
-    silver_source: WetlandsSilver, sample_dataframe: pd.DataFrame
+    silver_source: WetlandsSilver, sample_dataframe: 
 ) -> None:
     """Test successfully processing XML data."""
     result = silver_source._process_xml_data(sample_dataframe)
 
     assert result is not None
-    assert isinstance(result, gpd.GeoDataFrame)
+    assert isinstance(result, gGeo)
     assert len(result) == 2
     assert "id" in result.columns
     assert "gridcode" in result.columns
@@ -361,7 +359,7 @@ def test_process_xml_data_success(
 
 @patch("unified_pipeline.silver.wetlands.validate_and_transform_geometries")
 def test_create_dissolved_df(
-    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gpd.GeoDataFrame
+    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gGeo
 ) -> None:
     """Test creating dissolved dataframe."""
     # Create mock result with expected dissolution - two features from four
@@ -380,7 +378,7 @@ def test_create_dissolved_df(
     assert "wetland_id" in result.columns
     assert result["wetland_id"].tolist() == [1, 2]
 
-    # Check validation call - use any_call instead of directly comparing DataFrames
+    # Check validation call - use any_call instead of directly comparing s
     mock_validate.assert_called_once()
     args, kwargs = mock_validate.call_args
     assert args[1] == "silver.test_dissolved"
@@ -391,7 +389,7 @@ def test_create_dissolved_df_neighbor_checking_and_edge_sharing(
     mock_validate: MagicMock, silver_source: WetlandsSilver
 ) -> None:
     """Test the neighbor checking and edge sharing logic in _create_dissolved_df."""
-    # Create a test GeoDataFrame with polygons that should and shouldn't be merged
+    # Create a test Geo with polygons that should and shouldn't be merged
     data = {
         "id": ["1", "2", "3", "4", "5"],
         "gridcode": [1, 1, 1, 2, 3],
@@ -409,7 +407,7 @@ def test_create_dissolved_df_neighbor_checking_and_edge_sharing(
             Polygon([(42, 30), (52, 30), (52, 40), (42, 40)]),
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -452,7 +450,7 @@ def test_create_dissolved_df_spatial_index_efficiency(
             Polygon([(250, 250), (260, 250), (260, 260), (250, 260)]),
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -490,7 +488,7 @@ def test_create_dissolved_df_edge_sharing_criteria(
             Polygon([(10, 10), (20, 10), (20, 20), (10, 20)]),
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -524,7 +522,7 @@ def test_create_dissolved_df_merged_tracking(
             Polygon([(30, 0), (40, 0), (40, 10), (30, 10)]),  # 4 (adjacent to 3)
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -546,10 +544,10 @@ async def test_run_success(silver_source: WetlandsSilver) -> None:
     """Test successful run of the pipeline."""
     # Mock methods
     silver_source._read_bronze_data = MagicMock(
-        return_value=pd.DataFrame({"payload": ["<xml></xml>"]})
+        return_value=({"payload": ["<xml></xml>"]})
     )
-    silver_source._process_xml_data = MagicMock(return_value=gpd.GeoDataFrame())
-    silver_source._create_dissolved_df = MagicMock(return_value=gpd.GeoDataFrame())
+    silver_source._process_xml_data = MagicMock(return_value=gGeo())
+    silver_source._create_dissolved_df = MagicMock(return_value=gGeo())
     silver_source._save_data = MagicMock()
 
     await silver_source.run()
@@ -594,7 +592,7 @@ async def test_run_read_bronze_data_error(silver_source: WetlandsSilver) -> None
 @pytest.mark.asyncio
 async def test_run_process_xml_data_error(silver_source: WetlandsSilver) -> None:
     """Test run with error in processing XML data."""
-    silver_source._read_bronze_data = MagicMock(return_value=pd.DataFrame())
+    silver_source._read_bronze_data = MagicMock(return_value=())
     silver_source._process_xml_data = MagicMock(return_value=None)
     silver_source._create_dissolved_df = MagicMock()
     silver_source._save_data = MagicMock()
@@ -710,7 +708,7 @@ def test_create_dissolved_df_neighbor_iteration_and_edge_check(
             Polygon([(-5, 0), (0, 0), (0, 5), (-5, 5)]),
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -748,7 +746,7 @@ def test_create_dissolved_df_merged_set_prevents_double_processing(
             Polygon([(20, 0), (30, 0), (30, 10), (20, 10)]),  # 3 (touches 2)
         ],
     }
-    test_gdf = gpd.GeoDataFrame(data, crs="EPSG:25832")
+    test_gdf = gGeo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -770,7 +768,7 @@ def test_create_dissolved_df_merged_set_prevents_double_processing(
 
 @patch("unified_pipeline.silver.wetlands.validate_and_transform_geometries")
 def test_create_dissolved_df_exception_handling(
-    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gpd.GeoDataFrame
+    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gGeo
 ) -> None:
     """Test that _create_dissolved_df properly handles and re-raises exceptions."""
     # Mock validate_and_transform_geometries to raise an exception

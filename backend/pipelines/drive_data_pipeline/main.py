@@ -13,10 +13,6 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Load .env file directly
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(env_path)
-
 # Use absolute imports
 from drive_data_pipeline.bronze import BronzeProcessor
 from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
@@ -25,6 +21,13 @@ from drive_data_pipeline.config import get_settings, parse_args
 from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
+
+# Load .env file directly - check current directory first, then parent
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if not os.path.exists(env_path):
+    # Try parent directory
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(env_path)
 
 
 class ProgressTracker:
@@ -181,12 +184,15 @@ def main() -> int:
     progress = ProgressTracker(quiet=args.quiet, verbose=args.verbose)
 
     try:
+        # Track pipeline start time for consistent timestamping
+        pipeline_start_time = datetime.now()
+
         logger.info("Starting Google Drive Data Pipeline")
 
         if args.verbose and not args.quiet:
             # Print startup information in verbose mode
             print("Google Drive Data Pipeline")
-            print(f"Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Run time: {pipeline_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"Log level: {log_level}")
 
         # Load settings
@@ -242,6 +248,7 @@ def main() -> int:
             drive_fetcher=drive_fetcher,
             storage_manager=storage_manager,
             progress_callback=progress.update_bronze_progress,
+            pipeline_start_time=pipeline_start_time,
         )
 
         # Process the Google Drive folder (Bronze layer)
@@ -420,6 +427,92 @@ def main() -> int:
 
         # Print summary at the end
         progress.print_summary()
+
+        # Generate schema documentation for processed data
+        if not args.bronze_only:
+            try:
+                logger.info("Generating schema documentation for drive data pipeline")
+
+                # Import schema documentation (with path adjustment)
+                from pathlib import Path as PathLib
+
+                # Find the project root (directory containing 'backend' folder)
+                current_file = PathLib(__file__).resolve()
+                project_root = None
+
+                # Go up the directory tree to find the project root
+                for parent in current_file.parents:
+                    if (parent / "backend").is_dir():
+                        project_root = parent
+                        break
+
+                if project_root and str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
+
+                # Use the pipeline start time we already have
+                # Create DuckDB connection and look for silver parquet files
+                import duckdb
+
+                try:
+                    from backend.common.schema_documentation import SchemaDocumentationManager
+                except ImportError as e:
+                    import warnings
+
+                    warnings.warn(f"Schema documentation not available: {e}")
+                    SchemaDocumentationManager = None
+
+                conn = duckdb.connect()
+
+                # Find silver parquet files in the silver output directory
+                silver_path = Path(settings.silver_path)
+                if silver_path.exists():
+                    parquet_files = list(silver_path.rglob("*.parquet"))
+                    table_names = []
+
+                    for i, file_path in enumerate(
+                        parquet_files[:10]
+                    ):  # Limit to first 10 files to avoid overwhelming
+                        try:
+                            table_name = f"drive_data_{i + 1}"
+                            conn.execute(
+                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                            )
+                            table_names.append(table_name)
+                        except Exception as e:
+                            logger.warning(
+                                f"Could not load {file_path} for schema documentation: {e}"
+                            )
+
+                    if table_names and SchemaDocumentationManager is not None:
+                        # Initialize schema documentation manager
+                        schema_manager = SchemaDocumentationManager(
+                            connection=conn,
+                            pipeline_name="drive_data_pipeline",
+                            pipeline_start_time=pipeline_start_time,
+                            logger=logger,
+                        )
+
+                        # Generate documentation for drive data tables
+                        schema_files = schema_manager.generate_all_documentation(
+                            table_names, stage="silver"
+                        )
+                        logger.info("Generated schema documentation for drive data tables")
+
+                        # Commit to GitHub
+                        schema_manager.commit_to_github()
+                        logger.info("Drive data schema documentation committed to GitHub")
+                    elif SchemaDocumentationManager is None:
+                        logger.warning("Schema documentation disabled due to import error")
+                    else:
+                        logger.info("No processable parquet files found for schema documentation")
+                else:
+                    logger.info("Silver output directory not found, skipping schema documentation")
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to generate drive data schema documentation: {e}", exc_info=True
+                )
+                # Don't fail the pipeline if schema documentation fails
 
         logger.info("Google Drive Data Pipeline completed successfully")
         return 0

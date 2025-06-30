@@ -36,13 +36,13 @@ Before setting up the pipeline, ensure you have the following prerequisites inst
 3. Install dependencies:
 
    ```bash
-   pip install -e .
+   uv pip install -e .
    ```
 
-   Alternatively, you can use the requirements.txt file:
+   Alternatively, you can install directly with uv:
 
    ```bash
-   pip install -r requirements.txt
+   uv pip install -e .
    ```
 
 ### Docker Setup
@@ -161,7 +161,7 @@ This will run the pipeline with verbose logging and verify that all components a
    - Verify that the target Google Drive folder is shared with the service account
 
 2. **Missing Dependencies**:
-   - Run `pip install -r requirements.txt` to ensure all dependencies are installed
+   - Run `uv pip install -e .` to ensure all dependencies are installed
    - Check for error messages related to missing packages
 
 3. **Folder Access Issues**:

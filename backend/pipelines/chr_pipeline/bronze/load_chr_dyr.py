@@ -1,5 +1,6 @@
 """Module for loading CHR_dyr data (Animal Movements) - Bronze Layer."""
 
+import json
 import logging
 import os
 import uuid
@@ -7,6 +8,7 @@ from datetime import date, timedelta
 from typing import Any, Dict, Optional
 
 import certifi
+import requests
 from dotenv import load_dotenv
 from requests import Session
 from zeep import Client
@@ -15,7 +17,6 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
-from .export import save_raw_data
 
 # Load environment variables
 load_dotenv()
@@ -47,13 +48,25 @@ def get_fvm_credentials() -> tuple[str, str]:
 
 # --- SOAP Client Creation ---
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication."""
+    """Create a Zeep SOAP client with WSSE authentication and timeout configuration."""
     session = Session()
     session.verify = certifi.where()
+
+    # Configure timeouts to prevent hanging on slow/unresponsive herds
+    # Connection timeout: 30 seconds to establish connection
+    # Read timeout: 300 seconds (5 minutes) to wait for response
+    # This is especially important for cattle movement data which can be large
+    adapter = requests.adapters.HTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    # Set timeouts on the session instead
+    session.timeout = (30, 300)  # (connect_timeout, read_timeout)
+
     transport = Transport(session=session)
     try:
         client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
+        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / 300s read timeouts")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -154,22 +167,24 @@ def load_animal_movements(
                     f"Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
                 )
 
-        # Save aggregated movement summaries instead of massive individual animal records
+        # Save to streaming buffer to prevent memory buildup while maintaining consolidated output
         if movement_summaries and movement_summaries.get("movements"):
-            save_raw_data(
+            # Use streaming save to prevent memory accumulation
+            _save_to_streaming_buffer(
                 data_type="chr_dyr_movement_summaries",
                 identifier=f"{herd_number}{date_suffix}",
-                raw_response=movement_summaries,
+                data=movement_summaries,
             )
             logger.info(
-                f"Herd {herd_number}: Saved {len(movement_summaries['movements'])} movement summaries instead of individual animal records"
+                f"Herd {herd_number}: Streamed {len(movement_summaries['movements'])} movement summaries to buffer"
             )
         else:
             # Still save a minimal record indicating we processed this herd
-            save_raw_data(
+            minimal_record = {"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True}
+            _save_to_streaming_buffer(
                 data_type="chr_dyr_movement_summaries",
                 identifier=f"{herd_number}{date_suffix}",
-                raw_response={"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True},
+                data=minimal_record,
             )
 
         # Log statistics
@@ -189,7 +204,8 @@ def load_animal_movements(
             if animal_count > 0:
                 logger.debug(f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}")
 
-        return response
+        # Return aggregated summaries instead of massive raw response
+        return movement_summaries
 
     except Fault as soap_fault:
         logger.error(f"SOAP fault for herd {herd_number}: {soap_fault}")
@@ -253,30 +269,34 @@ def load_cattle_movement_summaries(
     logger.info(f"Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
 
     try:
-        # Get raw individual animal data (same as before)
-        response = load_animal_movements(chr_dyr_client, username, herd_number, start_date, end_date)
+        # Get aggregated movement summaries directly from load_animal_movements
+        # Note: load_animal_movements now returns aggregated summaries, not raw SOAP responses
+        movement_summaries = load_animal_movements(chr_dyr_client, username, herd_number, start_date, end_date)
 
-        if not response or not hasattr(response, "Response"):
-            logger.warning(f"No valid response for herd {herd_number}")
+        if not movement_summaries:
+            logger.warning(f"No movement summaries returned for herd {herd_number}")
             return None
 
-        # Process and aggregate individual animal records
-        movement_summaries = _aggregate_cattle_movements(response, herd_number)
+        # The movement_summaries are already processed and saved by load_animal_movements
+        # Return only lightweight summary for memory efficiency (full data is already in storage)
+        movement_count = len(movement_summaries.get("movements", []))
+        logger.info(f"Herd {herd_number}: Returned {movement_count} movement summaries")
 
-        if movement_summaries:
-            # Save aggregated summaries instead of raw individual records
-            save_raw_data(
-                data_type="cattle_movement_summaries",
-                identifier=f"{herd_number}_{start_date}_{end_date}",
-                raw_response=movement_summaries,
-            )
+        # Return lightweight summary instead of full data to reduce memory usage
+        lightweight_summary = {
+            "reporting_herd_number": movement_summaries.get("reporting_herd_number"),
+            "movement_count": movement_count,
+            "processed_successfully": True,
+            "summary_stats": {
+                "total_animals_processed": movement_summaries.get("summary_stats", {}).get(
+                    "total_animals_processed", 0
+                ),
+                "unique_movement_dates": movement_summaries.get("summary_stats", {}).get("unique_movement_dates", 0),
+                "counterparty_herds": movement_summaries.get("summary_stats", {}).get("counterparty_herds", 0),
+            },
+        }
 
-            logger.info(
-                f"Herd {herd_number}: Aggregated {len(movement_summaries.get('movements', []))} "
-                f"movement summaries from individual cattle records"
-            )
-
-        return movement_summaries
+        return lightweight_summary
 
     except Exception as e:
         logger.error(f"Error processing cattle movement summaries for herd {herd_number}: {e}")
@@ -447,3 +467,104 @@ def _parse_date(date_str):
     except Exception as e:
         logger.debug(f"Could not parse date {date_str}: {e}")
     return None
+
+
+# Global streaming file handles for consolidated output
+_streaming_files = {}
+
+
+def _append_to_streaming_json(data_type: str, data: Any) -> bool:
+    """
+    Append data to streaming JSON using simple temporary file approach.
+    This prevents memory buildup while maintaining consolidated output.
+    """
+    try:
+        import tempfile
+
+        from .export import EXPORT_TIMESTAMP
+
+        # Create unique stream key
+        stream_key = f"{data_type}_{EXPORT_TIMESTAMP}"
+
+        # Initialize temp file for this stream if needed
+        if stream_key not in _streaming_files:
+            temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
+            _streaming_files[stream_key] = {"temp_file": temp_file, "temp_path": temp_file.name, "count": 0}
+            logger.info(f"Initialized streaming temp file for {data_type}: {temp_file.name}")
+
+        # Append data as JSONL (one JSON object per line)
+        temp_file = _streaming_files[stream_key]["temp_file"]
+        json.dump(data, temp_file, default=str)
+        temp_file.write("\n")
+        temp_file.flush()  # Ensure data is written
+
+        _streaming_files[stream_key]["count"] += 1
+
+        # Log progress every 1000 records
+        count = _streaming_files[stream_key]["count"]
+        if count % 1000 == 0:
+            logger.info(f"Streamed {count} records for {data_type}")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error appending to streaming {data_type}: {e}")
+        return False
+
+
+def _finalize_streaming_files() -> bool:
+    """Convert streaming temp files to final consolidated JSON files."""
+    try:
+        from .export import save_raw_data
+
+        for stream_key, stream_info in _streaming_files.items():
+            data_type = stream_key.split("_")[0]  # Extract data_type from stream_key
+            temp_file = stream_info["temp_file"]
+            temp_path = stream_info["temp_path"]
+            count = stream_info["count"]
+
+            # Close the temp file
+            temp_file.close()
+
+            # Read all records from temp file and create consolidated JSON
+            consolidated_data = []
+            try:
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            consolidated_data.append(json.loads(line.strip()))
+
+                # Save consolidated data using existing export infrastructure
+                if consolidated_data:
+                    save_raw_data(
+                        data_type=data_type,
+                        identifier="consolidated",
+                        raw_response=consolidated_data,
+                    )
+                    logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
+
+            except Exception as e:
+                logger.error(f"Error consolidating {data_type}: {e}")
+
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+                logger.debug(f"Cleaned up temp file: {temp_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
+
+        # Clear the global registry
+        _streaming_files.clear()
+        logger.info("✅ Finalized all streaming files")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error finalizing streaming files: {e}")
+        return False
+
+
+def _save_to_streaming_buffer(data_type: str, identifier: str, data: Any) -> bool:
+    """
+    Save data using streaming approach to prevent memory buildup.
+    """
+    return _append_to_streaming_json(data_type, data)

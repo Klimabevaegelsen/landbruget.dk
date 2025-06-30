@@ -20,7 +20,8 @@ from asyncio import Semaphore
 from typing import Optional
 
 import aiohttp
-import pandas as pd
+
+# ✅ MIGRATION: Using DuckDB for  operations
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -39,6 +40,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     Attributes:
         name (str): Human-readable name of the data source
+        dataset (str): Machine name for the dataset, used in storage paths
         type (str): Type of the data source (arcgis)
         description (str): Brief description of the data
         fields_url (str): URL for fetching agricultural fields data
@@ -55,6 +57,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     """
 
     name: str = "Danish Agricultural Fields"
+    dataset: str = "agricultural_fields"
     type: str = "arcgis"
     description: str = "Multi-year agricultural field data (2020-2025)"
 
@@ -84,7 +87,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     batch_size: int = 2000
     max_concurrent: int = 5
-    storage_batch_size: int = 10000
+    storage_batch_size: int = 15000  # Increased for better performance with 16GB RAM
 
     timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=1200, connect=60, sock_read=540
@@ -216,30 +219,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: list[str], year: int) -> pd.DataFrame:
-        """
-        Create a DataFrame from the raw data.
-        This method takes a list of strings and converts it into a pandas DataFrame.
-
-        Args:
-            raw_data (list[str]): List of strings.
-            year (int): The year this data represents.
-
-        Returns:
-            pd.DataFrame: DataFrame containing the raw data with metadata.
-        """
-        df = pd.DataFrame(
-            {
-                "payload": raw_data,
-            }
-        )
-        df["source"] = self.config.name
-        df["year"] = year
-        df["created_at"] = pd.Timestamp.now()
-        df["updated_at"] = pd.Timestamp.now()
-        return df
-
-    async def _process_data(self, url: str, dataset: str, year: int) -> list[str]:
+    async def _process_data(self, url: str, dataset: str, year: int) -> str:
         """
         Process data from the specified URL and save it to Google Cloud Storage.
 
@@ -248,7 +228,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
         2. Gets the total count of available features from the API
         3. Fetches data in parallel chunks using _fetch_chunk method
         4. Combines results and saves them to Google Cloud Storage
-        5. Returns the raw data for potential in-memory passing
+        5. Returns the table name for potential in-memory passing
 
         Args:
             url (str): The URL of the ArcGIS endpoint to fetch data from
@@ -256,7 +236,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             year (int): The year this data represents
 
         Returns:
-            list[str]: Raw data that was processed
+            str: Table name containing the processed data
 
         Raises:
             Exception: If there are issues with data fetching or processing
@@ -282,7 +262,10 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
 
             if total_count == 0:
                 self.log.warning("No data to process.")
-                return []
+                # Create empty table for consistency
+                empty_table_name = f"empty_data_{dataset}_{year}"
+                self.conn.execute(f"CREATE OR REPLACE TABLE {empty_table_name} (payload VARCHAR)")
+                return empty_table_name
 
             tasks = []
             for start_index in range(0, total_count, self.config.batch_size):
@@ -291,18 +274,50 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             raw_data = await asyncio.gather(*tasks)
             if not raw_data:
                 self.log.error("No raw data fetched")
-                return []
+                # Create empty table for consistency
+                empty_table_name = f"empty_data_{dataset}_{year}"
+                self.conn.execute(f"CREATE OR REPLACE TABLE {empty_table_name} (payload VARCHAR)")
+                return empty_table_name
             self.log.info("Fetched raw data successfully")
 
-            df = self.create_dataframe(raw_data, year)
+            # Create table directly with raw JSON data
+            current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+            table_name = f"bronze_data_{dataset}_{year}"
+
+            # Create temporary table for raw data
+            self.conn.execute("CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR)")
+
+            # Insert JSON strings using prepared statements
+            for json_str in raw_data:
+                self.conn.execute("INSERT INTO temp_raw_data VALUES (?)", [json_str])
+
+            # Create final table with metadata
+            self.conn.execute(
+                f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT 
+                    payload,
+                    ? as source,
+                    ? as year,
+                    ? as created_at,
+                    ? as updated_at
+                FROM temp_raw_data
+            """,
+                [self.config.name, year, current_timestamp, current_timestamp],
+            )
+
+            # Clean up temporary table
+            self.conn.execute("DROP TABLE temp_raw_data")
+
             dataset_with_year = f"{dataset}_{year}"
             self.log.info(f"Saving data to GCS for {dataset_with_year}")
 
-            # Save using new unified method
-            self._save_data(df, dataset_with_year, self.config.bucket, stage="bronze")
+            # Save using new unified method - table-based
+            self.save_data_direct(table_name, dataset_with_year, self.config.bucket, "bronze")
             self.log.info(f"Data processing completed for {dataset}")
 
-            return raw_data
+            # ✅ MIGRATION: Return table name instead of raw data
+            return table_name
 
     async def run(self) -> Optional[dict]:
         """
@@ -312,13 +327,13 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
         1. Processes agricultural fields data for all available years (2020-2025)
         2. Processes agricultural blocks data for all available years (2020-2024)
         3. Tracks overall execution time for performance monitoring
-        4. Returns all processed data for potential in-memory passing
+        4. Returns all processed table names for potential in-memory passing
 
         Each year's data is stored separately with year information to enable
         historical analysis and trend identification.
 
         Returns:
-            Optional[dict]: Dictionary containing all processed data organized by dataset and year,
+            Optional[dict]: Dictionary containing all processed table names organized by dataset and year,
                            or None if processing fails
 
         Note:
@@ -333,17 +348,19 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             self.log.info("Processing agricultural fields data for all years")
             for year, url in self.config.fields_urls.items():
                 self.log.info(f"Processing fields data for year {year}")
-                fields_data = await self._process_data(url, self.config.fields_dataset, year)
-                all_data["fields"][year] = fields_data
+                # ✅ MIGRATION: Store table name instead of raw data
+                fields_table_name = await self._process_data(url, self.config.fields_dataset, year)
+                all_data["fields"][year] = fields_table_name
 
             # Process agricultural blocks for all available years
             self.log.info("Processing agricultural blocks data for all years")
             for year, url in self.config.blocks_urls.items():
                 self.log.info(f"Processing blocks data for year {year}")
-                blocks_data = await self._process_data(url, self.config.blocks_dataset, year)
-                all_data["blocks"][year] = blocks_data
+                # ✅ MIGRATION: Store table name instead of raw data
+                blocks_table_name = await self._process_data(url, self.config.blocks_dataset, year)
+                all_data["blocks"][year] = blocks_table_name
 
             self.log.info("Agricultural Fields bronze job completed successfully for all years")
 
-            # Return data for in-memory passing
+            # Return table names for in-memory passing
             return all_data

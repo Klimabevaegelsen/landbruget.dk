@@ -46,6 +46,9 @@ jobs:
       run: |
         cd backend/pipelines/arbejdstilsynet_inspections
         uv pip install --system -e . -vvv
+        # Install unified pipeline dependencies needed for GCS access
+        cd ../unified_pipeline
+        uv pip install --system -e . -vvv
 
     - name: Install Playwright Browsers
       working-directory: backend/pipelines/arbejdstilsynet_inspections

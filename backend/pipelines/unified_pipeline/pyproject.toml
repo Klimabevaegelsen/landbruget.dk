@@ -3,7 +3,7 @@ name = "unified-pipeline"
 version = "0.1.0"
 description = "Unified pipeline for fetching and processing data."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
@@ -13,12 +13,10 @@ dependencies = [
     "click>=8.1.8",
     "cryptography>=44.0.3",
     "gcsfs>=2025.3.2",
-    "geopandas>=1.0.1",
     "google-cloud-storage>=3.1.0",
     "ibis-framework[duckdb,geospatial]>=10.5.0",
     "loguru>=0.7.3",
     "lxml>=5.4.0",
-    "pandas>=2.2.3",
     "psutil>=6.1.0",
     "pyarrow>=20.0.0",
     "pydantic-settings>=2.9.1",
@@ -57,7 +55,7 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -81,11 +79,10 @@ ignore_errors = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N"]
 ignore = []
 
 [tool.ruff.lint.isort]
-known-third-party = ["click", "cryptography", "gcsfs", "geopandas", "google", "ibis_framework", "loguru", "lxml", "pandas", "pyarrow", "pydantic", "dotenv", "simple_singleton"]

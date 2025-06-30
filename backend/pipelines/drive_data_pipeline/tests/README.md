@@ -39,7 +39,7 @@ Before running tests, ensure you have:
 
 1. Installed all development dependencies:
    ```bash
-   pip install -e ".[dev]"
+   uv pip install -e ".[dev]"
    ```
    
 2. Set up the necessary environment variables (or use the test fixtures):

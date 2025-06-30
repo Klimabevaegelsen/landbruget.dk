@@ -9,10 +9,9 @@ from typing import Any, Dict, List, Optional
 import ibis
 from dotenv import load_dotenv
 
+# Import schema documentation
 # Import config
 # Import table creation functions
-# from . import entities # Removed entity import
-# from . import herd_sizes  # Removed since functionality is now in herds.py
 from . import (
     animal_movements,
     antibiotic_usage,
@@ -39,10 +38,35 @@ logging.basicConfig(
     filemode="w",
 )
 
-logging.info("--- Script execution started ---")
+# Add the backend directory to sys.path for imports
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
+
+# Find the project root (directory containing 'backend' folder)
+current_file = Path(__file__).resolve()
+project_root = None
+
+# Go up the directory tree to find the project root
+for parent in current_file.parents:
+    if (parent / "backend").is_dir():
+        project_root = parent
+        break
+
+if project_root and str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+try:
+    from backend.common.schema_documentation import SchemaDocumentationManager
+except ImportError as e:
+    # If import fails, disable schema documentation
+    import warnings
+
+    warnings.warn(f"Schema documentation not available: {e}")
+    SchemaDocumentationManager = None
+
+logging.info("--- Script execution started ---")
 
 
 # --- Main Processing Logic ---
@@ -93,14 +117,12 @@ def process_chr_data(
         if vetstat_antibiotics_data:
             # Ensure the temporary XML file is cleaned up
             temp_xml_path_obj = silver_dir / "_temp_vetstat.xml"
-            # DEBUG(Added): Define a path for the saved XML in case of issues
             saved_xml_path_obj = silver_dir / f"_DEBUG_FAILED_vetstat_{export_timestamp or 'unknown'}.xml"
             try:
                 with open(temp_xml_path_obj, "w") as f:
                     # Add separator compatible with VetStat XML parser's expectations
                     f.write("\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(vetstat_antibiotics_data))
                 vetstat_antibiotics_xml_path = temp_xml_path_obj  # Assign path only if successfully written
-                # DEBUG(Added): Log size of temp XML before parsing
                 try:
                     xml_size = vetstat_antibiotics_xml_path.stat().st_size
                     logging.info(
@@ -109,7 +131,6 @@ def process_chr_data(
                 except Exception as e_stat:
                     logging.warning(f"Could not get size of temp XML file {vetstat_antibiotics_xml_path}: {e_stat}")
                     logging.info(f"Created temporary VetStat XML file: {vetstat_antibiotics_xml_path}")
-                # --- END DEBUG ---
             except Exception as e_write:
                 logging.error(
                     f"Failed to write temporary VetStat XML file: {e_write}",
@@ -123,7 +144,7 @@ def process_chr_data(
                         temp_xml_path_obj.unlink()
                     except OSError:
                         pass
-            # NOTE: Cleanup happens in the finally block of the XML parsing section below
+
     else:
         # Use file paths as before
         besaetning_list_path = bronze_dir / "besaetning_list.json"
@@ -150,37 +171,25 @@ def process_chr_data(
                     logging.warning(
                         f"XML parser ran but output file is empty or missing: {vetstat_antibiotics_jsonl_path}"
                     )
-                    # DEBUG(Added): Save the failed XML file if parsing failed/was empty
                     if vetstat_antibiotics_xml_path.exists():
                         try:
                             vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
-                            logging.warning(
-                                f"DEBUG(Added): Saved problematic XML to {saved_xml_path_obj} for inspection."
-                            )
-                            vetstat_antibiotics_xml_path = None  # Ensure it's not cleaned up later normally
+                            logging.warning(f"Saved problematic XML to {saved_xml_path_obj} for inspection.")
+                            vetstat_antibiotics_xml_path = None
                         except Exception as e_save:
-                            logging.error(
-                                f"DEBUG(Added): Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}"
-                            )
-                    # --- END DEBUG ---
+                            logging.error(f"Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}")
             except (FileNotFoundError, RuntimeError, Exception) as e:
                 logging.error(
                     f"Failed to process VetStat XML: {e}. Proceeding without antibiotic data.",
                     exc_info=True,
                 )
-                # DEBUG(Added): Save the failed XML file if parsing failed/was empty
-                if (
-                    vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists()
-                ):  # Check again as path might be None
+                if vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists():
                     try:
                         vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
-                        logging.warning(f"DEBUG(Added): Saved problematic XML to {saved_xml_path_obj} for inspection.")
-                        vetstat_antibiotics_xml_path = None  # Ensure it's not cleaned up later normally
+                        logging.warning(f"Saved problematic XML to {saved_xml_path_obj} for inspection.")
+                        vetstat_antibiotics_xml_path = None
                     except Exception as e_save:
-                        logging.error(
-                            f"DEBUG(Added): Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}"
-                        )
-                # --- END DEBUG ---
+                        logging.error(f"Failed to save problematic XML {vetstat_antibiotics_xml_path}: {e_save}")
                 # Ensure path is None if failed
                 if vetstat_antibiotics_jsonl_path.exists():
                     try:
@@ -261,7 +270,7 @@ def process_chr_data(
             data = in_memory_data.get(source_info["mem_key"], {}).get("json", [])
             if data and isinstance(data, list):
                 logging.info(f"Found {len(data)} records in memory for {source_info['mem_key']}")
-                # Convert list of dicts to Pandas DataFrame for robust handling - REMOVED THIS STEP
+                # Convert list of dicts to Pandas  for robust handling - REMOVED THIS STEP
                 # Instead, write to temp JSONL and use read_json
                 temp_jsonl_path = None
                 temp_file = None
@@ -415,10 +424,10 @@ def process_chr_data(
     # --- DEBUG(Added): Directly print DESCRIBE output for bes_details ---
     if "bes_details" in raw_tables:
         logging.info("DEBUG(Added): Attempting to print DESCRIBE bes_details output...")
-        print("\\n--- DEBUG: DESCRIBE bes_details TABLE ---", flush=True)  # Add marker and flush
+        print("\\n--- DEBUG: DESCRIBE bes_details TABLE ---", flush=True)
         try:
             con.con.sql("DESCRIBE bes_details;").show()
-            print("--- END DEBUG: DESCRIBE bes_details TABLE ---\\n", flush=True)  # Add marker and flush
+            print("--- END DEBUG: DESCRIBE bes_details TABLE ---\\n", flush=True)
         except Exception as e_describe:
             logging.error(
                 f"DEBUG(Added): Error executing DESCRIBE bes_details: {e_describe}",
@@ -434,7 +443,7 @@ def process_chr_data(
     # --- END DEBUG ---
 
     # --- START DEBUG (Added): Describe unnested BesStr structure ---
-    # Add comment for easy removal later
+
     if "bes_details" in raw_tables:
         logging.info("DEBUG(Added): Attempting to describe unnested BesStr structure...")
         print("\\n--- DEBUG: DESCRIBE UNNESTED BesStr STRUCT ---", flush=True)
@@ -494,14 +503,13 @@ def process_chr_data(
 
     # Define silver steps in order
     silver_steps = [
-        # 'silver_entities', # Removed this step
         "silver_vet_practices",
         "silver_properties",
-        "silver_property_owners",  # Added property owners step
-        "silver_property_users",  # Added property users step
+        "silver_property_owners",
+        "silver_property_users",
         "silver_herds",
-        "silver_herd_owners",  # Added herd owners step
-        "silver_herd_users",  # Added herd users step
+        "silver_herd_owners",
+        "silver_herd_users",
         "silver_herd_sizes",
         "silver_animal_movements",
         "silver_property_vet_events",
@@ -512,7 +520,6 @@ def process_chr_data(
     for step in silver_steps:
         logging.info(f"Processing silver step: {step}")
         try:
-            # Removed silver_entities step block entirely
             if step == "silver_vet_practices":
                 vet_practices_table = vet_practices.create_vet_practices_table(
                     con, context.get("bes_details_table"), silver_dir
@@ -525,13 +532,13 @@ def process_chr_data(
                 )
                 context["properties_table"] = properties_table
 
-            elif step == "silver_property_owners":  # Added step for property owners
+            elif step == "silver_property_owners":
                 property_owners_table = properties.create_property_owners_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
                 # Optionally add to context if needed: context['property_owners_table'] = property_owners_table
 
-            elif step == "silver_property_users":  # Added step for property users
+            elif step == "silver_property_users":
                 property_users_table = properties.create_property_users_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
@@ -541,16 +548,15 @@ def process_chr_data(
                 herds_table = herds.create_herds_table(
                     con,
                     context.get("bes_details_table"),
-                    # context.get('entity_map_table'), # Removed dependency
                     silver_dir,
                 )
                 context["herds_table"] = herds_table
 
-            elif step == "silver_herd_owners":  # Added step for herd owners
+            elif step == "silver_herd_owners":
                 herd_owners_table = herds.create_herd_owners_table(con, context.get("bes_details_table"), silver_dir)
                 # Optionally add to context if needed: context['herd_owners_table'] = herd_owners_table
 
-            elif step == "silver_herd_users":  # Added step for herd users
+            elif step == "silver_herd_users":
                 herd_users_table = herds.create_herd_users_table(con, context.get("bes_details_table"), silver_dir)
                 # Optionally add to context if needed: context['herd_users_table'] = herd_users_table
 
@@ -583,7 +589,54 @@ def process_chr_data(
             # Continue with next step instead of failing completely
             continue
 
-    # --- 13. Cleanup Intermediate Files ---
+    # --- 13. Generate Schema Documentation ---
+    if SchemaDocumentationManager is not None:
+        logging.info("Generating schema documentation for CHR silver tables...")
+        try:
+            # Get the pipeline start time from the silver_dir timestamp
+            dir_name = silver_dir.name
+            if len(dir_name) == 15 and dir_name[8] == "_":  # Format: YYYYMMDD_HHMMSS
+                pipeline_start_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
+            else:
+                pipeline_start_time = datetime.now()
+
+            # Initialize schema documentation manager
+            schema_manager = SchemaDocumentationManager(
+                connection=con.con,  # Use the DuckDB connection
+                pipeline_name="chr_pipeline",
+                pipeline_start_time=pipeline_start_time,
+                logger=logging.getLogger(__name__),
+            )
+
+            # Get list of tables that were actually created
+            tables_query = "SHOW TABLES"
+            tables_result = con.con.execute(tables_query).fetchall()
+            silver_tables = [
+                table[0]
+                for table in tables_result
+                if table[0] not in ["bes_details", "diko_flyt", "ejendom_oplys", "ejendom_vet", "vetstat"]
+            ]
+
+            if silver_tables:
+                # Generate documentation for all silver tables
+                schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
+                logging.info(
+                    f"Generated schema documentation for {len(silver_tables)} tables: {', '.join(silver_tables)}"
+                )
+
+                # Commit to GitHub
+                schema_manager.commit_to_github()
+                logging.info("Schema documentation committed to GitHub")
+            else:
+                logging.warning("No silver tables found for schema documentation")
+
+        except Exception as e:
+            logging.error(f"Failed to generate schema documentation: {e}", exc_info=True)
+            # Don't fail the pipeline if schema documentation fails
+    else:
+        logging.warning("Schema documentation disabled due to import error")
+
+    # --- 14. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():
         try:
             vetstat_antibiotics_jsonl_path.unlink()
@@ -612,8 +665,9 @@ if __name__ == "__main__":
         logging.error(f"Error determining bronze data directory: {e}")
         sys.exit(1)
 
-    # Create timestamped output directory
-    processing_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create timestamped output directory using pipeline start time
+    pipeline_start_time = datetime.now()
+    processing_timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
     # Use config constant
     output_silver_dir = config.SILVER_BASE_DIR / processing_timestamp
     logging.info(f"Determined output silver directory: {output_silver_dir}")

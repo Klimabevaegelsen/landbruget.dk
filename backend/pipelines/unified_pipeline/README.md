@@ -21,7 +21,7 @@ This repository contains the Unified Pipeline for various Danish data sources wi
    ```
 4. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   uv pip install -e .
    ```
 
 ## Usage

@@ -1,80 +1,89 @@
-"""PDF transformer for Silver layer."""
+"""PDF transformer for Silver layer using DuckDB."""
 
 from pathlib import Path
+from typing import Any
 
-import pandas as pd
 import tabula
 
-from ...bronze.metadata import FileMetadata
-from ...utils.logging import get_logger, set_context
+# Handle imports for both standalone and package usage
+try:
+    from ...utils.logging import get_logger
+    from ..duckdb_base import DuckDBProcessor
+except ImportError:
+    # Fallback for standalone usage
+    import logging
+
+    get_logger = lambda: logging.getLogger(__name__)
+    from silver.duckdb_base import DuckDBProcessor
 from .base import BaseTransformer, TransformResult
 
 # Get logger
 logger = get_logger()
 
 
-class PDFTransformer(BaseTransformer):
-    """Transformer for PDF files."""
+class PDFTransformer(BaseTransformer, DuckDBProcessor):
+    """Transformer for PDF files using DuckDB."""
+
+    def __init__(self):
+        """Initialize the PDF transformer."""
+        BaseTransformer.__init__(self)
+        DuckDBProcessor.__init__(self)
+        logger.info("Initialized PDFTransformer with DuckDB")
 
     def transform(
         self,
         file_path: Path,
-        metadata: FileMetadata,
+        metadata: Any,  # FileMetadata
         output_dir: Path,
     ) -> TransformResult:
-        """Transform PDF file to Parquet format.
+        """Transform PDF file to structured data using DuckDB.
 
         Args:
             file_path: Path to the PDF file
-            metadata: Metadata for the file
-            output_dir: Directory to save the transformed file
+            metadata: File metadata
+            output_dir: Directory to save output files
 
         Returns:
-            TransformResult with the result of the transformation
+            TransformResult with transformation results
         """
         try:
-            set_context(
-                file_id=metadata.file_id,
-                file_name=metadata.original_filename,
-            )
             logger.info(f"Transforming PDF file: {file_path}")
 
             # Extract tables from PDF
             tables = self._extract_tables(file_path)
             if not tables:
+                logger.warning(f"PDF file {file_path} has no extractable tables")
                 return TransformResult(
                     success=False,
-                    error="PDF file has no extractable tables",
+                    error="No extractable tables found in PDF",
                 )
 
-            # Create output directory for this file
-            file_output_dir = output_dir / metadata.original_subfolder / "pdf"
-            file_output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Process each table
+            # Process tables using DuckDB
             output_paths = []
             total_rows = 0
 
             for i, df in enumerate(tables):
-                # Clean column names
-                df.columns = self._standardize_column_names(df.columns.tolist())
+                # Register table in DuckDB
+                table_name = f"pdf_table_{i}"
+                self.register_table(df, table_name)
 
-                # Apply data type standardization
-                df = self._standardize_data_types(df)
+                # Clean and standardize using DuckDB
+                clean_table = self._standardize_table_with_duckdb(table_name, i, file_path.name)
 
-                # Generate output filename
-                base_filename = Path(metadata.original_filename).stem
-                table_filename = f"{base_filename}_table_{i + 1}.parquet"
+                # Count rows
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {clean_table}").fetchone()[0]
+                total_rows += row_count
 
-                # Save as Parquet directly
-                output_path = file_output_dir / table_filename
-                df.to_parquet(output_path, index=False)
-
+                # Save to parquet
+                output_filename = f"{file_path.stem}_table_{i}.parquet"
+                output_path = output_dir / output_filename
+                self.export_to_parquet(clean_table, output_path)
                 output_paths.append(output_path)
-                total_rows += len(df)
 
-            # Create schema dictionary from the last table
-            schema = self._create_schema_dict(df)
+                logger.info(f"Processed table {i} with {row_count} rows")
+
+            # Create schema from the last table
+            schema = self._create_schema_dict_from_table(clean_table)
 
             return TransformResult(
                 success=True,
@@ -100,8 +109,8 @@ class PDFTransformer(BaseTransformer):
         file_content: bytes,
         filename: str,
         metadata_dict: dict,
-    ) -> pd.DataFrame | None:
-        """Transform PDF content directly from memory.
+    ) -> str | None:
+        """Transform PDF content directly from memory, returning DuckDB table name.
 
         Args:
             file_content: Raw PDF content in bytes
@@ -109,7 +118,7 @@ class PDFTransformer(BaseTransformer):
             metadata_dict: File metadata dictionary
 
         Returns:
-            Transformed DataFrame or None if transformation failed
+            DuckDB table name with transformed data or None if transformation failed
         """
         import os
         import tempfile
@@ -129,28 +138,30 @@ class PDFTransformer(BaseTransformer):
                 logger.warning(f"PDF file {filename} has no extractable tables")
                 return None
 
-            # Process tables
+            # Process tables using DuckDB
             processed_tables = []
             for i, df in enumerate(tables):
-                # Clean column names
-                df.columns = self._standardize_column_names(df.columns.tolist())
+                # Register table in DuckDB
+                temp_table = f"pdf_temp_{i}"
+                self.register_table(df, temp_table)
 
-                # Apply data type standardization
-                df = self._standardize_data_types(df)
+                # Clean and standardize
+                clean_table = self._standardize_table_with_duckdb(temp_table, i, filename)
+                processed_tables.append(clean_table)
 
-                # Add table identifier
-                df["table_number"] = i + 1
-                df["source_file"] = filename
-
-                processed_tables.append(df)
-
-            # Combine all tables into one DataFrame
+            # Combine all tables into one if multiple exist
             if len(processed_tables) == 1:
-                return processed_tables[0]
+                final_table = processed_tables[0]
             else:
-                # Combine multiple tables
-                combined_df = pd.concat(processed_tables, ignore_index=True)
-                return combined_df
+                # Union all tables (they should have same structure after standardization)
+                final_table = f"pdf_combined_{filename.replace('.', '_')}"
+                union_query = " UNION ALL ".join(
+                    [f"SELECT * FROM {table}" for table in processed_tables]
+                )
+                self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
+
+            logger.info(f"Successfully transformed PDF {filename} into table {final_table}")
+            return final_table
 
         except Exception as e:
             logger.error(f"Failed to transform PDF content for {filename}: {str(e)}")
@@ -163,14 +174,14 @@ class PDFTransformer(BaseTransformer):
             except Exception:
                 pass
 
-    def _extract_tables(self, file_path: Path) -> list[pd.DataFrame]:
-        """Extract tables from PDF file.
+    def _extract_tables(self, file_path: Path) -> list[Any]:
+        """Extract tables from PDF file using tabula.
 
         Args:
             file_path: Path to the PDF file
 
         Returns:
-            List of dataframes, each representing a table
+            List of pandas dataframes, each representing a table
         """
         try:
             logger.debug(f"Extracting tables from PDF: {file_path}")
@@ -194,79 +205,140 @@ class PDFTransformer(BaseTransformer):
             logger.error(f"Failed to extract tables from PDF {file_path}: {str(e)}")
             return []
 
-    def _standardize_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Standardize data types in the dataframe.
+    def _standardize_table_with_duckdb(
+        self, table_name: str, table_number: int, source_file: str
+    ) -> str:
+        """Standardize a table using DuckDB operations.
 
         Args:
-            df: Pandas dataframe
+            table_name: Name of the DuckDB table to standardize
+            table_number: Table number identifier
+            source_file: Source filename
 
         Returns:
-            Dataframe with standardized data types
+            Name of the standardized table
         """
-        # Create a copy to avoid modifying the original
-        df_clean = df.copy()
+        clean_table = f"{table_name}_clean"
 
-        for col in df_clean.columns:
-            # Skip columns that are already numeric or datetime
-            if pd.api.types.is_numeric_dtype(df_clean[col]) or pd.api.types.is_datetime64_any_dtype(
-                df_clean[col]
-            ):
-                continue
+        try:
+            # Get column information
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
 
-            # Only process object columns that contain strings
-            if df_clean[col].dtype == "object":
-                # Check if column contains actual string values (not just NaN or numeric)
-                string_values = df_clean[col].dropna()
-                if string_values.empty:
-                    continue
+            # Build standardization query
+            select_parts = []
 
-                # Ensure all non-null values are strings before applying string operations
-                non_null_mask = df_clean[col].notna()
-                if not non_null_mask.any():
-                    continue
+            for col_name, col_type, *_ in columns_info:
+                # Standardize column names (convert to snake_case)
+                clean_col_name = self._standardize_column_name(col_name)
 
-                # Convert all non-null values to strings for consistent processing
-                try:
-                    string_series = df_clean.loc[non_null_mask, col].astype(str)
-                    # Verify the conversion worked - if we still have non-string types, skip this column
-                    if not all(isinstance(x, str) for x in string_series.dropna()):
-                        continue
-                except Exception:
-                    # If string conversion fails, skip this column
-                    continue
+                # Apply data type standardization
+                if "VARCHAR" in col_type.upper() or "TEXT" in col_type.upper():
+                    # Handle string columns - try to detect dates, booleans, numbers
+                    select_parts.append(f"""
+                        CASE 
+                            WHEN {col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
+                                 {col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                            THEN TRY_CAST({col_name} AS DATE)::VARCHAR
+                            WHEN LOWER({col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
+                            THEN CASE LOWER({col_name}) 
+                                     WHEN 'yes' THEN '1'
+                                     WHEN 'true' THEN '1' 
+                                     WHEN 'ja' THEN '1'
+                                     WHEN 'no' THEN '0'
+                                     WHEN 'false' THEN '0'
+                                     WHEN 'nej' THEN '0'
+                                     ELSE {col_name}
+                                 END
+                            WHEN {col_name} ~ '^-?\\d+\\.?\\d*$' 
+                            THEN TRY_CAST({col_name} AS DOUBLE)::VARCHAR
+                            ELSE {col_name}
+                        END AS {clean_col_name}
+                    """)
+                else:
+                    # Keep numeric/date columns as-is but with clean names
+                    select_parts.append(f"{col_name} AS {clean_col_name}")
 
-                # Handle date columns
-                try:
-                    if (
-                        string_series.str.contains(r"\d{2}[/.-]\d{2}[/.-]\d{4}").any()
-                        or string_series.str.contains(r"\d{4}[/.-]\d{2}[/.-]\d{2}").any()
-                    ):
-                        df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce")
-                        continue  # Skip further processing if converted to datetime
-                except Exception:
-                    pass
+            # Add metadata columns
+            select_parts.append(f"{table_number} AS table_number")
+            select_parts.append(f"'{source_file}' AS source_file")
 
-                # Handle boolean columns (yes/no, true/false)
-                try:
-                    # Check for boolean-like values
-                    bool_map = {"yes": 1, "no": 0, "true": 1, "false": 0, "ja": 1, "nej": 0}
-                    lower_values = string_series.str.lower()
-                    if lower_values.isin(bool_map.keys()).all():
-                        # Create a new series with boolean mapping
-                        bool_series = lower_values.map(bool_map)
-                        df_clean.loc[non_null_mask, col] = bool_series
-                        continue  # Skip numeric conversion if converted to boolean
-                except Exception:
-                    pass
+            # Create the cleaned table
+            self.conn.execute(f"""
+                CREATE TABLE {clean_table} AS
+                SELECT {", ".join(select_parts)}
+                FROM {table_name}
+                WHERE NOT (
+                    -- Remove rows where all original columns are null
+                    {" AND ".join([f"{col[0]} IS NULL" for col in columns_info])}
+                )
+            """)
 
-                # Handle numeric columns that may be strings
-                try:
-                    # Try to convert strings with numbers to numeric
-                    numeric_converted = pd.to_numeric(df_clean[col], errors="coerce")
-                    # Only apply conversion if we successfully converted some values
-                    if not numeric_converted.isna().all():
-                        df_clean[col] = numeric_converted
-                except Exception:
-                    pass
+            logger.debug(f"Standardized table {table_name} -> {clean_table}")
+            return clean_table
 
-        return df_clean
+        except Exception as e:
+            logger.warning(f"Failed to standardize table {table_name}: {str(e)}")
+            # Return original table if standardization fails
+            return table_name
+
+    def _standardize_column_name(self, col_name: str) -> str:
+        """Convert column name to snake_case.
+
+        Args:
+            col_name: Original column name
+
+        Returns:
+            Standardized column name
+        """
+        import re
+
+        # Convert to lowercase and replace spaces/special chars with underscores
+        clean_name = re.sub(r"[^a-zA-Z0-9]", "_", str(col_name).lower())
+
+        # Remove consecutive underscores
+        clean_name = re.sub(r"_+", "_", clean_name)
+
+        # Remove leading/trailing underscores
+        clean_name = clean_name.strip("_")
+
+        # Ensure it starts with a letter
+        if clean_name and clean_name[0].isdigit():
+            clean_name = f"col_{clean_name}"
+
+        return clean_name or "unnamed_column"
+
+    def _create_schema_dict_from_table(self, table_name: str) -> dict:
+        """Create schema dictionary from DuckDB table.
+
+        Args:
+            table_name: Name of the DuckDB table
+
+        Returns:
+            Schema dictionary
+        """
+        try:
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            schema = {}
+
+            for col_name, col_type, *_ in columns_info:
+                # Map DuckDB types to schema types
+                if "VARCHAR" in col_type.upper() or "TEXT" in col_type.upper():
+                    schema[col_name] = "string"
+                elif "INTEGER" in col_type.upper() or "BIGINT" in col_type.upper():
+                    schema[col_name] = "integer"
+                elif "DOUBLE" in col_type.upper() or "FLOAT" in col_type.upper():
+                    schema[col_name] = "float"
+                elif "DATE" in col_type.upper():
+                    schema[col_name] = "date"
+                elif "TIMESTAMP" in col_type.upper():
+                    schema[col_name] = "timestamp"
+                elif "BOOLEAN" in col_type.upper():
+                    schema[col_name] = "boolean"
+                else:
+                    schema[col_name] = "string"  # Default to string
+
+            return schema
+
+        except Exception as e:
+            logger.warning(f"Failed to create schema from table {table_name}: {str(e)}")
+            return {}

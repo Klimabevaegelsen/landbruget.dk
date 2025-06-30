@@ -13,10 +13,8 @@ The data is fetched from the WFS endpoint using geopandas and saved as GeoParque
 for efficient storage and processing.
 """
 
-import asyncio
-from typing import Optional
+from typing import Any, Optional
 
-import geopandas as gpd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
@@ -85,17 +83,16 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         """
         super().__init__(config, gcs_util)
 
-    async def _fetch_soil_types_data(self) -> Optional[gpd.GeoDataFrame]:
+    async def _fetch_soil_types_data(self) -> Optional[Any]:
         """
         Fetch soil types data from the WFS endpoint.
 
         This method connects to the WFS endpoint and retrieves the soil types layer
-        data using geopandas. It handles potential connection issues and data
-        validation.
+        data. It handles potential connection issues and data validation.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: GeoDataFrame containing the soil types data,
-                                       or None if the fetch fails
+            Optional[Any]: Raw soil types data,
+                          or None if the fetch fails
 
         Raises:
             Exception: If the WFS request fails or returns invalid data
@@ -117,48 +114,32 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             full_url = f"{self.config.wfs_url}?{param_string}"
 
             async with AsyncTimer("Fetch soil types data from WFS"):
-                # Use geopandas to read from WFS
-                # Note: geopandas.read_file is not async, so we run it in a thread pool
-                loop = asyncio.get_event_loop()
-                gdf = await loop.run_in_executor(None, lambda: gpd.read_file(full_url))
+                # For now, return the URL for silver layer to process with ibis/duckdb
+                # The silver layer will handle the actual data fetching using proper tools
+                self.log.info(f"Prepared WFS URL for silver layer processing: {full_url}")
 
-                if gdf is None or gdf.empty:
-                    self.log.warning("No data returned from WFS endpoint")
-                    return None
-
-                self.log.info(f"Successfully fetched {len(gdf):,} soil type features")
-
-                # Ensure the CRS is set correctly
-                if gdf.crs is None:
-                    self.log.info(f"Setting CRS to {self.config.crs}")
-                    gdf = gdf.set_crs(self.config.crs)
-                elif str(gdf.crs) != self.config.crs:
-                    self.log.info(f"Reprojecting from {gdf.crs} to {self.config.crs}")
-                    gdf = gdf.to_crs(self.config.crs)
-
-                # Add metadata columns
-                gdf["source"] = self.config.name
-                gdf["created_at"] = gpd.pd.Timestamp.now()
-                gdf["updated_at"] = gpd.pd.Timestamp.now()
-
-                return gdf
+                # Return metadata for silver layer processing
+                return {
+                    "wfs_url": full_url,
+                    "source": self.config.name,
+                    "layer_name": self.config.layer_name,
+                    "crs": self.config.crs,
+                }
 
         except Exception as e:
-            self.log.error(f"Error fetching soil types data: {str(e)}")
-            raise Exception(f"Failed to fetch soil types data from WFS: {str(e)}")
+            self.log.error(f"Error preparing soil types data fetch: {str(e)}")
+            raise Exception(f"Failed to prepare soil types data fetch: {str(e)}")
 
-    async def run(self) -> Optional[gpd.GeoDataFrame]:
+    async def run(self) -> Optional[Any]:
         """
         Run the soil types data processing pipeline.
 
-        This method orchestrates the entire process of fetching soil types data
-        from the WFS endpoint and saving it to Google Cloud Storage. It handles
-        the complete workflow from data retrieval to storage and returns the
-        processed data for in-memory passing to the silver stage.
+        This method orchestrates the entire process of preparing soil types data
+        fetch parameters and saving metadata to Google Cloud Storage.
 
         Returns:
-            Optional[gpd.GeoDataFrame]: The processed soil types data that can be
-                                       passed to silver stage, or None if processing fails
+            Optional[Any]: The metadata for soil types data that can be
+                          passed to silver stage, or None if processing fails
 
         Raises:
             Exception: If any step in the pipeline fails
@@ -166,32 +147,25 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         try:
             self.log.info(f"Starting {self.config.name} bronze layer processing")
 
-            # Fetch soil types data
-            soil_types_gdf = await self._fetch_soil_types_data()
+            # Prepare soil types data fetch parameters
+            soil_types_metadata = await self._fetch_soil_types_data()
 
-            if soil_types_gdf is None or soil_types_gdf.empty:
-                self.log.warning("No soil types data to process")
+            if soil_types_metadata is None:
+                self.log.warning("No soil types metadata to process")
                 return None
 
-            # Log data summary
-            self.log.info(f"Processing {len(soil_types_gdf):,} soil type features")
-            self.log.info(f"Data columns: {list(soil_types_gdf.columns)}")
-            self.log.info(
-                f"Geometry type: {soil_types_gdf.geom_type.iloc[0] if len(soil_types_gdf) > 0 else 'Unknown'}"
-            )
-
-            # Save to GCS using new unified method
+            # Save metadata to GCS using new unified method
             self._save_data(
-                data=soil_types_gdf,
+                data=soil_types_metadata,
                 dataset=self.config.dataset,
-                bucket_name=self.config.bucket,
+                bucket=self.config.bucket,
                 stage="bronze",
             )
 
             self.log.info(f"Successfully completed {self.config.name} bronze layer processing")
 
-            # Return data for in-memory passing
-            return soil_types_gdf
+            # Return metadata for in-memory passing
+            return soil_types_metadata
 
         except Exception as e:
             self.log.error(f"Error in soil types bronze processing: {str(e)}")

@@ -1,155 +1,140 @@
+"""CHR Export functionality using DuckDB."""
+
 import logging
-import os
-import shutil
-import tempfile
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
-import gcsfs
-import pandas as pd
-from dotenv import load_dotenv
-from google.cloud import storage
+import ibis
 
-# Load environment variables
-load_dotenv()
 
-# Initialize storage paths and clients
-GCS_BUCKET = os.getenv("GCS_BUCKET")
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+def save_table(output_path: Path, data: Union[ibis.Table, str], is_geo: bool = False) -> Optional[Path]:
+    """
+    Save table data to parquet file using DuckDB directly.
 
-# DEBUG: Log retrieved environment variables
-logging.info(f"Retrieved GCS_BUCKET: '{GCS_BUCKET}'")
-logging.info(f"Retrieved GOOGLE_CLOUD_PROJECT: '{GOOGLE_CLOUD_PROJECT}'")
+    ✅ MIGRATION: This function now uses DuckDB exclusively for saving data,
+    accepting either Ibis tables or DuckDB table names.
 
-# Use GCS if we have the required configuration
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+    Args:
+        output_path: Path where to save the parquet file
+        data: Ibis table or DuckDB table name containing the data to save
+        is_geo: Whether the data contains geometry (for spatial extension loading)
 
-# DEBUG: Log USE_GCS decision
-logging.info(f"USE_GCS determined as: {USE_GCS}")
-
-# Get timestamp for this export run
-EXPORT_TIMESTAMP = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-
-# Initialize GCS client and filesystem if bucket is configured
-gcs_client = None
-gcs_fs = None
-if USE_GCS:
+    Returns:
+        Path to the saved file if successful, None otherwise
+    """
     try:
-        logging.info("Attempting to initialize GCS client and filesystem...")
-        gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        gcs_fs = gcsfs.GCSFileSystem(project=GOOGLE_CLOUD_PROJECT)
-        # Test GCS connection
-        try:
-            bucket = gcs_client.bucket(GCS_BUCKET)
-            if bucket.exists():
-                logging.info(f"Successfully connected to GCS bucket: {GCS_BUCKET}")
-            else:
-                logging.error(f"GCS bucket {GCS_BUCKET} does not exist")
-                USE_GCS = False
-        except Exception as bucket_err:
-            logging.error(f"Failed to verify GCS bucket: {bucket_err}")
-            USE_GCS = False
+        # Ensure parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Handle different input types
+        if isinstance(data, ibis.Table):
+            # Get the DuckDB connection from the Ibis table
+            con = data.get_backend()
+
+            # Create a temporary table name for the operation
+            temp_table_name = f"temp_export_{output_path.stem}"
+
+            # Create temporary table
+            con.create_table(temp_table_name, data, overwrite=True)
+
+            # Use DuckDB COPY to save to parquet
+            con.con.execute(f"COPY {temp_table_name} TO '{output_path}' (FORMAT PARQUET)")
+
+            # Clean up temporary table
+            con.drop_table(temp_table_name, force=True)
+
+        elif isinstance(data, str):
+            # Assume it's a table name in DuckDB
+            # We need a connection - this is a limitation of the current design
+            # For now, we'll assume the caller passes an Ibis table
+            raise ValueError("String table names not supported - please pass Ibis table directly")
+
+        else:
+            raise ValueError(f"Unsupported data type: {type(data)}. Expected Ibis table.")
+
+        if not output_path.exists():
+            logging.error(f"Failed to save table - file not created: {output_path}")
+            return None
+
+        logging.info(f"Successfully saved table to {output_path}")
+        return output_path
+
     except Exception as e:
-        logging.error(f"Failed to initialize GCS client/filesystem: {e}")
-        logging.info("Falling back to local storage")
-        USE_GCS = False
-
-if not USE_GCS:
-    logging.info("Using local storage in /data/silver/")
-
-
-def _convert_uuid_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert UUID columns to strings for parquet compatibility."""
-    df = df.copy()  # Create a copy to avoid modifying the original
-    for col in df.columns:
-        if df[col].dtype == "object":  # Check if column might contain UUIDs
-            # Get first non-null value
-            first_value = df[col].dropna().iloc[0] if not df[col].isna().all() else None
-            if first_value is not None and hasattr(first_value, "hex"):  # UUID objects have hex attribute
-                # Convert UUIDs to hex strings
-                df[col] = df[col].apply(lambda x: x.hex if x is not None and hasattr(x, "hex") else x)
-    return df
-
-
-def _save_to_gcs(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
-    """Save DataFrame to GCS."""
-    if not USE_GCS or not GCS_BUCKET:
-        logging.warning("GCS not configured, cannot save to GCS")
+        logging.error(f"Error saving table to {output_path}: {str(e)}")
         return None
 
+
+def save_table_with_connection(
+    con: ibis.BaseBackend, table_name: str, output_path: Path, is_geo: bool = False
+) -> Optional[Path]:
+    """
+    Save a DuckDB table to parquet file using the connection directly.
+
+    This is an alternative method when you have the connection and table name.
+
+    Args:
+        con: DuckDB connection (Ibis backend)
+        table_name: Name of the table in DuckDB
+        output_path: Path where to save the parquet file
+        is_geo: Whether the data contains geometry (for spatial extension loading)
+
+    Returns:
+        Path to the saved file if successful, None otherwise
+    """
     try:
-        # Convert UUIDs to strings
-        df = _convert_uuid_columns(df)
+        # Ensure parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create a temporary directory for local staging
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir) / filepath.name
-
-            # Save to temporary file
-            if is_geo:
-                df.to_parquet(temp_path, index=False, engine="pyarrow")
-            else:
-                df.to_parquet(temp_path, index=False, engine="pyarrow")
-
-            # Define GCS path with timestamp
-            gcs_path = f"gs://{GCS_BUCKET}/silver/chr/{EXPORT_TIMESTAMP}/{filepath.name}"
-
+        # Load spatial extension if needed
+        if is_geo:
             try:
-                # Upload to GCS using gcsfs
-                with open(temp_path, "rb") as local_file:
-                    with gcs_fs.open(gcs_path, "wb") as gcs_file:
-                        gcs_file.write(local_file.read())
-                logging.info(f"Successfully uploaded {filepath.name} to GCS at {gcs_path}")
-                return filepath
-            except Exception as gcs_err:
-                logging.error(f"Failed to upload to GCS: {gcs_err}")
-                return None
+                con.con.execute("INSTALL spatial")
+                con.con.execute("LOAD spatial")
+            except Exception:
+                pass  # Extensions might already be loaded
+
+        # Use DuckDB COPY to save to parquet
+        con.con.execute(f"COPY {table_name} TO '{output_path}' (FORMAT PARQUET)")
+
+        if not output_path.exists():
+            logging.error(f"Failed to save table - file not created: {output_path}")
+            return None
+
+        logging.info(f"Successfully saved table '{table_name}' to {output_path}")
+        return output_path
 
     except Exception as e:
-        logging.error(f"Error in GCS save process: {e}")
+        logging.error(f"Error saving table '{table_name}' to {output_path}: {str(e)}")
         return None
 
 
-def _save_locally(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
-    """Save DataFrame locally."""
-    try:
-        # Convert UUIDs to strings
-        df = _convert_uuid_columns(df)
+class CHRExporter:
+    """
+    CHR data exporter using DuckDB.
 
-        # Create a temporary directory
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir) / filepath.name
+    ✅ MIGRATION: Updated to use DuckDB exclusively for all export operations.
+    """
 
-            # Save to temporary file
-            if is_geo:
-                df.to_parquet(temp_path, index=False, engine="pyarrow")
-            else:
-                df.to_parquet(temp_path, index=False, engine="pyarrow")
+    def __init__(self, connection: ibis.BaseBackend):
+        """Initialize with DuckDB connection."""
+        self.con = connection
 
-            # Ensure the parent directory exists
-            os.makedirs(filepath.parent, exist_ok=True)
-            # Copy directly to the target path without adding timestamp again
-            shutil.copy2(temp_path, filepath)
+    def export_tables(self, table_names: list[str], output_dir: Path) -> dict[str, Optional[Path]]:
+        """
+        Export multiple tables to parquet files.
 
-            return filepath
-    except Exception as e:
-        logging.error(f"Error saving locally: {e}")
-        return None
+        Args:
+            table_names: List of table names to export
+            output_dir: Directory to save the files
 
+        Returns:
+            Dictionary mapping table names to saved file paths (None if failed)
+        """
+        results = {}
 
-def save_table(filepath: Path, df: pd.DataFrame, is_geo: bool = False) -> Optional[Path]:
-    """Save a DataFrame to parquet, first attempting GCS then falling back to local storage."""
-    try:
-        # Try saving to GCS first
-        saved_path = _save_to_gcs(filepath, df, is_geo)
-        if saved_path is not None:
-            return saved_path
+        for table_name in table_names:
+            output_path = output_dir / f"{table_name}.parquet"
+            saved_path = save_table_with_connection(self.con, table_name, output_path)
+            results[table_name] = saved_path
 
-        # If GCS fails, fall back to local storage
-        logging.warning("Falling back to local storage")
-        return _save_locally(filepath, df, is_geo)
-
-    except Exception as e:
-        logging.error(f"Failed to save table: {e}")
-        return None
+        return results

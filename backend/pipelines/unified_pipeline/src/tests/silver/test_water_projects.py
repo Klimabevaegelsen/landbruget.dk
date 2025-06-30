@@ -7,10 +7,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from unittest.mock import MagicMock, PropertyMock, call, patch
 
-import geopandas as gpd
-import pandas as pd
 import pytest
+from geopandas import GeoDataFrame as gGeo
+from pandas import Timestamp
 from shapely.geometry import MultiPolygon, Polygon
+
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.util.gcs_util import GCSUtil
 
@@ -205,13 +206,12 @@ def sample_json_string() -> str:
 
 
 @pytest.fixture
-def sample_bronze_df() -> pd.DataFrame:
-    """Return a sample DataFrame with bronze data."""
-    return pd.DataFrame(
-        {
-            "layer": ["test_layer1", "test_layer2"],
-            "payload": [
-                """
+def sample_bronze_df() -> dict:
+    """Return a sample dict with bronze data."""
+    return {
+        "layer": ["test_layer1", "test_layer2"],
+        "payload": [
+            """
             <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
                                 xmlns:gml="http://www.opengis.net/gml/3.2"
                                 xmlns:test="http://test.namespace">
@@ -241,44 +241,43 @@ def sample_bronze_df() -> pd.DataFrame:
                 </wfs:member>
             </wfs:FeatureCollection>
             """,  # noqa: E501
-                json.dumps(
-                    {
-                        "features": [
-                            {
-                                "attributes": {
-                                    "projektnavn": "Test Project",
-                                    "enhedskontakt": "Test Contact",
-                                    "projektstart": 1577836800000,  # 2020-01-01 00:00:00
-                                    "projektslut": 1609459200000,  # 2021-01-01 00:00:00
-                                    "status": "Active",
-                                    "OBJECTID": 1,
-                                    "GlobalID": "abc123",
-                                },
-                                "geometry": {
-                                    "rings": [
-                                        [
-                                            [10.0, 10.0],
-                                            [20.0, 10.0],
-                                            [20.0, 20.0],
-                                            [10.0, 20.0],
-                                            [10.0, 10.0],
-                                        ]
+            json.dumps(
+                {
+                    "features": [
+                        {
+                            "attributes": {
+                                "projektnavn": "Test Project",
+                                "enhedskontakt": "Test Contact",
+                                "projektstart": 1577836800000,  # 2020-01-01 00:00:00
+                                "projektslut": 1609459200000,  # 2021-01-01 00:00:00
+                                "status": "Active",
+                                "OBJECTID": 1,
+                                "GlobalID": "abc123",
+                            },
+                            "geometry": {
+                                "rings": [
+                                    [
+                                        [10.0, 10.0],
+                                        [20.0, 10.0],
+                                        [20.0, 20.0],
+                                        [10.0, 20.0],
+                                        [10.0, 10.0],
                                     ]
-                                },
-                            }
-                        ]
-                    }
-                ),
-            ],
-        }
-    )
+                                ]
+                            },
+                        }
+                    ]
+                }
+            ),
+        ],
+    }
 
 
 @pytest.fixture
-def sample_geodataframe() -> gpd.GeoDataFrame:
-    """Return a sample GeoDataFrame for testing."""
+def sample_geodataframe() -> gGeo:
+    """Return a sample Geo for testing."""
     polygon = Polygon([(10, 10), (20, 10), (20, 20), (10, 20)])
-    return gpd.GeoDataFrame(
+    return gGeo(
         {
             "layer": ["test_layer1", "test_layer2"],
             "area_ha": [1.0, 1.0],
@@ -457,7 +456,7 @@ def test_parse_feature_success(
     assert result["area"] == 100.5
     assert result["startaar"] == 2020
     # Verify date parsing
-    assert isinstance(result["startdato"], pd.Timestamp)
+    assert isinstance(result["startdato"], Timestamp)
 
 
 def test_parse_feature_no_geometry(silver_source: WaterProjectsSilver) -> None:
@@ -623,9 +622,7 @@ def test_process_json_data_invalid_geometry(silver_source: WaterProjectsSilver) 
     assert len(result) == 0
 
 
-def test_process_data_success(
-    silver_source: WaterProjectsSilver, sample_bronze_df: pd.DataFrame
-) -> None:
+def test_process_data_success(silver_source: WaterProjectsSilver, sample_bronze_df: dict) -> None:
     """Test _process_data with valid bronze data."""
     with (
         patch.object(silver_source, "_process_xml_data") as mock_process_xml,
@@ -653,7 +650,7 @@ def test_process_data_success(
 
         # Verify result
         assert result is not None
-        assert isinstance(result, gpd.GeoDataFrame)
+        assert isinstance(result, gGeo)
         assert len(result) == 2
         assert result.crs == "EPSG:25832"
 
@@ -663,14 +660,14 @@ def test_process_data_success(
 
 
 def test_process_data_empty_dataframe(silver_source: WaterProjectsSilver) -> None:
-    """Test _process_data with empty DataFrame."""
-    empty_df = pd.DataFrame()
+    """Test _process_data with empty ."""
+    empty_df = ()
     result = silver_source._process_data(empty_df)
     assert result is None
 
 
 def test_process_data_no_features_extracted(
-    silver_source: WaterProjectsSilver, sample_bronze_df: pd.DataFrame
+    silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
     """Test _process_data when no features are extracted."""
     with (
@@ -688,7 +685,7 @@ def test_process_data_no_features_extracted(
 
 
 def test_process_data_processing_error(
-    silver_source: WaterProjectsSilver, sample_bronze_df: pd.DataFrame
+    silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
     """Test _process_data when processing raises an exception for XML data but JSON data still processes."""  # noqa: E501
     with patch.object(silver_source, "_process_xml_data") as mock_process_xml:
@@ -698,50 +695,48 @@ def test_process_data_processing_error(
         # Process should continue for JSON data
         result = silver_source._process_data(sample_bronze_df)
 
-        # We should still get a GeoDataFrame since the JSON data should still process
+        # We should still get a Geo since the JSON data should still process
         assert result is not None
-        assert isinstance(result, gpd.GeoDataFrame)
+        assert isinstance(result, gGeo)
         assert len(result) == 1  # Only JSON data is processed
 
 
 def test_create_dissolved_df_success(
-    silver_source: WaterProjectsSilver, sample_geodataframe: gpd.GeoDataFrame
+    silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
 ) -> None:
-    """Test _create_dissolved_df with valid GeoDataFrame."""
+    """Test _create_dissolved_df with valid Geo."""
     # Test directly without mocking validate_and_transform_geometries
     result = silver_source._create_dissolved_df(sample_geodataframe, "test_dataset")
 
     # Verify result
     assert result is not None
-    assert isinstance(result, gpd.GeoDataFrame)
+    assert isinstance(result, gGeo)
     assert result.crs == "EPSG:4326"  # Should be converted to WGS84
 
 
 def test_create_dissolved_df_multipolygon(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with MultiPolygon geometries."""
-    # Create a GeoDataFrame with two separate polygons that won't dissolve into one
+    # Create a Geo with two separate polygons that won't dissolve into one
     polygon1 = Polygon([(10, 10), (20, 10), (20, 20), (10, 20)])
     polygon2 = Polygon([(30, 30), (40, 30), (40, 40), (30, 40)])
-    gdf = gpd.GeoDataFrame({"id": [1, 2]}, geometry=[polygon1, polygon2], crs="EPSG:25832")
+    gdf = gGeo({"id": [1, 2]}, geometry=[polygon1, polygon2], crs="EPSG:25832")
 
     with patch(
         "unified_pipeline.util.geometry_validator.validate_and_transform_geometries"
     ) as mock_validate:
-        # Setup mock to return a GeoDataFrame with the polygons
-        mock_validate.return_value = gpd.GeoDataFrame(
-            geometry=[polygon1, polygon2], crs="EPSG:4326"
-        )
+        # Setup mock to return a Geo with the polygons
+        mock_validate.return_value = gGeo(geometry=[polygon1, polygon2], crs="EPSG:4326")
 
         result = silver_source._create_dissolved_df(gdf, "test_dataset")
 
         # Verify result
         assert result is not None
-        assert isinstance(result, gpd.GeoDataFrame)
+        assert isinstance(result, gGeo)
         assert len(result) == 2  # Should have 2 separate polygons
 
 
 def test_create_dissolved_df_invalid_geometries(
-    silver_source: WaterProjectsSilver, sample_geodataframe: gpd.GeoDataFrame
+    silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
 ) -> None:
     """Test _create_dissolved_df with invalid geometries."""
     # Mock unary_union to return an invalid polygon
@@ -760,7 +755,7 @@ def test_create_dissolved_df_invalid_geometries(
         # Setup mocks
         mock_unary_union.return_value = invalid_multi
         mock_explain_validity.return_value = "Self-intersection at or near point 0.5 0.5"
-        mock_validate.return_value = gpd.GeoDataFrame(
+        mock_validate.return_value = gGeo(
             geometry=[invalid_poly1.buffer(0), invalid_poly2],  # Buffer(0) fixes self-intersection
             crs="EPSG:4326",
         )
@@ -769,13 +764,13 @@ def test_create_dissolved_df_invalid_geometries(
 
         # Verify result
         assert result is not None
-        assert isinstance(result, gpd.GeoDataFrame)
+        assert isinstance(result, gGeo)
 
         mock_explain_validity.assert_called()
 
 
 def test_create_dissolved_df_exception(
-    silver_source: WaterProjectsSilver, sample_geodataframe: gpd.GeoDataFrame
+    silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
 ) -> None:
     """Test _create_dissolved_df when an exception occurs."""
     with patch("unified_pipeline.silver.water_projects.unary_union") as mock_unary_union:
@@ -793,20 +788,16 @@ def test_create_dissolved_df_exception(
 async def test_run_success(silver_source: WaterProjectsSilver) -> None:
     """Test run with successful processing."""
     # Mock data for testing
-    bronze_df = pd.DataFrame(
-        {
-            "layer": ["test_layer"],
-            "payload": [
-                "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
-            ],
-        }
-    )
-    processed_gdf = gpd.GeoDataFrame(
+    bronze_df = {
+        "layer": ["test_layer"],
+        "payload": [
+            "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
+        ],
+    }
+    processed_gdf = gGeo(
         {"id": [1]}, geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:25832"
     )
-    dissolved_gdf = gpd.GeoDataFrame(
-        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326"
-    )
+    dissolved_gdf = gGeo(geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326")
 
     # Setup mocks
     with (
@@ -855,14 +846,12 @@ async def test_run_no_bronze_data(silver_source: WaterProjectsSilver) -> None:
 async def test_run_processing_failure(silver_source: WaterProjectsSilver) -> None:
     """Test run when processing fails."""
     # Mock data for testing
-    bronze_df = pd.DataFrame(
-        {
-            "layer": ["test_layer"],
-            "payload": [
-                "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
-            ],
-        }
-    )
+    bronze_df = {
+        "layer": ["test_layer"],
+        "payload": [
+            "<wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'></wfs:FeatureCollection>"
+        ],
+    }
 
     # Setup mocks
     with (
@@ -952,9 +941,9 @@ def test_parse_feature_general_exception(silver_source: WaterProjectsSilver) -> 
 
 def test_create_dissolved_df_invalid_single_polygon(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with an invalid single polygon."""
-    # Create a GeoDataFrame with a polygon
+    # Create a Geo with a polygon
     polygon = Polygon([(10, 10), (20, 10), (20, 20), (10, 20)])
-    gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
+    gdf = gGeo({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
 
     # Create a mock polygon for better control
     mock_polygon = MagicMock()
@@ -991,7 +980,7 @@ def test_create_dissolved_df_invalid_single_polygon(silver_source: WaterProjects
         mock_explain.return_value = "Self-intersection at or near point 0.5 0.5"
 
         # Setup validate_and_transform_geometries mock
-        mock_validate.return_value = gpd.GeoDataFrame(
+        mock_validate.return_value = gGeo(
             geometry=[polygon],  # Use a valid polygon for the result
             crs="EPSG:4326",
         )
@@ -1004,9 +993,9 @@ def test_create_dissolved_df_invalid_single_polygon(silver_source: WaterProjects
 
 def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with an invalid single polygon."""
-    # Create a GeoDataFrame with a polygon
+    # Create a Geo with a polygon
     polygon = Polygon([(10, 10), (20, 10), (20, 20), (10, 20)])
-    gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
+    gdf = gGeo({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
 
     # Create a mock polygon for better control
     mock_polygon = MagicMock()
@@ -1043,7 +1032,7 @@ def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSi
         mock_explain.return_value = "Self-intersection at or near point 0.5 0.5"
 
         # Setup validate_and_transform_geometries mock
-        mock_validate.return_value = gpd.GeoDataFrame(
+        mock_validate.return_value = gGeo(
             geometry=[polygon],  # Use a valid polygon for the result
             crs="EPSG:4326",
         )
@@ -1057,12 +1046,12 @@ def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSi
 def test_create_dissolved_df_invalid_single_polygon_with_interiors(
     silver_source: WaterProjectsSilver,
 ) -> None:
-    """Test creating a dissolved DataFrame with a single invalid polygon with interiors for detailed logging."""  # noqa: E501
+    """Test creating a dissolved  with a single invalid polygon with interiors for detailed logging."""  # noqa: E501
     # Create a mock polygon that fails validation
     invalid_polygon = Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
 
-    # Create a GeoDataFrame with the invalid polygon
-    gdf = gpd.GeoDataFrame(geometry=[invalid_polygon], crs="EPSG:4326")
+    # Create a Geo with the invalid polygon
+    gdf = gGeo(geometry=[invalid_polygon], crs="EPSG:4326")
 
     # Mock the unary_union method to return an invalid polygon
     with (
@@ -1099,7 +1088,7 @@ def test_create_dissolved_df_invalid_single_polygon_with_interiors(
         mock_explain.return_value = "Self-intersection at or near point 0.5 0.5"
 
         # Set up the final result after validation/transformation
-        mock_validate.return_value = gpd.GeoDataFrame(geometry=[invalid_polygon], crs="EPSG:4326")
+        mock_validate.return_value = gGeo(geometry=[invalid_polygon], crs="EPSG:4326")
 
         # Call the method
         result = silver_source._create_dissolved_df(gdf, "test_dataset")
@@ -1148,10 +1137,10 @@ def test_parse_geometry_no_polygon_correct(silver_source: WaterProjectsSilver) -
 def test_create_dissolved_df_invalid_polygon_with_interiors(
     silver_source: WaterProjectsSilver,
 ) -> None:
-    """Test creating a dissolved DataFrame with a single invalid polygon with interior rings."""
-    # Create a GeoDataFrame with a polygon
+    """Test creating a dissolved  with a single invalid polygon with interior rings."""
+    # Create a Geo with a polygon
     polygon = Polygon([(10, 10), (20, 10), (20, 20), (10, 20), (10, 10)])
-    gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
+    gdf = gGeo({"id": [1]}, geometry=[polygon], crs="EPSG:25832")
 
     # Mock the unary_union method to return an invalid polygon
     with (
@@ -1189,7 +1178,7 @@ def test_create_dissolved_df_invalid_polygon_with_interiors(
         mock_explain.return_value = "Self-intersection at or near point 0.5 0.5"
 
         # Setup validate_and_transform_geometries mock
-        mock_validate.return_value = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
+        mock_validate.return_value = gGeo(geometry=[polygon], crs="EPSG:4326")
 
         # Call the method
         result = silver_source._create_dissolved_df(gdf, "test_dataset")

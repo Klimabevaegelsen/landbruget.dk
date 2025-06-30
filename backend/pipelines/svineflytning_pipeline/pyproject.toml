@@ -18,7 +18,6 @@ dependencies = [
     "python-dotenv~=1.0.1",
     "cryptography",
     "tqdm~=4.66.2",
-    "pandas~=2.2.1",  # For data processing
     "xmltodict~=0.13.0",  # For handling raw XML responses
     "tenacity~=8.2.3",  # For retry logic
     "ijson~=3.2.3",  # For memory-efficient JSON streaming

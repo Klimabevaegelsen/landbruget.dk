@@ -69,7 +69,7 @@ def _create_base_request(username: str, session_id: str = "1", track_id: str = "
         "KlientId": DEFAULT_CLIENT_ID,
         "SessionId": session_id,
         "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",  # Add UUID for uniqueness
+        "TrackID": f"{track_id}-{uuid.uuid4()}",
     }
 
 

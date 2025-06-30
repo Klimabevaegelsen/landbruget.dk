@@ -5,10 +5,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
+# Handle imports for both standalone and package usage
+try:
+    from ...bronze.metadata import FileMetadata
+    from ...utils.logging import get_logger
+except ImportError:
+    # Fallback for standalone usage
+    import logging
 
-from ...bronze.metadata import FileMetadata
-from ...utils.logging import get_logger
+    get_logger = lambda: logging.getLogger(__name__)
+    FileMetadata = None
 
 # Get logger
 logger = get_logger()
@@ -57,7 +64,7 @@ class BaseTransformer(abc.ABC):
         file_content: bytes,
         filename: str,
         metadata_dict: dict,
-    ) -> pd.DataFrame | None:
+    ):
         """Transform file content directly from memory.
 
         Args:
@@ -72,7 +79,11 @@ class BaseTransformer(abc.ABC):
         import os
         import tempfile
 
-        from ...bronze.metadata import FileMetadata
+        # Handle imports for both standalone and package usage (duplicate import)
+        try:
+            from ...bronze.metadata import FileMetadata
+        except ImportError:
+            FileMetadata = None
 
         try:
             # Create a temporary file
@@ -94,27 +105,43 @@ class BaseTransformer(abc.ABC):
                 if result.success:
                     # Handle multiple output files (e.g., Excel with multiple sheets)
                     if result.output_path:
-                        # Single output file
-                        df = pd.read_parquet(result.output_path)
+                        # ✅ MIGRATION: Single output file - use DuckDB to read parquet
+                        import duckdb
+
+                        temp_conn = duckdb.connect()
+                        df = temp_conn.execute(
+                            f"SELECT * FROM read_parquet('{result.output_path}')"
+                        ).df()
+                        temp_conn.close()
                         return df
                     elif result.metadata and "output_paths" in result.metadata:
                         # Multiple output files - combine them
                         output_paths = result.metadata["output_paths"]
                         if output_paths:
-                            # Read and combine all output files
-                            dfs = []
-                            for path_str in output_paths:
+                            # ✅ MIGRATION: Read and combine all output files using DuckDB
+                            import duckdb
+
+                            temp_conn = duckdb.connect()
+
+                            # Register all parquet files and combine with UNION
+                            union_parts = []
+                            for i, path_str in enumerate(output_paths):
                                 path = Path(path_str)
                                 if path.exists():
-                                    df = pd.read_parquet(path)
-                                    # Add sheet identifier column
-                                    df["sheet_name"] = path.stem.split("_")[-1]
-                                    dfs.append(df)
+                                    sheet_name = path.stem.split("_")[-1]
+                                    union_parts.append(f"""
+                                        SELECT *, '{sheet_name}' as sheet_name 
+                                        FROM read_parquet('{path}')
+                                    """)
 
-                            if dfs:
-                                # Combine all sheets into one DataFrame
-                                combined_df = pd.concat(dfs, ignore_index=True)
+                            if union_parts:
+                                # Combine all sheets with UNION ALL
+                                union_query = " UNION ALL ".join(union_parts)
+                                combined_df = temp_conn.execute(union_query).df()
+                                temp_conn.close()
                                 return combined_df
+
+                            temp_conn.close()
 
                     logger.error("Transform succeeded but no output files found")
                     return None

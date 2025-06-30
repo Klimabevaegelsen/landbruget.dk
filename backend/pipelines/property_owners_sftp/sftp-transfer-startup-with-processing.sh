@@ -67,9 +67,13 @@ log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
+# Install uv first
+log_with_timestamp "Installing uv..."
+pip3 install uv
+
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
+uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
@@ -595,9 +599,23 @@ class SFTPToGCSTransferWithProcessing:
                     private_key = paramiko.RSAKey.from_private_key_file(key_file_path)
                     logger.info(f"Attempting SSH connection to {host_ip} (user: {username})...")
                     flush_logs()
+                    # Test basic TCP connectivity first
+                    import socket
+                    test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    test_sock.settimeout(10)
+                    try:
+                        test_sock.connect((host_ip, 22))
+                        logger.info(f"TCP connection to {host_ip}:22 successful")
+                        flush_logs()
+                        test_sock.close()
+                    except Exception as tcp_e:
+                        logger.error(f"TCP connection failed: {tcp_e}")
+                        flush_logs()
+                        raise
+
                     ssh.connect(
                         hostname=host_ip, port=22, username=username, pkey=private_key,
-                        timeout=60, banner_timeout=30, auth_timeout=30,
+                        timeout=30, banner_timeout=15, auth_timeout=15,
                         allow_agent=False, look_for_keys=False
                     )
                     logger.info("SSH connection established successfully.")

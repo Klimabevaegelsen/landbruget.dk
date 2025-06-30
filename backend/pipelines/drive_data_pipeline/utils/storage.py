@@ -6,9 +6,10 @@ from typing import Any, BinaryIO
 
 # Add the backend directory to the path to import common modules
 backend_dir = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(backend_dir))
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
 
-from common.storage_interface import GCSStorage, LocalStorage, StorageInterface
+from backend.common.storage_interface import GCSStorage, LocalStorage, StorageInterface
 
 from .error_handling import StorageError
 from .logging import get_logger
