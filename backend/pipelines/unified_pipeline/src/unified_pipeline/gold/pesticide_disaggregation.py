@@ -60,6 +60,9 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     enable_parallel_processing: bool = Field(
         default=True, description="Enable parallel processing for large datasets"
     )
+    enable_spatial_clustering: bool = Field(
+        default=True, description="Enable spatial clustering strategy (memory intensive)"
+    )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -1236,10 +1239,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         Uses DuckDB-spatial SPATIAL_JOIN operator with ST_DWithin(geometry, geometry, 10.0)
         for efficient 10-meter buffer analysis and proper connected components clustering.
 
-        MEMORY OPTIMIZATION: Processes in chunks by CVR to prevent memory exhaustion.
+        MEMORY OPTIMIZATION: Processes in very small chunks and skips if dataset is too large.
         """
+        # Check if spatial clustering is enabled in configuration
+        if not self.config.enable_spatial_clustering:
+            self.log.info("⚠️ Spatial clustering disabled in configuration - skipping strategy")
+            return 0
+
         self.log.info(
-            "Running Adjacent Fields Single Cluster with chunked processing and area matching..."
+            "Running Adjacent Fields Single Cluster with aggressive memory optimization..."
         )
 
         try:
@@ -1271,27 +1279,63 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info("No pending CVR+crop combinations for spatial clustering")
                 return 0
 
-            total_processed = 0
-            chunk_size = 10  # Process 10 CVR+crop combinations at a time (reduced for memory)
-
+            # Log dataset size for monitoring
             self.log.info(
-                f"✅ Processing {len(pending_cvr_crops)} CVR+crop combinations in chunks of {chunk_size}"
+                f"📊 Processing {len(pending_cvr_crops)} CVR+crop combinations for spatial clustering"
             )
 
-            # Process in chunks to manage memory
+            total_processed = 0
+            # OPTIMIZED: Now that we filter before spatial join, we can use larger chunks
+            chunk_size = 50 if len(pending_cvr_crops) > 1000 else 100
+            max_chunks = 500  # Increased limit since processing is now much more efficient
+
+            self.log.info(
+                f"✅ Processing {len(pending_cvr_crops)} CVR+crop combinations in chunks of {chunk_size} (max {max_chunks} chunks)"
+            )
+
+            # Process in very small chunks with aggressive memory management
+            chunks_processed = 0
             for i in range(0, len(pending_cvr_crops), chunk_size):
+                if chunks_processed >= max_chunks:
+                    self.log.warning(
+                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - stopping spatial clustering"
+                    )
+                    break
+
                 chunk = pending_cvr_crops[i : i + chunk_size]
-                chunk_processed = self._process_spatial_chunk(
-                    chunk, i // chunk_size + 1, len(pending_cvr_crops)
-                )
-                total_processed += chunk_processed
+
+                # Add memory cleanup before each chunk
+                self._cleanup_memory_before_chunk()
+
+                try:
+                    chunk_processed = self._process_spatial_chunk(
+                        chunk, chunks_processed + 1, len(pending_cvr_crops)
+                    )
+                    total_processed += chunk_processed
+                    chunks_processed += 1
+
+                    # Add memory cleanup after each chunk
+                    self._cleanup_memory_after_chunk()
+
+                except Exception as e:
+                    self.log.error(
+                        f"Error in spatial clustering chunk {chunks_processed + 1}: {str(e)}"
+                    )
+                    if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                        self.log.warning(
+                            "⚠️ Memory exhaustion detected - stopping spatial clustering"
+                        )
+                        break
+                    # Continue with next chunk for other errors
+                    chunks_processed += 1
+                    continue
 
             # Clean up processed records after all chunks are complete
             if total_processed > 0:
                 self._finalize_spatial_clustering()
 
             self.log.info(
-                f"Adjacent Fields Spatial Cluster: Processed {total_processed} pesticide applications with chunked area-matched spatial clustering."
+                f"Adjacent Fields Spatial Cluster: Processed {total_processed} pesticide applications across {chunks_processed} chunks."
             )
             return total_processed
 
@@ -1299,6 +1343,40 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in spatial clustering strategy: {str(e)}")
             self.log.error("Spatial clustering failed - skipping this strategy")
             return 0
+
+    def _cleanup_memory_before_chunk(self):
+        """Clean up memory before processing a spatial chunk."""
+        try:
+            # Force garbage collection in DuckDB
+            self.duckdb_conn.execute("PRAGMA force_checkpoint")
+            self.duckdb_conn.execute("PRAGMA wal_autocheckpoint = 1")
+
+            # Drop any temporary tables that might exist
+            temp_tables = ["temp_spatial_adjacency", "temp_clusters", "temp_allocations"]
+            for table in temp_tables:
+                try:
+                    self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
+                except:
+                    pass
+
+        except Exception:
+            # Don't fail on cleanup errors
+            pass
+
+    def _cleanup_memory_after_chunk(self):
+        """Clean up memory after processing a spatial chunk."""
+        try:
+            # Force checkpoint and cleanup
+            self.duckdb_conn.execute("PRAGMA force_checkpoint")
+
+            # Python garbage collection
+            import gc
+
+            gc.collect()
+
+        except Exception:
+            # Don't fail on cleanup errors
+            pass
 
     def _process_spatial_chunk(
         self, cvr_crop_chunk: List[tuple], chunk_num: int, total_combinations: int
@@ -1327,31 +1405,38 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     -- Process only this specific chunk of CVR+crop combinations
                     SELECT CVR_Str, Crop_Str FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
                 ),
-                SpatialAdjacency AS (
-                    -- Find pairs of fields within 10m of each other (ONLY for pending CVR+crop combinations)
-                    SELECT DISTINCT
-                        m1.field_id as field1_id,
-                        m2.field_id as field2_id,
-                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
-                    FROM marker m1
-                    JOIN marker m2 ON ST_DWithin(m1.geometry, m2.geometry, 10.0)  -- SPATIAL_JOIN with 10m buffer
+                FilteredFields AS (
+                    -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
+                    SELECT 
+                        m.field_id,
+                        m.geometry,
+                        m.area_ha,
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
+                    FROM marker m
                     JOIN PendingCVRCrops pcc ON 
-                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
-                        AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
-                    WHERE m1.field_id != m2.field_id
-                      -- Ensure same CVR and crop (already filtered by JOIN above)
-                      AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
-                      AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
-                      -- Filter valid CVR numbers
-                      AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      -- Valid crop codes and areas
-                      AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
-                      AND m1.area_ha > 0.0 AND m2.area_ha > 0.0
-                      AND m1.geometry IS NOT NULL AND m2.geometry IS NOT NULL
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
+                        AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
+                    WHERE m.cvr_number IS NOT NULL 
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL 
+                      AND m.area_ha > 0.0
+                      AND m.geometry IS NOT NULL
+                ),
+                SpatialAdjacency AS (
+                    -- Now do spatial join ONLY on the filtered subset (much smaller!)
+                    SELECT DISTINCT
+                        f1.field_id as field1_id,
+                        f2.field_id as field2_id,
+                        f1.CVR_Str,
+                        f1.Crop_Str
+                    FROM FilteredFields f1
+                    JOIN FilteredFields f2 ON 
+                        f1.CVR_Str = f2.CVR_Str 
+                        AND f1.Crop_Str = f2.Crop_Str
+                        AND f1.field_id != f2.field_id
+                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
                 ConnectedComponents AS (
@@ -1399,24 +1484,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         
                         UNION ALL
                         
-                        -- Include isolated fields (not in any adjacency)
+                        -- Include isolated fields (not in any adjacency) from our filtered set
                         SELECT 
-                            m.field_id,
-                            CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                            CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                            m.field_id as connected_field
-                        FROM marker m
-                        WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
-                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                          AND m.crop_code IS NOT NULL 
-                          AND m.area_ha > 0.0
-                          AND m.geometry IS NOT NULL
-                          AND m.field_id NOT IN (
-                              SELECT field1_id FROM SpatialAdjacency 
-                              UNION 
-                              SELECT field2_id FROM SpatialAdjacency
-                          )
+                            f.field_id,
+                            f.CVR_Str,
+                            f.Crop_Str,
+                            f.field_id as connected_field
+                        FROM FilteredFields f
+                        WHERE f.field_id NOT IN (
+                            SELECT field1_id FROM SpatialAdjacency 
+                            UNION 
+                            SELECT field2_id FROM SpatialAdjacency
+                        )
                     ) clustered_fields
                 ),
                 -- Calculate cluster areas and match against pesticide applications
