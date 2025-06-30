@@ -5,7 +5,6 @@ import logging
 import os
 import uuid
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import certifi
@@ -24,24 +23,6 @@ load_dotenv()
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_chr_dyr")
-
-# Import GCS streaming utility
-try:
-    import sys
-    from pathlib import Path
-
-    # Add unified pipeline to path for GCS access
-    unified_path = Path(__file__).parent.parent.parent.parent / "unified_pipeline" / "src"
-    if unified_path.exists():
-        sys.path.insert(0, str(unified_path))
-
-    from unified_pipeline.util.gcs_access import GCSDataAccess
-
-    gcs_access = GCSDataAccess()
-    logger.info("✅ GCS streaming access initialized")
-except ImportError as e:
-    logger.warning(f"GCS streaming not available: {e}")
-    gcs_access = None
 
 # --- Constants ---
 
@@ -494,52 +475,35 @@ _streaming_files = {}
 
 def _append_to_streaming_json(data_type: str, data: Any) -> bool:
     """
-    Append data to streaming JSON file to prevent memory buildup while maintaining consolidated output.
-    Uses GCS streaming utilities for efficient single-file output.
+    Append data to streaming JSON using simple temporary file approach.
+    This prevents memory buildup while maintaining consolidated output.
     """
     try:
-        from .export import EXPORT_TIMESTAMP, GCS_BUCKET, USE_GCS
+        import tempfile
+
+        from .export import EXPORT_TIMESTAMP
 
         # Create unique stream key
         stream_key = f"{data_type}_{EXPORT_TIMESTAMP}"
 
-        if USE_GCS and gcs_access:
-            # Use GCS streaming for consolidated file
-            gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{EXPORT_TIMESTAMP}/{data_type}.json"
+        # Initialize temp file for this stream if needed
+        if stream_key not in _streaming_files:
+            temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
+            _streaming_files[stream_key] = {"temp_file": temp_file, "temp_path": temp_file.name, "count": 0}
+            logger.info(f"Initialized streaming temp file for {data_type}: {temp_file.name}")
 
-            # Check if this is the first write for this stream
-            if stream_key not in _streaming_files:
-                # Initialize streaming JSON array
-                _streaming_files[stream_key] = {
-                    "path": gcs_path,
-                    "count": 0,
-                    "temp_data": [],  # Collect small batches before writing
-                }
-                logger.info(f"Initialized streaming JSON for {data_type} -> {gcs_path}")
+        # Append data as JSONL (one JSON object per line)
+        temp_file = _streaming_files[stream_key]["temp_file"]
+        json.dump(data, temp_file, default=str)
+        temp_file.write("\n")
+        temp_file.flush()  # Ensure data is written
 
-            # Add data to batch
-            _streaming_files[stream_key]["temp_data"].append(data)
-            _streaming_files[stream_key]["count"] += 1
+        _streaming_files[stream_key]["count"] += 1
 
-            # Write batch every 100 records to prevent memory buildup
-            if len(_streaming_files[stream_key]["temp_data"]) >= 100:
-                _flush_streaming_batch(stream_key)
-
-        else:
-            # Fallback to local streaming
-
-            from .export import LOCAL_DATA_PATH
-
-            local_dir = Path(LOCAL_DATA_PATH) / "bronze" / "chr" / EXPORT_TIMESTAMP
-            local_dir.mkdir(parents=True, exist_ok=True)
-            local_file = local_dir / f"{data_type}.jsonl"  # Use JSONL for streaming
-
-            # Append as JSONL (one JSON object per line)
-            with open(local_file, "a", encoding="utf-8") as f:
-                json.dump(data, f, default=str)
-                f.write("\n")
-
-            logger.debug(f"Appended to local streaming file: {local_file}")
+        # Log progress every 1000 records
+        count = _streaming_files[stream_key]["count"]
+        if count % 1000 == 0:
+            logger.info(f"Streamed {count} records for {data_type}")
 
         return True
 
@@ -548,56 +512,50 @@ def _append_to_streaming_json(data_type: str, data: Any) -> bool:
         return False
 
 
-def _flush_streaming_batch(stream_key: str) -> bool:
-    """Flush accumulated batch to GCS using streaming JSON upload."""
-    try:
-        if stream_key not in _streaming_files:
-            return True
-
-        stream_info = _streaming_files[stream_key]
-        batch_data = stream_info["temp_data"]
-
-        if not batch_data:
-            return True
-
-        # Check if file exists to determine if we need to append or create
-        gcs_path = stream_info["path"]
-
-        if gcs_access.file_exists(gcs_path):
-            # Download existing data, append batch, re-upload
-            existing_data = gcs_access.download_json(gcs_path)
-            if isinstance(existing_data, list):
-                existing_data.extend(batch_data)
-            else:
-                existing_data = [existing_data] + batch_data
-            combined_data = existing_data
-        else:
-            # First batch - create new file
-            combined_data = batch_data
-
-        # Upload consolidated data using streaming JSON
-        gcs_access.upload_json(combined_data, gcs_path)
-
-        # Clear the batch
-        stream_info["temp_data"] = []
-
-        logger.info(f"Flushed batch of {len(batch_data)} records to {gcs_path} (total: {stream_info['count']})")
-        return True
-
-    except Exception as e:
-        logger.error(f"Error flushing streaming batch {stream_key}: {e}")
-        return False
-
-
 def _finalize_streaming_files() -> bool:
-    """Finalize all streaming files by flushing remaining data."""
+    """Convert streaming temp files to final consolidated JSON files."""
     try:
-        for stream_key in list(_streaming_files.keys()):
-            _flush_streaming_batch(stream_key)
+        from .export import save_raw_data
+
+        for stream_key, stream_info in _streaming_files.items():
+            data_type = stream_key.split("_")[0]  # Extract data_type from stream_key
+            temp_file = stream_info["temp_file"]
+            temp_path = stream_info["temp_path"]
+            count = stream_info["count"]
+
+            # Close the temp file
+            temp_file.close()
+
+            # Read all records from temp file and create consolidated JSON
+            consolidated_data = []
+            try:
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            consolidated_data.append(json.loads(line.strip()))
+
+                # Save consolidated data using existing export infrastructure
+                if consolidated_data:
+                    save_raw_data(
+                        data_type=data_type,
+                        identifier="consolidated",
+                        raw_response=consolidated_data,
+                    )
+                    logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
+
+            except Exception as e:
+                logger.error(f"Error consolidating {data_type}: {e}")
+
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+                logger.debug(f"Cleaned up temp file: {temp_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
 
         # Clear the global registry
         _streaming_files.clear()
-        logger.info("Finalized all streaming files")
+        logger.info("✅ Finalized all streaming files")
         return True
 
     except Exception as e:
