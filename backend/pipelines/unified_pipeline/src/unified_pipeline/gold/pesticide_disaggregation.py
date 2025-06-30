@@ -563,6 +563,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"🔍 Filtering pending pesticide records for year {pesticide_year}")
             self._create_pending_pesticide_rows()
 
+            # Check if CVR matches are available before running strategies
+            self.log.info(f"🔍 Checking for CVR matches for year {pesticide_year}")
+            cvr_matches_available = self._check_cvr_matches_available()
+
+            if not cvr_matches_available:
+                self.log.warning(
+                    f"⚠️ No CVR matches found for year {pesticide_year} - skipping all strategies"
+                )
+                self.log.warning(
+                    "   This significantly improves performance when no matches are possible"
+                )
+
+                # Return empty results since no processing is possible
+                self.log.info(f"📊 Year {pesticide_year} completed with 0 records (no CVR matches)")
+                return []
+
             # Run the original strategies in exact order (from original main.py lines 89-180)
             self.log.info(f"🎯 Starting disaggregation strategies for year {pesticide_year}")
             total_processed = 0
@@ -812,9 +828,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute(create_table_sql)
 
     def _create_pending_pesticide_rows(self):
-        """Create pending pesticide rows table, filtering out nopesticides=1 (original logic)."""
+        """Create pending pesticide rows table with nopesticides=1 records filtered out."""
         self.duckdb_conn.execute("""
-            CREATE TABLE pending_pesticide_rows AS 
+            CREATE TABLE pending_pesticide_rows AS
             SELECT * FROM pesticide 
             WHERE nopesticides IS NULL OR nopesticides != 1
         """)
@@ -823,6 +839,71 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             0
         ]
         self.log.info(f"Created pending pesticide rows: {count} records")
+
+    def _check_cvr_matches_available(self) -> bool:
+        """
+        Check if there are any potential CVR matches between pesticide and marker data.
+        Returns True if matches exist, False otherwise.
+        This allows us to skip CVR-based strategies when no matches are possible.
+        """
+        self.log.info("🔍 Checking for potential CVR matches...")
+
+        try:
+            # Check if there are any CVR numbers that exist in both pesticide and marker data
+            cvr_match_count = self.duckdb_conn.execute("""
+                WITH PesticideCVRs AS (
+                    SELECT DISTINCT CAST(CAST(CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR
+                    FROM pending_pesticide_rows 
+                    WHERE CompanyRegistrationNumber IS NOT NULL
+                      AND TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                ),
+                MarkerCVRs AS (
+                    SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
+                    FROM marker 
+                    WHERE cvr_number IS NOT NULL
+                      AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
+                )
+                SELECT COUNT(*) 
+                FROM PesticideCVRs p
+                JOIN MarkerCVRs m ON p.CVR = m.CVR
+            """).fetchone()[0]
+
+            has_matches = cvr_match_count > 0
+
+            if has_matches:
+                self.log.info(
+                    f"✅ Found {cvr_match_count} potential CVR matches - strategies will run"
+                )
+            else:
+                self.log.warning("⚠️ No CVR matches found between pesticide and marker data")
+                self.log.warning("   All CVR-based strategies will be skipped")
+
+                # Log some diagnostic information
+                pesticide_cvr_count = self.duckdb_conn.execute("""
+                    SELECT COUNT(DISTINCT CompanyRegistrationNumber) 
+                    FROM pending_pesticide_rows 
+                    WHERE CompanyRegistrationNumber IS NOT NULL
+                """).fetchone()[0]
+
+                marker_cvr_count = self.duckdb_conn.execute("""
+                    SELECT COUNT(DISTINCT cvr_number) 
+                    FROM marker 
+                    WHERE cvr_number IS NOT NULL
+                """).fetchone()[0]
+
+                self.log.info(
+                    f"   📊 Pesticide records have {pesticide_cvr_count} distinct CVR numbers"
+                )
+                self.log.info(f"   📊 Marker records have {marker_cvr_count} distinct CVR numbers")
+
+            return has_matches
+
+        except Exception as e:
+            self.log.error(f"Error checking CVR matches: {str(e)}")
+            # If we can't check, assume matches exist to be safe
+            return True
 
     def _get_organic_marker_field_ids(self) -> Set[str]:
         """
