@@ -1166,10 +1166,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             has_geometry = len(geometry_columns) > 0
 
             if not has_geometry:
-                self.log.warning(
-                    "⚠️ No geometry data available - falling back to simple CVR+crop grouping"
-                )
-                return self._disaggregate_by_simple_multi_field_grouping()
+                self.log.warning("⚠️ No geometry data available - spatial clustering disabled")
+                return 0
 
             self.log.info("✅ Using 10m buffer spatial clustering with DuckDB-spatial SPATIAL_JOIN")
 
@@ -1208,15 +1206,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = mfc.CVR_Str
                         AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = mfc.Crop_Str
                     WHERE m1.field_id != m2.field_id
-                      -- Add proper filtering for both m1 and m2 CVR numbers
+                      -- Filter out empty/invalid CVR numbers BEFORE casting
                       AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
                       AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
                       AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
-                      -- Now safe to cast after filtering
-                      AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
-                      AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
+                      -- Safe to cast after filtering - compare CVR and crop codes
+                      AND TRIM(CAST(m1.cvr_number AS VARCHAR)) = TRIM(CAST(m2.cvr_number AS VARCHAR))
+                      AND CAST(m1.crop_code AS VARCHAR) = CAST(m2.crop_code AS VARCHAR)
                       AND m1.geometry IS NOT NULL 
                       AND m2.geometry IS NOT NULL
                 ),
