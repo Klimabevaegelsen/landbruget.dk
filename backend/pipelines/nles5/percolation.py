@@ -3,7 +3,7 @@ import geopandas as gpd
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 import logging
-from ..parsers.dmi import DMIParser
+from ...src.sources.parsers.dmi import DMIParser
 
 logger = logging.getLogger(__name__)
 

@@ -2,10 +2,10 @@ import logging
 from typing import Dict, Optional
 import geopandas as gpd
 import numpy as np
-from ..parsers.agricultural_fields import AgriculturalFields
+from ...src.sources.parsers.agricultural_fields import AgriculturalFields
 from .percolation import PercolationCalculator
-from ..static.fertilizer.parser import CatchCrops, FertilizerAccounts, FieldPlanFertilizer
-from ..parsers.soil_type import SoilTypeParser
+from ...src.sources.static.fertilizer.parser import CatchCrops, FertilizerAccounts, FieldPlanFertilizer
+from ...src.sources.parsers.soil_type import SoilTypeParser
 
 logger = logging.getLogger(__name__)
 
