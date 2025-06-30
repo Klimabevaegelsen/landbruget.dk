@@ -719,8 +719,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("🏗️ Creating final marker table with proper column mapping...")
 
         # Check if geometry column exists for spatial clustering
-        has_geometry = "geometry" in temp_column_names
-        geometry_select = ", geometry" if has_geometry else ""
+        has_geometry = "geometry" in temp_column_names or "geometry_wkt" in temp_column_names
+
+        if "geometry_wkt" in temp_column_names:
+            geometry_select = ", ST_GeomFromText(geometry_wkt) as geometry"
+            self.log.info(
+                "✅ Found geometry_wkt column - converting to geometry for spatial operations"
+            )
+        elif "geometry" in temp_column_names:
+            geometry_select = ", geometry"
+            self.log.info("✅ Found geometry column for spatial operations")
+        else:
+            geometry_select = ""
+            self.log.warning("⚠️ No geometry data - spatial clustering will be disabled")
 
         self.duckdb_conn.execute(f"""
             CREATE TABLE marker AS 
