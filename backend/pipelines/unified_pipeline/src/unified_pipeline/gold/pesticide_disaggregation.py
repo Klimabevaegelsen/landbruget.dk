@@ -267,28 +267,32 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         Returns:
             List of (pesticide_year, field_year) tuples
         """
-        logger.info("Discovering available pesticide and field years")
+        logger.info("🔍 Discovering available pesticide and field years")
 
         # Get available pesticide years from GCS
+        logger.info("📊 Scanning GCS for pesticide data...")
         pesticide_years = self._get_available_pesticide_years()
-        logger.info(f"Found pesticide years: {sorted(pesticide_years)}")
+        logger.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
         # Get available field years from GCS
+        logger.info("🌾 Scanning GCS for field data...")
         field_years = self._get_available_field_years()
-        logger.info(f"Found field years: {sorted(field_years)}")
+        logger.info(f"✅ Found field years: {sorted(field_years)}")
 
         # Create pairs using Y+1 pattern (pesticide year Y matches with field year Y+1)
+        logger.info(f"🔗 Creating year pairs using Y+{self.config.field_year_offset} pattern...")
         pairs = []
         for pest_year in pesticide_years:
             field_year = pest_year + self.config.field_year_offset
             if field_year in field_years:
                 pairs.append((pest_year, field_year))
+                logger.info(f"   ✅ Pair created: pesticide {pest_year} → field {field_year}")
             else:
                 logger.warning(
-                    f"No field data found for pesticide year {pest_year} (expected field year {field_year})"
+                    f"   ❌ No field data found for pesticide year {pest_year} (expected field year {field_year})"
                 )
 
-        logger.info(f"Created {len(pairs)} valid pesticide-field year pairs")
+        logger.info(f"🎯 Created {len(pairs)} valid pesticide-field year pairs")
         return sorted(pairs)
 
     def _get_available_pesticide_years(self) -> Set[int]:
@@ -346,35 +350,55 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self, pesticide_year: int, field_year: int, silver_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Load silver data for specific pesticide and field years."""
+        logger.info(
+            f"📥 Loading silver data: pesticide year {pesticide_year}, field year {field_year}"
+        )
         datasets = {}
 
         # Load pesticide data for the specific year
         if silver_data and "pesticides" in silver_data:
-            logger.info(f"Using in-memory pesticide data for year {pesticide_year}")
+            logger.info(f"💾 Using in-memory pesticide data for year {pesticide_year}")
             datasets["pesticides"] = silver_data["pesticides"]
         else:
-            logger.info(f"Reading pesticide data for year {pesticide_year} from GCS storage")
+            logger.info(f"☁️ Reading pesticide data for year {pesticide_year} from GCS storage")
             pesticide_path = self._read_pesticide_data_for_year(pesticide_year)
             if pesticide_path is not None:
                 datasets["pesticides"] = pesticide_path
-                logger.info(f"Successfully downloaded pesticide data for {pesticide_year}")
+                logger.info(
+                    f"✅ Successfully located pesticide data for {pesticide_year}: {pesticide_path}"
+                )
             else:
-                logger.warning(f"No pesticide data found for year {pesticide_year}")
+                logger.error(f"❌ No pesticide data found for year {pesticide_year}")
                 datasets["pesticides"] = None
 
         # Load agricultural fields data for the specific year
         if silver_data and "agricultural_fields" in silver_data:
-            logger.info(f"Using in-memory agricultural fields data for year {field_year}")
+            logger.info(f"💾 Using in-memory agricultural fields data for year {field_year}")
             datasets["agricultural_fields"] = silver_data["agricultural_fields"]
         else:
-            logger.info(f"Reading agricultural fields data for year {field_year} from GCS storage")
+            logger.info(
+                f"☁️ Reading agricultural fields data for year {field_year} from GCS storage"
+            )
             fields_path = self._read_fields_data_for_year(field_year)
             if fields_path is not None:
                 datasets["agricultural_fields"] = fields_path
-                logger.info(f"Successfully downloaded agricultural fields data for {field_year}")
+                logger.info(
+                    f"✅ Successfully located agricultural fields data for {field_year}: {fields_path}"
+                )
             else:
-                logger.warning(f"No agricultural fields data found for year {field_year}")
+                logger.error(f"❌ No agricultural fields data found for year {field_year}")
                 datasets["agricultural_fields"] = None
+
+        # Summary of what we found
+        pesticide_status = "✅" if datasets["pesticides"] else "❌"
+        fields_status = "✅" if datasets["agricultural_fields"] else "❌"
+        logger.info(f"📋 Data loading summary for {pesticide_year}-{field_year}:")
+        logger.info(
+            f"   {pesticide_status} Pesticide data: {'Found' if datasets['pesticides'] else 'Missing'}"
+        )
+        logger.info(
+            f"   {fields_status} Agricultural fields data: {'Found' if datasets['agricultural_fields'] else 'Missing'}"
+        )
 
         return datasets
 
@@ -569,37 +593,50 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute("LOAD spatial")
 
         # ✅ MIGRATION: Use optimized GCS access with temp download (since direct GCS doesn't work reliably)
-        logger.info(f"Creating marker table from {agricultural_fields_path}")
+        logger.info(f"🏗️ Creating marker table from {agricultural_fields_path}")
 
         # Download and create marker table
+        logger.info("📥 Downloading agricultural fields data for schema inspection...")
         with self.gcs_access._temp_download(agricultural_fields_path) as temp_file:
+            logger.info(f"✅ Downloaded to temporary file: {temp_file}")
             # First, create a temporary table to inspect the schema
             self.duckdb_conn.execute(
                 f"CREATE TABLE marker_temp AS SELECT * FROM read_parquet('{temp_file}')"
             )
 
         # Check what columns actually exist
+        logger.info("🔍 Inspecting marker data schema...")
         temp_columns = self.duckdb_conn.execute("DESCRIBE marker_temp").fetchall()
         temp_column_names = [col[0] for col in temp_columns]
-        logger.info(f"Actual marker columns: {temp_column_names}")
+        logger.info(f"📋 Found {len(temp_column_names)} columns in marker data:")
+        for i, col in enumerate(temp_column_names, 1):
+            logger.info(f"   {i:2d}. {col}")
 
         # Create the final marker table with proper column mapping
+        logger.info("🔍 Looking for CVR column...")
         cvr_column = None
         if "cvr_number" in temp_column_names:
             cvr_column = "cvr_number"
+            logger.info("✅ Found CVR column: cvr_number")
         elif "Ansoeger" in temp_column_names:
             cvr_column = "Ansoeger"
+            logger.info("✅ Found CVR column: Ansoeger")
         elif "KUNDE_LB" in temp_column_names:
             cvr_column = "KUNDE_LB"
+            logger.info("✅ Found CVR column: KUNDE_LB")
         else:
-            logger.warning(
-                f"No CVR column found in marker data. Skipping this year pair as CVR matching is required. Available columns: {temp_column_names}"
-            )
+            logger.error("❌ CRITICAL: No CVR column found in marker data!")
+            logger.error("🔍 CVR matching is required for pesticide disaggregation.")
+            logger.error(f"📋 Available columns: {temp_column_names}")
+            logger.error("💡 Expected one of: cvr_number, Ansoeger, KUNDE_LB")
             return False
 
         # Check if block_id exists, if not use field_id
+        logger.info("🔍 Looking for block_id column...")
         block_id_column = "block_id" if "block_id" in temp_column_names else "field_id"
+        logger.info(f"✅ Using block_id column: {block_id_column}")
 
+        logger.info("🏗️ Creating final marker table with proper column mapping...")
         self.duckdb_conn.execute(f"""
             CREATE TABLE marker AS 
             SELECT 
@@ -616,11 +653,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # Drop the temporary table
         self.duckdb_conn.execute("DROP TABLE marker_temp")
+        logger.info("✅ Marker table created successfully")
 
-        logger.info(f"Creating pesticide table from {pesticide_applications_path}")
+        logger.info(f"🏗️ Creating pesticide table from {pesticide_applications_path}")
 
         # ✅ MIGRATION: Create pesticide table using optimized GCS access with temp download
+        logger.info("📥 Downloading pesticide data...")
         with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
+            logger.info(f"✅ Downloaded to temporary file: {temp_file}")
             self.duckdb_conn.execute(f"""
                 CREATE TABLE pesticide AS 
                 SELECT 
@@ -637,11 +677,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             """)
 
         # Get record counts for logging
+        logger.info("📊 Counting loaded records...")
         marker_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM marker").fetchone()[0]
         pesticide_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM pesticide").fetchone()[0]
 
+        logger.info("✅ DuckDB setup completed successfully!")
         logger.info(
-            f"Loaded {marker_count} agricultural fields and {pesticide_count} pesticide records"
+            f"📈 Loaded {marker_count:,} agricultural fields and {pesticide_count:,} pesticide records"
         )
 
         return True
