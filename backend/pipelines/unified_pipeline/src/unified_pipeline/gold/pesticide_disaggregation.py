@@ -60,9 +60,6 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     enable_parallel_processing: bool = Field(
         default=True, description="Enable parallel processing for large datasets"
     )
-    enable_spatial_clustering: bool = Field(
-        default=True, description="Enable spatial clustering strategy (memory intensive)"
-    )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -588,38 +585,35 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Strategy 1: Marker CVR-Area Match (THE MAIN 92% STRATEGY)
             self.log.info(f"🎯 Strategy 1: Running marker CVR-area match for year {pesticide_year}")
-            processed_count = self._disaggregate_by_marker_match()
-            total_processed += processed_count
+            processed_1 = self._disaggregate_by_marker_match()
+            total_processed += processed_1
             self.log.info(
-                f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_1} records processed"
             )
 
             # Strategy 2: Marker Non-Organic CVR-Area Match
             self.log.info(f"🎯 Strategy 2: Running non-organic match for year {pesticide_year}")
-            processed_count = self._disaggregate_by_marker_non_organic_match()
-            total_processed += processed_count
+            processed_2 = self._disaggregate_by_marker_non_organic_match()
+            total_processed += processed_2
             self.log.info(
-                f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_2} records processed"
             )
 
             # Strategy 3: Partial Field Coverage
             self.log.info(
                 f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}"
             )
-            processed_count = self._disaggregate_by_partial_field_coverage()
-            total_processed += processed_count
+            processed_3 = self._disaggregate_by_partial_field_coverage()
+            total_processed += processed_3
             self.log.info(
-                f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_3} records processed"
             )
 
-            # Strategy 4: Adjacent Fields Single Cluster using DuckDB-spatial SPATIAL_JOIN with 10m buffer
+            # Strategy 4: Spatial clustering removed - was not providing additional value
+            # while adding significant complexity and processing overhead
+            processed_4 = 0
             self.log.info(
-                f"🎯 Strategy 4: Running adjacent fields cluster with spatial analysis for year {pesticide_year}"
-            )
-            processed_count = self._disaggregate_by_adjacent_fields_single_cluster()
-            total_processed += processed_count
-            self.log.info(
-                f"✅ Year {pesticide_year}: Adjacent Fields Cluster: {processed_count} records processed"
+                "ℹ️ Strategy 4: Spatial clustering removed for simplification - strategies 1-3 provide sufficient coverage"
             )
 
             # Get results
@@ -1222,33 +1216,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in partial field coverage strategy: {str(e)}")
             return 0
 
-    def _disaggregate_by_adjacent_fields_single_cluster(self) -> int:
+    def _disaggregate_by_adjacent_fields_single_cluster_REMOVED(self) -> int:
         """
-        Strategy 4: Adjacent Fields Single Cluster using DuckDB-spatial SPATIAL_JOIN with 10m buffer.
-
-        CORRECT AGRICULTURAL LOGIC:
-        - Finds fields with same CVR (farmer) + crop combination
-        - Identifies spatial clusters (connected components within 10m)
-        - Matches cluster total area against pesticide area (within 2% tolerance)
-        - Only allocates if there's both spatial coherence AND area match
-        - Prevents spurious correlations from random field combinations
-
-        This reflects real-world farming where spatially connected fields
-        are treated as a single operational unit for pesticide application.
-
-        Uses DuckDB-spatial SPATIAL_JOIN operator with ST_DWithin(geometry, geometry, 10.0)
-        for efficient 10-meter buffer analysis and proper connected components clustering.
-
-        MEMORY OPTIMIZATION: Processes in very small chunks and skips if dataset is too large.
+        Strategy 4: Adjacent Fields Single Cluster using DuckDB spatial operations.
+        CORRECTED VERSION: Only allocates when BOTH spatial coherence AND area match exist.
         """
-        # Check if spatial clustering is enabled in configuration
+        self.log.info("Running Adjacent Fields Spatial Cluster disaggregation strategy...")
+
+        # Check if spatial clustering is enabled
         if not self.config.enable_spatial_clustering:
-            self.log.info("⚠️ Spatial clustering disabled in configuration - skipping strategy")
+            self.log.info("⚠️ Spatial clustering disabled in configuration - skipping")
             return 0
-
-        self.log.info(
-            "Running Adjacent Fields Single Cluster with aggressive memory optimization..."
-        )
 
         try:
             # Check if geometry data is available for spatial clustering
@@ -1263,53 +1241,109 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.warning("⚠️ No geometry data available - spatial clustering disabled")
                 return 0
 
+            # DEBUG: Check how many records are still pending after strategies 1-3
+            pending_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM pending_pesticide_rows"
+            ).fetchone()[0]
+            self.log.info(
+                f"🔍 DEBUG: {pending_count} pesticide records still pending after strategies 1-3"
+            )
+
+            if pending_count == 0:
+                self.log.info(
+                    "✅ All records already processed by strategies 1-3 - spatial clustering not needed"
+                )
+                return 0
+
             # Get pending CVR+crop combinations to process in chunks
+            # OPTIMIZATION: Only get combinations that actually have pending records AND multiple fields with geometry
+            self.log.info(
+                "🔍 Getting CVR+crop combinations with pending records and multiple fields..."
+            )
             pending_cvr_crops = self.duckdb_conn.execute("""
-                SELECT DISTINCT
-                    CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
-                    CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str
-                FROM pending_pesticide_rows p
-                WHERE p.CompanyRegistrationNumber IS NOT NULL 
-                  AND p.Code IS NOT NULL
-                  AND p.AcreageSize > 0
-                ORDER BY CVR_Str, Crop_Str
+                WITH PendingCombinations AS (
+                    SELECT DISTINCT
+                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        COUNT(*) as pending_count
+                    FROM pending_pesticide_rows p
+                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
+                      AND TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                      AND p.Code IS NOT NULL 
+                      AND p.AcreageSize > 0.0
+                    GROUP BY CVR_Str, Crop_Str
+                    HAVING COUNT(*) > 0
+                ),
+                FieldCounts AS (
+                    SELECT 
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        COUNT(*) as field_count
+                    FROM marker m
+                    WHERE m.cvr_number IS NOT NULL 
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL 
+                      AND m.area_ha > 0.0
+                      AND m.geometry IS NOT NULL
+                    GROUP BY CVR_Str, Crop_Str
+                    HAVING COUNT(*) >= 2  -- Only combinations with 2+ fields
+                )
+                SELECT 
+                    p.CVR_Str,
+                    p.Crop_Str,
+                    p.pending_count,
+                    f.field_count
+                FROM PendingCombinations p
+                INNER JOIN FieldCounts f ON p.CVR_Str = f.CVR_Str AND p.Crop_Str = f.Crop_Str
+                ORDER BY p.pending_count DESC  -- Process combinations with most pending records first
             """).fetchall()
 
             if not pending_cvr_crops:
-                self.log.info("No pending CVR+crop combinations for spatial clustering")
+                self.log.info(
+                    "✅ No CVR+crop combinations found with both pending records and multiple fields"
+                )
                 return 0
 
-            # Log dataset size for monitoring
             self.log.info(
-                f"📊 Processing {len(pending_cvr_crops)} CVR+crop combinations for spatial clustering"
+                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations with pending records and 2+ fields"
             )
+            self.log.info(
+                f"🔍 Top combinations: {[(cvr, crop, pending, fields) for cvr, crop, pending, fields in pending_cvr_crops[:5]]}"
+            )
+
+            # Convert to list of tuples for processing
+            cvr_crop_combinations = [
+                (cvr, crop) for cvr, crop, pending_count, field_count in pending_cvr_crops
+            ]
 
             total_processed = 0
             # OPTIMIZED: Now that we filter before spatial join, we can use larger chunks
-            chunk_size = 50 if len(pending_cvr_crops) > 1000 else 100
+            chunk_size = 50 if len(cvr_crop_combinations) > 1000 else 100
             max_chunks = 500  # Increased limit since processing is now much more efficient
 
             self.log.info(
-                f"✅ Processing {len(pending_cvr_crops)} CVR+crop combinations in chunks of {chunk_size} (max {max_chunks} chunks)"
+                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of {chunk_size} (max {max_chunks} chunks)"
             )
 
             # Process in very small chunks with aggressive memory management
             chunks_processed = 0
-            for i in range(0, len(pending_cvr_crops), chunk_size):
+            for i in range(0, len(cvr_crop_combinations), chunk_size):
                 if chunks_processed >= max_chunks:
                     self.log.warning(
                         f"⚠️ Reached maximum chunk limit ({max_chunks}) - stopping spatial clustering"
                     )
                     break
 
-                chunk = pending_cvr_crops[i : i + chunk_size]
+                chunk = cvr_crop_combinations[i : i + chunk_size]
 
                 # Add memory cleanup before each chunk
                 self._cleanup_memory_before_chunk()
 
                 try:
                     chunk_processed = self._process_spatial_chunk(
-                        chunk, chunks_processed + 1, len(pending_cvr_crops)
+                        chunk, chunks_processed + 1, len(cvr_crop_combinations)
                     )
                     total_processed += chunk_processed
                     chunks_processed += 1
@@ -1381,23 +1415,39 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _process_spatial_chunk(
         self, cvr_crop_chunk: List[tuple], chunk_num: int, total_combinations: int
     ) -> int:
-        """Process a chunk of CVR+crop combinations for spatial clustering."""
+        """Process a single chunk of CVR+crop combinations for spatial clustering."""
         try:
+            # Convert chunk to SQL IN clause format
+            cvr_crop_in_clause = ", ".join([f"('{cvr}', '{crop}')" for cvr, crop in cvr_crop_chunk])
+
+            # Log current chunk for debugging
+            self.log.info(
+                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations}) [1 thread, no insertion order]"
+            )
+
             # Apply DuckDB memory optimization settings
             self.duckdb_conn.execute("SET threads = 1")  # Reduce threads to save memory
             self.duckdb_conn.execute(
                 "SET preserve_insertion_order = false"
             )  # Allow reordering for efficiency
 
-            # Create IN clause for this chunk
-            cvr_crop_pairs = []
-            for cvr, crop in cvr_crop_chunk:
-                cvr_crop_pairs.append(f"('{cvr}', '{crop}')")
-            cvr_crop_in_clause = ", ".join(cvr_crop_pairs)
+            # Check pending records for these CVR+crops (minimal debugging)
+            pending_for_chunk = self.duckdb_conn.execute(f"""
+                SELECT COUNT(*) as total_pending
+                FROM pending_pesticide_rows p
+                WHERE (CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                      IN ({cvr_crop_in_clause})
+            """).fetchone()[0]
 
-            self.log.info(
-                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations}) [1 thread, no insertion order]"
-            )
+            if pending_for_chunk == 0:
+                self.log.info(
+                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping (this shouldn't happen with optimized filtering)"
+                )
+                return 0
+            else:
+                self.log.info(
+                    f"✅ Chunk {chunk_num}: Processing {pending_for_chunk} pending records"
+                )
 
             # CHUNKED MEMORY-OPTIMIZED: Process only this chunk of CVR+crop combinations
             insert_query = f"""
@@ -1596,7 +1646,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if chunk_processed > 0:
                 self.log.info(f"✅ Chunk {chunk_num}: Processed {chunk_processed} records")
             else:
-                self.log.info(f"ℹ️ Chunk {chunk_num}: No records processed")
+                # Don't log for every empty chunk - this is expected behavior
+                pass
 
             return chunk_processed
 
