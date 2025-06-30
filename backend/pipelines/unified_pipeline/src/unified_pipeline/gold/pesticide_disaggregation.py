@@ -276,13 +276,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"🏗️ Creating table {table_name} with {len(columns)} columns")
                 year_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
 
-                # Insert all records
-                for record in year_results:
-                    placeholders = ", ".join(["?" for _ in record.values()])
-                    year_conn.execute(
-                        f"INSERT INTO {table_name} VALUES ({placeholders})",
-                        list(record.values()),
-                    )
+                # ✅ OPTIMIZED: Use bulk insert instead of one-by-one insertion
+                self.log.info(f"📊 Bulk inserting {len(year_results)} records...")
+
+                # ✅ MOST EFFICIENT: Use DuckDB's register() for maximum performance
+                # This is the fastest way to insert large datasets in DuckDB
+                year_conn.register("temp_results", year_results)
+                year_conn.execute(f"INSERT INTO {table_name} SELECT * FROM temp_results")
+
+                self.log.info(
+                    f"✅ Successfully inserted {len(year_results)} records using optimized bulk operation"
+                )
 
                 # Save using the base class method with year-specific table name
                 self.log.info(f"🚀 Uploading {table_name} to GCS bucket")
@@ -775,20 +779,56 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("📥 Downloading pesticide data...")
         with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")
-            self.duckdb_conn.execute(f"""
-                CREATE TABLE pesticide AS 
-                SELECT 
-                    row_number() OVER () as OriginalPesticideRowID,
-                    companyregistrationnumber as CompanyRegistrationNumber,
-                    pesticidename as PesticideName,
-                    pesticideregistrationnumber as PesticideRegistrationNumber,
-                    dosagequantity as DosageQuantity,
-                    dosageunit as DosageUnit,
-                    acreagesize as AcreageSize,
-                    code as Code,
-                    nopesticides as nopesticides
-                FROM read_parquet('{temp_file}')
-            """)
+
+            # First, create a temporary table to inspect the pesticide schema
+            self.duckdb_conn.execute(
+                f"CREATE TABLE pesticide_temp AS SELECT * FROM read_parquet('{temp_file}')"
+            )
+
+        # Check what columns actually exist in pesticide data
+        self.log.info("🔍 Inspecting pesticide data schema...")
+        pest_columns = self.duckdb_conn.execute("DESCRIBE pesticide_temp").fetchall()
+        pest_column_names = [col[0] for col in pest_columns]
+        self.log.info(f"📋 Found {len(pest_column_names)} columns in pesticide data:")
+        for i, col in enumerate(pest_column_names, 1):
+            self.log.info(f"   {i:2d}. {col}")
+
+        # Find the CVR column in pesticide data
+        self.log.info("🔍 Looking for CVR column in pesticide data...")
+        pest_cvr_column = None
+        if "companyregistrationnumber" in pest_column_names:
+            pest_cvr_column = "companyregistrationnumber"
+            self.log.info("✅ Found CVR column: companyregistrationnumber")
+        elif "cvr" in pest_column_names:
+            pest_cvr_column = "cvr"
+            self.log.info("✅ Found CVR column: cvr")
+        else:
+            self.log.error("❌ CRITICAL: No CVR column found in pesticide data!")
+            self.log.error("🔍 CVR matching is required for pesticide disaggregation.")
+            self.log.error(f"📋 Available columns: {pest_column_names}")
+            self.log.error("💡 Expected one of: companyregistrationnumber, cvr")
+            return False
+
+        # Create the final pesticide table with proper column mapping
+        self.log.info("🏗️ Creating final pesticide table with proper column mapping...")
+        self.duckdb_conn.execute(f"""
+            CREATE TABLE pesticide AS 
+            SELECT 
+                row_number() OVER () as OriginalPesticideRowID,
+                {pest_cvr_column} as CompanyRegistrationNumber,
+                pesticidename as PesticideName,
+                pesticideregistrationnumber as PesticideRegistrationNumber,
+                dosagequantity as DosageQuantity,
+                dosageunit as DosageUnit,
+                acreagesize as AcreageSize,
+                code as Code,
+                nopesticides as nopesticides
+            FROM pesticide_temp
+        """)
+
+        # Drop the temporary table
+        self.duckdb_conn.execute("DROP TABLE pesticide_temp")
+        self.log.info("✅ Pesticide table created successfully")
 
         # Get record counts for logging
         self.log.info("📊 Counting loaded records...")
