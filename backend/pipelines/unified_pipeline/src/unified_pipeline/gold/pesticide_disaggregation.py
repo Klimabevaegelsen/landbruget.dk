@@ -232,7 +232,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info("🎉 Pesticide disaggregation completed successfully!")
         self.log.info("📊 Final Statistics:")
-        self.log.info(f"   📈 Total pesticide records across all years: {total_pesticide_records:,}")
+        self.log.info(
+            f"   📈 Total pesticide records across all years: {total_pesticide_records:,}"
+        )
         self.log.info(
             f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} ({coverage_pct:.1f}%)"
         )
@@ -476,7 +478,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"Found pesticide data at {gcs_path}")
                 return gcs_path
             else:
-                self.log.warning(f"No pesticide file found for year {year} (looking for {filename})")
+                self.log.warning(
+                    f"No pesticide file found for year {year} (looking for {filename})"
+                )
                 return None
 
         except Exception as e:
@@ -572,7 +576,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
 
             # Strategy 3: Partial Field Coverage
-            self.log.info(f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}")
+            self.log.info(
+                f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}"
+            )
             processed_count = self._disaggregate_by_partial_field_coverage()
             total_processed += processed_count
             self.log.info(
@@ -580,7 +586,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
 
             # Strategy 4: Adjacent Fields Single Cluster
-            self.log.info(f"🎯 Strategy 4: Running adjacent fields cluster for year {pesticide_year}")
+            self.log.info(
+                f"🎯 Strategy 4: Running adjacent fields cluster for year {pesticide_year}"
+            )
             processed_count = self._disaggregate_by_adjacent_fields_single_cluster()
             total_processed += processed_count
             self.log.info(
@@ -601,7 +609,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             self.log.info(f"🎉 Year {pesticide_year} disaggregation completed:")
             self.log.info(f"   📈 Total pesticide records: {total_pesticide_records:,}")
-            self.log.info(f"   ✅ Successfully disaggregated: {len(results):,} ({coverage_pct:.1f}%)")
+            self.log.info(
+                f"   ✅ Successfully disaggregated: {len(results):,} ({coverage_pct:.1f}%)"
+            )
             self.log.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
 
             return results
