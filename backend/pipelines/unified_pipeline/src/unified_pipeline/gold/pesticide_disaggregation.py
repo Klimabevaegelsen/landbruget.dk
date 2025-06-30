@@ -277,12 +277,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     SELECT * FROM disaggregated_pesticide_applications
                 """)
 
-                # Save using the base class method
+                # Save directly to GCS using our own method
                 self.log.info(f"🚀 Uploading {table_name} to GCS bucket")
-
-                # Save with year-specific dataset name
                 dataset_name = f"{self.config.dataset}_{year}"
-                self.save_data_direct(table_name, dataset_name, self.config.bucket, "gold")
+                self._save_table_to_gcs(table_name, dataset_name, "gold")
 
                 self.log.info(f"✅ Successfully saved {result_count:,} records for year {year}")
 
@@ -297,6 +295,55 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"❌ Failed to save results for year {year}: {e}")
             return False
+
+    def _save_table_to_gcs(self, table_name: str, dataset: str, stage: str) -> None:
+        """
+        Save a DuckDB table directly to GCS storage.
+
+        Args:
+            table_name: Name of the DuckDB table to save
+            dataset: Dataset name for GCS path
+            stage: Processing stage (bronze, silver, gold)
+        """
+        import os
+        import tempfile
+        from datetime import datetime
+
+        try:
+            # Create timestamp and GCS path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{dataset}.parquet"
+            gcs_path = f"{stage}/{dataset}/{timestamp}/{filename}"
+
+            # Create temporary file for export
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                temp_path = tmp_file.name
+
+            # Export table to temporary file using DuckDB COPY
+            self.duckdb_conn.execute(f"""
+                COPY {table_name} TO '{temp_path}' 
+                (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
+            """)
+
+            # Upload to GCS
+            self.gcs_util.upload_file(
+                bucket_name=self.config.bucket,
+                source_file_path=temp_path,
+                destination_blob_name=gcs_path,
+            )
+
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+            self.log.info(f"✅ Saved table {table_name} to gs://{self.config.bucket}/{gcs_path}")
+
+        except Exception as e:
+            self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
+            # Clean up temp file on error
+            if "temp_path" in locals() and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
         """
