@@ -110,9 +110,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
 
             if year_results is not None and len(year_results) > 0:
-                # Add year information to results
-                year_results["pesticide_year"] = pesticide_year
-                year_results["field_year"] = field_year
+                # Convert results list to a DataFrame-like structure for DuckDB
+                # year_results is a list of dictionaries, so we can use it directly
                 all_results.append(year_results)
 
                 # ✅ MIGRATION: Count pesticide records using DuckDB with optimized GCS access
@@ -132,38 +131,56 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # ✅ MIGRATION: Combine all results using DuckDB
         temp_combined_table = "temp_combined_pesticide_results"
 
-        # Register all yearly results and combine using DuckDB
+        # Since we're dealing with list of dictionaries, we need to convert to a format DuckDB can handle
+        # First, create the combined table structure
+        first_created = False
+
         for i, year_result in enumerate(all_results):
-            year_table = f"temp_year_result_{i}"
-            self.duckdb_conn.register(year_table, year_result)
+            if not year_result:  # Skip empty results
+                continue
 
-            if i == 0:
-                # Create the combined table with the first year
+            # Convert list of dictionaries to DuckDB table using VALUES
+            if not first_created:
+                # Create table with first batch of results
+                columns = list(year_result[0].keys())
+                column_defs = ", ".join([f"{col} VARCHAR" for col in columns])
+
+                self.duckdb_conn.execute(f"CREATE TABLE {temp_combined_table} ({column_defs})")
+                first_created = True
+
+            # Insert all records from this year
+            for record in year_result:
+                placeholders = ", ".join(["?" for _ in record.values()])
                 self.duckdb_conn.execute(
-                    f"CREATE TABLE {temp_combined_table} AS SELECT * FROM {year_table}"
-                )
-            else:
-                # Union with subsequent years
-                self.duckdb_conn.execute(
-                    f"INSERT INTO {temp_combined_table} SELECT * FROM {year_table}"
+                    f"INSERT INTO {temp_combined_table} VALUES ({placeholders})",
+                    list(record.values()),
                 )
 
-        # ✅ MIGRATION: Calculate statistics directly in DuckDB without  conversion
-        total_disaggregated = self.duckdb_conn.execute(
-            f"SELECT COUNT(*) FROM {temp_combined_table}"
-        ).fetchone()[0]
-        coverage_pct = (
-            (total_disaggregated / total_pesticide_records * 100)
-            if total_pesticide_records > 0
-            else 0
-        )
+        # ✅ MIGRATION: Calculate statistics directly in DuckDB without conversion
+        if first_created:
+            total_disaggregated = self.duckdb_conn.execute(
+                f"SELECT COUNT(*) FROM {temp_combined_table}"
+            ).fetchone()[0]
+            coverage_pct = (
+                (total_disaggregated / total_pesticide_records * 100)
+                if total_pesticide_records > 0
+                else 0
+            )
 
-        logger.info("Pesticide disaggregation completed:")
-        logger.info(f"  Total pesticide records across all years: {total_pesticide_records}")
-        logger.info(f"  Successfully disaggregated: {total_disaggregated} ({coverage_pct:.1f}%)")
+            logger.info("Pesticide disaggregation completed:")
+            logger.info(f"  Total pesticide records across all years: {total_pesticide_records}")
+            logger.info(
+                f"  Successfully disaggregated: {total_disaggregated} ({coverage_pct:.1f}%)"
+            )
 
-        # ✅ MIGRATION: Save results directly from DuckDB table
-        self.save_data_direct(temp_combined_table, self.config.dataset, self.config.bucket, "gold")
+            # ✅ MIGRATION: Save results directly from DuckDB table
+            self.save_data_direct(
+                temp_combined_table, self.config.dataset, self.config.bucket, "gold"
+            )
+        else:
+            logger.warning(
+                "No disaggregated results to save - all year pairs were skipped or failed"
+            )
 
         logger.info("Pesticide disaggregation gold layer processing completed successfully")
 
@@ -371,7 +388,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Process a single pesticide-field year pair."""
         try:
             # Setup DuckDB with spatial extensions
-            self._setup_duckdb(agricultural_fields_path, pesticide_applications_path)
+            setup_success = self._setup_duckdb(
+                agricultural_fields_path, pesticide_applications_path
+            )
+            if not setup_success:
+                logger.warning(
+                    f"Skipping year pair {pesticide_year}-{field_year} due to setup failure"
+                )
+                return None
 
             # Create results table
             self._create_results_table()
@@ -436,8 +460,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.duckdb_conn.close()
                 self.duckdb_conn = None
 
-    def _setup_duckdb(self, agricultural_fields_path: str, pesticide_applications_path: str):
-        """Setup DuckDB connection with spatial extensions and register data from GCS paths."""
+    def _setup_duckdb(
+        self, agricultural_fields_path: str, pesticide_applications_path: str
+    ) -> bool:
+        """Setup DuckDB connection with spatial extensions and register data from GCS paths.
+
+        Returns:
+            bool: True if setup was successful, False if it failed (e.g., missing CVR column)
+        """
         self.duckdb_conn = duckdb.connect(":memory:")
 
         # Configure DuckDB for optimal performance with 16GB RAM
@@ -476,7 +506,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             logger.warning(
                 f"No CVR column found in marker data. Skipping this year pair as CVR matching is required. Available columns: {temp_column_names}"
             )
-            return None
+            return False
 
         # Check if block_id exists, if not use field_id
         block_id_column = "block_id" if "block_id" in temp_column_names else "field_id"
@@ -524,6 +554,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         logger.info(
             f"Loaded {marker_count} agricultural fields and {pesticide_count} pesticide records"
         )
+
+        return True
 
     def _create_results_table(self):
         """Create the disaggregated results table with original schema."""
