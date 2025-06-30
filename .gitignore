@@ -127,3 +127,9 @@ backend/test_wfs.py
 .secrets
 .secrets.*
 *.secrets
+
+# Devevnv (devenv.sh)
+devenv.*
+.devenv.flake.nix
+.devenv
+.direnv
