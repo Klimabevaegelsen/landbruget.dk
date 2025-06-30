@@ -181,45 +181,40 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.error(f"📋 Traceback: {traceback.format_exc()}")
                 year_results = None
 
-            if year_results is not None and len(year_results) > 0:
+            if year_results is not None and year_results > 0:
                 self.log.info(
-                    f"✅ Year {pesticide_year}: Successfully processed {len(year_results)} disaggregated records"
+                    f"✅ Year {pesticide_year}: Successfully processed and saved {year_results:,} disaggregated records"
                 )
 
-                # Save results for this year immediately (much more efficient than one giant table)
-                self.log.info(f"💾 Saving results for year {pesticide_year} to GCS")
-                year_saved = self._save_year_results(year_results, pesticide_year)
-
-                if year_saved:
-                    # Count pesticide records for this year using a separate connection
-                    self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
-                    try:
-                        temp_conn = duckdb.connect(":memory:")
-                        with self.gcs_access._temp_download(
-                            pesticide_applications_path
-                        ) as temp_file:
-                            pesticide_count = temp_conn.execute(
-                                f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
-                            ).fetchone()[0]
-                        temp_conn.close()
-                        total_pesticide_records += pesticide_count
-                        self.log.info(
-                            f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {len(year_results)} disaggregated"
-                        )
-                        total_disaggregated_records += len(year_results)
-                        successful_years += 1
-                    except Exception as e:
-                        self.log.error(
-                            f"❌ Failed to count pesticide records for year {pesticide_year}: {e}"
-                        )
-                        # Still count as successful since we have results
-                        total_disaggregated_records += len(year_results)
-                        successful_years += 1
-                else:
-                    self.log.error(f"❌ Failed to save results for year {pesticide_year}")
-                    failed_years += 1
+                # Count pesticide records for this year using a separate connection
+                self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
+                try:
+                    temp_conn = duckdb.connect(":memory:")
+                    with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
+                        pesticide_count = temp_conn.execute(
+                            f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
+                        ).fetchone()[0]
+                    temp_conn.close()
+                    total_pesticide_records += pesticide_count
+                    self.log.info(
+                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {year_results} disaggregated"
+                    )
+                    total_disaggregated_records += year_results
+                    successful_years += 1
+                except Exception as e:
+                    self.log.error(
+                        f"❌ Failed to count pesticide records for year {pesticide_year}: {e}"
+                    )
+                    # Still count as successful since we have results
+                    total_disaggregated_records += year_results
+                    successful_years += 1
+            elif year_results == 0:
+                self.log.info(
+                    f"✅ Year {pesticide_year}: Successfully processed (no records to save)"
+                )
+                successful_years += 1
             else:
-                self.log.warning(f"⚠️ Year {pesticide_year}: No results generated")
+                self.log.warning(f"⚠️ Year {pesticide_year}: Processing failed")
                 failed_years += 1
 
         self.log.info("📊 Processing summary:")
@@ -250,71 +245,68 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
         self.log.info("🏁 Pesticide disaggregation gold layer processing completed successfully")
 
-    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+    def _save_year_results_direct(self, year: int) -> bool:
         """
-        Save results for a single year to GCS storage.
+        Save results for a single year to GCS storage directly from DuckDB table.
+        This avoids converting to Python lists which causes memory issues.
 
         Args:
-            year_results: List of disaggregated records for the year
             year: The year being processed
 
         Returns:
             bool: True if save was successful, False otherwise
         """
         try:
-            self.log.info(f"💾 Preparing to save {len(year_results)} records for year {year}")
+            # Get record count for logging
+            result_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
+            ).fetchone()[0]
 
-            # Create a temporary DuckDB connection for this year's data
-            year_conn = duckdb.connect(":memory:")
+            self.log.info(
+                f"💾 Preparing to save {result_count:,} records for year {year} directly from DuckDB"
+            )
 
-            # Create table with the results
-            if year_results:
-                columns = list(year_results[0].keys())
-                column_defs = ", ".join([f"{col} VARCHAR" for col in columns])
+            if result_count > 0:
+                # Create the final table name for this year
                 table_name = f"pesticide_disaggregation_{year}"
 
-                self.log.info(f"🏗️ Creating table {table_name} with {len(columns)} columns")
-                year_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
+                # Create a copy of the results table with the year-specific name
+                self.log.info(f"🏗️ Creating final table {table_name}")
+                self.duckdb_conn.execute(f"""
+                    CREATE TABLE {table_name} AS 
+                    SELECT * FROM disaggregated_pesticide_applications
+                """)
 
-                # ✅ OPTIMIZED: Use bulk insert instead of one-by-one insertion
-                self.log.info(f"📊 Bulk inserting {len(year_results)} records...")
-
-                # ✅ MOST EFFICIENT: Use DuckDB's register() for maximum performance
-                # This is the fastest way to insert large datasets in DuckDB
-                year_conn.register("temp_results", year_results)
-                year_conn.execute(f"INSERT INTO {table_name} SELECT * FROM temp_results")
-
-                self.log.info(
-                    f"✅ Successfully inserted {len(year_results)} records using optimized bulk operation"
-                )
-
-                # Save using the base class method with year-specific table name
+                # Save using the base class method
                 self.log.info(f"🚀 Uploading {table_name} to GCS bucket")
-
-                # Use the base class save method - temporarily set connection
-                original_conn = getattr(self, "conn", None)
-                self.conn = year_conn
 
                 # Save with year-specific dataset name
                 dataset_name = f"{self.config.dataset}_{year}"
                 self.save_data_direct(table_name, dataset_name, self.config.bucket, "gold")
 
-                # Restore original connection
-                self.conn = original_conn
+                self.log.info(f"✅ Successfully saved {result_count:,} records for year {year}")
 
-                self.log.info(f"✅ Successfully saved {len(year_results)} records for year {year}")
-                year_conn.close()
+                # Clean up the temporary table
+                self.duckdb_conn.execute(f"DROP TABLE {table_name}")
+
                 return True
             else:
                 self.log.warning(f"⚠️ No results to save for year {year}")
-                year_conn.close()
                 return False
 
         except Exception as e:
             self.log.error(f"❌ Failed to save results for year {year}: {e}")
-            if "year_conn" in locals():
-                year_conn.close()
             return False
+
+    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+        """
+        Legacy method for saving results from Python list (deprecated).
+        Use _save_year_results_direct() instead for better performance.
+        """
+        self.log.warning(
+            "⚠️ Using deprecated _save_year_results method - consider using _save_year_results_direct"
+        )
+        return self._save_year_results_direct(year)
 
     def _get_pesticide_field_year_pairs(self) -> List[Tuple[int, int]]:
         """
@@ -543,7 +535,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         field_year: int,
         agricultural_fields_path: str,
         pesticide_applications_path: str,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Optional[int]:
         """Process a single pesticide-field year pair."""
         try:
             self.log.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
@@ -620,26 +612,34 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "ℹ️ Strategy 4: Spatial clustering removed for simplification - strategies 1-3 provide sufficient coverage"
             )
 
-            # Get results
+            # Get result count and save directly from DuckDB table
             self.log.info(f"📊 Collecting final results for year {pesticide_year}")
-            results = self._get_results()
+            result_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
+            ).fetchone()[0]
 
             # Calculate coverage statistics for this year
             total_pesticide_records = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM pesticide"
             ).fetchone()[0]
             coverage_pct = (
-                (len(results) / total_pesticide_records * 100) if total_pesticide_records > 0 else 0
+                (result_count / total_pesticide_records * 100) if total_pesticide_records > 0 else 0
             )
 
             self.log.info(f"🎉 Year {pesticide_year} disaggregation completed:")
             self.log.info(f"   📈 Total pesticide records: {total_pesticide_records:,}")
             self.log.info(
-                f"   ✅ Successfully disaggregated: {len(results):,} ({coverage_pct:.1f}%)"
+                f"   ✅ Successfully disaggregated: {result_count:,} ({coverage_pct:.1f}%)"
             )
             self.log.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
 
-            return results
+            # Save directly from DuckDB table (no conversion to Python list)
+            if result_count > 0:
+                self._save_year_results_direct(pesticide_year)
+                return result_count  # Return count instead of full results
+            else:
+                self.log.warning(f"⚠️ No results to save for year {pesticide_year}")
+                return 0
 
         except Exception as e:
             self.log.error(f"❌ Error processing year pair {pesticide_year}-{field_year}: {e}")
