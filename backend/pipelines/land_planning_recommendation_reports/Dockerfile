@@ -17,8 +17,8 @@ RUN uv pip install --system --no-cache -p /usr/local/bin/python -r /app/pyprojec
 # Copy the rest of the pipeline's application code
 COPY . /app
 
-# Create directory for raw data (specific to svineflytning pipeline)
-RUN mkdir -p /data/raw/mere_bedre_stoerre
+# Create directory for raw data
+RUN mkdir -p /data/raw/land_planning_recommendation_reports
 
 # Define the command to run this pipeline's main script
 CMD ["python", "main.py"]

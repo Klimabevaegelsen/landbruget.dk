@@ -12,4 +12,5 @@ dependencies = [
     "geopandas",
     "matplotlib",
     "requests",
+    "google-cloud-storage",
 ]
