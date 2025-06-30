@@ -8,6 +8,9 @@ This repository contains the Unified Pipeline for various Danish data sources wi
 - **agricultural_fields**: Agricultural field boundaries
 - **bnbo**: BNBO status data
 - **spf_su**: SPF SU herd health and salmonella data via WFS
+- **soil_types**: Danish soil types data from Environmental Portal
+- **dmi**: Danish Meteorological Institute climate data (precipitation, evaporation)
+- **nles5_nitrogen_estimation**: NLES5 nitrogen washout estimation (Gold layer)
 
 ## Prerequisites
 
@@ -32,7 +35,7 @@ Run a specific source and job stage:
 python -m unified_pipeline -s <source> -j <job>
 ```
 
-- `<source>`: one of `cadastral`, `agricultural_fields`, `bnbo`, `spf_su`
+- `<source>`: one of `cadastral`, `agricultural_fields`, `bnbo`, `spf_su`, `soil_types`, `dmi`, `nles5_nitrogen_estimation`
 - `<job>`: `bronze`, `silver`, or `all`
 
 ### Example: SPF SU Pipeline

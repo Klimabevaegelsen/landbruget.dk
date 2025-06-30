@@ -46,6 +46,10 @@ from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
 )
+from unified_pipeline.gold.nles5_nitrogen_estimation import (
+    NLES5NitrogenEstimationGold,
+    NLES5NitrogenEstimationGoldConfig,
+)
 from unified_pipeline.model import cli
 from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.silver.agricultural_fields import (
@@ -268,6 +272,14 @@ def execute(cli_config: cli.CliConfig) -> None:
                 # Note: This requires silver datasets to be available:
                 # agricultural_fields, pesticides
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
+            ],
+        },
+        cli.Source.nles5_nitrogen_estimation: {
+            cli.Stage.gold: [(NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # agricultural_fields, soil_types, dmi (climate data)
+                (NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig),
             ],
         },
         cli.Source.dst: {
