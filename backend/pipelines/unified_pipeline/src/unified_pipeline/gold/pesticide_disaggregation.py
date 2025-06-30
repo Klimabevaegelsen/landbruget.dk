@@ -78,6 +78,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             silver_data: Optional dictionary containing silver data
         """
         logger.info("🚀 Starting pesticide disaggregation processing with original strategy")
+        logger.info(
+            f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, field_year_offset={self.config.field_year_offset}"
+        )
+        logger.info(f"☁️ GCS Bucket: {self.config.bucket}")
 
         # Get all available pesticide years and their corresponding field years
         logger.info("📊 Discovering available data years...")
@@ -85,6 +89,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         if not pesticide_field_pairs:
             logger.error("❌ No valid pesticide-field year pairs found")
+            logger.error("🔍 This might be due to:")
+            logger.error("   - No pesticide data files in GCS")
+            logger.error("   - No field data files in GCS")
+            logger.error("   - Year offset mismatch between pesticide and field data")
             return
 
         logger.info(f"✅ Found {len(pesticide_field_pairs)} pesticide-field year pairs to process")
@@ -98,15 +106,27 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # Process each pesticide year with its corresponding field year
         for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
+            logger.info("=" * 80)
             logger.info(
                 f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: pesticide {pesticide_year} with field {field_year}"
             )
+            logger.info("=" * 80)
 
             # Load data for this year pair
             logger.info(
                 f"📥 Loading silver data for pesticide year {pesticide_year} and field year {field_year}"
             )
-            datasets = self._load_silver_data_for_years(pesticide_year, field_year, silver_data)
+            try:
+                datasets = self._load_silver_data_for_years(pesticide_year, field_year, silver_data)
+                logger.info(f"✅ Data loading completed for year {pesticide_year}")
+            except Exception as e:
+                logger.error(f"❌ EXCEPTION during data loading for year {pesticide_year}: {e}")
+                logger.error(f"🔍 Exception type: {type(e).__name__}")
+                import traceback
+
+                logger.error(f"📋 Traceback: {traceback.format_exc()}")
+                failed_years += 1
+                continue
             agricultural_fields_path = datasets.get("agricultural_fields")
             pesticide_applications_path = datasets.get("pesticides")
 
@@ -127,9 +147,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Process this year pair
             logger.info(f"⚙️ Starting disaggregation processing for year {pesticide_year}")
-            year_results = self._process_year_pair(
-                pesticide_year, field_year, agricultural_fields_path, pesticide_applications_path
-            )
+            try:
+                year_results = self._process_year_pair(
+                    pesticide_year,
+                    field_year,
+                    agricultural_fields_path,
+                    pesticide_applications_path,
+                )
+                logger.info(f"✅ Disaggregation processing completed for year {pesticide_year}")
+            except Exception as e:
+                logger.error(f"❌ EXCEPTION during disaggregation for year {pesticide_year}: {e}")
+                logger.error(f"🔍 Exception type: {type(e).__name__}")
+                import traceback
+
+                logger.error(f"📋 Traceback: {traceback.format_exc()}")
+                year_results = None
 
             if year_results is not None and len(year_results) > 0:
                 logger.info(
