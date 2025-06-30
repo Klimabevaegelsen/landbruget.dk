@@ -1174,10 +1174,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             self.log.info("✅ Using spatial clustering with area matching (2% tolerance)")
 
-            # CORRECTED LOGIC: Find spatial clusters that match pesticide area within tolerance
+            # MEMORY-OPTIMIZED: Only process CVR+crop combinations that have pending pesticide applications
             insert_query = f"""
-                WITH SpatialAdjacency AS (
-                    -- Find pairs of fields within 10m of each other (same CVR+crop)
+                WITH PendingCVRCrops AS (
+                    -- First, find which CVR+crop combinations have pending pesticide applications
+                    SELECT DISTINCT
+                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str
+                    FROM pending_pesticide_rows p
+                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
+                      AND p.Code IS NOT NULL
+                      AND p.AcreageSize > 0
+                ),
+                SpatialAdjacency AS (
+                    -- Find pairs of fields within 10m of each other (ONLY for pending CVR+crop combinations)
                     SELECT DISTINCT
                         m1.field_id as field1_id,
                         m2.field_id as field2_id,
@@ -1185,8 +1195,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
                     FROM marker m1
                     JOIN marker m2 ON ST_DWithin(m1.geometry, m2.geometry, 10.0)  -- SPATIAL_JOIN with 10m buffer
+                    JOIN PendingCVRCrops pcc ON 
+                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
+                        AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
                     WHERE m1.field_id != m2.field_id
-                      -- Ensure same CVR and crop
+                      -- Ensure same CVR and crop (already filtered by JOIN above)
                       AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
                       AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
                       -- Filter valid CVR numbers
