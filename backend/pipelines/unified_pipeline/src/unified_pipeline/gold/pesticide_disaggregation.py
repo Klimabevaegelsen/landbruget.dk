@@ -1191,7 +1191,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 return 0
 
             total_processed = 0
-            chunk_size = 50  # Process 50 CVR+crop combinations at a time
+            chunk_size = 10  # Process 10 CVR+crop combinations at a time (reduced for memory)
 
             self.log.info(
                 f"✅ Processing {len(pending_cvr_crops)} CVR+crop combinations in chunks of {chunk_size}"
@@ -1224,6 +1224,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     ) -> int:
         """Process a chunk of CVR+crop combinations for spatial clustering."""
         try:
+            # Apply DuckDB memory optimization settings
+            self.duckdb_conn.execute("SET threads = 1")  # Reduce threads to save memory
+            self.duckdb_conn.execute(
+                "SET preserve_insertion_order = false"
+            )  # Allow reordering for efficiency
+
             # Create IN clause for this chunk
             cvr_crop_pairs = []
             for cvr, crop in cvr_crop_chunk:
@@ -1231,7 +1237,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             cvr_crop_in_clause = ", ".join(cvr_crop_pairs)
 
             self.log.info(
-                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations})"
+                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations}) [1 thread, no insertion order]"
             )
 
             # CHUNKED MEMORY-OPTIMIZED: Process only this chunk of CVR+crop combinations
