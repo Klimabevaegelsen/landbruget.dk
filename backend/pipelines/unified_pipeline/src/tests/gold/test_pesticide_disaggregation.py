@@ -7,6 +7,7 @@ Tests the EXACT preservation of the original 92% coverage strategy.
 from unittest.mock import Mock
 
 import pytest
+from geopandas import GeoDataFrame as gGeo
 from shapely.geometry import Polygon
 
 from unified_pipeline.gold.pesticide_disaggregation import (
@@ -55,39 +56,37 @@ class TestPesticideDisaggregationGold:
     @pytest.fixture
     def sample_pesticide_applications(self):
         """Create sample pesticide applications data."""
-        return (
-            {
-                "OriginalPesticideRowID": [1, 2, 3, 4, 5],
-                "CompanyRegistrationNumber": [
-                    "12345678",
-                    "12345678",
-                    "87654321",
-                    "87654321",
-                    "99999999",
-                ],
-                "Code": [110, 110, 120, 120, 130],
-                "AcreageSize": [
-                    25.0,
-                    24.5,
-                    20.0,
-                    19.8,
-                    5.0,
-                ],  # First two match total field areas exactly
-                "PesticideName": [
-                    "Herbicide A",
-                    "Herbicide B",
-                    "Fungicide A",
-                    "Fungicide B",
-                    "Insecticide A",
-                ],
-                "PesticideRegistrationNumber": ["REG001", "REG002", "REG003", "REG004", "REG005"],
-                "DosageQuantity": [2.5, 3.0, 1.5, 2.0, 1.0],
-                "DosageUnit": ["L/ha", "L/ha", "kg/ha", "kg/ha", "L/ha"],
-                "CompanyName": ["Company A", "Company A", "Company B", "Company B", "Company C"],
-                "Name": ["Wheat", "Wheat", "Barley", "Barley", "Corn"],
-                "nopesticides": [None, None, None, None, None],
-            }
-        )
+        return {
+            "OriginalPesticideRowID": [1, 2, 3, 4, 5],
+            "CompanyRegistrationNumber": [
+                "12345678",
+                "12345678",
+                "87654321",
+                "87654321",
+                "99999999",
+            ],
+            "Code": [110, 110, 120, 120, 130],
+            "AcreageSize": [
+                25.0,
+                24.5,
+                20.0,
+                19.8,
+                5.0,
+            ],  # First two match total field areas exactly
+            "PesticideName": [
+                "Herbicide A",
+                "Herbicide B",
+                "Fungicide A",
+                "Fungicide B",
+                "Insecticide A",
+            ],
+            "PesticideRegistrationNumber": ["REG001", "REG002", "REG003", "REG004", "REG005"],
+            "DosageQuantity": [2.5, 3.0, 1.5, 2.0, 1.0],
+            "DosageUnit": ["L/ha", "L/ha", "kg/ha", "kg/ha", "L/ha"],
+            "CompanyName": ["Company A", "Company A", "Company B", "Company B", "Company C"],
+            "Name": ["Wheat", "Wheat", "Barley", "Barley", "Corn"],
+            "nopesticides": [None, None, None, None, None],
+        }
 
     def test_config_validation(self, config):
         """Test that configuration validates correctly."""
@@ -134,24 +133,22 @@ class TestPesticideDisaggregationGold:
     def test_area_tolerance_enforcement(self, config, mock_gcs_util, sample_agricultural_fields):
         """Test that 2% area tolerance is strictly enforced."""
         # Create pesticide data that exceeds tolerance
-        pesticide_data = (
-            {
-                "OriginalPesticideRowID": [1, 2],
-                "CompanyRegistrationNumber": ["12345678", "12345678"],
-                "Code": [110, 110],
-                "AcreageSize": [
-                    30.0,
-                    20.0,
-                ],  # 30.0 exceeds 2% tolerance of 25.0, 20.0 is within tolerance
-                "PesticideName": ["Herbicide A", "Herbicide B"],
-                "PesticideRegistrationNumber": ["REG001", "REG002"],
-                "DosageQuantity": [2.5, 3.0],
-                "DosageUnit": ["L/ha", "L/ha"],
-                "CompanyName": ["Company A", "Company A"],
-                "Name": ["Wheat", "Wheat"],
-                "nopesticides": [None, None],
-            }
-        )
+        pesticide_data = {
+            "OriginalPesticideRowID": [1, 2],
+            "CompanyRegistrationNumber": ["12345678", "12345678"],
+            "Code": [110, 110],
+            "AcreageSize": [
+                30.0,
+                20.0,
+            ],  # 30.0 exceeds 2% tolerance of 25.0, 20.0 is within tolerance
+            "PesticideName": ["Herbicide A", "Herbicide B"],
+            "PesticideRegistrationNumber": ["REG001", "REG002"],
+            "DosageQuantity": [2.5, 3.0],
+            "DosageUnit": ["L/ha", "L/ha"],
+            "CompanyName": ["Company A", "Company A"],
+            "Name": ["Wheat", "Wheat"],
+            "nopesticides": [None, None],
+        }
 
         processor = PesticideDisaggregationGold(config, mock_gcs_util)
         processor._setup_duckdb(sample_agricultural_fields, pesticide_data)
@@ -172,21 +169,19 @@ class TestPesticideDisaggregationGold:
 
     def test_nopesticides_filtering(self, config, mock_gcs_util, sample_agricultural_fields):
         """Test that nopesticides=1 records are correctly filtered out."""
-        pesticide_data = (
-            {
-                "OriginalPesticideRowID": [1, 2, 3],
-                "CompanyRegistrationNumber": ["12345678", "12345678", "12345678"],
-                "Code": [110, 110, 110],
-                "AcreageSize": [25.0, 25.0, 25.0],
-                "PesticideName": ["Herbicide A", "Herbicide B", "No Pesticide"],
-                "PesticideRegistrationNumber": ["REG001", "REG002", None],
-                "DosageQuantity": [2.5, 3.0, None],
-                "DosageUnit": ["L/ha", "L/ha", None],
-                "CompanyName": ["Company A", "Company A", "Company A"],
-                "Name": ["Wheat", "Wheat", "Wheat"],
-                "nopesticides": [None, None, 1],  # Third record should be filtered out
-            }
-        )
+        pesticide_data = {
+            "OriginalPesticideRowID": [1, 2, 3],
+            "CompanyRegistrationNumber": ["12345678", "12345678", "12345678"],
+            "Code": [110, 110, 110],
+            "AcreageSize": [25.0, 25.0, 25.0],
+            "PesticideName": ["Herbicide A", "Herbicide B", "No Pesticide"],
+            "PesticideRegistrationNumber": ["REG001", "REG002", None],
+            "DosageQuantity": [2.5, 3.0, None],
+            "DosageUnit": ["L/ha", "L/ha", None],
+            "CompanyName": ["Company A", "Company A", "Company A"],
+            "Name": ["Wheat", "Wheat", "Wheat"],
+            "nopesticides": [None, None, 1],  # Third record should be filtered out
+        }
 
         processor = PesticideDisaggregationGold(config, mock_gcs_util)
         processor._setup_duckdb(sample_agricultural_fields, pesticide_data)
@@ -273,21 +268,19 @@ class TestPesticideDisaggregationGold:
         )
 
         # Create many pesticide records that won't match
-        pesticide_data = (
-            {
-                "OriginalPesticideRowID": list(range(1, 101)),  # 100 records
-                "CompanyRegistrationNumber": ["99999999"] * 100,  # Non-matching CVR
-                "Code": [999] * 100,  # Non-matching crop code
-                "AcreageSize": [5.0] * 100,
-                "PesticideName": ["Test Pesticide"] * 100,
-                "PesticideRegistrationNumber": ["REG999"] * 100,
-                "DosageQuantity": [1.0] * 100,
-                "DosageUnit": ["L/ha"] * 100,
-                "CompanyName": ["Test Company"] * 100,
-                "Name": ["Test Crop"] * 100,
-                "nopesticides": [None] * 100,
-            }
-        )
+        pesticide_data = {
+            "OriginalPesticideRowID": list(range(1, 101)),  # 100 records
+            "CompanyRegistrationNumber": ["99999999"] * 100,  # Non-matching CVR
+            "Code": [999] * 100,  # Non-matching crop code
+            "AcreageSize": [5.0] * 100,
+            "PesticideName": ["Test Pesticide"] * 100,
+            "PesticideRegistrationNumber": ["REG999"] * 100,
+            "DosageQuantity": [1.0] * 100,
+            "DosageUnit": ["L/ha"] * 100,
+            "CompanyName": ["Test Company"] * 100,
+            "Name": ["Test Crop"] * 100,
+            "nopesticides": [None] * 100,
+        }
 
         processor = PesticideDisaggregationGold(config, mock_gcs_util)
 
@@ -398,3 +391,50 @@ class TestPesticideDisaggregationGold:
             assert results["AllocatedArea"].dtype in ["float64", "float32"]
             assert all(area > 0 for area in results["AllocatedArea"])
             assert results["IsPartialFieldCoverage"].dtype == bool
+
+    def test_no_cvr_matches_optimization(self, config, mock_gcs_util):
+        """Test that strategies are skipped when no CVR matches are available."""
+        # Create field data with CVR numbers that won't match pesticide data
+        fields_df = gGeo(
+            {
+                "field_id": ["field_001", "field_002"],
+                "cvr_number": ["11111111", "22222222"],  # Non-matching CVRs
+                "crop_code": [110, 120],
+                "area_ha": [10.0, 15.0],
+                "organic_farming": [None, None],
+                "geometry": [
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+                ],
+            }
+        )
+
+        # Create pesticide data with different CVR numbers
+        pesticide_data = [
+            {
+                "OriginalPesticideRowID": 1,
+                "CompanyRegistrationNumber": "99999999",  # Non-matching CVR
+                "Code": 110,
+                "AcreageSize": 10.0,
+                "PesticideName": "Test Pesticide",
+                "PesticideRegistrationNumber": "REG001",
+                "DosageQuantity": 1.0,
+                "DosageUnit": "L/ha",
+                "nopesticides": None,
+            }
+        ]
+
+        processor = PesticideDisaggregationGold(config, mock_gcs_util)
+        processor._setup_duckdb(fields_df, pesticide_data)
+        processor._create_results_table()
+        processor._create_pending_pesticide_rows()
+
+        # Check that CVR matches are correctly identified as unavailable
+        cvr_matches_available = processor._check_cvr_matches_available()
+        assert not cvr_matches_available, "Should detect no CVR matches"
+
+        # Test that _process_year_pair returns empty list when no CVR matches
+        results = processor._process_year_pair(
+            2021, 2022, "dummy_fields_path", "dummy_pesticide_path"
+        )
+        assert results == [], "Should return empty list when no CVR matches"
