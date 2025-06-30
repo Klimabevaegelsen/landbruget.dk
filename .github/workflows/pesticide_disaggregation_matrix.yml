@@ -1,0 +1,304 @@
+name: Pesticide Disaggregation Matrix Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2020,2021,2022" or "all")'
+        type: string
+        default: 'all'
+        required: true
+      max_parallel_jobs:
+        description: 'Maximum number of parallel jobs'
+        type: string
+        default: '5'
+        required: true
+      stage:
+        description: 'Processing stage'
+        type: choice
+        required: true
+        options:
+          - gold
+          - all
+        default: 'gold'
+      dry_run:
+        description: 'Dry run mode (discover years only)'
+        type: boolean
+        default: false
+
+jobs:
+  discover-years:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    outputs:
+      years: ${{ steps.discover.outputs.years }}
+      year_count: ${{ steps.discover.outputs.year_count }}
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Discover available years
+      id: discover
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        cd backend/pipelines/unified_pipeline
+        
+        # Create a script to discover available years
+        cat > discover_years.py << 'EOF'
+        import os
+        import sys
+        import json
+        import re
+        from unified_pipeline.util.gcs_util import GCSUtil
+        
+        def discover_pesticide_years():
+            """Discover available pesticide years from GCS storage."""
+            try:
+                gcs_util = GCSUtil()
+                bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+                
+                # List all files in the pesticides silver directory
+                files = gcs_util.list_files(bucket_name=bucket, prefix="silver/pesticides/")
+                years = set()
+                
+                for file_blob in files:
+                    # Extract years from filenames like "pesticiddata_2015_2016.parquet"
+                    match = re.search(r"pesticiddata_(\d{4})_(\d{4})\.parquet", file_blob.name)
+                    if match:
+                        start_year = int(match.group(1))
+                        years.add(start_year)
+                
+                return sorted(list(years))
+            except Exception as e:
+                print(f"Error discovering years: {e}", file=sys.stderr)
+                return []
+        
+        def discover_field_years():
+            """Discover available field years from GCS storage."""
+            try:
+                gcs_util = GCSUtil()
+                bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+                
+                # List all files in silver layer to find fvm_marker directories
+                files = gcs_util.list_files(bucket_name=bucket, prefix="silver/fvm_marker_")
+                years = set()
+                
+                for file_blob in files:
+                    # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
+                    match = re.search(r"silver/fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_blob.name)
+                    if match:
+                        year1 = int(match.group(1))
+                        year2 = int(match.group(2))
+                        # Ensure both years match (sanity check)
+                        if year1 == year2:
+                            years.add(year1)
+                
+                return sorted(list(years))
+            except Exception as e:
+                print(f"Error discovering field years: {e}", file=sys.stderr)
+                return []
+        
+        # Main discovery logic
+        try:
+            requested_years = "${{ inputs.years }}"
+            
+            if requested_years == "all":
+                print("Discovering all available years...")
+                pesticide_years = discover_pesticide_years()
+                field_years = discover_field_years()
+                
+                print(f"Available pesticide years: {pesticide_years}")
+                print(f"Available field years: {field_years}")
+                
+                # Create valid year pairs (pesticide year + field year offset of +1)
+                valid_years = []
+                for pest_year in pesticide_years:
+                    field_year = pest_year + 1  # Y+1 pattern
+                    if field_year in field_years:
+                        valid_years.append(pest_year)
+                        print(f"Valid pair: pesticide {pest_year} → field {field_year}")
+                    else:
+                        print(f"Missing field data: pesticide {pest_year} → field {field_year} (not available)")
+                
+                years_to_process = valid_years
+            else:
+                # Parse requested years
+                years_to_process = [int(y.strip()) for y in requested_years.split(",")]
+                print(f"Requested years: {years_to_process}")
+            
+            print(f"Final years to process: {years_to_process}")
+            print(json.dumps(years_to_process))
+            
+        except Exception as e:
+            print(f"Error in discovery: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            sys.exit(1)
+        EOF
+        
+        # Run the discovery script
+        years=$(python discover_years.py | tail -n 1)
+        year_count=$(echo "$years" | jq '. | length')
+        
+        echo "years=$years" >> $GITHUB_OUTPUT
+        echo "year_count=$year_count" >> $GITHUB_OUTPUT
+        
+        echo "Discovered $year_count years for matrix processing: $years"
+
+  process-years:
+    if: ${{ !inputs.dry_run && needs.discover-years.outputs.years != '[]' && needs.discover-years.outputs.years != '' }}
+    needs: discover-years
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false  # Don't stop other jobs if one fails
+      matrix:
+        year: ${{ fromJson(needs.discover-years.outputs.years) }}
+    
+    name: Process Year ${{ matrix.year }}
+    
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Run Pesticide Disaggregation for Year ${{ matrix.year }}
+      run: |
+        cd backend/pipelines/unified_pipeline
+        
+        echo "🚀 Starting pesticide disaggregation for year ${{ matrix.year }}"
+        echo "📊 Processing pesticide year ${{ matrix.year }} with field year $((${{ matrix.year }} + 1))"
+        
+        # Create a year-specific configuration script
+        cat > run_year_${{ matrix.year }}.py << 'EOF'
+        import asyncio
+        import os
+        import sys
+        from unified_pipeline.gold.pesticide_disaggregation import (
+            PesticideDisaggregationGold,
+            PesticideDisaggregationGoldConfig
+        )
+        from unified_pipeline.util.gcs_util import GCSUtil
+        
+        async def main():
+            try:
+                # Create configuration for this specific year
+                config = PesticideDisaggregationGoldConfig(
+                    bucket=os.getenv("GCS_BUCKET", "landbrugsdata-raw-data"),
+                    pesticide_year=${{ matrix.year }},
+                    area_tolerance_pct=2.0,  # Preserve original value
+                    max_memory_gb=12.0,
+                    enable_parallel_processing=True
+                )
+                
+                # Initialize GCS utility and processor
+                gcs_util = GCSUtil()
+                processor = PesticideDisaggregationGold(config, gcs_util)
+                
+                print(f"🎯 Processing year ${{ matrix.year }} with optimized single-year execution")
+                print(f"🔧 Configuration: area_tolerance={config.area_tolerance_pct}%, memory_limit={config.max_memory_gb}GB")
+                
+                # Override the year discovery to process only this specific year
+                def get_single_year_pairs():
+                    pesticide_year = ${{ matrix.year }}
+                    field_year = pesticide_year + 1  # Y+1 pattern
+                    return [(pesticide_year, field_year)]
+                
+                # Monkey patch the method to process only our target year
+                processor._get_pesticide_field_year_pairs = get_single_year_pairs
+                
+                # Run the processor
+                await processor.run()
+                
+                print(f"✅ Successfully completed processing for year ${{ matrix.year }}")
+                
+            except Exception as e:
+                print(f"❌ Error processing year ${{ matrix.year }}: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+        
+        if __name__ == "__main__":
+            asyncio.run(main())
+        EOF
+        
+        # Run the year-specific processing
+        python run_year_${{ matrix.year }}.py
+        
+        echo "🎉 Completed pesticide disaggregation for year ${{ matrix.year }}"
+
+  summary:
+    if: ${{ !inputs.dry_run }}
+    needs: [discover-years, process-years]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Job Summary
+      run: |
+        echo "## Pesticide Disaggregation Matrix Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Years Processed:** ${{ needs.discover-years.outputs.year_count }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Years:** ${{ needs.discover-years.outputs.years }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Max Parallel Jobs:** ${{ inputs.max_parallel_jobs }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Stage:** ${{ inputs.stage }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ All matrix jobs completed successfully!" >> $GITHUB_STEP_SUMMARY
+
+  dry-run-summary:
+    if: ${{ inputs.dry_run }}
+    needs: discover-years
+    runs-on: ubuntu-latest
+    steps:
+    - name: Dry Run Summary
+      run: |
+        echo "## Pesticide Disaggregation Matrix Pipeline - Dry Run" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Available Years:** ${{ needs.discover-years.outputs.year_count }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Years:** ${{ needs.discover-years.outputs.years }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔍 This was a dry run - no processing was performed." >> $GITHUB_STEP_SUMMARY
+        echo "To run the actual processing, set 'Dry run mode' to false." >> $GITHUB_STEP_SUMMARY 
