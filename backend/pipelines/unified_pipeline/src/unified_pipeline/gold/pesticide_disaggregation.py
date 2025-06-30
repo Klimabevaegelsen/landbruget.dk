@@ -1208,6 +1208,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = mfc.CVR_Str
                         AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = mfc.Crop_Str
                     WHERE m1.field_id != m2.field_id
+                      -- Add proper filtering for both m1 and m2 CVR numbers
+                      AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
+                      -- Now safe to cast after filtering
                       AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
                       AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
                       AND m1.geometry IS NOT NULL 
@@ -1325,123 +1332,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         except Exception as e:
             self.log.error(f"Error in spatial clustering strategy: {str(e)}")
-            self.log.warning("Falling back to simple multi-field grouping...")
-            return self._disaggregate_by_simple_multi_field_grouping()
-
-    def _disaggregate_by_simple_multi_field_grouping(self) -> int:
-        """
-        Fallback strategy: Simple multi-field grouping without spatial analysis.
-        Used when geometry data is not available.
-        """
-        self.log.info("Running simple multi-field grouping (no spatial analysis)...")
-
-        try:
-            # Simple grouping by CVR+crop without spatial analysis
-            insert_query = """
-                WITH MultiFieldCVRCrop AS (
-                    SELECT 
-                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        COUNT(*) as FieldCount,
-                        SUM(m.area_ha) as TotalFieldArea
-                    FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
-                      AND m.area_ha > 0.0
-                    GROUP BY 1, 2
-                    HAVING COUNT(*) > 1 AND COUNT(*) <= 50  -- Limit to reasonable groups per CVR (clustering within each farmer)
-                ),
-                PendingForMultiFields AS (
-                    SELECT 
-                        p.OriginalPesticideRowID,
-                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        p.AcreageSize,
-                        p.PesticideName,
-                        p.PesticideRegistrationNumber,
-                        p.DosageQuantity,
-                        p.DosageUnit
-                    FROM pending_pesticide_rows p
-                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
-                      AND p.Code IS NOT NULL
-                      AND p.AcreageSize > 0
-                ),
-                CandidatesWithFields AS (
-                    SELECT 
-                        pf.OriginalPesticideRowID,
-                        pf.CVR_Str,
-                        pf.Crop_Str,
-                        pf.AcreageSize,
-                        pf.PesticideName,
-                        pf.PesticideRegistrationNumber,
-                        pf.DosageQuantity,
-                        pf.DosageUnit,
-                        mf.TotalFieldArea,
-                        m.field_id,
-                        m.area_ha as field_area,
-                        -- Calculate proportional allocation for each field
-                        pf.AcreageSize * (m.area_ha / mf.TotalFieldArea) as allocated_area
-                    FROM MultiFieldCVRCrop mf
-                    JOIN PendingForMultiFields pf 
-                        ON mf.CVR_Str = pf.CVR_Str 
-                        AND mf.Crop_Str = pf.Crop_Str
-                    JOIN marker m 
-                        ON mf.CVR_Str = CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR)
-                        AND mf.Crop_Str = CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR)
-                    WHERE pf.AcreageSize < mf.TotalFieldArea  -- Pesticide area smaller than total field area
-                      AND m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
-                      AND m.area_ha > 0.0
-                )
-                INSERT INTO disaggregated_pesticide_applications
-                SELECT
-                    uuid() as DisaggregatedID,
-                    CAST(c.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    c.CVR_Str as CompanyRegistrationNumber,
-                    c.PesticideName,
-                    c.PesticideRegistrationNumber,
-                    c.DosageQuantity,
-                    c.DosageUnit,
-                    'marker_' || CAST(c.field_id AS VARCHAR) as MatchedFieldID,
-                    'block_' || CAST(c.field_id AS VARCHAR) as MatchedBlockID,
-                    c.allocated_area as AllocatedArea,
-                    'Adjacent_Fields_Simple_Grouping_Limited' as AllocationMethod,
-                    0.6 as MatchConfidence,  -- Lower confidence without spatial analysis
-                    FALSE as IsPartialFieldCoverage,
-                    NOW() as DisaggregationDate
-                FROM CandidatesWithFields c
-            """
-
-            # Execute the batch insert
-            self.duckdb_conn.execute(insert_query)
-
-            # Remove processed records from pending table
-            self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
-                WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
-                    WHERE AllocationMethod = 'Adjacent_Fields_Simple_Grouping_Limited'
-                )
-            """)
-
-            # Get count of processed records
-            count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Simple_Grouping_Limited'"
-            ).fetchone()
-            processed_count = count_result[0] if count_result else 0
-
-            self.log.info(
-                f"Simple Multi-Field Grouping: Processed {processed_count} pesticide applications with limited grouping."
-            )
-            return processed_count
-
-        except Exception as e:
-            self.log.error(f"Error in simple multi-field grouping: {str(e)}")
+            self.log.error("Spatial clustering failed - skipping this strategy")
             return 0
 
     def _get_results(self) -> List[Dict[str, Any]]:
