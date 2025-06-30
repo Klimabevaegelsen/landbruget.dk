@@ -1,0 +1,769 @@
+name: CHR Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Pipeline step to run'
+        type: choice
+        required: true
+        options:
+          - all
+          - bronze_foundation
+          - bronze_data_collection
+          - silver_processing
+          - stamdata
+          - herds
+          - herd_details
+          - diko
+          - animal_movements
+          - ejendom
+          - vetstat
+          - silver_all
+        default: 'all'
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
+        type: string
+        required: false
+        default: ''
+      end_date:
+        description: 'End date (YYYY-MM-DD)'
+        type: string
+        required: false
+        default: ''
+      max_herds:
+        description: 'Maximum number of herds to process'
+        type: string
+        default: ''
+      species_codes:
+        description: 'Comma-separated list of species codes'
+        type: string
+        default: ''
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - WARNING
+          - INFO
+          - DEBUG
+          - ERROR
+        default: 'WARNING'
+      show_progress:
+        description: 'Show progress information'
+        type: boolean
+        default: true
+      limit_herds_per_species:
+        description: 'Limit number of herds processed per species'
+        type: string
+        default: ''
+
+env:
+  # Set a shared timestamp for all bronze jobs in this workflow run
+  # Use run_number and run_id to create a unique but shared timestamp
+  BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
+
+jobs:
+  # Job 1: Foundation Steps (stamdata, herds)
+  bronze-foundation:
+    runs-on: ubuntu-latest
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Foundation Steps
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Determine which foundation step to run
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+          STEP="herds"  # This will run stamdata -> herds
+        elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
+          STEP="$INPUT_STEP"
+        else
+          echo "Invalid step for bronze-foundation job: $INPUT_STEP"
+          exit 1
+        fi
+        
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running foundation command: $CMD"
+        $CMD
+
+    - name: Upload context artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/chr_context.json
+        retention-days: 1
+
+    - name: Upload bronze data summary
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bronze-foundation-logs
+        path: |
+          /tmp/data/
+        retention-days: 1
+
+  # Job 2: Parallel Data Collection - Group 1 (diko + animal_movements - only need foundation)
+  bronze-parallel-group-1:
+    runs-on: ubuntu-latest
+    needs: bronze-foundation
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        data_type: [diko, animal_movements]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Parallel Group 1 Step
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Skip if this specific step is not requested
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
+          echo "Skipping ${{ matrix.data_type }} step for this configuration"
+          exit 0
+        fi
+        
+        STEP="${{ matrix.data_type }}"
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # Set default 3-year date range for animal_movements step
+        if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
+          START_DATE=$(date -d "3 years ago" +%Y-01-01)
+          END_DATE=$(date +%Y-%m-%d)
+          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
+        fi
+        
+        # IMPORTANT: Only run the specific step, not its dependencies
+        # Dependencies have already been satisfied by previous jobs and context import
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        elif [[ -n "$START_DATE" ]]; then
+          CMD="$CMD --start-date $START_DATE"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        elif [[ -n "$END_DATE" ]]; then
+          CMD="$CMD --end-date $END_DATE"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
+        $CMD
+
+  # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
+  bronze-herd-details:
+    runs-on: ubuntu-latest
+    needs: bronze-foundation
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+        echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Herd Details Step
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # IMPORTANT: Only run the herd_details step, not its dependencies
+        # Dependencies have already been satisfied by the foundation job and context import
+        CMD="python -m main --steps herd_details --log-level $LOG_LEVEL --skip-dependencies"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running herd details command: $CMD"
+        $CMD
+
+    - name: Upload updated context artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: chr-context-with-details
+        path: /tmp/chr_context_with_details.json
+        retention-days: 1
+
+  # Job 4: Parallel Data Collection - Group 2 (ejendom + vetstat - need herd_details)
+  bronze-parallel-group-2:
+    runs-on: ubuntu-latest
+    needs: bronze-herd-details
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        data_type: [ejendom, vetstat]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-with-details
+        path: /tmp/
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Parallel Group 2 Step
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Skip if this specific step is not requested
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
+          echo "Skipping ${{ matrix.data_type }} step for this configuration"
+          exit 0
+        fi
+        
+        STEP="${{ matrix.data_type }}"
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # IMPORTANT: Only run the specific step, not its dependencies
+        # Dependencies have already been satisfied by previous jobs and context import
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running parallel group 2 command for $STEP: $CMD"
+        $CMD
+
+  # Job 5: Silver Processing
+  silver-processing:
+    runs-on: ubuntu-latest
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-herd-details, bronze-parallel-group-2]
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Download Bronze Data from GCS
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        # Download all bronze data from the shared timestamp folder
+        echo "Downloading bronze data from GCS..."
+        
+        # Use the same shared timestamp that all bronze jobs used
+        SHARED_TIMESTAMP="${{ env.BRONZE_EXPORT_TIMESTAMP }}"
+        echo "Using shared bronze timestamp: $SHARED_TIMESTAMP"
+        
+        # Create the target directory with the timestamp
+        mkdir -p /tmp/data/bronze/chr/$SHARED_TIMESTAMP
+        
+        # Download all files from the shared timestamp folder to the timestamped directory
+        echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/"
+        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/* /tmp/data/bronze/chr/$SHARED_TIMESTAMP/ || {
+          echo "Failed to download bronze data from shared timestamp folder"
+          echo "Checking what timestamp folders exist..."
+          gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
+          exit 1
+        }
+        
+        # Set the timestamp for silver processing
+        echo "BRONZE_DATE_FOLDER_OVERRIDE=$SHARED_TIMESTAMP" >> .env
+        
+        # List what we downloaded
+        echo "=== Downloaded bronze files ==="
+        ls -la /tmp/data/bronze/chr/$SHARED_TIMESTAMP/
+
+    - name: Run Silver Processing
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        # Determine which silver step to run
+        INPUT_STEP="${{ inputs.step || 'all' }}"
+        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "silver_processing" ]]; then
+          STEP="silver_all"
+        else
+          STEP="$INPUT_STEP"
+        fi
+        
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        
+        echo "Running silver processing command: $CMD"
+        $CMD
+
+    - name: Verify Pipeline Output
+      if: always()
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        echo "=== Silver Processing Output Verification ==="
+        
+        if [[ -n "$GCS_BUCKET" ]]; then
+          echo "Checking silver data in GCS..."
+          gsutil ls -l gs://$GCS_BUCKET/silver/chr/ | tail -20 || echo "No silver data found in GCS"
+          echo ""
+          echo "Checking bronze data in GCS..."
+          gsutil ls -l gs://$GCS_BUCKET/bronze/chr/ | tail -20 || echo "No bronze data found in GCS"
+        fi
+        
+        if [[ -d "/tmp/data/silver" ]]; then
+          echo "Local silver data files:"
+          find /tmp/data/silver -name "*.parquet" | head -20
+        fi
+
+  # Job 6: Single Step Execution (for individual steps not covered above)
+  single-step:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        
+        # Set up VetStat credentials if provided
+        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+        fi
+        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+        fi
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Single Step
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        STEP="${{ inputs.step }}"
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # Set default 3-year date range for animal_movements step
+        if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
+          START_DATE=$(date -d "3 years ago" +%Y-01-01)
+          END_DATE=$(date +%Y-%m-%d)
+          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
+        fi
+        
+        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        elif [[ -n "$START_DATE" ]]; then
+          CMD="$CMD --start-date $START_DATE"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        elif [[ -n "$END_DATE" ]]; then
+          CMD="$CMD --end-date $END_DATE"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running single step command: $CMD"
+        $CMD
+
+    - name: Handle pipeline failure
+      if: failure()
+      run: |
+        echo "❌ CHR Pipeline step '${{ inputs.step }}' failed. Please check the logs above for details."
+        echo ""
+        echo "🔧 Common issues:"
+        echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
+        echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
+        echo "3. Network connectivity issues with FVM services"
+        echo "4. GCS authentication or bucket access issues"
+        echo "5. Pipeline timeout or memory issues"
+        echo ""
+        echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
+        exit 1

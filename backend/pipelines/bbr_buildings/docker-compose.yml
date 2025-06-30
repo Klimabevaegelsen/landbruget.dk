@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  bbr-buildings:
+    build: .
+    container_name: bbr_buildings_pipeline
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=dev
+      - STORAGE_TYPE=local
+      - LOG_LEVEL=INFO
+      - MAX_WORKERS=4
+      - CHUNK_SIZE=50000
+    env_file:
+      - .env
+    command: ["python", "main.py", "--layer", "bronze", "--sample-size", "1000"]
+
+  test:
+    build: .
+    container_name: bbr_buildings_test
+    volumes:
+      - ./:/app
+    environment:
+      - ENVIRONMENT=test
+    command: ["python", "-m", "pytest", "tests/", "-v"] 

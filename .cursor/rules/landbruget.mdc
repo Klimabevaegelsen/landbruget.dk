@@ -1,0 +1,49 @@
+---
+description: landbruget.dk project organization and file placement rules
+globs: 
+alwaysApply: true
+---
+
+## GCS Configuration
+our bucket is gs://landbrugsdata-raw-data/
+
+## File Organization Rules
+When creating new files, place them in the appropriate directory:
+
+### Scripts
+- **Analysis scripts** → `scripts/analysis/` - field analysis, data research, clustering analysis
+- **Testing scripts** → `scripts/testing/` - API tests, debugging tools, performance tests
+  - SPF-SU API tests → `scripts/testing/spf_su/`
+  - CHR pipeline tests → `scripts/testing/chr/`
+- **Discovery scripts** → `scripts/discovery/` - data exploration, WFS layer discovery, example usage
+
+### Documentation
+- **Architecture docs** → `docs/architecture/` - system design, migration plans, technical specs
+- **Troubleshooting guides** → `docs/troubleshooting/` - problem resolution, optimization guides
+- **Analysis documentation** → `docs/analysis/` - research findings, methodology reviews
+- **Data documentation** → `docs/data/` - data catalogs, usage guides, schema docs
+
+### Data Files
+- **Sample data** → `data/samples/` - test datasets, small examples for development
+- **Reference data** → `data/reference/` - lookup tables, mappings, static references
+- **Generated files** → `data/generated/` - script outputs, processed data, derived datasets
+
+### Pipelines
+- **New pipelines** → `backend/pipelines/unified_pipeline/src/unified_pipeline/` - all new data pipelines should use the unified architecture
+  - Bronze layer → `backend/pipelines/unified_pipeline/src/unified_pipeline/bronze/`
+  - Silver layer → `backend/pipelines/unified_pipeline/src/unified_pipeline/silver/`
+  - Gold layer → `backend/pipelines/unified_pipeline/src/unified_pipeline/gold/`
+- **Legacy pipelines** → `backend/pipelines/` - existing standalone pipelines (avoid creating new ones here)
+
+### Special Cases
+- **Root level**: Only for essential config files (pyproject.toml, ruff.toml, .gitignore, README.md)
+- **Large cached datasets** → `data_cache/` - pipeline outputs, processed datasets
+- **Project-specific analysis** → Keep in dedicated directories like `cvr_analysis_31373077/`
+
+### File Naming
+- Use descriptive names with underscores: `analyze_field_clusters.py`
+- Include purpose in name: `test_spf_su_performance.py`, `debug_chr_memory.py`
+- Documentation should end in `.md`
+- Data files should use appropriate extensions (`.parquet`, `.csv`, `.json`)
+
+NEVER create files in the root directory unless they are essential configuration files or have active external references that cannot be easily updated.

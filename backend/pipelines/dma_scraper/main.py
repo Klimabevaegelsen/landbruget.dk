@@ -1,0 +1,211 @@
+import argparse
+import asyncio
+
+# inside backend/pipelines/dma_scraper/fetch_company_data.py
+import os
+import sys
+import time
+from datetime import datetime
+
+import nest_asyncio
+
+ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
+sys.path.insert(0, ROOT)
+
+from bronze.fetch_company_data import DMAScraper
+from bronze.fetch_company_detail import DMACompanyDetailScraper
+from silver.transformation import transform_dma_json
+
+from backend.common.storage_interface import GCSStorage, LocalStorage
+
+nest_asyncio.apply()
+
+PREFIX_BRONZE_SAVE_PATH = os.environ.get("BRONZE_OUTPUT_DIR", "bronze/dma")
+PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
+
+# Initialize GCS client and bucket
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+if ENVIRONMENT.lower() in ("production", "container"):
+    storage_backend = GCSStorage(os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data"))
+else:
+    storage_backend = LocalStorage(os.environ.get("BRONZE_OUTPUT_DIR", "."))
+
+scraper = DMAScraper()
+
+
+def save_data(data, timestamp, PATH):
+    timestamp_dir = os.path.join(PATH, timestamp)
+    blob_name = f"{timestamp_dir}/environmental_companies_raw.json"
+    storage_backend.save_json(data, blob_name)
+    print(f"Saved {blob_name} to storage")
+
+
+def save_parquet(data, timestamp, PATH):
+    timestamp_dir = os.path.join(PATH, timestamp)
+    blob_name = f"{timestamp_dir}/environmental_companies.parquet"
+    storage_backend.save_parquet(data, blob_name)
+    print(f"Saved {blob_name} to storage")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="DMA Scraper Pipeline")
+    parser.add_argument(
+        "--total-pages",
+        type=int,
+        default=None,
+        help="Total number of pages to scrape",
+    )
+    parser.add_argument(
+        "--silver",
+        action="store_true",
+        help="Run silver transformation stage",
+    )
+    parser.add_argument(
+        "--timestamp",
+        type=str,
+        help="Timestamp directory for silver stage",
+    )
+    parser.add_argument(
+        "--start-date",
+        type=str,
+        help="Start date for filtering Tilsynsdato (format: YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        help="End date for filtering Tilsynsdato (format: YYYY-MM-DD)",
+    )
+    return parser.parse_args()
+
+
+def silver(data, timestamp: str):
+    df = transform_dma_json(data)
+    save_parquet(df, timestamp, PREFIX_SILVER_SAVE_PATH)
+
+
+def bronze(timestamp: str):
+    args = parse_args()
+    page = 1
+    total_pages = args.total_pages
+    all_page_results = []
+    while total_pages is None or page <= total_pages:
+        print(f"Fetching page {page}...")
+        data = scraper.fetch_data(page)
+
+        if total_pages is None:
+            total_pages = data["pagination"]["antalSider"]
+            print(f"Total pages: {total_pages}")
+
+        page_results = scraper.extract_info(data)
+        time.sleep(1)  # Add a delay to avoid overwhelming the server
+        all_page_results.extend(page_results)
+        page += 1
+
+    # Convert date strings to datetime objects if provided
+    start_date = None
+    end_date = None
+    if args.start_date:
+        start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
+    if args.end_date:
+        end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
+
+    detail_scraper = DMACompanyDetailScraper(all_page_results, start_date=start_date, end_date=end_date)
+    loop = asyncio.get_event_loop()
+    detailed_data = loop.run_until_complete(detail_scraper.process_miljoeaktoer_for_company_file_path())
+    # Merge base and detail dicts by 'miljoeaktoerUrl'
+    detail_lookup = {item.get("miljoeaktoerUrl"): item for item in detailed_data if item}
+    merged_results = []
+    for base in all_page_results:
+        url = base.get("miljoeaktoerUrl")
+        merged_results.append({**base, **detail_lookup.get(url, {})})
+    save_data(merged_results, timestamp, PREFIX_BRONZE_SAVE_PATH)
+    return merged_results
+
+
+if __name__ == "__main__":
+    pipeline_start_time = datetime.now()
+    timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+    args = parse_args()
+    if args.silver:
+        if not args.timestamp:
+            print("Error: --timestamp is required for silver stage")
+            sys.exit(1)
+        data = storage_backend.read_json(
+            os.path.join(PREFIX_BRONZE_SAVE_PATH, args.timestamp, "environmental_companies_raw.json")
+        )
+        silver(data, args.timestamp)
+    else:
+        data = bronze(timestamp)
+        silver(data, timestamp)
+
+        # Generate schema documentation after silver processing
+        try:
+            print("Generating schema documentation for DMA data")
+
+            # Import schema documentation (with path adjustment)
+            import sys
+            from pathlib import Path
+
+            # Find the project root (directory containing 'backend' folder)
+            current_file = Path(__file__).resolve()
+            project_root = None
+
+            # Go up the directory tree to find the project root
+            for parent in current_file.parents:
+                if (parent / "backend").is_dir():
+                    project_root = parent
+                    break
+
+            if project_root and str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            # Use the pipeline start time we already have
+            # Create DuckDB connection and load the parquet file
+            import duckdb
+
+            try:
+                from backend.common.schema_documentation import SchemaDocumentationManager
+            except ImportError as e:
+                import warnings
+
+                warnings.warn(f"Schema documentation not available: {e}")
+                SchemaDocumentationManager = None
+
+            conn = duckdb.connect()
+
+            # Construct path to the silver parquet file
+            parquet_path = os.path.join(PREFIX_SILVER_SAVE_PATH, timestamp, "environmental_companies.parquet")
+
+            # Check if running locally or in GCS environment
+            if ENVIRONMENT.lower() in ("production", "container"):
+                # For GCS, we need to download the file first or use a different approach
+                print("Note: Schema documentation for GCS files not yet implemented")
+            else:
+                # For local files
+                if os.path.exists(parquet_path) and SchemaDocumentationManager is not None:
+                    table_name = "dma_processed"
+                    conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{parquet_path}')")
+
+                    # Initialize schema documentation manager
+                    schema_manager = SchemaDocumentationManager(
+                        connection=conn,
+                        pipeline_name="dma_scraper",
+                        pipeline_start_time=pipeline_start_time,
+                        logger=None,  # No logger available in this pipeline
+                    )
+
+                    # Generate documentation for DMA table
+                    schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+                    print("Generated schema documentation for DMA data")
+
+                    # Commit to GitHub
+                    schema_manager.commit_to_github()
+                    print("DMA schema documentation committed to GitHub")
+                elif SchemaDocumentationManager is None:
+                    print("Warning: Schema documentation disabled due to import error")
+                else:
+                    print(f"Warning: Parquet file not found at {parquet_path}")
+
+        except Exception as e:
+            print(f"Failed to generate DMA schema documentation: {e}")
+            # Don't fail the pipeline if schema documentation fails

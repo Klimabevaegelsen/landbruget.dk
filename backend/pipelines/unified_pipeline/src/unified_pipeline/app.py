@@ -1,0 +1,375 @@
+"""
+Main application module for the unified pipeline.
+
+This module contains the main entry point and CLI interface for the unified
+data pipeline application. It orchestrates different data processing stages
+(bronze, silver, gold) for various data sources.
+"""
+
+import asyncio
+
+import click
+from dotenv import load_dotenv
+
+from unified_pipeline.bronze.agricultural_fields import (
+    AgriculturalFieldsBronze,
+    AgriculturalFieldsBronzeConfig,
+)
+from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
+from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeConfig
+from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
+from unified_pipeline.bronze.dmi import DMIBronze, DMIBronzeConfig
+from unified_pipeline.bronze.dst import DSTBronze, DSTBronzeConfig
+from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
+from unified_pipeline.bronze.jordbrugsanalyser import (
+    JordbrugsanalyserBronze,
+    JordbrugsanalyserBronzeConfig,
+)
+from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
+from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
+from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
+from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
+from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.field_area_analysis import (
+    FieldAreaAnalysisGold,
+    FieldAreaAnalysisGoldConfig,
+)
+from unified_pipeline.gold.field_production import (
+    FieldProductionGold,
+    FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.pesticide_disaggregation import (
+    PesticideDisaggregationGold,
+    PesticideDisaggregationGoldConfig,
+)
+from unified_pipeline.gold.property_cadastral_merge import (
+    PropertyCadastralMergeGold,
+    PropertyCadastralMergeGoldConfig,
+)
+from unified_pipeline.model import cli
+from unified_pipeline.model.app_config import GCSConfig
+from unified_pipeline.silver.agricultural_fields import (
+    AgriculturalFieldsSilver,
+    AgriculturalFieldsSilverConfig,
+)
+from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
+from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
+from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
+from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
+from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
+from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
+from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
+from unified_pipeline.silver.jordbrugsanalyser import (
+    JordbrugsanalyserSilver,
+    JordbrugsanalyserSilverConfig,
+)
+from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
+from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
+from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
+from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
+from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.log_util import Logger
+
+load_dotenv()
+
+
+async def execute_pipeline_jobs(
+    jobs: list, gcs_util: GCSUtil, stage: cli.Stage, cli_config: cli.CliConfig
+) -> None:
+    """
+    Execute pipeline jobs with support for gold layer and in-memory data passing.
+
+    This function handles the execution of bronze, silver, and gold jobs, implementing
+    in-memory data passing when Stage.all is used. When bronze and silver jobs
+    are run together, bronze data is passed directly to silver jobs without
+    disk I/O for improved performance.
+
+    Args:
+        jobs: List of (job_class, config_class) tuples to execute
+        gcs_util: GCS utility instance
+        stage: The stage being executed (bronze, silver, or all)
+        cli_config: CLI configuration containing filtering parameters
+    """
+    log = Logger.get_logger()
+    bronze_data = None
+    silver_data = {}
+
+    for job_cls, config_cls in jobs:
+        log.info(f"Running {job_cls.__name__} for stage {stage}")
+
+        # Create config instance and pass CLI config for FVM WFS filtering
+        config_instance = config_cls()
+        if hasattr(config_instance, "apply_cli_filters"):
+            config_instance.apply_cli_filters(cli_config)
+
+        instance = job_cls(config=config_instance, gcs_util=gcs_util)
+
+        if issubclass(job_cls, BronzeJobInterface):
+            # Bronze stage - get data for memory passing
+            bronze_data = await instance.run()
+            log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
+
+        elif issubclass(job_cls, SilverJobInterface):
+            # Silver stage - pass in-memory data if available and collect results
+            result = await instance.run(bronze_data=bronze_data)
+            # Collect silver data for gold stage
+            dataset_name = instance.config.dataset
+            silver_data[dataset_name] = result
+            log.info(
+                f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
+            )
+
+        elif issubclass(job_cls, GoldJobInterface):
+            # Gold stage - pass collected silver data
+            await instance.run(silver_data=silver_data)
+            log.info(f"Gold job {job_cls.__name__} completed using silver data")
+
+        else:
+            # Legacy support - jobs that don't implement the new interfaces
+            await instance.run()
+            log.info(f"Legacy job {job_cls.__name__} completed")
+
+        log.info(f"Finished {job_cls.__name__} for stage {stage}")
+
+
+def execute(cli_config: cli.CliConfig) -> None:
+    """
+    Main execution function for processing pipeline data.
+
+    This function initializes the appropriate data processing pipeline based on
+    the provided CLI configuration. It handles source selection and processing
+    stage (bronze, silver, or all stages) with support for in-memory data passing.
+
+    Args:
+        cli_config (cli.CliConfig): Configuration containing source and stage settings
+
+    Raises:
+        ValueError: If the requested source/stage combination is not supported
+    """
+    log = Logger.get_logger()
+    log.info("Starting Unified Pipeline.")
+
+    gcs_util = GCSUtil(GCSConfig())
+
+    # Define pipeline mapping for sources and stages
+    pipeline_map = {
+        cli.Source.bnbo: {
+            cli.Stage.bronze: [(BNBOStatusBronze, BNBOStatusBronzeConfig)],
+            cli.Stage.silver: [(BNBOStatusSilver, BNBOStatusSilverConfig)],
+            cli.Stage.all: [
+                (BNBOStatusBronze, BNBOStatusBronzeConfig),
+                (BNBOStatusSilver, BNBOStatusSilverConfig),
+            ],
+        },
+        cli.Source.agricultural_fields: {
+            cli.Stage.bronze: [(AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig)],
+            cli.Stage.silver: [(AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig)],
+            cli.Stage.all: [
+                (AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig),
+                (AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig),
+            ],
+        },
+        cli.Source.cadastral: {
+            cli.Stage.bronze: [(CadastralBronze, CadastralBronzeConfig)],
+            cli.Stage.silver: [(CadastralSilver, CadastralSilverConfig)],
+            cli.Stage.all: [
+                (CadastralBronze, CadastralBronzeConfig),
+                (CadastralSilver, CadastralSilverConfig),
+            ],
+        },
+        cli.Source.spf_su: {
+            cli.Stage.bronze: [(SpfSuBronze, SpfSuBronzeConfig)],
+            cli.Stage.silver: [(SpfSuSilver, SpfSuSilverConfig)],
+            cli.Stage.all: [
+                (SpfSuBronze, SpfSuBronzeConfig),
+                (SpfSuSilver, SpfSuSilverConfig),
+            ],
+        },
+        cli.Source.soil_types: {
+            cli.Stage.bronze: [(SoilTypesBronze, SoilTypesBronzeConfig)],
+            cli.Stage.silver: [(SoilTypesSilver, SoilTypesSilverConfig)],
+            cli.Stage.all: [
+                (SoilTypesBronze, SoilTypesBronzeConfig),
+                (SoilTypesSilver, SoilTypesSilverConfig),
+            ],
+        },
+        cli.Source.dagi: {
+            cli.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
+            cli.Stage.silver: [
+                (DAGISilver, DAGISilverConfig),
+                (DSTZoneMapping, DSTZoneMappingConfig),
+            ],
+            cli.Stage.all: [
+                (DAGIBronze, DAGIBronzeConfig),
+                (DAGISilver, DAGISilverConfig),
+                (DSTZoneMapping, DSTZoneMappingConfig),
+            ],
+        },
+        cli.Source.jordbrugsanalyser: {
+            cli.Stage.bronze: [(JordbrugsanalyserBronze, JordbrugsanalyserBronzeConfig)],
+            cli.Stage.silver: [(JordbrugsanalyserSilver, JordbrugsanalyserSilverConfig)],
+            cli.Stage.all: [
+                (JordbrugsanalyserBronze, JordbrugsanalyserBronzeConfig),
+                (JordbrugsanalyserSilver, JordbrugsanalyserSilverConfig),
+            ],
+        },
+        cli.Source.fvm_wfs: {
+            cli.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
+            cli.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli.Stage.all: [
+                (FVMWFSBronze, FVMWFSBronzeConfig),
+                (FVMWFSSilver, FVMWFSSilverConfig),
+            ],
+        },
+        cli.Source.wetlands: {
+            cli.Stage.bronze: [(WetlandsBronze, WetlandsBronzeConfig)],
+            cli.Stage.silver: [(WetlandsSilver, WetlandsSilverConfig)],
+            cli.Stage.all: [
+                (WetlandsBronze, WetlandsBronzeConfig),
+                (WetlandsSilver, WetlandsSilverConfig),
+            ],
+        },
+        cli.Source.water_projects: {
+            cli.Stage.bronze: [(WaterProjectsBronze, WaterProjectsBronzeConfig)],
+            cli.Stage.silver: [(WaterProjectsSilver, WaterProjectsSilverConfig)],
+            cli.Stage.all: [
+                (WaterProjectsBronze, WaterProjectsBronzeConfig),
+                (WaterProjectsSilver, WaterProjectsSilverConfig),
+            ],
+        },
+        cli.Source.property_cadastral_merge: {
+            cli.Stage.gold: [(PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires property_owners and cadastral silver data to be available
+                # These should be run separately first or through dependent pipelines
+                (PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig),
+            ],
+        },
+        cli.Source.field_production: {
+            cli.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires agricultural_fields and dst_zone_mapping silver data to be available
+                # These should be run separately first or through dependent pipelines
+                (FieldProductionGold, FieldProductionGoldConfig),
+            ],
+        },
+        cli.Source.field_area_analysis: {
+            cli.Stage.gold: [(FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires multiple silver datasets to be available:
+                # agricultural_fields, property_cadastral_merged, soil_types, bnbo_status_dissolved,
+                # wetlands_dissolved, water_projects_dissolved
+                (FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig),
+            ],
+        },
+        cli.Source.pesticide_disaggregation: {
+            cli.Stage.gold: [(PesticideDisaggregationGold, PesticideDisaggregationGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # agricultural_fields, pesticides
+                (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
+            ],
+        },
+        cli.Source.dst: {
+            cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
+            cli.Stage.silver: [(DSTSilver, DSTSilverConfig)],
+            cli.Stage.all: [
+                (DSTBronze, DSTBronzeConfig),
+                (DSTSilver, DSTSilverConfig),
+            ],
+        },
+        cli.Source.dmi: {
+            cli.Stage.bronze: [(DMIBronze, DMIBronzeConfig)],
+            cli.Stage.silver: [(DMISilver, DMISilverConfig)],
+            cli.Stage.all: [
+                (DMIBronze, DMIBronzeConfig),
+                (DMISilver, DMISilverConfig),
+            ],
+        },
+    }
+
+    # Retrieve jobs for given source and stage
+    try:
+        jobs = pipeline_map[cli_config.source][cli_config.stage]
+    except KeyError:
+        raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
+
+    # Execute jobs with support for in-memory data passing
+    asyncio.run(execute_pipeline_jobs(jobs, gcs_util, cli_config.stage, cli_config))
+
+    log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
+
+
+@click.command()
+@click.option(
+    "-e",
+    "--env",
+    "env",
+    help="The environment to use. Default is prod.",
+    type=click.Choice([env.value for env in cli.Env]),
+    default="prod",
+)
+@click.option(
+    "-s",
+    "--source",
+    "source",
+    help="The source to use.",
+    type=click.Choice([source.value for source in cli.Source]),
+    required=True,
+)
+@click.option(
+    "-j",
+    "--stage",
+    "stage",
+    type=click.Choice([mode.value for mode in cli.Stage]),
+    help="The stage to use. The options are bronze, silver, and all.",
+    required=True,
+)
+@click.option(
+    "--fvm-layer-type",
+    "fvm_layer_type",
+    type=click.Choice([layer.value for layer in cli.FVMLayerType]),
+    help="FVM layer type filter for matrix jobs (markblokke, marker, smaabiotoper).",
+    required=False,
+)
+@click.option(
+    "--fvm-year",
+    "fvm_year",
+    type=int,
+    help="Year filter for FVM matrix jobs (e.g., 2024).",
+    required=False,
+)
+def run_cli(
+    env: str,
+    source: str,
+    stage: str,
+    fvm_layer_type: str = None,
+    fvm_year: int = None,
+) -> None:
+    """
+    CLI entry point for the unified pipeline application.
+
+    This function parses command-line arguments and initializes the pipeline
+    with the appropriate configuration. It serves as the main entry point
+    when running the application from the command line.
+
+    Args:
+        env: The environment to use (prod, dev, etc.)
+        source: The data source to process
+        stage: The processing stage (bronze, silver, all)
+        fvm_layer_type: Optional FVM layer type filter for matrix jobs
+        fvm_year: Optional year filter for FVM matrix jobs
+
+    Example:
+        $ python -m unified_pipeline -s bnbo -j bronze
+        $ python -m unified_pipeline -s fvm_wfs -j bronze --fvm-layer-type markblokke --fvm-year 2024
+    """
+    app_config = cli.CliConfig(
+        env=cli.Env(env),
+        source=cli.Source(source),
+        stage=cli.Stage(stage),
+        fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
+        fvm_year=fvm_year,
+    )
+    print(app_config)
+    execute(app_config)
