@@ -77,112 +77,188 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         Args:
             silver_data: Optional dictionary containing silver data
         """
-        logger.info("Starting pesticide disaggregation processing with original strategy")
+        logger.info("🚀 Starting pesticide disaggregation processing with original strategy")
 
         # Get all available pesticide years and their corresponding field years
+        logger.info("📊 Discovering available data years...")
         pesticide_field_pairs = self._get_pesticide_field_year_pairs()
 
         if not pesticide_field_pairs:
-            logger.error("No valid pesticide-field year pairs found")
+            logger.error("❌ No valid pesticide-field year pairs found")
             return
 
-        logger.info(f"Found {len(pesticide_field_pairs)} pesticide-field year pairs to process")
+        logger.info(f"✅ Found {len(pesticide_field_pairs)} pesticide-field year pairs to process")
+        for pest_year, field_year in pesticide_field_pairs:
+            logger.info(f"   📅 Will process: pesticide {pest_year} → field {field_year}")
 
-        all_results = []
         total_pesticide_records = 0
+        total_disaggregated_records = 0
+        successful_years = 0
+        failed_years = 0
 
         # Process each pesticide year with its corresponding field year
-        for pesticide_year, field_year in pesticide_field_pairs:
-            logger.info(f"Processing pesticide year {pesticide_year} with field year {field_year}")
+        for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
+            logger.info(
+                f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: pesticide {pesticide_year} with field {field_year}"
+            )
 
             # Load data for this year pair
+            logger.info(
+                f"📥 Loading silver data for pesticide year {pesticide_year} and field year {field_year}"
+            )
             datasets = self._load_silver_data_for_years(pesticide_year, field_year, silver_data)
             agricultural_fields_path = datasets.get("agricultural_fields")
             pesticide_applications_path = datasets.get("pesticides")
 
             if agricultural_fields_path is None or pesticide_applications_path is None:
-                logger.warning(f"Skipping year {pesticide_year}: missing data")
+                logger.warning(f"⚠️ Skipping year {pesticide_year}: missing data files")
+                logger.warning(
+                    f"   Agricultural fields: {'✅' if agricultural_fields_path else '❌'}"
+                )
+                logger.warning(
+                    f"   Pesticide applications: {'✅' if pesticide_applications_path else '❌'}"
+                )
+                failed_years += 1
                 continue
 
+            logger.info(f"✅ Data files located for year {pesticide_year}")
+            logger.info(f"   📄 Agricultural fields: {agricultural_fields_path}")
+            logger.info(f"   📄 Pesticide applications: {pesticide_applications_path}")
+
             # Process this year pair
+            logger.info(f"⚙️ Starting disaggregation processing for year {pesticide_year}")
             year_results = self._process_year_pair(
                 pesticide_year, field_year, agricultural_fields_path, pesticide_applications_path
             )
 
             if year_results is not None and len(year_results) > 0:
-                # Convert results list to a DataFrame-like structure for DuckDB
-                # year_results is a list of dictionaries, so we can use it directly
-                all_results.append(year_results)
-
-                # ✅ MIGRATION: Count pesticide records using DuckDB with optimized GCS access
-                with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
-                    pesticide_count = self.duckdb_conn.execute(
-                        f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
-                    ).fetchone()[0]
-                total_pesticide_records += pesticide_count
                 logger.info(
-                    f"Year {pesticide_year}: processed {len(year_results)} disaggregated records from {pesticide_count} total pesticide records"
+                    f"✅ Year {pesticide_year}: Successfully processed {len(year_results)} disaggregated records"
                 )
 
-        if not all_results:
-            logger.error("No results generated for any year")
+                # Save results for this year immediately (much more efficient than one giant table)
+                logger.info(f"💾 Saving results for year {pesticide_year} to GCS")
+                year_saved = self._save_year_results(year_results, pesticide_year)
+
+                if year_saved:
+                    # Count pesticide records for this year using a separate connection
+                    logger.info(f"📊 Counting total pesticide records for year {pesticide_year}")
+                    try:
+                        temp_conn = duckdb.connect(":memory:")
+                        with self.gcs_access._temp_download(
+                            pesticide_applications_path
+                        ) as temp_file:
+                            pesticide_count = temp_conn.execute(
+                                f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
+                            ).fetchone()[0]
+                        temp_conn.close()
+                        total_pesticide_records += pesticide_count
+                        logger.info(
+                            f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {len(year_results)} disaggregated"
+                        )
+                        total_disaggregated_records += len(year_results)
+                        successful_years += 1
+                    except Exception as e:
+                        logger.error(
+                            f"❌ Failed to count pesticide records for year {pesticide_year}: {e}"
+                        )
+                        # Still count as successful since we have results
+                        total_disaggregated_records += len(year_results)
+                        successful_years += 1
+                else:
+                    logger.error(f"❌ Failed to save results for year {pesticide_year}")
+                    failed_years += 1
+            else:
+                logger.warning(f"⚠️ Year {pesticide_year}: No results generated")
+                failed_years += 1
+
+        logger.info("📊 Processing summary:")
+        logger.info(f"   ✅ Successful years: {successful_years}")
+        logger.info(f"   ❌ Failed years: {failed_years}")
+        logger.info(f"   📈 Total pesticide records: {total_pesticide_records}")
+
+        if successful_years == 0:
+            logger.error("❌ No years were successfully processed - terminating")
             return
 
-        # ✅ MIGRATION: Combine all results using DuckDB
-        temp_combined_table = "temp_combined_pesticide_results"
+        # Calculate coverage statistics
+        coverage_pct = (
+            (total_disaggregated_records / total_pesticide_records * 100)
+            if total_pesticide_records > 0
+            else 0
+        )
 
-        # Since we're dealing with list of dictionaries, we need to convert to a format DuckDB can handle
-        # First, create the combined table structure
-        first_created = False
+        logger.info("🎉 Pesticide disaggregation completed successfully!")
+        logger.info("📊 Final Statistics:")
+        logger.info(f"   📈 Total pesticide records across all years: {total_pesticide_records:,}")
+        logger.info(
+            f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} ({coverage_pct:.1f}%)"
+        )
+        logger.info(f"   📅 Processed years: {successful_years}")
+        logger.info("   💾 Results saved as separate files for each year (much more efficient!)")
+        logger.info("🏁 Pesticide disaggregation gold layer processing completed successfully")
 
-        for i, year_result in enumerate(all_results):
-            if not year_result:  # Skip empty results
-                continue
+    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+        """
+        Save results for a single year to GCS storage.
 
-            # Convert list of dictionaries to DuckDB table using VALUES
-            if not first_created:
-                # Create table with first batch of results
-                columns = list(year_result[0].keys())
+        Args:
+            year_results: List of disaggregated records for the year
+            year: The year being processed
+
+        Returns:
+            bool: True if save was successful, False otherwise
+        """
+        try:
+            logger.info(f"💾 Preparing to save {len(year_results)} records for year {year}")
+
+            # Create a temporary DuckDB connection for this year's data
+            year_conn = duckdb.connect(":memory:")
+
+            # Create table with the results
+            if year_results:
+                columns = list(year_results[0].keys())
                 column_defs = ", ".join([f"{col} VARCHAR" for col in columns])
+                table_name = f"pesticide_disaggregation_{year}"
 
-                self.duckdb_conn.execute(f"CREATE TABLE {temp_combined_table} ({column_defs})")
-                first_created = True
+                logger.info(f"🏗️ Creating table {table_name} with {len(columns)} columns")
+                year_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
 
-            # Insert all records from this year
-            for record in year_result:
-                placeholders = ", ".join(["?" for _ in record.values()])
-                self.duckdb_conn.execute(
-                    f"INSERT INTO {temp_combined_table} VALUES ({placeholders})",
-                    list(record.values()),
-                )
+                # Insert all records
+                for record in year_results:
+                    placeholders = ", ".join(["?" for _ in record.values()])
+                    year_conn.execute(
+                        f"INSERT INTO {table_name} VALUES ({placeholders})",
+                        list(record.values()),
+                    )
 
-        # ✅ MIGRATION: Calculate statistics directly in DuckDB without conversion
-        if first_created:
-            total_disaggregated = self.duckdb_conn.execute(
-                f"SELECT COUNT(*) FROM {temp_combined_table}"
-            ).fetchone()[0]
-            coverage_pct = (
-                (total_disaggregated / total_pesticide_records * 100)
-                if total_pesticide_records > 0
-                else 0
-            )
+                # Save using the base class method with year-specific table name
+                logger.info(f"🚀 Uploading {table_name} to GCS bucket")
 
-            logger.info("Pesticide disaggregation completed:")
-            logger.info(f"  Total pesticide records across all years: {total_pesticide_records}")
-            logger.info(
-                f"  Successfully disaggregated: {total_disaggregated} ({coverage_pct:.1f}%)"
-            )
+                # Use the base class save method - temporarily set connection
+                original_conn = getattr(self, "conn", None)
+                self.conn = year_conn
 
-            # ✅ MIGRATION: Save results directly from DuckDB table
-            self.save_data_direct(
-                temp_combined_table, self.config.dataset, self.config.bucket, "gold"
-            )
-        else:
-            logger.warning(
-                "No disaggregated results to save - all year pairs were skipped or failed"
-            )
+                # Save with year-specific dataset name
+                dataset_name = f"{self.config.dataset}_{year}"
+                self.save_data_direct(table_name, dataset_name, self.config.bucket, "gold")
 
-        logger.info("Pesticide disaggregation gold layer processing completed successfully")
+                # Restore original connection
+                self.conn = original_conn
+
+                logger.info(f"✅ Successfully saved {len(year_results)} records for year {year}")
+                year_conn.close()
+                return True
+            else:
+                logger.warning(f"⚠️ No results to save for year {year}")
+                year_conn.close()
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Failed to save results for year {year}: {e}")
+            if "year_conn" in locals():
+                year_conn.close()
+            return False
 
     def _get_pesticide_field_year_pairs(self) -> List[Tuple[int, int]]:
         """
@@ -387,54 +463,65 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     ) -> Optional[List[Dict[str, Any]]]:
         """Process a single pesticide-field year pair."""
         try:
+            logger.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
             # Setup DuckDB with spatial extensions
             setup_success = self._setup_duckdb(
                 agricultural_fields_path, pesticide_applications_path
             )
             if not setup_success:
                 logger.warning(
-                    f"Skipping year pair {pesticide_year}-{field_year} due to setup failure"
+                    f"⚠️ Skipping year pair {pesticide_year}-{field_year} due to setup failure"
                 )
                 return None
 
+            logger.info(f"✅ DuckDB setup complete for year {pesticide_year}")
+
             # Create results table
+            logger.info(f"🏗️ Creating results table for year {pesticide_year}")
             self._create_results_table()
 
             # Filter out nopesticides=1 records (from original main.py lines 50-60)
+            logger.info(f"🔍 Filtering pending pesticide records for year {pesticide_year}")
             self._create_pending_pesticide_rows()
 
             # Run the original strategies in exact order (from original main.py lines 89-180)
+            logger.info(f"🎯 Starting disaggregation strategies for year {pesticide_year}")
             total_processed = 0
 
             # Strategy 1: Marker CVR-Area Match (THE MAIN 92% STRATEGY)
+            logger.info(f"🎯 Strategy 1: Running marker CVR-area match for year {pesticide_year}")
             processed_count = self._disaggregate_by_marker_match()
             total_processed += processed_count
             logger.info(
-                f"Year {pesticide_year}: Marker CVR-Area Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_count} records processed"
             )
 
             # Strategy 2: Marker Non-Organic CVR-Area Match
+            logger.info(f"🎯 Strategy 2: Running non-organic match for year {pesticide_year}")
             processed_count = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_count
             logger.info(
-                f"Year {pesticide_year}: Marker Non-Organic Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_count} records processed"
             )
 
             # Strategy 3: Partial Field Coverage
+            logger.info(f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}")
             processed_count = self._disaggregate_by_partial_field_coverage()
             total_processed += processed_count
             logger.info(
-                f"Year {pesticide_year}: Partial Field Coverage: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_count} records processed"
             )
 
             # Strategy 4: Adjacent Fields Single Cluster
+            logger.info(f"🎯 Strategy 4: Running adjacent fields cluster for year {pesticide_year}")
             processed_count = self._disaggregate_by_adjacent_fields_single_cluster()
             total_processed += processed_count
             logger.info(
-                f"Year {pesticide_year}: Adjacent Fields Cluster: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Adjacent Fields Cluster: {processed_count} records processed"
             )
 
             # Get results
+            logger.info(f"📊 Collecting final results for year {pesticide_year}")
             results = self._get_results()
 
             # Calculate coverage statistics for this year
@@ -445,18 +532,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 (len(results) / total_pesticide_records * 100) if total_pesticide_records > 0 else 0
             )
 
-            logger.info(f"Year {pesticide_year} disaggregation completed:")
-            logger.info(f"  Total pesticide records: {total_pesticide_records}")
-            logger.info(f"  Successfully disaggregated: {len(results)} ({coverage_pct:.1f}%)")
+            logger.info(f"🎉 Year {pesticide_year} disaggregation completed:")
+            logger.info(f"   📈 Total pesticide records: {total_pesticide_records:,}")
+            logger.info(f"   ✅ Successfully disaggregated: {len(results):,} ({coverage_pct:.1f}%)")
+            logger.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
 
             return results
 
         except Exception as e:
-            logger.error(f"Error processing year pair {pesticide_year}-{field_year}: {e}")
+            logger.error(f"❌ Error processing year pair {pesticide_year}-{field_year}: {e}")
             return None
         finally:
             # Clean up DuckDB connection for this year
             if self.duckdb_conn:
+                logger.info(f"🧹 Cleaning up DuckDB connection for year {pesticide_year}")
                 self.duckdb_conn.close()
                 self.duckdb_conn = None
 
