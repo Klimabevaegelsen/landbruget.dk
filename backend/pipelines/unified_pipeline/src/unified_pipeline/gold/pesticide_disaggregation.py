@@ -1206,15 +1206,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = mfc.CVR_Str
                         AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = mfc.Crop_Str
                     WHERE m1.field_id != m2.field_id
-                      -- Filter out empty/invalid CVR numbers BEFORE casting
+                      -- Filter out NULL/empty CVR numbers and handle float vs int formats
                       AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != 'NULL'
                       AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != 'NULL'
                       AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
-                      -- Safe to cast after filtering - compare CVR and crop codes
-                      AND TRIM(CAST(m1.cvr_number AS VARCHAR)) = TRIM(CAST(m2.cvr_number AS VARCHAR))
-                      AND CAST(m1.crop_code AS VARCHAR) = CAST(m2.crop_code AS VARCHAR)
+                      -- Handle float CVR numbers (39292912.0) by casting to BIGINT first, then compare
+                      AND TRY_CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) IS NOT NULL
+                      AND TRY_CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR) IS NOT NULL
+                      AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
+                      AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
                       AND m1.geometry IS NOT NULL 
                       AND m2.geometry IS NOT NULL
                 ),
