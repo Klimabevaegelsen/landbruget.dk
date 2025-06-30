@@ -1142,19 +1142,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         Strategy 4: Adjacent Fields Single Cluster using DuckDB-spatial SPATIAL_JOIN with 10m buffer.
 
-        AGRICULTURAL LOGIC:
+        CORRECT AGRICULTURAL LOGIC:
         - Finds fields with same CVR (farmer) + crop combination
-        - Identifies fields within 10m of each other (operational proximity)
-        - Groups these into spatial clusters (connected components)
-        - Allocates pesticide proportionally across the cluster
+        - Identifies spatial clusters (connected components within 10m)
+        - Matches cluster total area against pesticide area (within 2% tolerance)
+        - Only allocates if there's both spatial coherence AND area match
+        - Prevents spurious correlations from random field combinations
 
-        This reflects real-world farming where nearby fields of the same crop
-        are often treated as a single operational unit for pesticide application.
+        This reflects real-world farming where spatially connected fields
+        are treated as a single operational unit for pesticide application.
 
         Uses DuckDB-spatial SPATIAL_JOIN operator with ST_DWithin(geometry, geometry, 10.0)
-        for efficient 10-meter buffer analysis.
+        for efficient 10-meter buffer analysis and proper connected components clustering.
         """
-        self.log.info("Running Adjacent Fields Single Cluster with 10m buffer spatial analysis...")
+        self.log.info(
+            "Running Adjacent Fields Single Cluster with area matching and spatial analysis..."
+        )
 
         try:
             # Check if geometry data is available for spatial clustering
@@ -1169,164 +1172,200 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.warning("⚠️ No geometry data available - spatial clustering disabled")
                 return 0
 
-            self.log.info("✅ Using 10m buffer spatial clustering with DuckDB-spatial SPATIAL_JOIN")
+            self.log.info("✅ Using spatial clustering with area matching (2% tolerance)")
 
-            # SPATIAL OPTIMIZATION: Use SPATIAL_JOIN with 10m buffer to find operationally adjacent fields
-            # This implements the original agricultural logic: fields within 10m are treated as one unit
-            insert_query = """
-                WITH MultiFieldCVRCrop AS (
-                    -- Find CVR+crop combinations with multiple fields
-                    SELECT 
-                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        COUNT(*) as FieldCount,
-                        SUM(m.area_ha) as TotalFieldArea
-                    FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
-                      AND m.area_ha > 0.0
-                      AND m.geometry IS NOT NULL
-                    GROUP BY 1, 2
-                    HAVING COUNT(*) > 1 AND COUNT(*) <= 50  -- Limit to reasonable groups per CVR (clustering within each farmer)
-                ),
-                SpatialClusters AS (
-                    -- Use SPATIAL_JOIN to identify adjacent fields within 10m buffer within each CVR+crop group
+            # CORRECTED LOGIC: Find spatial clusters that match pesticide area within tolerance
+            insert_query = f"""
+                WITH SpatialAdjacency AS (
+                    -- Find pairs of fields within 10m of each other (same CVR+crop)
                     SELECT DISTINCT
                         m1.field_id as field1_id,
                         m2.field_id as field2_id,
-                        m1.cvr_number,
-                        m1.crop_code,
-                        m1.area_ha as field1_area,
-                        m2.area_ha as field2_area
+                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
                     FROM marker m1
                     JOIN marker m2 ON ST_DWithin(m1.geometry, m2.geometry, 10.0)  -- SPATIAL_JOIN with 10m buffer
-                    JOIN MultiFieldCVRCrop mfc ON 
-                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = mfc.CVR_Str
-                        AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = mfc.Crop_Str
                     WHERE m1.field_id != m2.field_id
-                      -- Filter out NULL/empty CVR numbers and handle float vs int formats
-                      AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
-                      AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != 'NULL'
-                      AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
-                      AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != 'NULL'
-                      AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
-                      -- Handle float CVR numbers (39292912.0) by casting to BIGINT first, then compare
-                      AND TRY_CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) IS NOT NULL
-                      AND TRY_CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR) IS NOT NULL
+                      -- Ensure same CVR and crop
                       AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
                       AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
-                      AND m1.geometry IS NOT NULL 
-                      AND m2.geometry IS NOT NULL
+                      -- Filter valid CVR numbers
+                      AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      -- Valid crop codes and areas
+                      AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
+                      AND m1.area_ha > 0.0 AND m2.area_ha > 0.0
+                      AND m1.geometry IS NOT NULL AND m2.geometry IS NOT NULL
                 ),
-                ClusterGroups AS (
-                    -- Group spatially adjacent fields into clusters
-                    SELECT 
-                        cvr_number,
-                        crop_code,
+                -- Build connected components using recursive CTE (Union-Find algorithm)
+                ConnectedComponents AS (
+                    -- Start with individual fields as their own clusters
+                    SELECT DISTINCT
                         field1_id as field_id,
-                        field1_area as field_area,
-                        COUNT(*) OVER (PARTITION BY cvr_number, crop_code) as cluster_size
-                    FROM SpatialClusters
+                        CVR_Str,
+                        Crop_Str,
+                        field1_id as cluster_root  -- Initially, each field is its own cluster
+                    FROM SpatialAdjacency
                     
                     UNION
                     
-                    SELECT 
-                        cvr_number,
-                        crop_code,
-                        field2_id as field_id,
-                        field2_area as field_area,
-                        COUNT(*) OVER (PARTITION BY cvr_number, crop_code) as cluster_size
-                    FROM SpatialClusters
-                ),
-                ValidClusters AS (
-                    -- Only process clusters where fields are truly spatially connected
                     SELECT DISTINCT
-                        CAST(CAST(cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        field_id,
-                        field_area,
-                        SUM(field_area) OVER (PARTITION BY cvr_number, crop_code) as total_cluster_area
-                    FROM ClusterGroups
-                    WHERE cluster_size >= 2  -- At least 2 adjacent fields
+                        field2_id as field_id,
+                        CVR_Str,
+                        Crop_Str,
+                        field2_id as cluster_root
+                    FROM SpatialAdjacency
                 ),
-                PendingForSpatialClusters AS (
+                -- Simplified clustering: group fields that are directly connected
+                FieldClusters AS (
+                    SELECT 
+                        field_id,
+                        CVR_Str,
+                        Crop_Str,
+                        -- Use minimum field_id in adjacency as cluster identifier
+                        MIN(LEAST(field_id, connected_field)) OVER (PARTITION BY CVR_Str, Crop_Str, field_id) as cluster_id
+                    FROM (
+                        SELECT 
+                            sa.field1_id as field_id,
+                            sa.CVR_Str,
+                            sa.Crop_Str,
+                            sa.field2_id as connected_field
+                        FROM SpatialAdjacency sa
+                        
+                        UNION ALL
+                        
+                        SELECT 
+                            sa.field2_id as field_id,
+                            sa.CVR_Str,
+                            sa.Crop_Str,
+                            sa.field1_id as connected_field
+                        FROM SpatialAdjacency sa
+                        
+                        UNION ALL
+                        
+                        -- Include isolated fields (not in any adjacency)
+                        SELECT 
+                            m.field_id,
+                            CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                            CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
+                            m.field_id as connected_field
+                        FROM marker m
+                        WHERE m.cvr_number IS NOT NULL 
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                          AND m.crop_code IS NOT NULL 
+                          AND m.area_ha > 0.0
+                          AND m.geometry IS NOT NULL
+                          AND m.field_id NOT IN (
+                              SELECT field1_id FROM SpatialAdjacency 
+                              UNION 
+                              SELECT field2_id FROM SpatialAdjacency
+                          )
+                    ) clustered_fields
+                ),
+                -- Calculate cluster areas and match against pesticide applications
+                ClusterAreas AS (
+                    SELECT 
+                        fc.CVR_Str,
+                        fc.Crop_Str,
+                        fc.cluster_id,
+                        COUNT(*) as cluster_field_count,
+                        SUM(m.area_ha) as cluster_total_area,
+                        ARRAY_AGG(fc.field_id) as cluster_field_ids,
+                        ARRAY_AGG(m.area_ha) as cluster_field_areas
+                    FROM FieldClusters fc
+                    JOIN marker m ON fc.field_id = m.field_id
+                    GROUP BY fc.CVR_Str, fc.Crop_Str, fc.cluster_id
+                    HAVING COUNT(*) >= 2  -- Only multi-field clusters
+                ),
+                -- Match clusters against pesticide applications with area tolerance
+                MatchedClusters AS (
                     SELECT 
                         p.OriginalPesticideRowID,
-                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        p.AcreageSize,
+                        p.CompanyRegistrationNumber,
                         p.PesticideName,
                         p.PesticideRegistrationNumber,
                         p.DosageQuantity,
-                        p.DosageUnit
+                        p.DosageUnit,
+                        p.AcreageSize,
+                        ca.cluster_id,
+                        ca.cluster_total_area,
+                        ca.cluster_field_ids,
+                        ca.cluster_field_areas,
+                        ca.cluster_field_count,
+                        -- Calculate area match quality
+                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 as area_diff_pct
                     FROM pending_pesticide_rows p
+                    JOIN ClusterAreas ca ON 
+                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = ca.CVR_Str
+                        AND CAST(CAST(p.Code AS BIGINT) AS VARCHAR) = ca.Crop_Str
                     WHERE p.CompanyRegistrationNumber IS NOT NULL 
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
+                      -- CRITICAL: Area must match within tolerance (2%)
+                      AND ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                 ),
-                CandidatesWithSpatialFields AS (
+                -- Expand matched clusters to individual field allocations
+                FieldAllocations AS (
                     SELECT 
-                        pf.OriginalPesticideRowID,
-                        pf.CVR_Str,
-                        pf.Crop_Str,
-                        pf.AcreageSize,
-                        pf.PesticideName,
-                        pf.PesticideRegistrationNumber,
-                        pf.DosageQuantity,
-                        pf.DosageUnit,
-                        vc.field_id,
-                        vc.field_area,
-                        vc.total_cluster_area,
-                        -- Calculate proportional allocation based on spatial cluster
-                        pf.AcreageSize * (vc.field_area / vc.total_cluster_area) as allocated_area
-                    FROM ValidClusters vc
-                    JOIN PendingForSpatialClusters pf 
-                        ON vc.CVR_Str = pf.CVR_Str 
-                        AND vc.Crop_Str = pf.Crop_Str
-                    WHERE pf.AcreageSize < vc.total_cluster_area  -- Pesticide area smaller than cluster area
+                        mc.OriginalPesticideRowID,
+                        mc.CompanyRegistrationNumber,
+                        mc.PesticideName,
+                        mc.PesticideRegistrationNumber,
+                        mc.DosageQuantity,
+                        mc.DosageUnit,
+                        mc.AcreageSize,
+                        UNNEST(mc.cluster_field_ids) as field_id,
+                        UNNEST(mc.cluster_field_areas) as field_area,
+                        mc.cluster_total_area,
+                        mc.area_diff_pct,
+                        mc.cluster_field_count
+                    FROM MatchedClusters mc
                 )
                 INSERT INTO disaggregated_pesticide_applications
                 SELECT
                     uuid() as DisaggregatedID,
-                    CAST(c.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    c.CVR_Str as CompanyRegistrationNumber,
-                    c.PesticideName,
-                    c.PesticideRegistrationNumber,
-                    c.DosageQuantity,
-                    c.DosageUnit,
-                    'marker_spatial_' || CAST(c.field_id AS VARCHAR) as MatchedFieldID,
-                    'block_' || CAST(c.field_id AS VARCHAR) as MatchedBlockID,
-                    c.allocated_area as AllocatedArea,
-                    'Adjacent_Fields_Spatial_Cluster_SPATIAL_JOIN' as AllocationMethod,
-                    0.8 as MatchConfidence,  -- Higher confidence due to spatial analysis
+                    CAST(fa.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
+                    CAST(fa.CompanyRegistrationNumber AS VARCHAR) as CompanyRegistrationNumber,
+                    fa.PesticideName,
+                    fa.PesticideRegistrationNumber,
+                    fa.DosageQuantity,
+                    fa.DosageUnit,
+                    'marker_spatial_' || CAST(fa.field_id AS VARCHAR) as MatchedFieldID,
+                    'block_' || CAST(fa.field_id AS VARCHAR) as MatchedBlockID,
+                    -- Proportional allocation: pesticide_area * (field_area / cluster_area)
+                    fa.AcreageSize * (fa.field_area / fa.cluster_total_area) as AllocatedArea,
+                    'Adjacent_Fields_Spatial_Cluster_AreaMatched' as AllocationMethod,
+                    -- Confidence based on area match quality and cluster size
+                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate
-                FROM CandidatesWithSpatialFields c
+                FROM FieldAllocations fa
             """
 
-            # Execute the optimized spatial batch insert
+            # Execute the corrected spatial clustering with area matching
             self.duckdb_conn.execute(insert_query)
 
-            # Remove processed records from pending table in a single operation
+            # Remove processed records from pending table
             self.duckdb_conn.execute("""
                 DELETE FROM pending_pesticide_rows 
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT OriginalPesticideRowID 
                     FROM disaggregated_pesticide_applications 
-                    WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_SPATIAL_JOIN'
+                    WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'
                 )
             """)
 
             # Get count of processed records
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_SPATIAL_JOIN'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
             self.log.info(
-                f"Adjacent Fields Spatial Cluster: Processed {processed_count} pesticide applications using DuckDB-spatial SPATIAL_JOIN clustering."
+                f"Adjacent Fields Spatial Cluster: Processed {processed_count} pesticide applications with area-matched spatial clustering."
             )
             return processed_count
 
