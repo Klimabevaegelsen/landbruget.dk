@@ -508,12 +508,12 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         # Process in chunks to avoid overwhelming GitHub Actions runner
         chunk_size = 50  # Process 50 herds at a time (reduced for better memory management)
-        all_results = []
         total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
 
-        # Track overall statistics
+        # Track overall statistics (no result accumulation to prevent memory issues)
         total_successful = 0
         total_movements = 0
+        processed_herds = []  # Only track herd numbers for context, not full results
 
         for chunk_idx in range(total_chunks):
             start_idx = chunk_idx * chunk_size
@@ -530,48 +530,36 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
             )
 
-            # Process and upload chunk results immediately to avoid memory buildup
-            chunk_successful = sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
-            chunk_movements = sum(
-                r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
-            )
-
-            # Add successful results to buffer (they're already saved individually by load_cattle_movement_summaries)
-            # We just need to track them for context, not accumulate all data
-            successful_results = [r for r in chunk_results if r and r.get("processed_successfully", False)]
-            all_results.extend(successful_results)
+            # Track only herd numbers for context (no result accumulation to prevent memory issues)
+            # Full data is already saved to storage by load_cattle_movement_summaries
+            successful_herd_numbers = [
+                r.get("reporting_herd_number")
+                for r in chunk_results
+                if r and r.get("processed_successfully", False) and r.get("reporting_herd_number")
+            ]
+            processed_herds.extend(successful_herd_numbers)
 
             # Update totals
-            total_successful += chunk_successful
-            total_movements += chunk_movements
+            total_successful += sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
+            total_movements += sum(
+                r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
+            )
 
             # Log progress after each chunk
             if context["args"]["progress"]:
                 logging.info(
-                    f"Chunk {chunk_idx + 1} completed: {chunk_successful}/{len(chunk_tasks)} successful, {chunk_movements} movements"
+                    f"Chunk {chunk_idx + 1} completed: {sum(1 for r in chunk_results if r and r.get('processed_successfully', False))} successful, {total_movements} movements"
                 )
                 logging.info(
                     f"Overall progress: {total_successful} successful herds, {total_movements} total movements"
                 )
 
             # Progressive cleanup: Clear chunk results from memory after processing
-            # (Individual herd data is already saved to storage by load_cattle_movement_summaries)
+            # (Individual herd data is already saved directly to storage by load_cattle_movement_summaries)
             del chunk_results
+            del successful_herd_numbers  # Also clear the herd numbers list
 
-            # Progressive upload: Flush buffer every 5 chunks to prevent memory buildup
-            if (chunk_idx + 1) % 5 == 0 or chunk_idx + 1 == total_chunks:
-                if context["args"]["progress"]:
-                    logging.info(f"Flushing data buffer after chunk {chunk_idx + 1} to prevent memory buildup...")
-
-                # Import the export function and flush the buffer
-                from bronze.export import finalize_export
-
-                finalize_export(clear_buffer=True)
-
-                if context["args"]["progress"]:
-                    logging.info(f"Buffer flushed successfully after chunk {chunk_idx + 1}")
-
-            # Optional: Force garbage collection and memory monitoring for large datasets
+            # Force garbage collection and memory monitoring for large datasets
             import gc
             import os
 
@@ -589,7 +577,24 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                     except Exception:
                         pass  # Ignore if psutil is not available
 
-        context["animal_movements_results"] = all_results
+        # Store only essential summary data for context (no full results to prevent memory issues)
+        context["animal_movements_results"] = {
+            "total_successful": total_successful,
+            "total_movements": total_movements,
+            "processed_herd_count": len(processed_herds),
+            "processed_herds_sample": processed_herds[:10],  # Only keep first 10 for debugging
+            "processing_completed": True,
+        }
+
+        # Finalize streaming files to flush any remaining data
+        try:
+            from bronze.load_chr_dyr import _finalize_streaming_files
+
+            _finalize_streaming_files()
+            if context["args"]["progress"]:
+                logging.info("✅ Finalized streaming cattle movement files")
+        except Exception as e:
+            logging.warning(f"Error finalizing streaming files: {e}")
 
         if context["args"]["progress"]:
             logging.info(
