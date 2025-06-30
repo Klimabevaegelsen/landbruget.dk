@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  unified-pipeline:
+    build: .
+    container_name: unified-pipeline
+    environment:
+      # GCS Configuration
+      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      
+      # Pipeline Configuration
+      - SAVE_LOCAL=${SAVE_LOCAL:-false}
+      - DEV_MODE=${DEV_MODE:-false}
+      - GENERATE_SCHEMAS=${GENERATE_SCHEMAS:-false}
+      
+      # Pesticide Disaggregation Configuration
+      - PESTICIDE_YEAR=${PESTICIDE_YEAR:-2021}
+      - AREA_TOLERANCE_PCT=2.0  # PRESERVE ORIGINAL VALUE
+      
+      # Optional Datafordeler credentials
+      - DATAFORDELER_USERNAME=${DATAFORDELER_USERNAME}
+      - DATAFORDELER_PASSWORD=${DATAFORDELER_PASSWORD}
+      
+    volumes:
+      # Mount GCS credentials if available
+      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      # Mount local data directory if saving locally
+      - ${LOCAL_DATA_DIR:-./data}:/app/data
+      # Mount logs directory
+      - ${LOG_DIR:-./logs}:/app/logs
+      
+    # Default command - run pesticide disaggregation
+    command: >
+      uv run python -m unified_pipeline 
+      --source pesticide_disaggregation 
+      --stage gold
+      
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import unified_pipeline; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4'
+        reservations:
+          memory: 4G
+          cpus: '2'
+          
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Alternative service for running other unified pipeline sources
+  unified-pipeline-agricultural-fields:
+    build: .
+    container_name: unified-pipeline-agricultural-fields
+    environment:
+      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - SAVE_LOCAL=${SAVE_LOCAL:-false}
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      - ${LOCAL_DATA_DIR:-./data}:/app/data
+      - ${LOG_DIR:-./logs}:/app/logs
+    command: >
+      uv run python -m unified_pipeline 
+      --source agricultural_fields 
+      --stage all
+    profiles:
+      - agricultural-fields
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+    restart: "no"
+
+  # Alternative service for running BNBO processing
+  unified-pipeline-bnbo:
+    build: .
+    container_name: unified-pipeline-bnbo
+    environment:
+      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - SAVE_LOCAL=${SAVE_LOCAL:-false}
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      - ${LOCAL_DATA_DIR:-./data}:/app/data
+      - ${LOG_DIR:-./logs}:/app/logs
+    command: >
+      uv run python -m unified_pipeline 
+      --source bnbo 
+      --stage all
+    profiles:
+      - bnbo
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+    restart: "no"
+
+networks:
+  default:
+    name: unified-pipeline-network 

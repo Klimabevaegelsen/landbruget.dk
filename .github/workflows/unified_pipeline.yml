@@ -1,0 +1,108 @@
+# Unified Pipeline
+
+name: Unified Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
+  workflow_dispatch:
+    # Allow manual triggering
+    inputs:
+      source:
+        description: 'Source to run the pipeline for'
+        required: true
+        default: 'cadastral'
+        type: choice
+        options:
+          - all
+          - cadastral
+          - agricultural_fields
+          - bnbo
+          - spf_su
+          - dagi
+          - jordbrugsanalyser
+          - fvm_wfs
+          - soil_types
+          - wetlands
+          - water_projects
+          - property_cadastral_merge
+          - field_production
+          - field_area_analysis
+          - pesticide_disaggregation
+          - dst
+          - dmi
+
+jobs:
+  run-unified-pipeline:
+    name: Run Unified Pipeline
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      actions: 'write'  # Required to trigger other workflows via API
+    strategy:
+      matrix:
+        include: >-
+          ${{
+            (github.event.inputs.source == 'fvm_wfs' && 
+             fromJson('[
+               {"source":"fvm_wfs","layer_type":"markblokke","year":2005},{"source":"fvm_wfs","layer_type":"markblokke","year":2006},{"source":"fvm_wfs","layer_type":"markblokke","year":2007},{"source":"fvm_wfs","layer_type":"markblokke","year":2008},{"source":"fvm_wfs","layer_type":"markblokke","year":2009},{"source":"fvm_wfs","layer_type":"markblokke","year":2010},{"source":"fvm_wfs","layer_type":"markblokke","year":2011},{"source":"fvm_wfs","layer_type":"markblokke","year":2012},{"source":"fvm_wfs","layer_type":"markblokke","year":2013},{"source":"fvm_wfs","layer_type":"markblokke","year":2014},{"source":"fvm_wfs","layer_type":"markblokke","year":2015},{"source":"fvm_wfs","layer_type":"markblokke","year":2016},{"source":"fvm_wfs","layer_type":"markblokke","year":2017},{"source":"fvm_wfs","layer_type":"markblokke","year":2018},{"source":"fvm_wfs","layer_type":"markblokke","year":2019},{"source":"fvm_wfs","layer_type":"markblokke","year":2020},{"source":"fvm_wfs","layer_type":"markblokke","year":2021},{"source":"fvm_wfs","layer_type":"markblokke","year":2022},{"source":"fvm_wfs","layer_type":"markblokke","year":2023},{"source":"fvm_wfs","layer_type":"markblokke","year":2024},{"source":"fvm_wfs","layer_type":"markblokke","year":2025},{"source":"fvm_wfs","layer_type":"markblokke","year":2026},
+               {"source":"fvm_wfs","layer_type":"marker","year":2008},{"source":"fvm_wfs","layer_type":"marker","year":2009},{"source":"fvm_wfs","layer_type":"marker","year":2010},{"source":"fvm_wfs","layer_type":"marker","year":2011},{"source":"fvm_wfs","layer_type":"marker","year":2012},{"source":"fvm_wfs","layer_type":"marker","year":2013},{"source":"fvm_wfs","layer_type":"marker","year":2014},{"source":"fvm_wfs","layer_type":"marker","year":2015},{"source":"fvm_wfs","layer_type":"marker","year":2016},{"source":"fvm_wfs","layer_type":"marker","year":2017},{"source":"fvm_wfs","layer_type":"marker","year":2018},{"source":"fvm_wfs","layer_type":"marker","year":2019},{"source":"fvm_wfs","layer_type":"marker","year":2020},{"source":"fvm_wfs","layer_type":"marker","year":2021},{"source":"fvm_wfs","layer_type":"marker","year":2022},{"source":"fvm_wfs","layer_type":"marker","year":2023},{"source":"fvm_wfs","layer_type":"marker","year":2024},{"source":"fvm_wfs","layer_type":"marker","year":2025},
+               {"source":"fvm_wfs","layer_type":"smaabiotoper","year":2023},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2024},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2025}
+             ]')) ||
+            (github.event_name == 'schedule' &&
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+            (github.event.inputs.source == 'all' &&
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+            fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
+          }}
+      fail-fast: false
+      max-parallel: 10  # GitHub will auto-queue within 20 job limit, this helps with server load
+    env:
+      ENVIRONMENT: production
+      DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+      DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Unified Pipeline for ${{ matrix.source || matrix.layer_type }}
+        run: |
+          if [ -n "${{ matrix.layer_type }}" ]; then
+            # FVM WFS matrix job with specific layer and year
+            echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
+            python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+          elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+            # FVM WFS from "all" - trigger the dedicated matrix workflow with all stages
+            echo "FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
+            echo "FVM WFS matrix workflow triggered successfully with stage=all"
+          else
+            # Regular source job
+            echo "Running regular pipeline job: ${{ matrix.source }}"
+            python -m unified_pipeline -s ${{ matrix.source }} -j all
+          fi
