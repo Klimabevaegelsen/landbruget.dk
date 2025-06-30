@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,8 @@ from utils.logger import setup_logger
 def main():
     try:
         settings = get_settings()
-        logger = setup_logger(level="INFO")
+        # Use WARNING level by default to reduce log output for GitHub Actions
+        logger = setup_logger(level="WARNING")
         output_dir = Path("data/bronze")
 
         # Set sample size if specified
@@ -32,6 +34,14 @@ def main():
             print(f"🧪 Using sample size: {sample_size}")
         else:
             print("🔄 Processing full INSPIRE BBR dataset")
+            # For GitHub Actions free runner, we should use a reasonable limit
+            # to avoid memory/time constraints (6GB RAM, 6 hours max)
+            if "GITHUB_ACTIONS" in os.environ:
+                # Limit to ~100k buildings for free runner constraints
+                sample_size = 100000
+                print(
+                    f"🚀 GitHub Actions detected: limiting to {sample_size:,} buildings for resource constraints"
+                )
 
         print("📦 Starting INSPIRE BBR fetch...")
         inspire_fetcher = InspireBBRFetcher(settings, logger)
@@ -47,8 +57,11 @@ def main():
         if inspire_result and "data" in inspire_result:
             building_ids = inspire_result["data"].get("building_ids", [])
             print(f"🏢 Total INSPIRE BBR buildings fetched: {len(building_ids):,}")
-            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-                f.write(f"buildings-count={len(building_ids)}\n")
+
+            # Only write to GITHUB_OUTPUT if running in GitHub Actions
+            if "GITHUB_OUTPUT" in os.environ:
+                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                    f.write(f"buildings-count={len(building_ids)}\n")
 
             # Save building IDs for the join job
             with open("data/inspire_building_ids.json", "w") as f:
@@ -60,22 +73,39 @@ def main():
 
                 # Convert list of dictionaries to parquet using DuckDB
                 conn = duckdb.connect(":memory:")
-                conn.execute(
-                    "CREATE TABLE buildings AS SELECT * FROM ?",
-                    [inspire_result["data"]["attributes_df"]],
-                )
-                conn.execute("COPY buildings TO 'data/inspire_attributes.parquet' (FORMAT PARQUET)")
-                conn.close()
-                print("💾 Saved INSPIRE attributes to parquet")
+
+                # Convert the list of dictionaries to JSON and use DuckDB's JSON functions
+                attributes_data = inspire_result["data"]["attributes_df"]
+
+                # Create a temporary JSON file for DuckDB to read
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+                    json.dump(attributes_data, f)
+                    temp_json_path = f.name
+
+                try:
+                    # Read JSON file into DuckDB table
+                    conn.execute(
+                        f"CREATE TABLE buildings AS SELECT * FROM read_json('{temp_json_path}')"
+                    )
+                    conn.execute(
+                        "COPY buildings TO 'data/inspire_attributes.parquet' (FORMAT PARQUET)"
+                    )
+                    print("💾 Saved INSPIRE attributes to parquet")
+                finally:
+                    # Clean up temporary file
+                    os.unlink(temp_json_path)
+                    conn.close()
         else:
             print("❌ No INSPIRE BBR data fetched")
-            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-                f.write("buildings-count=0\n")
+            if "GITHUB_OUTPUT" in os.environ:
+                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                    f.write("buildings-count=0\n")
     except Exception as e:
         print("❌ INSPIRE BBR fetch failed")
         print(f"Error: {e}")
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write("buildings-count=0\n")
+        if "GITHUB_OUTPUT" in os.environ:
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write("buildings-count=0\n")
         raise
 
 

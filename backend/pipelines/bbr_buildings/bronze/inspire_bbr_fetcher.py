@@ -526,6 +526,7 @@ class InspireBBRFetcher:
         all_results = []
         total_batches = (len(uuids) + batch_size - 1) // batch_size
 
+        # Only log summary info to reduce GitHub Actions output
         self.logger.info(
             f"Querying GraphQL API for {category_name} BBR codes ({total_batches} batches)"
         )
@@ -533,15 +534,17 @@ class InspireBBRFetcher:
         # Use current timestamp for temporal filtering (required by API)
         current_timestamp = datetime.now().isoformat() + "Z"
 
-        # Debug: Log API key status and timestamp
-        api_key_status = "SET" if self.settings.datafordeler_graphql_api_key else "MISSING"
-        self.logger.info(f"API Key status: {api_key_status}, Using timestamp: {current_timestamp}")
+        # Only log API key status for debugging, not timestamp details
+        if not self.settings.datafordeler_graphql_api_key:
+            self.logger.warning("No GraphQL API key configured")
 
         for batch_idx in range(0, len(uuids), batch_size):
             batch_uuids = uuids[batch_idx : batch_idx + batch_size]
             batch_num = (batch_idx // batch_size) + 1
 
-            self.logger.info(f"  Batch {batch_num}/{total_batches} ({len(batch_uuids)} UUIDs)")
+            # Only log progress for larger batches to reduce output
+            if total_batches > 10 and batch_num % 10 == 0:
+                self.logger.info(f"  Progress: {batch_num}/{total_batches} batches")
 
             # Create GraphQL query with IN operator for efficient batching
             uuids_list = '["' + '","'.join(batch_uuids) + '"]'
@@ -561,10 +564,6 @@ class InspireBBRFetcher:
             }}
             """
 
-            # Debug: Log query for first few batches
-            if batch_num <= 2:
-                self.logger.info(f"    GraphQL batch query: {batch_query}")
-
             try:
                 response = requests.post(
                     graphql_url,
@@ -573,27 +572,19 @@ class InspireBBRFetcher:
                     timeout=60,  # Longer timeout for batch queries
                 )
 
-                # Debug: Log response details for first few batches
-                if batch_num <= 2:
-                    self.logger.info(f"    HTTP Status: {response.status_code}")
-                    self.logger.info(f"    Response: {response.text[:500]}")
-
                 if response.status_code != 200:
-                    self.logger.warning(
-                        f"    HTTP Error for batch {batch_num}: {response.status_code}"
-                    )
+                    self.logger.warning(f"HTTP Error for batch {batch_num}: {response.status_code}")
                     continue
 
                 data = response.json()
 
                 if "errors" in data:
                     self.logger.warning(
-                        f"    GraphQL Errors for batch {batch_num}: {data['errors']}"
+                        f"GraphQL Errors for batch {batch_num}: {len(data['errors'])} errors"
                     )
                     continue
 
                 if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
-                    self.logger.info(f"    No buildings found for batch {batch_num}")
                     continue
 
                 batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
@@ -608,15 +599,11 @@ class InspireBBRFetcher:
 
                 all_results.extend(batch_results)
 
-                self.logger.info(
-                    f"    ✅ Batch {batch_num}: {len(batch_results)} buildings with BBR codes"
-                )
-
                 # Rate limiting between batch requests (much less frequent now)
                 time.sleep(0.5)
 
             except Exception as e:
-                self.logger.warning(f"    Error for batch {batch_num}: {e}")
+                self.logger.warning(f"Error for batch {batch_num}: {e}")
                 continue
 
         self.logger.info(
@@ -794,15 +781,19 @@ class InspireBBRFetcher:
 
                 # Download with progress tracking
                 downloaded = 0
+                progress_interval = 200 * 1024 * 1024  # Log every 200MB instead of 100MB
+                last_logged = 0
+
                 with open(output_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
                             downloaded += len(chunk)
 
-                            # Log progress every 100MB
-                            if downloaded % (100 * 1024 * 1024) == 0:
-                                self.logger.info(f"Downloaded {downloaded / (1024**2):.2f} MB")
+                            # Log progress less frequently for GitHub Actions
+                            if downloaded - last_logged >= progress_interval:
+                                self.logger.info(f"Downloaded {downloaded / (1024**2):.0f} MB")
+                                last_logged = downloaded
 
                 self.logger.info(f"Download completed: {downloaded / (1024**2):.2f} MB")
 
