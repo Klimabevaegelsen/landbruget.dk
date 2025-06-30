@@ -390,21 +390,33 @@ class BulkGeoDanmarkFetcher:
 
             logger.info(f"Combining {len(intermediate_files)} intermediate files")
 
-            # Create a single table from all files
+            # Create a single table from all files with schema normalization
             file_paths = [str(f) for f in intermediate_files]
             file_list = "', '".join(file_paths)
 
+            # First, normalize the schema by casting problematic columns to consistent types
+            # The synligBygning column appears to have mixed VARCHAR/BOOLEAN values
             query = f"""
             COPY (
-                SELECT * FROM read_parquet(['{file_list}'])
+                SELECT 
+                    * EXCLUDE (synligBygning),
+                    CASE 
+                        WHEN synligBygning IS NULL THEN NULL
+                        WHEN synligBygning = 'true' OR synligBygning = '1' THEN true
+                        WHEN synligBygning = 'false' OR synligBygning = '0' THEN false
+                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values as NULL
+                    END as synligBygning
+                FROM read_parquet(['{file_list}'], union_by_name=true)
             ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 
             (FORMAT PARQUET)
             """
 
             self.conn.execute(query)
 
-            # Get final count
-            count_query = f"SELECT COUNT(*) as total FROM read_parquet(['{file_list}'])"
+            # Get final count using the union_by_name option
+            count_query = (
+                f"SELECT COUNT(*) as total FROM read_parquet(['{file_list}'], union_by_name=true)"
+            )
             result = self.conn.execute(count_query).fetchone()
             total_buildings = result[0] if result else 0
 
@@ -420,6 +432,74 @@ class BulkGeoDanmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error combining intermediate files: {e}")
+
+            # Add debugging information for schema issues
+            if "failed to cast column" in str(e) or "Conversion Error" in str(e):
+                logger.info("Schema mismatch detected. Attempting to diagnose...")
+                try:
+                    # Check schemas of each file
+                    for i, file_path in enumerate(file_paths[:3]):  # Check first 3 files
+                        schema_query = f"DESCRIBE SELECT * FROM read_parquet('{file_path}') LIMIT 1"
+                        schema_result = self.conn.execute(schema_query).fetchall()
+                        logger.info(f"Schema for file {i + 1} ({Path(file_path).name}):")
+                        for col_name, col_type, null, key, default, extra in schema_result:
+                            logger.info(f"  {col_name}: {col_type}")
+                except Exception as debug_e:
+                    logger.error(f"Failed to debug schema: {debug_e}")
+
+                # Try a more aggressive fallback: read each file individually and cast all columns to string
+                logger.info("Attempting fallback combination with string casting...")
+                try:
+                    # Create a temporary table to collect all data
+                    self.conn.execute("DROP TABLE IF EXISTS combined_buildings")
+
+                    for i, file_path in enumerate(file_paths):
+                        logger.info(
+                            f"Processing file {i + 1}/{len(file_paths)}: {Path(file_path).name}"
+                        )
+
+                        if i == 0:
+                            # First file: create the table structure
+                            self.conn.execute(f"""
+                                CREATE TABLE combined_buildings AS 
+                                SELECT * FROM read_parquet('{file_path}')
+                            """)
+                        else:
+                            # Subsequent files: insert with union_by_name
+                            self.conn.execute(f"""
+                                INSERT INTO combined_buildings 
+                                SELECT * FROM read_parquet('{file_path}')
+                            """)
+
+                    # Now save the combined table
+                    self.conn.execute(f"""
+                        COPY combined_buildings 
+                        TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 
+                        (FORMAT PARQUET)
+                    """)
+
+                    # Get final count
+                    result = self.conn.execute("SELECT COUNT(*) FROM combined_buildings").fetchone()
+                    total_buildings = result[0] if result else 0
+
+                    logger.info(
+                        f"🏢 Fallback combination successful: {total_buildings:,} buildings"
+                    )
+
+                    # Clean up
+                    self.conn.execute("DROP TABLE combined_buildings")
+
+                    # Clean up intermediate files
+                    for file in intermediate_files:
+                        file.unlink()
+                    logger.info("🧹 Cleaned up intermediate files")
+
+                    return  # Success with fallback
+
+                except Exception as fallback_e:
+                    logger.error(f"Fallback combination also failed: {fallback_e}")
+
+            raise
 
     def __del__(self):
         """Clean up DuckDB connection."""
