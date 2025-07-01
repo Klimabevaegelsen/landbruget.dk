@@ -13,6 +13,7 @@ The NLES5 model calculates nitrogen washout based on:
 """
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 
@@ -37,7 +38,6 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Input silver datasets
-    agricultural_fields_dataset: str = "fvm_marker"
     soil_types_dataset: str = "soil_types"
     dmi_dataset: str = "dmi"
 
@@ -45,6 +45,9 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     batch_size: int = 5000  # Fields to process in each batch
     max_year_lag: int = 1  # Maximum years between field and climate data
     climate_data_days: int = 365  # Days of climate data to analyze
+
+    # FVM marker years to process (will be auto-discovered if not specified)
+    target_years: Optional[List[int]] = None  # If None, will use all available years
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
@@ -106,11 +109,204 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     - Seasonal percolation aggregations
     - Complete nitrogen effect calculations
     - Soil and drainage effect modeling
+
+    The processor handles yearly FVM marker datasets (fvm_marker_YYYY) and automatically
+    discovers available years or processes specified target years.
     """
 
     def __init__(self, config: NLES5NitrogenEstimationGoldConfig, gcs_util: GCSUtil):
         super().__init__(config, gcs_util)
         self.log = Logger.get_logger()
+
+        # Initialize optimized GCS access
+        self.gcs_access = GCSDataAccess()
+
+        # Use the optimized DuckDB connection from GCS access
+        self.conn = self.gcs_access.duckdb_conn
+        self._configure_duckdb()
+
+    def _configure_duckdb(self):
+        """Configure DuckDB for optimal spatial operations."""
+        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        self.conn.execute("SET threads = 4")  # Use all available CPU cores
+        self.conn.execute("SET enable_progress_bar = true")
+        self.conn.execute("SET preserve_insertion_order = false")
+
+        # Spatial extensions already loaded by GCSDataAccess
+        # Verify SPATIAL_JOIN operator availability
+        try:
+            version_result = self.conn.execute(
+                "SELECT extension_name, extension_version FROM duckdb_extensions() WHERE extension_name = 'spatial'"
+            ).fetchone()
+            if version_result:
+                self.log.info(f"DuckDB Spatial version: {version_result[1]}")
+                if version_result[1] >= "1.2.2":
+                    self.log.info("✅ SPATIAL_JOIN operator available")
+                else:
+                    self.log.warning(
+                        f"⚠️  SPATIAL_JOIN operator may not be available in version {version_result[1]}"
+                    )
+        except Exception as e:
+            self.log.warning(f"Could not verify spatial extension version: {e}")
+
+    def _get_available_fvm_marker_years(self) -> List[int]:
+        """
+        Get all available fvm_marker years from GCS storage.
+
+        Returns:
+            List of available years for fvm_marker datasets
+        """
+        try:
+            # List all files in silver layer to find fvm_marker directories with actual data
+            files = self.gcs_util.list_files(
+                bucket_name=self.config.bucket, prefix="silver/fvm_marker_"
+            )
+            years = set()
+
+            for file_blob in files:
+                # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
+                match = re.search(
+                    r"silver/fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_blob.name
+                )
+                if match:
+                    year1 = int(match.group(1))
+                    year2 = int(match.group(2))
+                    # Ensure both years match (sanity check)
+                    if year1 == year2:
+                        years.add(year1)
+
+            return sorted(list(years))
+        except Exception as e:
+            self.log.error(f"Error discovering FVM marker years: {e}")
+            return []
+
+    def _read_fvm_marker_data_for_year(self, year: int) -> Optional[str]:
+        """
+        Read agricultural fields data for a specific year.
+
+        Args:
+            year: Year to read data for
+
+        Returns:
+            Table name containing the data, or None if not found
+        """
+        try:
+            dataset_name = f"fvm_marker_{year}"
+            self.log.info(f"Reading FVM marker data for year {year}")
+
+            # Look for the latest timestamped directory
+            files = self.gcs_util.list_files(
+                bucket_name=self.config.bucket, prefix=f"silver/{dataset_name}/"
+            )
+
+            # Find the parquet file in timestamped subdirectories
+            target_file = None
+            latest_timestamp = None
+            for file_blob in files:
+                # Look for files like "fvm_marker_2021.parquet"
+                if file_blob.name.endswith(f"{dataset_name}.parquet"):
+                    # Extract timestamp from path like "silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
+                    path_parts = file_blob.name.split("/")
+                    if len(path_parts) >= 3:
+                        timestamp_dir = path_parts[2]  # "20241201_123456"
+                        if latest_timestamp is None or timestamp_dir > latest_timestamp:
+                            latest_timestamp = timestamp_dir
+                            target_file = file_blob.name
+
+            if target_file:
+                # Read the data using GCS access with proper authentication
+                gcs_path = f"gs://{self.config.bucket}/{target_file}"
+                table_name = f"fvm_marker_{year}"
+
+                                                # Use authenticated temporary download pattern (consistent with other gold processors)
+                try:
+                    with self.gcs_access._temp_download(gcs_path) as temp_file:
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            SELECT * FROM read_parquet('{temp_file}')
+                        """)
+
+                    count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                    self.log.info(f"Loaded {count:,} fields for year {year}")
+
+                    return table_name
+                except Exception as e:
+                    self.log.error(f"Failed to load {gcs_path} using authenticated GCS access: {e}")
+                    return None
+            else:
+                self.log.warning(f"No FVM marker file found for year {year}")
+                return None
+
+        except Exception as e:
+            self.log.error(f"Error reading fields data for year {year}: {e}")
+            return None
+
+    @timed(name="Loading agricultural fields data")
+    def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
+        """
+        Load agricultural fields data from multiple yearly datasets.
+
+        Args:
+            silver_data: Optional in-memory silver data
+
+        Returns:
+            Table name containing combined agricultural fields data
+        """
+        # Determine which years to process
+        if self.config.target_years:
+            years_to_process = self.config.target_years
+            self.log.info(f"Processing specified years: {years_to_process}")
+        else:
+            years_to_process = self._get_available_fvm_marker_years()
+            self.log.info(f"Auto-discovered years: {years_to_process}")
+
+        if not years_to_process:
+            self.log.error("No FVM marker years found to process")
+            raise ValueError("No agricultural fields data available")
+
+        # Process each year and collect table names
+        yearly_tables = []
+        for year in years_to_process:
+            try:
+                # Check if data is available in silver_data dict
+                year_dataset = f"fvm_marker_{year}"
+                if silver_data and year_dataset in silver_data:
+                    self.log.info(f"Using in-memory data for {year_dataset}")
+                    table_name = f"fvm_marker_{year}"
+                    self.conn.register(table_name, silver_data[year_dataset])
+                    yearly_tables.append(table_name)
+                else:
+                    # Load from storage
+                    table_name = self._read_fvm_marker_data_for_year(year)
+                    if table_name:
+                        yearly_tables.append(table_name)
+            except Exception as e:
+                self.log.warning(f"Failed to load data for year {year}: {e}")
+                continue
+
+        if not yearly_tables:
+            self.log.error("No agricultural fields data could be loaded")
+            raise ValueError("Failed to load any agricultural fields data")
+
+        # Combine all yearly tables into a single table
+        self.log.info(f"Combining {len(yearly_tables)} yearly datasets")
+
+        # Create UNION query for all tables
+        union_queries = []
+        for table_name in yearly_tables:
+            union_queries.append(f"SELECT * FROM {table_name}")
+
+        combined_query = " UNION ALL ".join(union_queries)
+
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE agricultural_fields AS
+            {combined_query}
+        """)
+
+        total_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        self.log.info(f"Combined agricultural fields: {total_count:,} records from {len(yearly_tables)} years")
+
+        return "agricultural_fields"
 
     @timed(name="Loading silver datasets for NLES5")
     def _load_required_silver_datasets(self, silver_data: Optional[Dict[str, Any]]) -> Dict[str, str]:
@@ -122,14 +318,20 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """
         loaded_tables = {}
 
-        # Define required datasets
-        required_datasets = [
-            (self.config.agricultural_fields_dataset, "agricultural_fields"),
+        # Load agricultural fields data (handles yearly datasets)
+        try:
+            agricultural_fields_table = self._load_agricultural_fields_data(silver_data)
+            loaded_tables["agricultural_fields"] = agricultural_fields_table
+        except Exception as e:
+            self.log.error(f"Failed to load agricultural fields data: {e}")
+
+        # Define other required datasets
+        other_datasets = [
             (self.config.soil_types_dataset, "soil_types"),
             (self.config.dmi_dataset, "dmi_data"),
         ]
 
-        for dataset_name, table_name in required_datasets:
+        for dataset_name, table_name in other_datasets:
             try:
                 if silver_data and dataset_name in silver_data:
                     # Use in-memory silver data
@@ -607,38 +809,39 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     @timed(name="Saving NLES5 results to gold layer")
     def _save_results_to_gold(self) -> None:
-        """Save NLES5 results to the gold layer in GCS."""
+        """Save NLES5 results to the gold layer using optimized DuckDB export."""
         try:
             self.log.info("Saving NLES5 results to gold layer")
 
-            # Define output tables
+            # Define output tables with optimized paths
             tables_to_save = [
-                ("nles5_nitrogen_estimates", "nitrogen_estimates.parquet"),
-                ("nles5_overall_summary", "overall_summary.parquet"),
-                ("nles5_soil_type_summary", "soil_type_summary.parquet"),
-                ("nles5_crop_type_summary", "crop_type_summary.parquet"),
+                ("nles5_nitrogen_estimates", "nitrogen_estimates"),
+                ("nles5_overall_summary", "overall_summary"),
+                ("nles5_soil_type_summary", "soil_type_summary"),
+                ("nles5_crop_type_summary", "crop_type_summary"),
             ]
 
-            for table_name, filename in tables_to_save:
+            for table_name, subdataset in tables_to_save:
                 try:
                     count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                     if count > 0:
-                        # Save to timestamped directory
-                        self._save_data(
-                            data=table_name,
-                            dataset=self.config.dataset,
-                            bucket=self.config.bucket,
-                            stage="gold",
-                            subdataset=filename.replace('.parquet', ''),
-                            conn=self.conn
+                        # Use optimized GCS upload directly from DuckDB table
+                        output_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/{subdataset}.parquet"
+
+                        self.gcs_access.upload_from_duckdb_table(
+                            table_name,
+                            output_path,
+                            compression="zstd",
+                            row_group_size=100000,
                         )
-                        self.log.info(f"Saved {table_name} ({count:,} rows)")
+
+                        self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {output_path}")
                     else:
                         self.log.warning(f"Table {table_name} is empty, skipping")
                 except Exception as e:
                     self.log.error(f"Failed to save {table_name}: {e}")
 
-            self.log.info(f"NLES5 results saved to: gs://{self.config.bucket}/gold/{self.config.dataset}")
+            self.log.info(f"NLES5 results saved to: gs://{self.config.bucket}/gold/{self.config.dataset}/latest/")
 
         except Exception as e:
             self.log.error(f"Error saving results: {e}")

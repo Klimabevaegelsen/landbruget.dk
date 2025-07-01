@@ -21,9 +21,9 @@ class TestNLES5NitrogenEstimationGold:
         """Create test configuration."""
         return NLES5NitrogenEstimationGoldConfig(
             bucket="test-bucket",
-            agricultural_fields_dataset="fvm_marker",
             soil_types_dataset="soil_types",
             dmi_dataset="dmi",
+            target_years=[2021, 2022, 2023]  # Specify test years
         )
 
     @pytest.fixture
@@ -73,7 +73,6 @@ class TestNLES5NitrogenEstimationGold:
         assert config.name == "NLES5 Nitrogen Estimation Gold"
         assert config.dataset == "nles5_nitrogen_estimation"
         assert config.type == "gold"
-        assert config.agricultural_fields_dataset == "fvm_marker"
         assert config.soil_types_dataset == "soil_types"
 
     def test_processor_initialization(self, processor):
