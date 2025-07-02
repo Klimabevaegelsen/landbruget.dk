@@ -351,8 +351,52 @@ class BulkGeoDanmarkFetcher:
             return
 
         try:
-            # Combine all batch tables using UNION ALL
-            union_query = " UNION ALL ".join([f"SELECT * FROM {table}" for table in table_names])
+            # First, get all unique columns across all tables to normalize schemas
+            all_columns = set()
+            table_schemas = {}
+
+            for table_name in table_names:
+                columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                table_columns = [col[0] for col in columns_info]
+                table_schemas[table_name] = table_columns
+                all_columns.update(table_columns)
+
+            # Sort columns for consistent ordering
+            all_columns = sorted(all_columns)
+
+            logger.info(
+                f"Normalizing schemas across {len(table_names)} tables with {len(all_columns)} total columns"
+            )
+
+            # Build normalized SELECT statements for each table
+            normalized_selects = []
+            for table_name in table_names:
+                table_columns = table_schemas[table_name]
+
+                # Build SELECT with all columns, using NULL for missing ones
+                select_parts = []
+                for col in all_columns:
+                    if col in table_columns:
+                        select_parts.append(f'"{col}"')
+                    else:
+                        # Use appropriate NULL type based on common column patterns
+                        if col in ["geometry", "geom"]:
+                            select_parts.append('CAST(NULL AS GEOMETRY) as "' + col + '"')
+                        elif any(keyword in col.lower() for keyword in ["id", "uuid", "nummer"]):
+                            select_parts.append('CAST(NULL AS VARCHAR) as "' + col + '"')
+                        elif any(
+                            keyword in col.lower()
+                            for keyword in ["area", "length", "width", "height"]
+                        ):
+                            select_parts.append('CAST(NULL AS DOUBLE) as "' + col + '"')
+                        else:
+                            select_parts.append('CAST(NULL AS VARCHAR) as "' + col + '"')
+
+                normalized_select = f"SELECT {', '.join(select_parts)} FROM {table_name}"
+                normalized_selects.append(normalized_select)
+
+            # Combine all normalized tables using UNION ALL
+            union_query = " UNION ALL ".join(normalized_selects)
 
             # Save to intermediate GeoParquet file
             output_file = self.output_dir / f"geodanmark_buildings_batch_{batch_num:04d}.geoparquet"
@@ -375,6 +419,14 @@ class BulkGeoDanmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error saving intermediate results: {e}")
+            # Log table schemas for debugging
+            try:
+                logger.info("Table schemas for debugging:")
+                for table_name in table_names:
+                    columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                    logger.info(f"  {table_name}: {[col[0] for col in columns_info]}")
+            except:
+                pass
 
     def _combine_intermediate_files(self):
         """Combine all intermediate files into final GeoParquet."""
