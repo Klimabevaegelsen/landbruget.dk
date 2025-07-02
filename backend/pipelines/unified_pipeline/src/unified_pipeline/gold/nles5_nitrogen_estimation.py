@@ -81,6 +81,24 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
     max_nitrogen_washout: float = 1000.0  # Maximum reasonable nitrogen washout (kg/ha)
 
+    # Uncertainty estimation parameters
+    uncertainty_estimation: bool = True  # Enable uncertainty calculations
+    climate_distance_threshold: float = 5000.0  # meters - beyond this increases uncertainty
+    data_age_threshold: int = 2  # years - older data increases uncertainty
+    min_climate_observations: int = 30  # minimum for reliable climate data
+
+    # Model coefficient uncertainties (standard errors from original NLES5 calibration)
+    coefficient_uncertainties: Dict[str, float] = {
+        'Bt': 0.202200,    # βNT: Total N in top 25cm soil layer (SE from DCA Rapport 163 Table 3.2)
+        'Bcs': 0.007000,   # βCS: Mineral N application in spring (SE from DCA Rapport 163 Table 3.2)
+        'Bca': 0.034257,   # βCA: Mineral N application in autumn (SE from DCA Rapport 163 Table 3.2)
+        'Budb': 0.011056,  # βudb: Mineral N deposited by grazing animals (SE from DCA Rapport 163 Table 3.2)
+        'Bm1': 0.006121,   # βm1: Effect of mineral and organic N in previous two years (SE from DCA Rapport 163 Table 3.2)
+        'Bf0': 0.005530,   # βf0: Biological N fixation in current year (SE from DCA Rapport 163 Table 3.2)
+        'Bf1': 0.006121,   # βf1: Biological N fixation in previous two years (SE from DCA Rapport 163 Table 3.2)
+        'Bg0': 0.008799    # βg0: Organic N in animal manure in current year (SE from DCA Rapport 163 Table 3.2)
+    }
+
     # NLES5 Model Parameters (from original implementation)
     crop_parameters: Dict[str, float] = {
         'winter_cereals': 0,
@@ -864,15 +882,15 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.error(f"Error during validation: {e}")
             return False
 
-    @timed(name="Generating summary statistics")
-    def _generate_summary_statistics(self) -> None:
-        """Generate comprehensive summary statistics for NLES5 estimates."""
+    @timed(name="Analyzing estimates distribution")
+    def _analyze_estimates_distribution(self) -> None:
+        """Analyze comprehensive distribution patterns for NLES5 estimates."""
         try:
-            self.log.info("Generating NLES5 summary statistics")
+            self.log.info("Analyzing NLES5 estimates distribution")
 
-            # Overall summary
+            # Overall estimates analysis
             self.conn.execute("""
-                CREATE OR REPLACE TABLE nles5_overall_summary AS
+                CREATE OR REPLACE TABLE nles5_estimates_analysis AS
                 SELECT
                     COUNT(*) as total_fields,
                     SUM(area_ha) as total_area_ha,
@@ -908,9 +926,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 FROM nles5_nitrogen_estimates
             """)
 
-            # Summary by soil type
+            # Estimates by soil type
             self.conn.execute("""
-                CREATE OR REPLACE TABLE nles5_soil_type_summary AS
+                CREATE OR REPLACE TABLE nles5_estimates_by_soil_type AS
                 SELECT
                     soil_type,
                     COUNT(*) as field_count,
@@ -926,9 +944,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 ORDER BY total_area_ha DESC
             """)
 
-            # Summary by crop type
+            # Estimates by crop type
             self.conn.execute("""
-                CREATE OR REPLACE TABLE nles5_crop_type_summary AS
+                CREATE OR REPLACE TABLE nles5_estimates_by_crop_type AS
                 SELECT
                     crop_type,
                     COUNT(*) as field_count,
@@ -943,16 +961,360 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 ORDER BY total_nitrogen_washout_kg DESC
             """)
 
-            # Log summary
-            summary = self.conn.execute("SELECT * FROM nles5_overall_summary").fetchone()
-            if summary:
-                self.log.info(f"NLES5 Summary - Fields: {summary[0]:,}, Total Area: {summary[1]:.1f} ha")
-                self.log.info(f"Avg N Washout: {summary[2]:.2f} kg/ha, Total N Washout: {summary[7]:.1f} kg")
-                self.log.info(f"Data Quality - Soil: {summary[11]:.1%}, Climate: {summary[12]:.1%}, High Quality: {summary[13]:.1%}")
-                self.log.info(f"Fertilizer Data - Avg Total N: {summary[17]:.1f} kg/ha, Spring: {summary[18]:.1f} kg/ha")
+            # Uncertainty distribution analysis
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE nles5_uncertainty_analysis AS
+                SELECT
+                    COUNT(*) as total_fields_with_uncertainty,
+
+                    -- Overall uncertainty distribution
+                    AVG(total_uncertainty_pct) as avg_total_uncertainty_pct,
+                    MEDIAN(total_uncertainty_pct) as median_total_uncertainty_pct,
+                    MIN(total_uncertainty_pct) as min_total_uncertainty_pct,
+                    MAX(total_uncertainty_pct) as max_total_uncertainty_pct,
+                    STDDEV(total_uncertainty_pct) as stddev_total_uncertainty_pct,
+
+                    -- Uncertainty class distribution
+                    COUNT(CASE WHEN uncertainty_class = 'low' THEN 1 END) as low_uncertainty_count,
+                    COUNT(CASE WHEN uncertainty_class = 'moderate' THEN 1 END) as moderate_uncertainty_count,
+                    COUNT(CASE WHEN uncertainty_class = 'high' THEN 1 END) as high_uncertainty_count,
+                    COUNT(CASE WHEN uncertainty_class = 'very_high' THEN 1 END) as very_high_uncertainty_count,
+
+                    -- Uncertainty class percentages
+                    COUNT(CASE WHEN uncertainty_class = 'low' THEN 1 END) / COUNT(*)::FLOAT as low_uncertainty_pct,
+                    COUNT(CASE WHEN uncertainty_class = 'moderate' THEN 1 END) / COUNT(*)::FLOAT as moderate_uncertainty_pct,
+                    COUNT(CASE WHEN uncertainty_class = 'high' THEN 1 END) / COUNT(*)::FLOAT as high_uncertainty_pct,
+                    COUNT(CASE WHEN uncertainty_class = 'very_high' THEN 1 END) / COUNT(*)::FLOAT as very_high_uncertainty_pct,
+
+                    -- Component uncertainty averages
+                    AVG(spatial_uncertainty_climate_pct) as avg_spatial_climate_uncertainty_pct,
+                    AVG(spatial_uncertainty_soil_pct) as avg_spatial_soil_uncertainty_pct,
+                    AVG(temporal_uncertainty_climate_pct) as avg_temporal_climate_uncertainty_pct,
+                    AVG(input_uncertainty_fertilizer_pct) as avg_fertilizer_uncertainty_pct,
+                    AVG(input_uncertainty_percolation_pct) as avg_percolation_uncertainty_pct,
+                    AVG(crop_parameter_uncertainty_pct) as avg_crop_uncertainty_pct,
+
+                    -- Confidence interval coverage
+                    AVG(washout_upper_95ci - washout_lower_95ci) as avg_95ci_width_kg_ha,
+                    AVG(washout_upper_90ci - washout_lower_90ci) as avg_90ci_width_kg_ha,
+
+                    current_timestamp as generated_at
+                FROM nles5_uncertainty_estimates
+            """)
+
+            # Log estimates analysis
+            analysis = self.conn.execute("SELECT * FROM nles5_estimates_analysis").fetchone()
+            if analysis:
+                self.log.info(f"NLES5 Analysis - Fields: {analysis[0]:,}, Total Area: {analysis[1]:.1f} ha")
+                self.log.info(f"Avg N Washout: {analysis[2]:.2f} kg/ha, Total N Washout: {analysis[7]:.1f} kg")
+                self.log.info(f"Data Quality - Soil: {analysis[11]:.1%}, Climate: {analysis[12]:.1%}, High Quality: {analysis[13]:.1%}")
+                self.log.info(f"Fertilizer Data - Avg Total N: {analysis[17]:.1f} kg/ha, Spring: {analysis[18]:.1f} kg/ha")
+
+            # Log uncertainty analysis
+            uncertainty_analysis = self.conn.execute("SELECT * FROM nles5_uncertainty_analysis").fetchone()
+            if uncertainty_analysis:
+                self.log.info(f"Uncertainty Analysis - Avg: {uncertainty_analysis[1]:.1f}%, Range: {uncertainty_analysis[3]:.1f}%-{uncertainty_analysis[4]:.1f}%")
+                self.log.info(f"Confidence Classes - Low: {uncertainty_analysis[11]:.1%}, Moderate: {uncertainty_analysis[12]:.1%}, High: {uncertainty_analysis[13]:.1%}")
 
         except Exception as e:
             self.log.error(f"Error generating summary statistics: {e}")
+            raise
+
+    @timed(name="Calculating uncertainty estimates")
+    def _calculate_uncertainty_estimates(self) -> str:
+        """
+        Calculate comprehensive uncertainty estimates for NLES5 nitrogen washout predictions.
+
+        Uncertainty sources considered:
+        1. Spatial uncertainty (distance to climate/soil data)
+        2. Temporal uncertainty (data age and coverage)
+        3. Input data quality uncertainty
+        4. Model parameter uncertainty
+        5. Overall prediction uncertainty
+
+        Returns:
+            Table name containing uncertainty estimates
+        """
+        try:
+            self.log.info("Calculating NLES5 uncertainty estimates")
+
+            # Calculate dynamic coefficient uncertainty from actual NLES5 calibration standard errors
+            coeff_uncertainties = self.config.coefficient_uncertainties
+            avg_coeff_uncertainty = sum(coeff_uncertainties.values()) / len(coeff_uncertainties)
+
+            self.log.info(f"Using official NLES5 coefficient uncertainties - average SE: {avg_coeff_uncertainty:.6f}")
+
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE nles5_uncertainty_estimates AS
+                WITH uncertainty_components AS (
+                    SELECT
+                        field_id,
+                        nitrogen_washout_kg_ha,
+                        v_base,
+                        perco_soil_effect,
+
+                        -- 1. SPATIAL UNCERTAINTY
+                        -- Climate distance uncertainty (0-1 scale)
+                        CASE
+                            WHEN climate_distance_m <= {self.config.climate_distance_threshold/4} THEN 0.05  -- Very close: 5% uncertainty
+                            WHEN climate_distance_m <= {self.config.climate_distance_threshold/2} THEN 0.10  -- Close: 10% uncertainty
+                            WHEN climate_distance_m <= {self.config.climate_distance_threshold} THEN 0.20     -- Moderate: 20% uncertainty
+                            ELSE 0.35  -- Far: 35% uncertainty
+                        END as spatial_uncertainty_climate,
+
+                        -- Soil data spatial uncertainty
+                        CASE
+                            WHEN has_soil_data = true THEN 0.10   -- 10% uncertainty with soil data
+                            ELSE 0.25  -- 25% uncertainty using defaults
+                        END as spatial_uncertainty_soil,
+
+                        -- 2. TEMPORAL UNCERTAINTY
+                        -- Climate data recency and coverage
+                        CASE
+                            WHEN sufficient_climate_data = true THEN 0.08   -- 8% uncertainty with good coverage
+                            ELSE 0.20  -- 20% uncertainty with poor coverage
+                        END as temporal_uncertainty_climate,
+
+                        -- 3. INPUT DATA QUALITY UNCERTAINTY
+                        -- Fertilizer data availability uncertainty
+                        CASE
+                            WHEN total_nitrogen_kg_ha > 0 AND mineral_n_spring_kg_ha >= 0 THEN 0.12  -- 12% with real fertilizer data
+                            ELSE 0.30  -- 30% uncertainty using defaults
+                        END as input_uncertainty_fertilizer,
+
+                        -- Percolation data quality uncertainty
+                        CASE
+                            WHEN total_percolation > 0 AND total_percolation < 2000 THEN 0.15  -- 15% for reasonable percolation
+                            ELSE 0.25  -- 25% for extreme or missing percolation
+                        END as input_uncertainty_percolation,
+
+                        -- 4. MODEL PARAMETER UNCERTAINTY
+                        -- Coefficient uncertainty propagation (Monte Carlo approximation)
+                        {avg_coeff_uncertainty} as coefficient_uncertainty_base,
+
+                        -- Crop parameter uncertainty (varies by crop knowledge)
+                        CASE crop_type
+                            WHEN 'grass_clover' THEN 0.08      -- 8% - well studied
+                            WHEN 'winter_cereals' THEN 0.10    -- 10% - well studied
+                            WHEN 'spring_cereals' THEN 0.12    -- 12% - moderate knowledge
+                            WHEN 'maize_potatoes' THEN 0.15    -- 15% - more variable
+                            WHEN 'fallow' THEN 0.25            -- 25% - high uncertainty
+                            ELSE 0.18  -- 18% - average for other crops
+                        END as crop_parameter_uncertainty
+                    FROM nles5_nitrogen_estimates
+                ),
+                combined_uncertainty AS (
+                    SELECT
+                        *,
+                        -- 5. COMBINED UNCERTAINTY CALCULATION
+                        -- Use root sum of squares for independent uncertainties
+                        SQRT(
+                            POW(spatial_uncertainty_climate, 2) +
+                            POW(spatial_uncertainty_soil, 2) +
+                            POW(temporal_uncertainty_climate, 2) +
+                            POW(input_uncertainty_fertilizer, 2) +
+                            POW(input_uncertainty_percolation, 2) +
+                            POW(coefficient_uncertainty_base, 2) +
+                            POW(crop_parameter_uncertainty, 2)
+                        ) as total_relative_uncertainty,
+
+                        -- Scale uncertainty based on model components
+                        GREATEST(0.05, LEAST(0.60,
+                            SQRT(
+                                POW(spatial_uncertainty_climate, 2) +
+                                POW(spatial_uncertainty_soil, 2) +
+                                POW(temporal_uncertainty_climate, 2) +
+                                POW(input_uncertainty_fertilizer, 2) +
+                                POW(input_uncertainty_percolation, 2) +
+                                POW(coefficient_uncertainty_base, 2) +
+                                POW(crop_parameter_uncertainty, 2)
+                            )
+                        )) as bounded_relative_uncertainty
+                    FROM uncertainty_components
+                )
+                SELECT
+                    field_id,
+                    nitrogen_washout_kg_ha,
+
+                    -- UNCERTAINTY COMPONENTS (as percentages)
+                    ROUND(spatial_uncertainty_climate * 100, 1) as spatial_uncertainty_climate_pct,
+                    ROUND(spatial_uncertainty_soil * 100, 1) as spatial_uncertainty_soil_pct,
+                    ROUND(temporal_uncertainty_climate * 100, 1) as temporal_uncertainty_climate_pct,
+                    ROUND(input_uncertainty_fertilizer * 100, 1) as input_uncertainty_fertilizer_pct,
+                    ROUND(input_uncertainty_percolation * 100, 1) as input_uncertainty_percolation_pct,
+                    ROUND(coefficient_uncertainty_base * 100, 1) as coefficient_uncertainty_pct,
+                    ROUND(crop_parameter_uncertainty * 100, 1) as crop_parameter_uncertainty_pct,
+
+                    -- TOTAL UNCERTAINTY
+                    ROUND(bounded_relative_uncertainty * 100, 1) as total_uncertainty_pct,
+                    bounded_relative_uncertainty as total_relative_uncertainty,
+
+                    -- CONFIDENCE INTERVALS (assuming normal distribution)
+                    ROUND(nitrogen_washout_kg_ha * (1 - 1.96 * bounded_relative_uncertainty), 2) as washout_lower_95ci,
+                    ROUND(nitrogen_washout_kg_ha * (1 + 1.96 * bounded_relative_uncertainty), 2) as washout_upper_95ci,
+                    ROUND(nitrogen_washout_kg_ha * (1 - 1.645 * bounded_relative_uncertainty), 2) as washout_lower_90ci,
+                    ROUND(nitrogen_washout_kg_ha * (1 + 1.645 * bounded_relative_uncertainty), 2) as washout_upper_90ci,
+
+                    -- UNCERTAINTY CLASSIFICATION
+                    CASE
+                        WHEN bounded_relative_uncertainty <= 0.15 THEN 'low'           -- ≤15% uncertainty
+                        WHEN bounded_relative_uncertainty <= 0.25 THEN 'moderate'      -- 15-25% uncertainty
+                        WHEN bounded_relative_uncertainty <= 0.35 THEN 'high'          -- 25-35% uncertainty
+                        ELSE 'very_high'  -- >35% uncertainty
+                    END as uncertainty_class,
+
+                    -- CONFIDENCE LEVEL (inverse of uncertainty)
+                    CASE
+                        WHEN bounded_relative_uncertainty <= 0.15 THEN 'high_confidence'
+                        WHEN bounded_relative_uncertainty <= 0.25 THEN 'moderate_confidence'
+                        WHEN bounded_relative_uncertainty <= 0.35 THEN 'low_confidence'
+                        ELSE 'very_low_confidence'
+                    END as confidence_level,
+
+                    current_timestamp as calculated_at
+
+                FROM combined_uncertainty
+                ORDER BY total_relative_uncertainty ASC
+            """)
+
+            count = self.conn.execute("SELECT COUNT(*) FROM nles5_uncertainty_estimates").fetchone()[0]
+            avg_uncertainty = self.conn.execute(
+                "SELECT AVG(total_uncertainty_pct) FROM nles5_uncertainty_estimates"
+            ).fetchone()[0]
+
+            self.log.info(f"Uncertainty calculation complete: {count:,} fields, avg uncertainty: {avg_uncertainty:.1f}%")
+
+            return "nles5_uncertainty_estimates"
+
+        except Exception as e:
+            self.log.error(f"Error calculating uncertainty estimates: {e}")
+            raise
+
+    @timed(name="Analyzing uncertainty patterns")
+    def _analyze_uncertainty_patterns(self) -> str:
+        """
+        Analyze uncertainty patterns and risk classifications for agricultural fields.
+
+        Returns:
+            Table name containing uncertainty pattern analysis and risk classifications
+        """
+        try:
+            self.log.info("Analyzing uncertainty patterns and risk classifications")
+
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE nles5_uncertainty_patterns AS
+                WITH field_risk_assessment AS (
+                    SELECT
+                        n.field_id,
+                        n.nitrogen_washout_kg_ha,
+                        n.total_nitrogen_washout_kg,
+                        n.area_ha,
+                        n.crop_type,
+                        n.soil_type,
+                        u.total_uncertainty_pct,
+                        u.uncertainty_class,
+                        u.confidence_level,
+                        u.washout_lower_95ci,
+                        u.washout_upper_95ci,
+
+                        -- Risk classification based on washout and uncertainty
+                        CASE
+                            WHEN n.nitrogen_washout_kg_ha >= 100 AND u.uncertainty_class IN ('low', 'moderate') THEN 'high_risk_high_confidence'
+                            WHEN n.nitrogen_washout_kg_ha >= 100 AND u.uncertainty_class IN ('high', 'very_high') THEN 'high_risk_low_confidence'
+                            WHEN n.nitrogen_washout_kg_ha >= 50 AND n.nitrogen_washout_kg_ha < 100 AND u.uncertainty_class IN ('low', 'moderate') THEN 'moderate_risk_high_confidence'
+                            WHEN n.nitrogen_washout_kg_ha >= 50 AND n.nitrogen_washout_kg_ha < 100 AND u.uncertainty_class IN ('high', 'very_high') THEN 'moderate_risk_low_confidence'
+                            WHEN n.nitrogen_washout_kg_ha < 50 AND u.uncertainty_class IN ('low', 'moderate') THEN 'low_risk_high_confidence'
+                            ELSE 'low_risk_low_confidence'
+                        END as risk_confidence_class,
+
+                        -- Management priority scoring (1-10 scale)
+                        CASE
+                            WHEN n.nitrogen_washout_kg_ha >= 100 AND u.uncertainty_class = 'low' THEN 10         -- Immediate action needed
+                            WHEN n.nitrogen_washout_kg_ha >= 100 AND u.uncertainty_class = 'moderate' THEN 9     -- High priority
+                            WHEN n.nitrogen_washout_kg_ha >= 100 AND u.uncertainty_class = 'high' THEN 7         -- Verify then act
+                            WHEN n.nitrogen_washout_kg_ha >= 50 AND u.uncertainty_class IN ('low', 'moderate') THEN 6  -- Monitor closely
+                            WHEN n.nitrogen_washout_kg_ha >= 50 AND u.uncertainty_class = 'high' THEN 4          -- Improve data first
+                            WHEN n.nitrogen_washout_kg_ha < 50 AND u.uncertainty_class = 'low' THEN 2            -- Continue current practices
+                            ELSE 3  -- Default moderate priority
+                        END as management_priority_score
+                    FROM nles5_nitrogen_estimates n
+                    JOIN nles5_uncertainty_estimates u ON n.field_id = u.field_id
+                )
+                SELECT
+                    field_id,
+                    nitrogen_washout_kg_ha,
+                    total_uncertainty_pct,
+                    uncertainty_class,
+                    confidence_level,
+                    risk_confidence_class,
+                    management_priority_score,
+                    washout_lower_95ci,
+                    washout_upper_95ci,
+
+                    -- RISK CLASSIFICATION ANALYSIS
+                    CASE risk_confidence_class
+                        WHEN 'high_risk_high_confidence' THEN
+                            'CRITICAL: High nitrogen washout with reliable data quality. Strong evidence for environmental impact.'
+                        WHEN 'high_risk_low_confidence' THEN
+                            'UNCERTAIN_HIGH: High washout indicated but data quality compromised. Requires verification.'
+                        WHEN 'moderate_risk_high_confidence' THEN
+                            'MODERATE: Moderate washout risk with reliable data. Monitoring threshold exceeded.'
+                        WHEN 'moderate_risk_low_confidence' THEN
+                            'UNCERTAIN_MODERATE: Moderate risk but high uncertainty. Data quality limits confidence.'
+                        WHEN 'low_risk_high_confidence' THEN
+                            'ACCEPTABLE: Low washout risk with high confidence. Within acceptable parameters.'
+                        ELSE
+                            'UNCERTAIN_LOW: Low risk but uncertain data quality. Inconclusive analysis.'
+                    END as risk_classification,
+
+                    -- DATA QUALITY ASSESSMENT
+                    CASE
+                        WHEN total_uncertainty_pct > 30 THEN 'POOR: Significant data gaps in soil, fertilizer, and climate data'
+                        WHEN total_uncertainty_pct > 20 THEN 'LIMITED: Moderate gaps in fertilizer documentation and soil verification'
+                        WHEN total_uncertainty_pct > 15 THEN 'ADEQUATE: Minor data quality limitations identified'
+                        ELSE 'GOOD: Data quality sufficient for reliable analysis'
+                    END as data_quality_assessment,
+
+                    -- NITROGEN EFFICIENCY ANALYSIS
+                    CASE
+                        WHEN nitrogen_washout_kg_ha >= 100 THEN
+                            CASE crop_type
+                                WHEN 'maize_potatoes' THEN 'HIGH_LOSS_INTENSIVE: Intensive crop with high nitrogen losses'
+                                WHEN 'winter_cereals' THEN 'HIGH_LOSS_CEREAL: Winter cereals showing excessive nitrogen washout'
+                                WHEN 'spring_cereals' THEN 'HIGH_LOSS_SPRING: Spring cereals with poor nitrogen retention'
+                                ELSE 'HIGH_LOSS_GENERAL: Excessive nitrogen washout detected'
+                            END
+                        WHEN nitrogen_washout_kg_ha >= 50 THEN
+                            'MODERATE_LOSS: Moderate nitrogen losses - timing optimization potential'
+                        ELSE
+                            'EFFICIENT: Nitrogen retention within acceptable parameters'
+                    END as nitrogen_efficiency_pattern,
+
+                    -- ANALYSIS CONFIDENCE
+                    CASE
+                        WHEN uncertainty_class = 'low' THEN 'HIGH: Analysis based on reliable data and robust model predictions'
+                        WHEN uncertainty_class = 'moderate' THEN 'MODERATE: Analysis reasonable with acceptable uncertainty levels'
+                        WHEN uncertainty_class = 'high' THEN 'LOW: High uncertainty limits analysis confidence'
+                        ELSE 'VERY_LOW: Extreme uncertainty - analysis highly uncertain'
+                    END as analysis_confidence,
+
+                    current_timestamp as generated_at
+
+                FROM field_risk_assessment
+                ORDER BY management_priority_score DESC, total_uncertainty_pct ASC
+            """)
+
+            count = self.conn.execute("SELECT COUNT(*) FROM nles5_uncertainty_patterns").fetchone()[0]
+            high_priority = self.conn.execute(
+                "SELECT COUNT(*) FROM nles5_uncertainty_patterns WHERE management_priority_score >= 8"
+            ).fetchone()[0]
+
+            self.log.info(f"Analyzed {count:,} uncertainty patterns, {high_priority:,} high-priority fields identified")
+
+            return "nles5_uncertainty_patterns"
+
+        except Exception as e:
+            self.log.error(f"Error analyzing uncertainty patterns: {e}")
             raise
 
     @timed(name="Saving NLES5 results to gold layer")
@@ -964,9 +1326,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Define output tables with optimized paths
             tables_to_save = [
                 ("nles5_nitrogen_estimates", "nitrogen_estimates"),
-                ("nles5_overall_summary", "overall_summary"),
-                ("nles5_soil_type_summary", "soil_type_summary"),
-                ("nles5_crop_type_summary", "crop_type_summary"),
+                ("nles5_estimates_analysis", "estimates_analysis"),
+                ("nles5_estimates_by_soil_type", "estimates_by_soil_type"),
+                ("nles5_estimates_by_crop_type", "estimates_by_crop_type"),
+                ("nles5_uncertainty_estimates", "uncertainty_estimates"),
+                ("nles5_uncertainty_analysis", "uncertainty_analysis"),
+                ("nles5_uncertainty_patterns", "uncertainty_patterns"),
             ]
 
             for table_name, subdataset in tables_to_save:
@@ -1037,8 +1402,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         self.log.error("NLES5 estimates failed validation - check data quality and model parameters")
                         return
 
-            # Generate summary statistics
-            self._generate_summary_statistics()
+            # Analyze estimates distribution
+            self._analyze_estimates_distribution()
+
+            # Calculate uncertainty estimates
+            uncertainty_table = self._calculate_uncertainty_estimates()
+
+            # Analyze uncertainty patterns
+            patterns_table = self._analyze_uncertainty_patterns()
 
             # Save results to gold layer
             self._save_results_to_gold()
