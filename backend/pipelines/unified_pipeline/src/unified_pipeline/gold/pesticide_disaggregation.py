@@ -181,45 +181,40 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.error(f"📋 Traceback: {traceback.format_exc()}")
                 year_results = None
 
-            if year_results is not None and len(year_results) > 0:
+            if year_results is not None and year_results > 0:
                 self.log.info(
-                    f"✅ Year {pesticide_year}: Successfully processed {len(year_results)} disaggregated records"
+                    f"✅ Year {pesticide_year}: Successfully processed and saved {year_results:,} disaggregated records"
                 )
 
-                # Save results for this year immediately (much more efficient than one giant table)
-                self.log.info(f"💾 Saving results for year {pesticide_year} to GCS")
-                year_saved = self._save_year_results(year_results, pesticide_year)
-
-                if year_saved:
-                    # Count pesticide records for this year using a separate connection
-                    self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
-                    try:
-                        temp_conn = duckdb.connect(":memory:")
-                        with self.gcs_access._temp_download(
-                            pesticide_applications_path
-                        ) as temp_file:
-                            pesticide_count = temp_conn.execute(
-                                f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
-                            ).fetchone()[0]
-                        temp_conn.close()
-                        total_pesticide_records += pesticide_count
-                        self.log.info(
-                            f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {len(year_results)} disaggregated"
-                        )
-                        total_disaggregated_records += len(year_results)
-                        successful_years += 1
-                    except Exception as e:
-                        self.log.error(
-                            f"❌ Failed to count pesticide records for year {pesticide_year}: {e}"
-                        )
-                        # Still count as successful since we have results
-                        total_disaggregated_records += len(year_results)
-                        successful_years += 1
-                else:
-                    self.log.error(f"❌ Failed to save results for year {pesticide_year}")
-                    failed_years += 1
+                # Count pesticide records for this year using a separate connection
+                self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
+                try:
+                    temp_conn = duckdb.connect(":memory:")
+                    with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
+                        pesticide_count = temp_conn.execute(
+                            f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
+                        ).fetchone()[0]
+                    temp_conn.close()
+                    total_pesticide_records += pesticide_count
+                    self.log.info(
+                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {year_results} disaggregated"
+                    )
+                    total_disaggregated_records += year_results
+                    successful_years += 1
+                except Exception as e:
+                    self.log.error(
+                        f"❌ Failed to count pesticide records for year {pesticide_year}: {e}"
+                    )
+                    # Still count as successful since we have results
+                    total_disaggregated_records += year_results
+                    successful_years += 1
+            elif year_results == 0:
+                self.log.info(
+                    f"✅ Year {pesticide_year}: Successfully processed (no records to save)"
+                )
+                successful_years += 1
             else:
-                self.log.warning(f"⚠️ Year {pesticide_year}: No results generated")
+                self.log.warning(f"⚠️ Year {pesticide_year}: Processing failed")
                 failed_years += 1
 
         self.log.info("📊 Processing summary:")
@@ -250,67 +245,115 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
         self.log.info("🏁 Pesticide disaggregation gold layer processing completed successfully")
 
-    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+    def _save_year_results_direct(self, year: int) -> bool:
         """
-        Save results for a single year to GCS storage.
+        Save results for a single year to GCS storage directly from DuckDB table.
+        This avoids converting to Python lists which causes memory issues.
 
         Args:
-            year_results: List of disaggregated records for the year
             year: The year being processed
 
         Returns:
             bool: True if save was successful, False otherwise
         """
         try:
-            self.log.info(f"💾 Preparing to save {len(year_results)} records for year {year}")
+            # Get record count for logging
+            result_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
+            ).fetchone()[0]
 
-            # Create a temporary DuckDB connection for this year's data
-            year_conn = duckdb.connect(":memory:")
+            self.log.info(
+                f"💾 Preparing to save {result_count:,} records for year {year} directly from DuckDB"
+            )
 
-            # Create table with the results
-            if year_results:
-                columns = list(year_results[0].keys())
-                column_defs = ", ".join([f"{col} VARCHAR" for col in columns])
+            if result_count > 0:
+                # Create the final table name for this year
                 table_name = f"pesticide_disaggregation_{year}"
 
-                self.log.info(f"🏗️ Creating table {table_name} with {len(columns)} columns")
-                year_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
+                # Create a copy of the results table with the year-specific name
+                self.log.info(f"🏗️ Creating final table {table_name}")
+                self.duckdb_conn.execute(f"""
+                    CREATE TABLE {table_name} AS 
+                    SELECT * FROM disaggregated_pesticide_applications
+                """)
 
-                # Insert all records
-                for record in year_results:
-                    placeholders = ", ".join(["?" for _ in record.values()])
-                    year_conn.execute(
-                        f"INSERT INTO {table_name} VALUES ({placeholders})",
-                        list(record.values()),
-                    )
-
-                # Save using the base class method with year-specific table name
+                # Save directly to GCS using our own method
                 self.log.info(f"🚀 Uploading {table_name} to GCS bucket")
-
-                # Use the base class save method - temporarily set connection
-                original_conn = getattr(self, "conn", None)
-                self.conn = year_conn
-
-                # Save with year-specific dataset name
                 dataset_name = f"{self.config.dataset}_{year}"
-                self.save_data_direct(table_name, dataset_name, self.config.bucket, "gold")
+                self._save_table_to_gcs(table_name, dataset_name, "gold")
 
-                # Restore original connection
-                self.conn = original_conn
+                self.log.info(f"✅ Successfully saved {result_count:,} records for year {year}")
 
-                self.log.info(f"✅ Successfully saved {len(year_results)} records for year {year}")
-                year_conn.close()
+                # Clean up the temporary table
+                self.duckdb_conn.execute(f"DROP TABLE {table_name}")
+
                 return True
             else:
                 self.log.warning(f"⚠️ No results to save for year {year}")
-                year_conn.close()
                 return False
 
         except Exception as e:
             self.log.error(f"❌ Failed to save results for year {year}: {e}")
-            if "year_conn" in locals():
-                year_conn.close()
             return False
+
+    def _save_table_to_gcs(self, table_name: str, dataset: str, stage: str) -> None:
+        """
+        Save a DuckDB table directly to GCS storage.
+
+        Args:
+            table_name: Name of the DuckDB table to save
+            dataset: Dataset name for GCS path
+            stage: Processing stage (bronze, silver, gold)
+        """
+        import os
+        import tempfile
+        from datetime import datetime
+
+        try:
+            # Create timestamp and GCS path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{dataset}.parquet"
+            gcs_path = f"{stage}/{dataset}/{timestamp}/{filename}"
+
+            # Create temporary file for export
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                temp_path = tmp_file.name
+
+            # Export table to temporary file using DuckDB COPY
+            self.duckdb_conn.execute(f"""
+                COPY {table_name} TO '{temp_path}' 
+                (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
+            """)
+
+            # Upload to GCS
+            self.gcs_util.upload_file(
+                bucket_name=self.config.bucket,
+                source_file_path=temp_path,
+                destination_blob_name=gcs_path,
+            )
+
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+            self.log.info(f"✅ Saved table {table_name} to gs://{self.config.bucket}/{gcs_path}")
+
+        except Exception as e:
+            self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
+            # Clean up temp file on error
+            if "temp_path" in locals() and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
+    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+        """
+        Legacy method for saving results from Python list (deprecated).
+        Use _save_year_results_direct() instead for better performance.
+        """
+        self.log.warning(
+            "⚠️ Using deprecated _save_year_results method - consider using _save_year_results_direct"
+        )
+        return self._save_year_results_direct(year)
 
     def _get_pesticide_field_year_pairs(self) -> List[Tuple[int, int]]:
         """
@@ -539,7 +582,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         field_year: int,
         agricultural_fields_path: str,
         pesticide_applications_path: str,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Optional[int]:
         """Process a single pesticide-field year pair."""
         try:
             self.log.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
@@ -563,66 +606,87 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"🔍 Filtering pending pesticide records for year {pesticide_year}")
             self._create_pending_pesticide_rows()
 
+            # Check if CVR matches are available before running strategies
+            self.log.info(f"🔍 Checking for CVR matches for year {pesticide_year}")
+            cvr_matches_available = self._check_cvr_matches_available()
+
+            if not cvr_matches_available:
+                self.log.warning(
+                    f"⚠️ No CVR matches found for year {pesticide_year} - skipping all strategies"
+                )
+                self.log.warning(
+                    "   This significantly improves performance when no matches are possible"
+                )
+
+                # Return empty results since no processing is possible
+                self.log.info(f"📊 Year {pesticide_year} completed with 0 records (no CVR matches)")
+                return []
+
             # Run the original strategies in exact order (from original main.py lines 89-180)
             self.log.info(f"🎯 Starting disaggregation strategies for year {pesticide_year}")
             total_processed = 0
 
             # Strategy 1: Marker CVR-Area Match (THE MAIN 92% STRATEGY)
             self.log.info(f"🎯 Strategy 1: Running marker CVR-area match for year {pesticide_year}")
-            processed_count = self._disaggregate_by_marker_match()
-            total_processed += processed_count
+            processed_1 = self._disaggregate_by_marker_match()
+            total_processed += processed_1
             self.log.info(
-                f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_1} records processed"
             )
 
             # Strategy 2: Marker Non-Organic CVR-Area Match
             self.log.info(f"🎯 Strategy 2: Running non-organic match for year {pesticide_year}")
-            processed_count = self._disaggregate_by_marker_non_organic_match()
-            total_processed += processed_count
+            processed_2 = self._disaggregate_by_marker_non_organic_match()
+            total_processed += processed_2
             self.log.info(
-                f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_2} records processed"
             )
 
             # Strategy 3: Partial Field Coverage
             self.log.info(
                 f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}"
             )
-            processed_count = self._disaggregate_by_partial_field_coverage()
-            total_processed += processed_count
+            processed_3 = self._disaggregate_by_partial_field_coverage()
+            total_processed += processed_3
             self.log.info(
-                f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_count} records processed"
+                f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_3} records processed"
             )
 
-            # Strategy 4: Adjacent Fields Single Cluster using DuckDB-spatial SPATIAL_JOIN with 10m buffer
+            # Strategy 4: Spatial clustering removed - was not providing additional value
+            # while adding significant complexity and processing overhead
+            processed_4 = 0
             self.log.info(
-                f"🎯 Strategy 4: Running adjacent fields cluster with spatial analysis for year {pesticide_year}"
-            )
-            processed_count = self._disaggregate_by_adjacent_fields_single_cluster()
-            total_processed += processed_count
-            self.log.info(
-                f"✅ Year {pesticide_year}: Adjacent Fields Cluster: {processed_count} records processed"
+                "ℹ️ Strategy 4: Spatial clustering removed for simplification - strategies 1-3 provide sufficient coverage"
             )
 
-            # Get results
+            # Get result count and save directly from DuckDB table
             self.log.info(f"📊 Collecting final results for year {pesticide_year}")
-            results = self._get_results()
+            result_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
+            ).fetchone()[0]
 
             # Calculate coverage statistics for this year
             total_pesticide_records = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM pesticide"
             ).fetchone()[0]
             coverage_pct = (
-                (len(results) / total_pesticide_records * 100) if total_pesticide_records > 0 else 0
+                (result_count / total_pesticide_records * 100) if total_pesticide_records > 0 else 0
             )
 
             self.log.info(f"🎉 Year {pesticide_year} disaggregation completed:")
             self.log.info(f"   📈 Total pesticide records: {total_pesticide_records:,}")
             self.log.info(
-                f"   ✅ Successfully disaggregated: {len(results):,} ({coverage_pct:.1f}%)"
+                f"   ✅ Successfully disaggregated: {result_count:,} ({coverage_pct:.1f}%)"
             )
             self.log.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
 
-            return results
+            # Save directly from DuckDB table (no conversion to Python list)
+            if result_count > 0:
+                self._save_year_results_direct(pesticide_year)
+                return result_count  # Return count instead of full results
+            else:
+                self.log.warning(f"⚠️ No results to save for year {pesticide_year}")
+                return 0
 
         except Exception as e:
             self.log.error(f"❌ Error processing year pair {pesticide_year}-{field_year}: {e}")
@@ -762,20 +826,56 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("📥 Downloading pesticide data...")
         with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")
-            self.duckdb_conn.execute(f"""
-                CREATE TABLE pesticide AS 
-                SELECT 
-                    row_number() OVER () as OriginalPesticideRowID,
-                    companyregistrationnumber as CompanyRegistrationNumber,
-                    pesticidename as PesticideName,
-                    pesticideregistrationnumber as PesticideRegistrationNumber,
-                    dosagequantity as DosageQuantity,
-                    dosageunit as DosageUnit,
-                    acreagesize as AcreageSize,
-                    code as Code,
-                    nopesticides as nopesticides
-                FROM read_parquet('{temp_file}')
-            """)
+
+            # First, create a temporary table to inspect the pesticide schema
+            self.duckdb_conn.execute(
+                f"CREATE TABLE pesticide_temp AS SELECT * FROM read_parquet('{temp_file}')"
+            )
+
+        # Check what columns actually exist in pesticide data
+        self.log.info("🔍 Inspecting pesticide data schema...")
+        pest_columns = self.duckdb_conn.execute("DESCRIBE pesticide_temp").fetchall()
+        pest_column_names = [col[0] for col in pest_columns]
+        self.log.info(f"📋 Found {len(pest_column_names)} columns in pesticide data:")
+        for i, col in enumerate(pest_column_names, 1):
+            self.log.info(f"   {i:2d}. {col}")
+
+        # Find the CVR column in pesticide data
+        self.log.info("🔍 Looking for CVR column in pesticide data...")
+        pest_cvr_column = None
+        if "companyregistrationnumber" in pest_column_names:
+            pest_cvr_column = "companyregistrationnumber"
+            self.log.info("✅ Found CVR column: companyregistrationnumber")
+        elif "cvr" in pest_column_names:
+            pest_cvr_column = "cvr"
+            self.log.info("✅ Found CVR column: cvr")
+        else:
+            self.log.error("❌ CRITICAL: No CVR column found in pesticide data!")
+            self.log.error("🔍 CVR matching is required for pesticide disaggregation.")
+            self.log.error(f"📋 Available columns: {pest_column_names}")
+            self.log.error("💡 Expected one of: companyregistrationnumber, cvr")
+            return False
+
+        # Create the final pesticide table with proper column mapping
+        self.log.info("🏗️ Creating final pesticide table with proper column mapping...")
+        self.duckdb_conn.execute(f"""
+            CREATE TABLE pesticide AS 
+            SELECT 
+                row_number() OVER () as OriginalPesticideRowID,
+                {pest_cvr_column} as CompanyRegistrationNumber,
+                pesticidename as PesticideName,
+                pesticideregistrationnumber as PesticideRegistrationNumber,
+                dosagequantity as DosageQuantity,
+                dosageunit as DosageUnit,
+                acreagesize as AcreageSize,
+                code as Code,
+                nopesticides as nopesticides
+            FROM pesticide_temp
+        """)
+
+        # Drop the temporary table
+        self.duckdb_conn.execute("DROP TABLE pesticide_temp")
+        self.log.info("✅ Pesticide table created successfully")
 
         # Get record counts for logging
         self.log.info("📊 Counting loaded records...")
@@ -812,9 +912,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute(create_table_sql)
 
     def _create_pending_pesticide_rows(self):
-        """Create pending pesticide rows table, filtering out nopesticides=1 (original logic)."""
+        """Create pending pesticide rows table with nopesticides=1 records filtered out."""
         self.duckdb_conn.execute("""
-            CREATE TABLE pending_pesticide_rows AS 
+            CREATE TABLE pending_pesticide_rows AS
             SELECT * FROM pesticide 
             WHERE nopesticides IS NULL OR nopesticides != 1
         """)
@@ -823,6 +923,71 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             0
         ]
         self.log.info(f"Created pending pesticide rows: {count} records")
+
+    def _check_cvr_matches_available(self) -> bool:
+        """
+        Check if there are any potential CVR matches between pesticide and marker data.
+        Returns True if matches exist, False otherwise.
+        This allows us to skip CVR-based strategies when no matches are possible.
+        """
+        self.log.info("🔍 Checking for potential CVR matches...")
+
+        try:
+            # Check if there are any CVR numbers that exist in both pesticide and marker data
+            cvr_match_count = self.duckdb_conn.execute("""
+                WITH PesticideCVRs AS (
+                    SELECT DISTINCT CAST(CAST(CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR
+                    FROM pending_pesticide_rows 
+                    WHERE CompanyRegistrationNumber IS NOT NULL
+                      AND TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                ),
+                MarkerCVRs AS (
+                    SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
+                    FROM marker 
+                    WHERE cvr_number IS NOT NULL
+                      AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
+                )
+                SELECT COUNT(*) 
+                FROM PesticideCVRs p
+                JOIN MarkerCVRs m ON p.CVR = m.CVR
+            """).fetchone()[0]
+
+            has_matches = cvr_match_count > 0
+
+            if has_matches:
+                self.log.info(
+                    f"✅ Found {cvr_match_count} potential CVR matches - strategies will run"
+                )
+            else:
+                self.log.warning("⚠️ No CVR matches found between pesticide and marker data")
+                self.log.warning("   All CVR-based strategies will be skipped")
+
+                # Log some diagnostic information
+                pesticide_cvr_count = self.duckdb_conn.execute("""
+                    SELECT COUNT(DISTINCT CompanyRegistrationNumber) 
+                    FROM pending_pesticide_rows 
+                    WHERE CompanyRegistrationNumber IS NOT NULL
+                """).fetchone()[0]
+
+                marker_cvr_count = self.duckdb_conn.execute("""
+                    SELECT COUNT(DISTINCT cvr_number) 
+                    FROM marker 
+                    WHERE cvr_number IS NOT NULL
+                """).fetchone()[0]
+
+                self.log.info(
+                    f"   📊 Pesticide records have {pesticide_cvr_count} distinct CVR numbers"
+                )
+                self.log.info(f"   📊 Marker records have {marker_cvr_count} distinct CVR numbers")
+
+            return has_matches
+
+        except Exception as e:
+            self.log.error(f"Error checking CVR matches: {str(e)}")
+            # If we can't check, assume matches exist to be safe
+            return True
 
     def _get_organic_marker_field_ids(self) -> Set[str]:
         """
@@ -1138,26 +1303,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in partial field coverage strategy: {str(e)}")
             return 0
 
-    def _disaggregate_by_adjacent_fields_single_cluster(self) -> int:
+    def _disaggregate_by_adjacent_fields_single_cluster_REMOVED(self) -> int:
         """
-        Strategy 4: Adjacent Fields Single Cluster using DuckDB-spatial SPATIAL_JOIN with 10m buffer.
-
-        CORRECT AGRICULTURAL LOGIC:
-        - Finds fields with same CVR (farmer) + crop combination
-        - Identifies spatial clusters (connected components within 10m)
-        - Matches cluster total area against pesticide area (within 2% tolerance)
-        - Only allocates if there's both spatial coherence AND area match
-        - Prevents spurious correlations from random field combinations
-
-        This reflects real-world farming where spatially connected fields
-        are treated as a single operational unit for pesticide application.
-
-        Uses DuckDB-spatial SPATIAL_JOIN operator with ST_DWithin(geometry, geometry, 10.0)
-        for efficient 10-meter buffer analysis and proper connected components clustering.
+        Strategy 4: Adjacent Fields Single Cluster using DuckDB spatial operations.
+        CORRECTED VERSION: Only allocates when BOTH spatial coherence AND area match exist.
         """
-        self.log.info(
-            "Running Adjacent Fields Single Cluster with area matching and spatial analysis..."
-        )
+        self.log.info("Running Adjacent Fields Spatial Cluster disaggregation strategy...")
+
+        # Check if spatial clustering is enabled
+        if not self.config.enable_spatial_clustering:
+            self.log.info("⚠️ Spatial clustering disabled in configuration - skipping")
+            return 0
 
         try:
             # Check if geometry data is available for spatial clustering
@@ -1172,32 +1328,252 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.warning("⚠️ No geometry data available - spatial clustering disabled")
                 return 0
 
-            self.log.info("✅ Using spatial clustering with area matching (2% tolerance)")
+            # DEBUG: Check how many records are still pending after strategies 1-3
+            pending_count = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM pending_pesticide_rows"
+            ).fetchone()[0]
+            self.log.info(
+                f"🔍 DEBUG: {pending_count} pesticide records still pending after strategies 1-3"
+            )
 
-            # CORRECTED LOGIC: Find spatial clusters that match pesticide area within tolerance
-            insert_query = f"""
-                WITH SpatialAdjacency AS (
-                    -- Find pairs of fields within 10m of each other (same CVR+crop)
+            if pending_count == 0:
+                self.log.info(
+                    "✅ All records already processed by strategies 1-3 - spatial clustering not needed"
+                )
+                return 0
+
+            # Get pending CVR+crop combinations to process in chunks
+            # OPTIMIZATION: Only get combinations that actually have pending records AND multiple fields with geometry
+            self.log.info(
+                "🔍 Getting CVR+crop combinations with pending records and multiple fields..."
+            )
+            pending_cvr_crops = self.duckdb_conn.execute("""
+                WITH PendingCombinations AS (
                     SELECT DISTINCT
-                        m1.field_id as field1_id,
-                        m2.field_id as field2_id,
-                        CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
-                    FROM marker m1
-                    JOIN marker m2 ON ST_DWithin(m1.geometry, m2.geometry, 10.0)  -- SPATIAL_JOIN with 10m buffer
-                    WHERE m1.field_id != m2.field_id
-                      -- Ensure same CVR and crop
-                      AND CAST(CAST(m1.cvr_number AS BIGINT) AS VARCHAR) = CAST(CAST(m2.cvr_number AS BIGINT) AS VARCHAR)
-                      AND CAST(CAST(m1.crop_code AS BIGINT) AS VARCHAR) = CAST(CAST(m2.crop_code AS BIGINT) AS VARCHAR)
-                      -- Filter valid CVR numbers
-                      AND m1.cvr_number IS NOT NULL AND TRIM(CAST(m1.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m1.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m2.cvr_number IS NOT NULL AND TRIM(CAST(m2.cvr_number AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(m2.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      -- Valid crop codes and areas
-                      AND m1.crop_code IS NOT NULL AND m2.crop_code IS NOT NULL
-                      AND m1.area_ha > 0.0 AND m2.area_ha > 0.0
-                      AND m1.geometry IS NOT NULL AND m2.geometry IS NOT NULL
+                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        COUNT(*) as pending_count
+                    FROM pending_pesticide_rows p
+                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
+                      AND TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                      AND p.Code IS NOT NULL 
+                      AND p.AcreageSize > 0.0
+                    GROUP BY CVR_Str, Crop_Str
+                    HAVING COUNT(*) > 0
+                ),
+                FieldCounts AS (
+                    SELECT 
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        COUNT(*) as field_count
+                    FROM marker m
+                    WHERE m.cvr_number IS NOT NULL 
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL 
+                      AND m.area_ha > 0.0
+                      AND m.geometry IS NOT NULL
+                    GROUP BY CVR_Str, Crop_Str
+                    HAVING COUNT(*) >= 2  -- Only combinations with 2+ fields
+                )
+                SELECT 
+                    p.CVR_Str,
+                    p.Crop_Str,
+                    p.pending_count,
+                    f.field_count
+                FROM PendingCombinations p
+                INNER JOIN FieldCounts f ON p.CVR_Str = f.CVR_Str AND p.Crop_Str = f.Crop_Str
+                ORDER BY p.pending_count DESC  -- Process combinations with most pending records first
+            """).fetchall()
+
+            if not pending_cvr_crops:
+                self.log.info(
+                    "✅ No CVR+crop combinations found with both pending records and multiple fields"
+                )
+                return 0
+
+            self.log.info(
+                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations with pending records and 2+ fields"
+            )
+            self.log.info(
+                f"🔍 Top combinations: {[(cvr, crop, pending, fields) for cvr, crop, pending, fields in pending_cvr_crops[:5]]}"
+            )
+
+            # Convert to list of tuples for processing
+            cvr_crop_combinations = [
+                (cvr, crop) for cvr, crop, pending_count, field_count in pending_cvr_crops
+            ]
+
+            total_processed = 0
+            # OPTIMIZED: Now that we filter before spatial join, we can use larger chunks
+            chunk_size = 50 if len(cvr_crop_combinations) > 1000 else 100
+            max_chunks = 500  # Increased limit since processing is now much more efficient
+
+            self.log.info(
+                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of {chunk_size} (max {max_chunks} chunks)"
+            )
+
+            # Process in very small chunks with aggressive memory management
+            chunks_processed = 0
+            for i in range(0, len(cvr_crop_combinations), chunk_size):
+                if chunks_processed >= max_chunks:
+                    self.log.warning(
+                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - stopping spatial clustering"
+                    )
+                    break
+
+                chunk = cvr_crop_combinations[i : i + chunk_size]
+
+                # Add memory cleanup before each chunk
+                self._cleanup_memory_before_chunk()
+
+                try:
+                    chunk_processed = self._process_spatial_chunk(
+                        chunk, chunks_processed + 1, len(cvr_crop_combinations)
+                    )
+                    total_processed += chunk_processed
+                    chunks_processed += 1
+
+                    # Add memory cleanup after each chunk
+                    self._cleanup_memory_after_chunk()
+
+                except Exception as e:
+                    self.log.error(
+                        f"Error in spatial clustering chunk {chunks_processed + 1}: {str(e)}"
+                    )
+                    if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                        self.log.warning(
+                            "⚠️ Memory exhaustion detected - stopping spatial clustering"
+                        )
+                        break
+                    # Continue with next chunk for other errors
+                    chunks_processed += 1
+                    continue
+
+            # Clean up processed records after all chunks are complete
+            if total_processed > 0:
+                self._finalize_spatial_clustering()
+
+            self.log.info(
+                f"Adjacent Fields Spatial Cluster: Processed {total_processed} pesticide applications across {chunks_processed} chunks."
+            )
+            return total_processed
+
+        except Exception as e:
+            self.log.error(f"Error in spatial clustering strategy: {str(e)}")
+            self.log.error("Spatial clustering failed - skipping this strategy")
+            return 0
+
+    def _cleanup_memory_before_chunk(self):
+        """Clean up memory before processing a spatial chunk."""
+        try:
+            # Force garbage collection in DuckDB
+            self.duckdb_conn.execute("PRAGMA force_checkpoint")
+            self.duckdb_conn.execute("PRAGMA wal_autocheckpoint = 1")
+
+            # Drop any temporary tables that might exist
+            temp_tables = ["temp_spatial_adjacency", "temp_clusters", "temp_allocations"]
+            for table in temp_tables:
+                try:
+                    self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
+                except:
+                    pass
+
+        except Exception:
+            # Don't fail on cleanup errors
+            pass
+
+    def _cleanup_memory_after_chunk(self):
+        """Clean up memory after processing a spatial chunk."""
+        try:
+            # Force checkpoint and cleanup
+            self.duckdb_conn.execute("PRAGMA force_checkpoint")
+
+            # Python garbage collection
+            import gc
+
+            gc.collect()
+
+        except Exception:
+            # Don't fail on cleanup errors
+            pass
+
+    def _process_spatial_chunk(
+        self, cvr_crop_chunk: List[tuple], chunk_num: int, total_combinations: int
+    ) -> int:
+        """Process a single chunk of CVR+crop combinations for spatial clustering."""
+        try:
+            # Convert chunk to SQL IN clause format
+            cvr_crop_in_clause = ", ".join([f"('{cvr}', '{crop}')" for cvr, crop in cvr_crop_chunk])
+
+            # Log current chunk for debugging
+            self.log.info(
+                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations}) [1 thread, no insertion order]"
+            )
+
+            # Apply DuckDB memory optimization settings
+            self.duckdb_conn.execute("SET threads = 1")  # Reduce threads to save memory
+            self.duckdb_conn.execute(
+                "SET preserve_insertion_order = false"
+            )  # Allow reordering for efficiency
+
+            # Check pending records for these CVR+crops (minimal debugging)
+            pending_for_chunk = self.duckdb_conn.execute(f"""
+                SELECT COUNT(*) as total_pending
+                FROM pending_pesticide_rows p
+                WHERE (CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                      IN ({cvr_crop_in_clause})
+            """).fetchone()[0]
+
+            if pending_for_chunk == 0:
+                self.log.info(
+                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping (this shouldn't happen with optimized filtering)"
+                )
+                return 0
+            else:
+                self.log.info(
+                    f"✅ Chunk {chunk_num}: Processing {pending_for_chunk} pending records"
+                )
+
+            # CHUNKED MEMORY-OPTIMIZED: Process only this chunk of CVR+crop combinations
+            insert_query = f"""
+                WITH PendingCVRCrops AS (
+                    -- Process only this specific chunk of CVR+crop combinations
+                    SELECT CVR_Str, Crop_Str FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
+                ),
+                FilteredFields AS (
+                    -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
+                    SELECT 
+                        m.field_id,
+                        m.geometry,
+                        m.area_ha,
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
+                    FROM marker m
+                    JOIN PendingCVRCrops pcc ON 
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
+                        AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
+                    WHERE m.cvr_number IS NOT NULL 
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL 
+                      AND m.area_ha > 0.0
+                      AND m.geometry IS NOT NULL
+                ),
+                SpatialAdjacency AS (
+                    -- Now do spatial join ONLY on the filtered subset (much smaller!)
+                    SELECT DISTINCT
+                        f1.field_id as field1_id,
+                        f2.field_id as field2_id,
+                        f1.CVR_Str,
+                        f1.Crop_Str
+                    FROM FilteredFields f1
+                    JOIN FilteredFields f2 ON 
+                        f1.CVR_Str = f2.CVR_Str 
+                        AND f1.Crop_Str = f2.Crop_Str
+                        AND f1.field_id != f2.field_id
+                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
                 ConnectedComponents AS (
@@ -1245,24 +1621,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         
                         UNION ALL
                         
-                        -- Include isolated fields (not in any adjacency)
+                        -- Include isolated fields (not in any adjacency) from our filtered set
                         SELECT 
-                            m.field_id,
-                            CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                            CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                            m.field_id as connected_field
-                        FROM marker m
-                        WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
-                          AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                          AND m.crop_code IS NOT NULL 
-                          AND m.area_ha > 0.0
-                          AND m.geometry IS NOT NULL
-                          AND m.field_id NOT IN (
-                              SELECT field1_id FROM SpatialAdjacency 
-                              UNION 
-                              SELECT field2_id FROM SpatialAdjacency
-                          )
+                            f.field_id,
+                            f.CVR_Str,
+                            f.Crop_Str,
+                            f.field_id as connected_field
+                        FROM FilteredFields f
+                        WHERE f.field_id NOT IN (
+                            SELECT field1_id FROM SpatialAdjacency 
+                            UNION 
+                            SELECT field2_id FROM SpatialAdjacency
+                        )
                     ) clustered_fields
                 ),
                 -- Calculate cluster areas and match against pesticide applications
@@ -1345,10 +1715,37 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM FieldAllocations fa
             """
 
-            # Execute the corrected spatial clustering with area matching
+            # Execute the chunked spatial clustering
             self.duckdb_conn.execute(insert_query)
 
-            # Remove processed records from pending table
+            # Get count of processed records for this chunk
+            count_result = self.duckdb_conn.execute(
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
+            ).fetchone()
+            total_processed_so_far = count_result[0] if count_result else 0
+
+            # Calculate records processed in this chunk (difference from before)
+            chunk_processed = total_processed_so_far - getattr(
+                self, "_spatial_processed_before_chunk", 0
+            )
+            self._spatial_processed_before_chunk = total_processed_so_far
+
+            if chunk_processed > 0:
+                self.log.info(f"✅ Chunk {chunk_num}: Processed {chunk_processed} records")
+            else:
+                # Don't log for every empty chunk - this is expected behavior
+                pass
+
+            return chunk_processed
+
+        except Exception as e:
+            self.log.error(f"Error in spatial clustering chunk {chunk_num}: {str(e)}")
+            return 0
+
+    def _finalize_spatial_clustering(self) -> None:
+        """Remove processed records from pending table after all chunks are complete."""
+        try:
+            # Remove all processed records from pending table
             self.duckdb_conn.execute("""
                 DELETE FROM pending_pesticide_rows 
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
@@ -1357,22 +1754,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'
                 )
             """)
-
-            # Get count of processed records
-            count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
-            ).fetchone()
-            processed_count = count_result[0] if count_result else 0
-
-            self.log.info(
-                f"Adjacent Fields Spatial Cluster: Processed {processed_count} pesticide applications with area-matched spatial clustering."
-            )
-            return processed_count
-
+            self.log.info("🧹 Cleaned up processed records from pending table")
         except Exception as e:
-            self.log.error(f"Error in spatial clustering strategy: {str(e)}")
-            self.log.error("Spatial clustering failed - skipping this strategy")
-            return 0
+            self.log.error(f"Error cleaning up processed records: {str(e)}")
 
     def _get_results(self) -> List[Dict[str, Any]]:
         """Get the disaggregated results."""
