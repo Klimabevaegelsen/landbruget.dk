@@ -95,7 +95,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/bbr_buildings
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install BBR buildings pipeline dependencies
+        cd ../bbr_buildings
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
         uv pip install --system -e .
@@ -220,7 +225,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/bbr_buildings
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install BBR buildings pipeline dependencies
+        cd ../bbr_buildings
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
         uv pip install --system -e .
@@ -324,7 +334,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: inspire-bbr-data-${{ github.run_id }}
-        path: backend/pipelines/bbr_buildings/
+        path: .
 
     - name: Process Bronze Layer - Spatial Join
       id: process-bronze
