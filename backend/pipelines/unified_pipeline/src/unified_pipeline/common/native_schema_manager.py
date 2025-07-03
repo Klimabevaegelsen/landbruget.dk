@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 import duckdb
 
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 
@@ -188,8 +187,10 @@ class NativeSchemaManager:
         gcs_path = f"{bucket_path.rstrip('/')}/{filename}"
 
         try:
-            gcs_util = GCSUtil()
-            gcs_util.upload_json_to_gcs(schema_info, gcs_path)
+            from unified_pipeline.util.gcs_access import GCSDataAccess
+
+            gcs_access = GCSDataAccess()
+            gcs_access.upload_json(schema_info, gcs_path)
             self.logger.info(f"Schema saved to GCS: {gcs_path}")
             return gcs_path
 

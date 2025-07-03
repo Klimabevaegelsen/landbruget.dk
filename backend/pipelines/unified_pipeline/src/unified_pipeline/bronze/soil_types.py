@@ -18,9 +18,7 @@ from typing import Any, Optional
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class SoilTypesBronzeConfig(BaseJobConfig):
     """
@@ -54,7 +52,6 @@ class SoilTypesBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True)
 
-
 class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for soil types data.
@@ -73,15 +70,13 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     4. Save to Google Cloud Storage as GeoParquet
     """
 
-    def __init__(self, config: SoilTypesBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: SoilTypesBronzeConfig):
         """
         Initialize the SoilTypesBronze source.
 
         Args:
-            config (SoilTypesBronzeConfig): Configuration for the data source
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (SoilTypesBronzeConfig): Configuration for the data source        """
+        super().__init__(config)
 
     async def _fetch_soil_types_data(self) -> Optional[Any]:
         """

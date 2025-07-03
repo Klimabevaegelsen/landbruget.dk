@@ -9,15 +9,6 @@ import pytest
 
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
 
-
-@pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Create a mock GCS utility."""
-    mock = MagicMock()
-    mock.upload_blob = MagicMock()
-    return mock
-
-
 @pytest.fixture
 def config() -> FVMWFSBronzeConfig:
     """Create a test configuration."""
@@ -28,12 +19,10 @@ def config() -> FVMWFSBronzeConfig:
         save_local=True,
     )
 
-
 @pytest.fixture
-def fvm_wfs_bronze(config: FVMWFSBronzeConfig, mock_gcs_util: MagicMock) -> FVMWFSBronze:
+def fvm_wfs_bronze(config: FVMWFSBronzeConfig) -> FVMWFSBronze:
     """Create a FVM WFS bronze instance."""
-    return FVMWFSBronze(config, mock_gcs_util)
-
+    return FVMWFSBronze(config)
 
 def get_async_mock_session(response: AsyncMock) -> MagicMock:
     """Create a mock aiohttp session."""
@@ -49,7 +38,6 @@ def get_async_mock_session(response: AsyncMock) -> MagicMock:
     mock_session.get.return_value = MockGetContextManager()
     return mock_session
 
-
 def test_fvm_wfs_bronze_config() -> None:
     """Test FVM WFS bronze configuration."""
     config = FVMWFSBronzeConfig()
@@ -63,7 +51,6 @@ def test_fvm_wfs_bronze_config() -> None:
     assert len(config.marker_years) == 18  # 2008-2025
     assert len(config.smaabiotoper_years) == 3  # 2023-2025
 
-
 def test_get_layer_name(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test layer name generation."""
     # Test Markblokke
@@ -74,7 +61,6 @@ def test_get_layer_name(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
     # Test Smaabiotoper
     assert fvm_wfs_bronze._get_layer_name("Smaabiotoper", 2024) == "Marker:Smaabiotoper_2024"
-
 
 def test_get_wfs_params(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test WFS parameter generation."""
@@ -106,7 +92,6 @@ def test_get_wfs_params(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
     assert params == expected_params
 
-
 @pytest.mark.asyncio
 async def test_get_total_count_success(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test successful feature count retrieval."""
@@ -122,7 +107,6 @@ async def test_get_total_count_success(fvm_wfs_bronze: FVMWFSBronze) -> None:
     count = await fvm_wfs_bronze._get_total_count(mock_session, "Markblokke:Markblokke_2024")
     assert count == 12345
 
-
 @pytest.mark.asyncio
 async def test_get_total_count_error_status(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test feature count retrieval with error status."""
@@ -134,7 +118,6 @@ async def test_get_total_count_error_status(fvm_wfs_bronze: FVMWFSBronze) -> Non
 
     with pytest.raises(Exception, match="Error getting count"):
         await fvm_wfs_bronze._get_total_count(mock_session, "Markblokke:Markblokke_2024")
-
 
 @pytest.mark.asyncio
 async def test_fetch_layer_data_success(fvm_wfs_bronze: FVMWFSBronze) -> None:
@@ -148,7 +131,6 @@ async def test_fetch_layer_data_success(fvm_wfs_bronze: FVMWFSBronze) -> None:
     data = await fvm_wfs_bronze._fetch_layer_data(mock_session, "Markblokke:Markblokke_2024")
     assert data == '{"type": "FeatureCollection", "features": []}'
 
-
 @pytest.mark.asyncio
 async def test_fetch_layer_data_error(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test layer data fetching with error."""
@@ -160,7 +142,6 @@ async def test_fetch_layer_data_error(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
     with pytest.raises(Exception, match="Error response 500"):
         await fvm_wfs_bronze._fetch_layer_data(mock_session, "Markblokke:Markblokke_2024")
-
 
 def test_create_dataframe(fvm_wfs_bronze: FVMWFSBronze) -> None:
     """Test  creation from raw data."""

@@ -13,15 +13,6 @@ from unified_pipeline.bronze.agricultural_fields import (
     AgriculturalFieldsBronze,
     AgriculturalFieldsBronzeConfig,
 )
-from unified_pipeline.util.gcs_util import GCSUtil
-
-
-@pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Return a mock GCSUtil instance."""
-    mock_gcs = MagicMock(spec=GCSUtil)
-    mock_gcs.upload_blob = MagicMock()
-    return mock_gcs
 
 
 @pytest.fixture
@@ -42,11 +33,9 @@ def config() -> AgriculturalFieldsBronzeConfig:
 
 
 @pytest.fixture
-def agricultural_fields_bronze(
-    config: AgriculturalFieldsBronzeConfig, mock_gcs_util: MagicMock
-) -> AgriculturalFieldsBronze:
+def agricultural_fields_bronze(config: AgriculturalFieldsBronzeConfig) -> AgriculturalFieldsBronze:
     """Return a test AgriculturalFieldsBronze instance."""
-    source = AgriculturalFieldsBronze(config, mock_gcs_util)
+    source = AgriculturalFieldsBronze(config)
     source.log = MagicMock()
     return source
 
@@ -189,17 +178,17 @@ async def test_process_data(
     mock_client_session.get.return_value.__aexit__.return_value = None
     mock_client_session.get.return_value.status = 200
 
-    # Mock the save_raw_data method using patch.object
+    # Mock the save_data_direct method using patch.object
     with (
-        patch.object(AgriculturalFieldsBronze, "_save_raw_data") as mock_save_raw_data,
+        patch.object(AgriculturalFieldsBronze, "save_data_direct") as mock_save_data_direct,
         patch("aiohttp.ClientSession", return_value=mock_client_session),
     ):
-        await agricultural_fields_bronze._process_data("https://test.url", "test_fields")
+        await agricultural_fields_bronze._process_data("https://test.url", "test_fields", 2024)
 
         mock_get_total_count.assert_called_once()
 
         assert mock_fetch_chunk.call_count == 2
-        mock_save_raw_data.assert_called_once()
+        mock_save_data_direct.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -210,7 +199,7 @@ async def test_process_data_when_total_count_is_zero(
     agricultural_fields_bronze._get_total_count = AsyncMock(return_value=0)  # type: ignore[method-assign]
     agricultural_fields_bronze._fetch_chunk = AsyncMock()  # type: ignore[method-assign]
 
-    await agricultural_fields_bronze._process_data("https://test.url", "test_fields")
+    await agricultural_fields_bronze._process_data("https://test.url", "test_fields", 2024)
 
     agricultural_fields_bronze._fetch_chunk.assert_not_called()
 
@@ -223,8 +212,8 @@ async def test_run_success(agricultural_fields_bronze: AgriculturalFieldsBronze)
     await agricultural_fields_bronze.run()
 
     assert (
-        agricultural_fields_bronze._process_data.call_count == 2
-    )  # Should be called for fields and blocks
+        agricultural_fields_bronze._process_data.call_count == 11
+    )  # Should be called for 6 fields years (2020-2025) + 5 blocks years (2020-2024)
 
 
 @pytest.mark.asyncio
@@ -237,25 +226,5 @@ async def test_run_with_exception(agricultural_fields_bronze: AgriculturalFields
         await agricultural_fields_bronze.run()
 
 
-def test_create_raw_dataframe(agricultural_fields_bronze: AgriculturalFieldsBronze) -> None:
-    """Test creating a DuckDB table from raw data."""
-    data = [
-        "{'id': 1, 'name': 'Field1', 'geometry': 'Polygon'}",
-        "{'id': 2, 'name': 'Field2', 'geometry': 'Polygon'}",
-    ]  # noqa: E501
-    table_name = agricultural_fields_bronze.create_dataframe(data, 2024)
-
-    # ✅ MIGRATION: Method now returns table name instead of 
-    assert isinstance(table_name, str)
-    assert table_name  # Should be non-empty string
-
-    # Verify the table was created in DuckDB
-    result = agricultural_fields_bronze.conn.execute(
-        f"SELECT COUNT(*) FROM {table_name}"
-    ).fetchone()
-    assert result[0] == 2
-
-    # Verify the table has the expected columns
-    columns_result = agricultural_fields_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
-    column_names = {row[0] for row in columns_result}
-    assert {"payload", "created_at", "source", "updated_at"}.issubset(column_names)
+# NOTE: create_dataframe method was removed from AgriculturalFieldsBronze
+# as the data processing is now handled directly in _process_data method

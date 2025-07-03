@@ -20,8 +20,6 @@ from typing import Any, Optional
 # ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -74,28 +72,17 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     6. Saving the processed data back to GCS.
     """
 
-    def __init__(self, config: BNBOStatusSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: BNBOStatusSilverConfig):
         """
         Initialize the BNBOStatusSilver processor.
 
         Args:
-            config (BNBOStatusSilverConfig): Configuration object for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+            config (BNBOStatusSilverConfig): Configuration object for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for BNBO status processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ BNBOStatusSilver: Using unified GCS access and DuckDB connection")
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """
@@ -304,6 +291,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Get data for iteration - only fetch when needed
             raw_df = self.conn.execute(f"SELECT * FROM {raw_data}").fetchall()
             columns = [desc[0] for desc in self.conn.description]
+        elif isinstance(raw_data, dict) and "payload" in raw_data:
+            # Handle dictionary format for backward compatibility (mainly for tests)
+            self.log.info("Processing dictionary format data (test compatibility)")
+            raw_df = [(payload,) for payload in raw_data["payload"]]
+            columns = ["payload"]
         else:
             # Handle other data types (fallback)
             self.log.warning(f"Unexpected raw_data type: {type(raw_data)}")

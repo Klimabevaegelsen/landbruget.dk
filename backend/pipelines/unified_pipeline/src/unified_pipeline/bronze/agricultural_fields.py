@@ -26,9 +26,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     """
@@ -96,7 +94,6 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for agricultural fields data.
@@ -114,15 +111,14 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
     3. Save raw responses to Google Cloud Storage
     """
 
-    def __init__(self, config: AgriculturalFieldsBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: AgriculturalFieldsBronzeConfig):
         """
         Initialize the AgriculturalFieldsBronze source.
 
         Args:
             config (AgriculturalFieldsBronzeConfig): Configuration for the data source
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
         """
-        super().__init__(config, gcs_util)
+        super().__init__(config)
 
     async def _get_total_count(self, session: aiohttp.ClientSession, url: str) -> int:
         """

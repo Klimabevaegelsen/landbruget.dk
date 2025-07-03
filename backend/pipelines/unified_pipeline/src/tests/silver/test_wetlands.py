@@ -3,21 +3,17 @@ Tests for the WetlandsSilver class.
 """
 
 import xml.etree.ElementTree as ET
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
+import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
+
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
-from unified_pipeline.util.gcs_util import GCSUtil
 
-
-@pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Return a mock GCSUtil instance."""
-    mock_gcs = MagicMock(spec=GCSUtil)
-    mock_gcs.read_parquet = MagicMock()
-    mock_gcs.upload_blob = MagicMock()
-    return mock_gcs
+# Alias for geopandas.GeoDataFrame to match usage in tests
+gGeo = gpd.GeoDataFrame
 
 
 @pytest.fixture
@@ -37,9 +33,9 @@ def config() -> WetlandsSilverConfig:
 
 
 @pytest.fixture
-def silver_source(config: WetlandsSilverConfig, mock_gcs_util: MagicMock) -> WetlandsSilver:
+def silver_source(config: WetlandsSilverConfig) -> WetlandsSilver:
     """Return a test WetlandsSilver instance."""
-    source = WetlandsSilver(config, mock_gcs_util)
+    source = WetlandsSilver(config)
     source.log = MagicMock()
     return source
 
@@ -78,13 +74,13 @@ def sample_xml() -> str:
 
 
 @pytest.fixture
-def sample_dataframe(sample_xml: str) -> :
-    """Return a sample  with XML payloads."""
-    return ({"payload": [sample_xml]})
+def sample_dataframe(sample_xml: str) -> dict:
+    """Return a sample dataframe with XML payloads."""
+    return {"payload": [sample_xml]}
 
 
 @pytest.fixture
-def simple_geodataframe() -> gGeo:
+def simple_geodataframe() -> Any:
     """Return a simple Geo for testing the dissolve function."""
     data = {
         "id": ["1", "2", "3", "4"],
@@ -342,9 +338,7 @@ def test_process_xml_data_error(mock_fromstring: MagicMock, silver_source: Wetla
         silver_source._process_xml_data(({"payload": ["<invalid>"]}))
 
 
-def test_process_xml_data_success(
-    silver_source: WetlandsSilver, sample_dataframe: 
-) -> None:
+def test_process_xml_data_success(silver_source: WetlandsSilver, sample_dataframe: dict) -> None:
     """Test successfully processing XML data."""
     result = silver_source._process_xml_data(sample_dataframe)
 
@@ -543,12 +537,12 @@ def test_create_dissolved_df_merged_tracking(
 async def test_run_success(silver_source: WetlandsSilver) -> None:
     """Test successful run of the pipeline."""
     # Mock methods
-    silver_source._read_bronze_data = MagicMock(
-        return_value=({"payload": ["<xml></xml>"]})
-    )
-    silver_source._process_xml_data = MagicMock(return_value=gGeo())
-    silver_source._create_dissolved_df = MagicMock(return_value=gGeo())
-    silver_source._save_data = MagicMock()
+    silver_source._read_bronze_data = MagicMock(return_value=({"payload": ["<xml></xml>"]}))
+    silver_source._process_xml_data = MagicMock(return_value="test_table")  # Returns table name now
+    silver_source._create_dissolved_df = MagicMock(
+        return_value="test_dissolved_table"
+    )  # Returns table name now
+    silver_source.save_data_direct = MagicMock()  # Uses save_data_direct now
 
     await silver_source.run()
 
@@ -558,18 +552,20 @@ async def test_run_success(silver_source: WetlandsSilver) -> None:
     )
     silver_source._process_xml_data.assert_called_once()
     silver_source._create_dissolved_df.assert_called_once()
-    assert silver_source._save_data.call_count == 2
-    silver_source._save_data.assert_has_calls(
+    assert silver_source.save_data_direct.call_count == 2
+    silver_source.save_data_direct.assert_has_calls(
         [
             call(
-                silver_source._process_xml_data.return_value,
+                "test_table",
                 silver_source.config.dataset,
                 silver_source.config.bucket,
+                "silver",
             ),
             call(
-                silver_source._create_dissolved_df.return_value,
+                "test_dissolved_table",
                 f"{silver_source.config.dataset}_dissolved",
                 silver_source.config.bucket,
+                "silver",
             ),
         ]
     )

@@ -9,6 +9,30 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+def _get_optimized_gcs_access():
+    """
+    Get optimized GCS access with robust import handling.
+
+    Returns GCSDataAccess if available, otherwise None for fallback.
+    """
+    try:
+        # Primary import path - should work when unified_pipeline is properly installed
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        logging.info("✅ Successfully imported optimized GCSDataAccess")
+        return GCSDataAccess
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logging.warning(
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+        )
+        return None
+
+
+# Get optimized GCS access class or None if not available
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
+
 class BMDScraper:
     def __init__(self, base_url="https://bmd.mst.dk", output_dir="data"):
         self.base_url = base_url
@@ -200,26 +224,17 @@ class GCSStorage:
 
         # ✅ OPTIMIZED: Initialize optimized GCS access
         self.gcs_access = None
-        if self.is_available:
+        self.use_optimized = False
+
+        if self.is_available and OptimizedGCSDataAccess:
             try:
-                # Import optimized GCS access using proper Python path
-                import sys
-                from pathlib import Path
-
-                # Add the backend directory to Python path
-                backend_path = Path(__file__).parent.parent.parent.parent
-                unified_pipeline_path = backend_path / "pipelines" / "unified_pipeline" / "src"
-
-                if str(unified_pipeline_path) not in sys.path:
-                    sys.path.insert(0, str(unified_pipeline_path))
-
-                from unified_pipeline.util.gcs_access import GCSDataAccess
-
-                self.gcs_access = GCSDataAccess()
+                self.gcs_access = OptimizedGCSDataAccess()
+                self.use_optimized = True
                 logging.info("✅ BMD GCSStorage: Initialized optimized GCS access")
             except Exception as e:
                 logging.warning(f"Failed to initialize optimized GCS access: {e}")
                 self.gcs_access = None
+                self.use_optimized = False
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -244,7 +259,7 @@ class GCSStorage:
 
         try:
             # ✅ OPTIMIZED: Use streaming upload if available
-            if self.gcs_access:
+            if self.use_optimized and self.gcs_access:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory

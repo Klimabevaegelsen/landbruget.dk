@@ -22,7 +22,7 @@ import time
 import warnings
 from contextlib import contextmanager
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import duckdb
 import gcsfs
@@ -98,29 +98,61 @@ class ResourceMonitor:
 class GCSDataAccess:
     """Unified GCS data access optimized for maximum performance."""
 
-    def __init__(self):
+    def __init__(self, connection: Optional[duckdb.DuckDBPyConnection] = None):
+        """
+        Initialize GCS access with optional DuckDB connection.
+
+        Uses fsspec + gcsfs for optimal performance (5x faster than httpfs).
+        Based on DuckDB GitHub issue #15140 findings.
+
+        Args:
+            connection: Existing DuckDB connection to reuse. If None, creates new one.
+        """
         self.fs = get_gcs_filesystem()
-        # Create a fresh connection for this instance
-        self.duckdb_conn = duckdb.connect()
 
-        # Initialize logger for this instance
-        self.log = logger
-
-        # Configure DuckDB with spatial and gcsfs
-        try:
-            self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
-
-            # Register gcsfs filesystem
-            from fsspec import filesystem
-
-            fs = filesystem("gs")
-            self.duckdb_conn.register_filesystem(fs)
-
-            logger.info("✅ GCSDataAccess: DuckDB configured with gcsfs integration")
-        except Exception as e:
-            logger.warning(f"DuckDB configuration warning: {e}")
+        if connection:
+            self.duckdb_conn = connection
+            self.log = logger
+            self.log.info("✅ GCSDataAccess: Using provided DuckDB connection")
+        else:
+            # Create a fresh connection for this instance
+            self.duckdb_conn = duckdb.connect()
+            self.log = logger
+            self._configure_duckdb()
+            self.log.info("✅ GCSDataAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
+
+    def _configure_duckdb(self):
+        """
+        Configure DuckDB with optimal settings and gcsfs integration.
+
+        VERIFIED APPROACH: Uses fsspec + gcsfs instead of httpfs for 5x performance gain.
+        Reference: DuckDB GitHub issue #15140
+        """
+        try:
+            # Performance settings
+            self.duckdb_conn.execute("SET memory_limit = '12GB'")
+            self.duckdb_conn.execute("SET max_memory = '12GB'")
+            self.duckdb_conn.execute("SET threads = 4")
+            self.duckdb_conn.execute("SET enable_progress_bar = true")
+
+            # Install spatial extension
+            self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
+
+            # CRITICAL: Register gcsfs filesystem for optimal GCS performance
+            # This approach is 5x faster than httpfs according to benchmarks
+            from fsspec import filesystem
+
+            fs = filesystem("gs")  # Uses gcsfs under the hood
+            self.duckdb_conn.register_filesystem(fs)
+
+            logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
+            logger.info(
+                "✅ Using fsspec + gcsfs for optimal GCS performance (5x faster than httpfs)"
+            )
+        except Exception as e:
+            logger.warning(f"DuckDB configuration warning: {e}")
 
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""

@@ -24,9 +24,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     """
@@ -90,7 +88,6 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for Jordbrugsanalyser marker data.
@@ -111,15 +108,13 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
     4. Save raw WFS responses to Google Cloud Storage
     """
 
-    def __init__(self, config: JordbrugsanalyserBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: JordbrugsanalyserBronzeConfig):
         """
         Initialize the JordbrugsanalyserBronze source.
 
         Args:
-            config (JordbrugsanalyserBronzeConfig): Configuration for the data source
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (JordbrugsanalyserBronzeConfig): Configuration for the data source        """
+        super().__init__(config)
 
     def _get_layer_name(self, year: int) -> str:
         """

@@ -5,12 +5,11 @@ This module tests the bronze layer data ingestion for Danish Statistics data,
 including configuration validation, API client functionality, and data processing.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from unified_pipeline.bronze.dst import DSTApiClient, DSTBronze, DSTBronzeConfig
-from unified_pipeline.util.gcs_util import GCSUtil
 
 
 class TestDSTBronzeConfig:
@@ -122,15 +121,15 @@ class TestDSTBronze:
     """Test cases for DSTBronze."""
 
     @pytest.fixture
-    def mock_gcs_util(self):
-        """Create a mock GCS utility."""
-        return MagicMock(spec=GCSUtil)
+    def mock_gcs_access(self):
+        """Mock GCS access for testing."""
+        return Mock()
 
     @pytest.fixture
-    def dst_bronze(self, mock_gcs_util):
+    def dst_bronze(self):
         """Create a DSTBronze instance for testing."""
         config = DSTBronzeConfig(table_ids=["HST77"])
-        return DSTBronze(config, mock_gcs_util)
+        return DSTBronze(config)
 
     def test_initialization(self, dst_bronze):
         """Test DSTBronze initialization."""

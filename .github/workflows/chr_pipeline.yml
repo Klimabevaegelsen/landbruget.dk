@@ -90,7 +90,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -202,7 +207,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -316,7 +326,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -417,7 +432,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -530,7 +550,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -670,7 +695,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/chr_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
         uv pip install --system -e .
 
     - id: 'auth'

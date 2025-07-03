@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from typing import List, Optional
 
 import aiohttp
@@ -7,7 +8,6 @@ from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 
 # async def fetch(session, url):
 #     async with session.get(url) as response:
@@ -29,41 +29,54 @@ class SpfSuBronzeConfig(BaseJobConfig):
 
 
 class SpfSuBronze(BaseSource[SpfSuBronzeConfig], BronzeJobInterface):
-    def __init__(self, config: SpfSuBronzeConfig, gcs_util: GCSUtil) -> None:
-        super().__init__(config, gcs_util)
+    def __init__(self, config: SpfSuBronzeConfig) -> None:
+        super().__init__(config)
 
-    def fetch_silver_data_chr(self):
+    def fetch_silver_data_chr(self) -> List[int]:
         """
-        Fetch all herd_number values from parquet files in the latest silver/chr timestamp folder.
+        Fetch all herd_number values from parquet files in the latest silver/chr folder.
         """
-        import tempfile
+        self.log.info("Fetching CHR data to get herd numbers for SPF SU")
 
-        client = self.gcs_util.get_gcs_client()
-        prefix = "silver/chr/"
-        blobs = client.list_blobs(self.config.bucket, prefix=prefix)
-        ts_map: dict[str, list[str]] = {}
-        for blob in blobs:
-            if not blob.name.endswith(".parquet"):
-                continue
-            parts = blob.name.split("/")
-            if len(parts) < 4:
-                continue
-            ts = parts[2]
-            ts_map.setdefault(ts, []).append(blob.name)
-        if not ts_map:
+        # Use modern GCS access to find the latest CHR data
+        gcs_pattern = f"gs://{self.config.bucket}/silver/chr/*/*.parquet"
+        files = self.gcs_access.list_files(gcs_pattern)
+
+        if not files:
+            self.log.warning("No CHR silver data found.")
             return []
-        latest_ts = max(ts_map.keys())
-        # Download and read parquet files to extract herd_number
-        bucket = client.bucket(self.config.bucket)
-        temp_dir = tempfile.mkdtemp(prefix=f"spf_su_{latest_ts}_")
-        herd_numbers: list = []
-        for path in ts_map[latest_ts]:
-            local = os.path.join(temp_dir, os.path.basename(path))
-            bucket.blob(path).download_to_filename(local)
-            chr_data = self.conn.execute(f"SELECT * FROM read_parquet('{local}')").fetchdf()
-            if "herd_number" in chr_data.columns:
-                herd_numbers.extend(chr_data["herd_number"].dropna().tolist())
-        return herd_numbers
+
+        # The latest timestamp will be last when sorted
+        latest_file = sorted(files, reverse=True)[0]
+        timestamp_match = re.search(r"/(\d{8}_\d{6})/", latest_file)
+        if not timestamp_match:
+            self.log.warning(f"Could not extract timestamp from {latest_file}")
+            return []
+
+        latest_ts = timestamp_match.group(1)
+        self.log.info(f"Found latest CHR data from timestamp: {latest_ts}")
+
+        # Get all files from the latest timestamp
+        latest_files_pattern = f"gs://{self.config.bucket}/silver/chr/{latest_ts}/*.parquet"
+        latest_files = self.gcs_access.list_files(latest_files_pattern)
+
+        if not latest_files:
+            self.log.warning(f"No files found for latest timestamp: {latest_ts}")
+            return []
+
+        # Create a unified table from all parquet files of the latest run
+        table_name = "chr_silver_data"
+        file_list_str = ", ".join([f"'{f}'" for f in latest_files])
+        self.conn.execute(
+            f"CREATE OR REPLACE TABLE {table_name} AS SELECT herd_number FROM read_parquet([{file_list_str}])"
+        )
+
+        # Fetch herd numbers and filter out nulls
+        herd_numbers_df = self.conn.execute(
+            f"SELECT DISTINCT herd_number FROM {table_name} WHERE herd_number IS NOT NULL"
+        ).fetchdf()
+
+        return herd_numbers_df["herd_number"].tolist()
 
     async def get_spf_su(self, session, herd_number: int):
         self.log.info(f"Fetching SPF SU for herd number: {herd_number}")

@@ -8,8 +8,6 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.schema.spf_su import SpfSuResponse
-from unified_pipeline.util.gcs_util import GCSUtil
-
 
 class SpfSuSilverConfig(BaseJobConfig):
     name: str = "Danish SPF SU"
@@ -22,10 +20,9 @@ class SpfSuSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class SpfSuSilver(BaseSource[SpfSuSilverConfig], SilverJobInterface):
-    def __init__(self, config: SpfSuSilverConfig, gcs_util: GCSUtil) -> None:
-        super().__init__(config, gcs_util)
+    def __init__(self, config: SpfSuSilverConfig) -> None:
+        super().__init__(config)
 
     def _validate_and_transform(self, data: list[dict]):
         """Parse and flatten bronze JSON data into tables using Pydantic schema and DuckDB."""

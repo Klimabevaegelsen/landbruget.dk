@@ -20,9 +20,7 @@ import ibis
 from ibis import _
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import timed
-
 
 class DSTSilverConfig(BaseJobConfig):
     """
@@ -42,7 +40,6 @@ class DSTSilverConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
     table_ids: list[str] = ["HST77", "GARTN1", "FRO", "HALM1"]
 
-
 class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
     """
     Silver layer processor for DST data using DuckDB and ibis.
@@ -60,15 +57,13 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
     5. Saving processed data to GCS
     """
 
-    def __init__(self, config: DSTSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DSTSilverConfig):
         """
         Initialize the DSTSilver processor.
 
         Args:
-            config: Configuration for the silver processing job
-            gcs_util: Utility for GCS operations
-        """
-        super().__init__(config, gcs_util)
+            config: Configuration for the silver processing job        """
+        super().__init__(config)
         # Configure ibis backend
         ibis.options.interactive = True
         self.ibis_con = ibis.duckdb.connect()

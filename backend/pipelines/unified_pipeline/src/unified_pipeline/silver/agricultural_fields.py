@@ -19,9 +19,7 @@ from typing import Any, Optional
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class AgriculturalFieldsSilverConfig(BaseJobConfig):
     """
@@ -64,7 +62,6 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "MARKBLOKTY": "block_type",
     }
 
-
 class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
     """
     Silver layer processor for agricultural fields data using DuckDB-spatial.
@@ -82,15 +79,13 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
     5. Saving processed data to GCS
     """
 
-    def __init__(self, config: AgriculturalFieldsSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: AgriculturalFieldsSilverConfig):
         """
         Initialize the AgriculturalFieldsSilver processor.
 
         Args:
-            config: Configuration for the silver processing job
-            gcs_util: Utility for GCS operations
-        """
-        super().__init__(config, gcs_util)
+            config: Configuration for the silver processing job        """
+        super().__init__(config)
         # Initialize DuckDB with spatial extension
         self._setup_duckdb()
 

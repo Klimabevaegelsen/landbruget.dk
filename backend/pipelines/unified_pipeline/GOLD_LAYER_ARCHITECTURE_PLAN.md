@@ -79,14 +79,16 @@ class Stage(Enum):
 **File**: `backend/pipelines/unified_pipeline/src/unified_pipeline/app.py`
 
 ```python
-async def execute_pipeline_jobs(jobs: list, gcs_util: GCSUtil, stage: cli.Stage) -> None:
-    """Execute pipeline jobs with support for gold layer and in-memory data passing."""
+async def execute_pipeline_jobs(jobs: list, stage: cli.Stage) -> None:
+    """
+    Execute a list of pipeline jobs concurrently.
+    """
     
     bronze_data = None
     silver_data = {}
     
     for job_cls, config_cls in jobs:
-        instance = job_cls(config=config_cls(), gcs_util=gcs_util)
+        instance = job_cls(config=config_cls())
         
         if issubclass(job_cls, BronzeJobInterface):
             bronze_data = await instance.run()

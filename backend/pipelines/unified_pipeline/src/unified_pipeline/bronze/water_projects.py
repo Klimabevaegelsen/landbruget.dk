@@ -25,9 +25,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class WaterProjectsBronzeConfig(BaseJobConfig):
     """
@@ -101,7 +99,6 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer data processor for Danish water projects.
@@ -119,12 +116,10 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
     - Unicode handling for various data encodings
 
     Args:
-        config: Configuration object containing job parameters
-        gcs_util: Utility for Google Cloud Storage operations
-    """
+        config: Configuration object containing job parameters    """
 
-    def __init__(self, config: WaterProjectsBronzeConfig, gcs_util: GCSUtil):
-        super().__init__(config, gcs_util)
+    def __init__(self, config: WaterProjectsBronzeConfig):
+        super().__init__(config)
 
     def _get_params(self, layer: str, start_index: int = 0) -> dict[str, str]:
         """

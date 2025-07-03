@@ -66,7 +66,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/svineflytning_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install svineflytning pipeline dependencies
+        cd ../svineflytning_pipeline
         uv pip install --system -e .
 
     - id: 'auth'

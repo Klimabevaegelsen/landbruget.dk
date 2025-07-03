@@ -47,7 +47,6 @@ from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGoldConfig,
 )
 from unified_pipeline.model import cli
-from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.silver.agricultural_fields import (
     AgriculturalFieldsSilver,
     AgriculturalFieldsSilverConfig,
@@ -67,15 +66,12 @@ from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverC
 from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
 
 
-async def execute_pipeline_jobs(
-    jobs: list, gcs_util: GCSUtil, stage: cli.Stage, cli_config: cli.CliConfig
-) -> None:
+async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.CliConfig) -> None:
     """
     Execute pipeline jobs with support for gold layer and in-memory data passing.
 
@@ -86,7 +82,6 @@ async def execute_pipeline_jobs(
 
     Args:
         jobs: List of (job_class, config_class) tuples to execute
-        gcs_util: GCS utility instance
         stage: The stage being executed (bronze, silver, or all)
         cli_config: CLI configuration containing filtering parameters
     """
@@ -102,7 +97,7 @@ async def execute_pipeline_jobs(
         if hasattr(config_instance, "apply_cli_filters"):
             config_instance.apply_cli_filters(cli_config)
 
-        instance = job_cls(config=config_instance, gcs_util=gcs_util)
+        instance = job_cls(config=config_instance)
 
         if issubclass(job_cls, BronzeJobInterface):
             # Bronze stage - get data for memory passing
@@ -148,8 +143,6 @@ def execute(cli_config: cli.CliConfig) -> None:
     """
     log = Logger.get_logger()
     log.info("Starting Unified Pipeline.")
-
-    gcs_util = GCSUtil(GCSConfig())
 
     # Define pipeline mapping for sources and stages
     pipeline_map = {
@@ -295,7 +288,7 @@ def execute(cli_config: cli.CliConfig) -> None:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing
-    asyncio.run(execute_pipeline_jobs(jobs, gcs_util, cli_config.stage, cli_config))
+    asyncio.run(execute_pipeline_jobs(jobs, cli_config.stage, cli_config))
 
     log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
 
@@ -373,3 +366,9 @@ def run_cli(
     )
     print(app_config)
     execute(app_config)
+
+
+def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
+    """Run a specific pipeline by name and stage."""
+    pipeline_jobs = get_pipeline_jobs(pipeline_name)
+    asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))
