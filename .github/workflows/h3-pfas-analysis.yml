@@ -1,0 +1,241 @@
+name: H3 PFAS Exposure Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2022,2023" or leave empty for all)'
+        required: false
+        default: ''
+      analysis_modes:
+        description: 'Analysis modes to run'
+        required: true
+        default: 'h3,kommune'
+        type: choice
+        options:
+          - 'h3'
+          - 'kommune'
+          - 'h3,kommune'
+          - 'all'
+      memory_limit:
+        description: 'Memory limit for DuckDB'
+        required: false
+        default: '12GB'
+      thread_count:
+        description: 'Number of threads'
+        required: false
+        default: '4'
+      chunk_size:
+        description: 'H3 cells per chunk'
+        required: false
+        default: '25000'
+  
+  schedule:
+    # Run weekly on Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+  
+  push:
+    paths:
+      - 'backend/pipelines/h3_pfas_exposure_pipeline/**'
+      - '.github/workflows/h3-pfas-analysis.yml'
+    branches:
+      - main
+
+env:
+  GCS_BUCKET: landbrugsdata-raw-data
+  PIPELINE_DIR: backend/pipelines/h3_pfas_exposure_pipeline
+
+jobs:
+  # Prepare matrix strategy
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      years: ${{ steps.set-years.outputs.years }}
+    steps:
+      - name: Set analysis modes matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event.inputs.analysis_modes }}" == "all" ]]; then
+            echo "matrix=[\"h3\", \"kommune\"]" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
+            # Convert comma-separated string to JSON array
+            modes=$(echo "${{ github.event.inputs.analysis_modes }}" | sed 's/,/","/g')
+            echo "matrix=[\"$modes\"]" >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"${{ github.event.inputs.analysis_modes || 'h3' }}\"]" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Set years parameter
+        id: set-years
+        run: |
+          if [[ -n "${{ github.event.inputs.years }}" ]]; then
+            # Convert comma-separated to space-separated for CLI
+            years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
+            echo "years=$years" >> $GITHUB_OUTPUT
+          else
+            echo "years=" >> $GITHUB_OUTPUT
+          fi
+
+  # Matrix job for parallel analysis
+  h3-pfas-analysis:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mode: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+      fail-fast: false  # Allow other jobs to continue if one fails
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgeos-dev \
+            libproj-dev \
+            libgdal-dev
+      
+      - name: Install Python dependencies
+        working-directory: ${{ env.PIPELINE_DIR }}
+        run: |
+          uv pip install --system -e ".[production]"
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Verify GCS access
+        run: |
+          gsutil ls gs://${{ env.GCS_BUCKET }}/ | head -5
+      
+      - name: Run H3 PFAS Analysis - ${{ matrix.mode }}
+        working-directory: ${{ env.PIPELINE_DIR }}
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          H3_RESOLUTION: 10
+          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '12GB' }}
+          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
+          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '25000' }}
+          LOG_LEVEL: INFO
+          ENABLE_PROGRESS_TRACKING: true
+          LOG_CHUNK_DETAILS: true
+          LOG_STAGE_TIMINGS: true
+          PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
+        run: |
+          # Build the command
+          cmd="python main.py --mode ${{ matrix.mode }} --verbose"
+          
+          # Add years if specified
+          if [[ -n "${{ needs.prepare-matrix.outputs.years }}" ]]; then
+            cmd="$cmd --years ${{ needs.prepare-matrix.outputs.years }}"
+          fi
+          
+          # Add custom parameters
+          cmd="$cmd --memory-limit ${{ github.event.inputs.memory_limit || '12GB' }}"
+          cmd="$cmd --thread-count ${{ github.event.inputs.thread_count || '4' }}"
+          cmd="$cmd --chunk-size ${{ github.event.inputs.chunk_size || '25000' }}"
+          
+          echo "Running: $cmd"
+          eval $cmd
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-${{ matrix.mode }}-${{ github.run_id }}
+          path: |
+            ${{ env.PIPELINE_DIR }}/*.log
+            /tmp/*.log
+          retention-days: 7
+      
+      - name: Verify output files
+        run: |
+          echo "Checking for output files in GCS..."
+          # List recent outputs for this mode
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pesticide|kommune_pesticide)" | tail -10
+
+  # Summary job
+  analysis-summary:
+    needs: [prepare-matrix, h3-pfas-analysis]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Check job results
+        run: |
+          echo "=== H3 PFAS Analysis Summary ==="
+          echo "Matrix jobs: ${{ needs.prepare-matrix.outputs.matrix }}"
+          echo "Years processed: ${{ needs.prepare-matrix.outputs.years || 'all available' }}"
+          echo "Analysis results: ${{ needs.h3-pfas-analysis.result }}"
+          
+          if [[ "${{ needs.h3-pfas-analysis.result }}" == "success" ]]; then
+            echo "✅ All analyses completed successfully!"
+          else
+            echo "❌ Some analyses failed. Check the logs for details."
+            exit 1
+          fi
+      
+      - name: Authenticate to Google Cloud
+        if: needs.h3-pfas-analysis.result == 'success'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        if: needs.h3-pfas-analysis.result == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: List final outputs
+        if: needs.h3-pfas-analysis.result == 'success'
+        run: |
+          echo "=== Final Output Files ==="
+          echo "Recent H3 outputs:"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_*/*/h3_pesticide_*.parquet | tail -5
+          echo ""
+          echo "Recent kommune outputs:"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_*/*/kommune_pesticide_*.parquet | tail -5
+
+  # Notification job
+  notify:
+    needs: [analysis-summary]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name != 'push'
+    
+    steps:
+      - name: Send notification
+        if: needs.analysis-summary.result == 'success'
+        run: |
+          echo "🎉 H3 PFAS Analysis completed successfully!"
+          echo "Check the Actions tab for detailed logs and output locations."
+      
+      - name: Send failure notification
+        if: needs.analysis-summary.result == 'failure'
+        run: |
+          echo "❌ H3 PFAS Analysis failed!"
+          echo "Check the Actions tab for error details and logs." 
