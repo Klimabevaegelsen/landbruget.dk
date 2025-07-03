@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  h3_pfas_exposure:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: development
+    volumes:
+      # Mount the code directory for development
+      - ./src:/app/src
+      - ./main.py:/app/main.py
+      # Mount data directories for persistence between runs
+      - ../../data/gold/h3_pfas_exposure:/data/gold/h3_pfas_exposure
+      # Mount GCS credentials if using local authentication
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+      
+      # GCS Configuration
+      - GCS_BUCKET=landbrugsdata-raw-data
+      
+      # H3 Configuration
+      - H3_RESOLUTION=10
+      - CHUNK_SIZE=25000
+      
+      # Processing Configuration
+      - MEMORY_LIMIT=12GB
+      - THREAD_COUNT=4
+      
+      # Logging Configuration
+      - LOG_LEVEL=INFO
+      - ENABLE_PROGRESS_TRACKING=true
+      - LOG_CHUNK_DETAILS=true
+      - LOG_STAGE_TIMINGS=true
+      
+    # Default command (can be overridden)
+    command: ["python", "main.py", "--mode", "h3", "--verbose"]
+    
+    # For development, uncomment to keep container running
+    # command: tail -f /dev/null
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '4'
+        reservations:
+          memory: 8G
+          cpus: '2'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, '/app/src'); from h3_pfas_exposure.config import H3PFASConfig; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s 
