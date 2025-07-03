@@ -4,7 +4,6 @@ Pydantic schemas for SPF SU API response.
 from typing import List, Optional, Any
 from pydantic import BaseModel
 
-
 class Address(BaseModel):
     farmName: Optional[str]
     line1: Optional[str]
@@ -12,19 +11,16 @@ class Address(BaseModel):
     city: Optional[str]
     name: Optional[str]
 
-
 class DanishCertificate(BaseModel):
     approved: bool
     pdfFileName: str
     isExpired: bool
-
 
 class HealthData(BaseModel):
     conditionalStatus: str
     healthStatus: str
     healthStatusColor: str
     supplementaryStatus: str
-
 
 class SalmonellaData(BaseModel):
     salmonellaLevel: List[Any]
@@ -34,7 +30,6 @@ class SalmonellaData(BaseModel):
     salmonellaStatus: str
     salmonellaTestResults: List[Any]
     showData: bool
-
 
 class OwnerDetailInfo(BaseModel):
     chrNumber: str
@@ -46,12 +41,10 @@ class OwnerDetailInfo(BaseModel):
     healthData: HealthData
     salmonellaData: SalmonellaData
 
-
 class HealthControlInfo(BaseModel):
     disease: str
     lastSample: Optional[str] = None
     nextSample: Optional[str] = None
-
 
 class HealthStatusModel(BaseModel):
     healthControlInfo: List[HealthControlInfo]
@@ -60,7 +53,6 @@ class HealthStatusModel(BaseModel):
     receptionOptions: List[str]
     susCoRunningFarms: List[Any]
     veterinarians: Optional[Any] = None
-
 
 class SpfSuResponse(BaseModel):
     ownerDetailInfo: OwnerDetailInfo

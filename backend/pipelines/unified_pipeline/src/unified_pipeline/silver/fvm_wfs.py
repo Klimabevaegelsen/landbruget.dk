@@ -23,9 +23,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class FVMWFSSilverConfig(BaseJobConfig):
     """
@@ -129,7 +127,6 @@ class FVMWFSSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     """
     Silver layer processor for FVM WFS agricultural data.
@@ -146,15 +143,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     5. Saving processed data to GCS for each year
     """
 
-    def __init__(self, config: FVMWFSSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: FVMWFSSilverConfig):
         """
         Initialize the FVMWFSSilver processor.
 
         Args:
-            config: Configuration for the silver processing job
-            gcs_util: Utility for GCS operations
-        """
-        super().__init__(config, gcs_util)
+            config: Configuration for the silver processing job        """
+        super().__init__(config)
 
     async def extract_geojson_from_wfs_payload(
         self, payload_json: str, column_mapping: Dict[str, str], table_suffix: str = ""

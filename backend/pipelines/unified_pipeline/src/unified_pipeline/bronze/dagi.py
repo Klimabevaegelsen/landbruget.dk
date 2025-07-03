@@ -23,9 +23,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class DAGIBronzeConfig(BaseJobConfig):
     """
@@ -72,7 +70,6 @@ class DAGIBronzeConfig(BaseJobConfig):
 
     retries: int = Field(default=3, description="Number of retry attempts for failed requests")
 
-
 class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer implementation for DAGI (Danish Administrative Geographic Division) data.
@@ -85,9 +82,9 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     - postnumre (postal codes)
     """
 
-    def __init__(self, config: DAGIBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DAGIBronzeConfig):
         """Initialize the DAGI bronze layer with configuration."""
-        super().__init__(config, gcs_util)
+        super().__init__(config)
         self.semaphore = Semaphore(config.max_concurrent_requests)
         self.gcs_access = GCSDataAccess()
 

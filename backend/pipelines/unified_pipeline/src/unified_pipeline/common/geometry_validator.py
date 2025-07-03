@@ -13,7 +13,6 @@ logger = Logger.get_logger()
 
 # DuckDB-spatial geometry validation utilities
 
-
 def validate_and_transform_geometries_duckdb(
     conn: duckdb.DuckDBPyConnection,
     table_name: str,
@@ -191,7 +190,6 @@ def validate_and_transform_geometries_duckdb(
     except Exception as e:
         logger.error(f"{dataset_name}: Error in geometry validation: {str(e)}")
         raise
-
 
 def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bool:
     """

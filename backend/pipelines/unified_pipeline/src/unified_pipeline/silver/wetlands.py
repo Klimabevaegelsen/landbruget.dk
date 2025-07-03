@@ -21,8 +21,6 @@ from typing import Any, Optional
 # # ✅ MIGRATION: Removed shapely import - using DuckDB-spatial for geometry operations
 # from shapely import Polygon
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -68,29 +66,18 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
     3. Analyzing and logging geometry statistics for data quality assessment
     """
 
-    def __init__(self, config: WetlandsSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: WetlandsSilverConfig):
         """
         Initialize the WetlandsSilver processor.
 
         Args:
             config (WetlandsSilverConfig): Configuration object containing settings
-                                            for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+                                            for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for wetlands processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ WetlandsSilver: Using unified GCS access and DuckDB connection")
 
     def analyze_geometry(self, geometry_wkt: str) -> dict[str, Any]:
         """

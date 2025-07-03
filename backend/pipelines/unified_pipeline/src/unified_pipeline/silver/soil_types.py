@@ -22,10 +22,8 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
-from unified_pipeline.util.gcs_util import GCSUtil
 
 load_dotenv()
-
 
 class SoilTypesSilverConfig(BaseJobConfig):
     """
@@ -55,7 +53,6 @@ class SoilTypesSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
     """
     Silver layer processing for soil types data.
@@ -72,15 +69,13 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
     5. Save processed data to the silver layer
     """
 
-    def __init__(self, config: SoilTypesSilverConfig, gcs_util: GCSUtil) -> None:
+    def __init__(self, config: SoilTypesSilverConfig) -> None:
         """
         Initialize the SoilTypesSilver source.
 
         Args:
-            config (SoilTypesSilverConfig): Configuration for the silver layer processing
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (SoilTypesSilverConfig): Configuration for the silver layer processing        """
+        super().__init__(config)
 
     async def _validate_and_transform_with_duckdb(self, wfs_url: str) -> str:
         """

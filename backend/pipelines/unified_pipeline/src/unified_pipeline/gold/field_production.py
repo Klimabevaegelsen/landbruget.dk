@@ -14,8 +14,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 # DST functionality is now integrated into the unified pipeline
@@ -59,15 +57,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     comprehensive production estimates for analytics and downstream consumption.
     """
 
-    def __init__(self, config: FieldProductionGoldConfig, gcs_util: GCSUtil):
-        super().__init__(config, gcs_util)
+    def __init__(self, config: FieldProductionGoldConfig):
+        super().__init__(config)
         self.log = Logger.get_logger()
 
-        # Initialize optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # Use the optimized DuckDB connection from GCS access
-        self.conn = self.gcs_access.duckdb_conn
+        # Connection is already set up by BaseSource - no need for workaround
         self._configure_duckdb()
 
     def _configure_duckdb(self):

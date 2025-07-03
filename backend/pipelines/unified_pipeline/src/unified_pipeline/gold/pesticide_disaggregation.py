@@ -20,7 +20,6 @@ import duckdb
 from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 print("DEBUG: pesticide_disaggregation.py module loaded!")
@@ -74,13 +73,24 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     - Direct proportional allocation to fields
     """
 
-    def __init__(self, config: PesticideDisaggregationGoldConfig, gcs_util: GCSUtil):
+    def __init__(self, config: PesticideDisaggregationGoldConfig):
         print("DEBUG: PesticideDisaggregationGold.__init__ called!")
-        super().__init__(config, gcs_util)
+        super().__init__(config)
         self.log = Logger.get_logger()
         self.duckdb_conn = None
         self._organic_marker_field_ids: Set[str] = set()
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
+
+    def _upload_file_with_gcs_access(
+        self, bucket_name: str, source_file_path: str, destination_blob_name: str
+    ):
+        """Helper method to upload file using gcs_access."""
+        import shutil
+
+        gcs_path = f"gs://{bucket_name}/{destination_blob_name}"
+        with open(source_file_path, "rb") as src:
+            with self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -326,10 +336,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             """)
 
             # Upload to GCS
-            self.gcs_util.upload_file(
-                bucket_name=self.config.bucket,
-                source_file_path=temp_path,
-                destination_blob_name=gcs_path,
+            self._upload_file_with_gcs_access(
+                self.config.bucket,
+                temp_path,
+                gcs_path,
             )
 
             # Clean up temporary file
@@ -395,8 +405,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Extract available pesticide years from GCS storage."""
         try:
             # List all files in the pesticides silver directory
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix="silver/pesticides/"
+            files = self.gcs_access.list_files_with_metadata(
+                self.config.bucket, "silver/pesticides/"
             )
             years = set()
 
@@ -420,8 +430,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Override base method to look for the correct FVM marker file pattern."""
         try:
             # List all files in silver layer to find fvm_marker directories with actual data
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix="silver/fvm_marker_"
+            files = self.gcs_access.list_files_with_metadata(
+                self.config.bucket, "silver/fvm_marker_"
             )
             years = set()
 
@@ -506,8 +516,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
             # Look for the file in timestamped subdirectories
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix="silver/pesticides/"
+            files = self.gcs_access.list_files_with_metadata(
+                self.config.bucket, "silver/pesticides/"
             )
 
             # Find the file that matches our year in the latest timestamped directory
@@ -545,8 +555,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"Reading FVM marker data for year {year}")
 
             # Based on actual codebase: find latest timestamped directory in fvm_marker_YYYY/
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix=f"silver/fvm_marker_{year}/"
+            files = self.gcs_access.list_files_with_metadata(
+                self.config.bucket, f"silver/fvm_marker_{year}/"
             )
 
             # Find the parquet file in timestamped subdirectories

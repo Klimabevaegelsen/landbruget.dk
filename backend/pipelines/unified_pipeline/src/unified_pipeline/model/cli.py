@@ -12,7 +12,6 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-
 class Env(Enum):
     """
     Environment configuration options for the pipeline.
@@ -26,7 +25,6 @@ class Env(Enum):
     local = "local"
     dev = "dev"
     prod = "prod"
-
 
 class Source(Enum):
     """
@@ -45,6 +43,7 @@ class Source(Enum):
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
+        pesticide_disaggregation: Pesticide disaggregation gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
     """
@@ -66,7 +65,6 @@ class Source(Enum):
     dst = "dst"
     dmi = "dmi"
 
-
 class Stage(Enum):
     """
     Processing stage options for the pipeline.
@@ -86,7 +84,6 @@ class Stage(Enum):
     gold = "gold"
     all = "all"
 
-
 class FVMLayerType(Enum):
     """
     FVM WFS layer type options for matrix job processing.
@@ -100,7 +97,6 @@ class FVMLayerType(Enum):
     markblokke = "markblokke"
     marker = "marker"
     smaabiotoper = "smaabiotoper"
-
 
 class CliConfig(BaseModel):
     """
