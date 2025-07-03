@@ -9,14 +9,12 @@ Migrated from the standalone field_area_analysis_pipeline to the unified pipelin
 """
 
 import os
-import tempfile
 from typing import Any, Dict, List, Optional
 
 import duckdb
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 
@@ -57,8 +55,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
     to create analytics-ready spatial intersection results.
     """
 
-    def __init__(self, config: FieldAreaAnalysisGoldConfig, gcs_util: GCSUtil):
-        super().__init__(config, gcs_util)
+    def __init__(self, config: FieldAreaAnalysisGoldConfig):
+        super().__init__(config)
         self.log = Logger.get_logger()
 
         # Initialize DuckDB connection for spatial operations
@@ -166,39 +164,15 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
     def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> Optional[str]:
         """Get the latest silver data path for a specific dataset."""
         try:
-            # Handle FVM marker datasets with specific naming pattern
-            if dataset_name.startswith("fvm_marker_"):
-                # For FVM marker files, look for fvm_marker_YYYY.parquet pattern
-                files = self.gcs_util.list_files(
-                    bucket_name=self.config.bucket, prefix=f"silver/{dataset_name}/"
-                )
-
-                # Find the parquet file in timestamped subdirectories
-                target_file = None
-                latest_timestamp = None
-                for file_blob in files:
-                    if file_blob.name.endswith(f"{dataset_name}.parquet"):
-                        # Extract timestamp from path like "silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
-                        path_parts = file_blob.name.split("/")
-                        if len(path_parts) >= 3:
-                            timestamp_dir = path_parts[2]  # "20241201_123456"
-                            if latest_timestamp is None or timestamp_dir > latest_timestamp:
-                                latest_timestamp = timestamp_dir
-                                target_file = file_blob.name
-
-                if target_file:
-                    gcs_path = f"gs://{self.config.bucket}/{target_file}"
-                    self.log.info(f"Found {dataset_name} data at {gcs_path}")
-                    return gcs_path
-                else:
-                    self.log.warning(f"No data found for {dataset_name}")
-                    return None
+            # ✅ MIGRATION: Use unified pattern for all datasets
+            pattern = f"gs://{self.config.bucket}/silver/{dataset_name}/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
+            if files:
+                latest_path = sorted(files, reverse=True)[0]
+                self.log.info(f"Found latest data for {dataset_name} at {latest_path}")
+                return latest_path
             else:
-                # Standard pattern for other datasets
-                pattern = f"gs://{self.config.bucket}/silver/{dataset_name}/*/data.parquet"
-                files = self.gcs_access.list_files(pattern)
-                if files:
-                    return sorted(files)[-1]  # Latest by timestamp
+                self.log.warning(f"No data found for {dataset_name} with pattern {pattern}")
                 return None
         except Exception as e:
             self.log.error(f"Error finding latest data for {dataset_name}: {e}")
@@ -229,16 +203,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Get file paths for streaming processing
                 self.log.info(f"Setting up streaming for {dataset_name}")
                 try:
-                    files = self.gcs_util.list_files(
-                        bucket_name=self.config.bucket,
-                        prefix=f"silver/{dataset_name}/",
-                    )
-                    if files:
-                        latest_file = max(files, key=lambda x: x.time_created)
-                        dataset_paths[dataset_name] = (
-                            f"gs://{self.config.bucket}/{latest_file.name}"
-                        )
-                        self.log.info(f"Found {dataset_name}: {latest_file.name}")
+                    path = self._get_latest_silver_path_for_dataset(dataset_name)
+                    if path:
+                        dataset_paths[dataset_name] = path
                     else:
                         self.log.warning(f"No data found for {dataset_name}")
                         dataset_paths[dataset_name] = None
@@ -262,31 +229,18 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         ):
             self.log.info("🏠 Streaming property cadastral data from GCS...")
 
-            # Download to temporary file
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
-                temp_path = tmp_file.name
-
-            try:
-                bucket_name = properties_path.split("/")[2]
-                blob_name = "/".join(properties_path.split("/")[3:])
-                self.gcs_util.download_file(bucket_name, blob_name, temp_path)
-
-                # Load directly into DuckDB without pandas
-                self.conn.execute(f"""
-                    CREATE TABLE properties AS
-                    SELECT 
-                        bfe_number,
-                        ST_GeomFromWKB(geometry) as geom
-                    FROM read_parquet('{temp_path}')
-                    WHERE bfe_number IS NOT NULL
-                """)
-
-                property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
-                self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
-
-            finally:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
+            # ✅ OPTIMIZED: Load directly into DuckDB without temp files
+            self.gcs_access.query_parquet_direct(
+                properties_path,
+                """SELECT 
+                    bfe_number,
+                    ST_GeomFromWKB(geometry) as geom
+                FROM read_parquet_auto()
+                WHERE bfe_number IS NOT NULL""",
+                "properties",
+            )
+            property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
+            self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
 
         elif properties_path is not None:
             # Handle in-memory data

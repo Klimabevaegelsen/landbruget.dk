@@ -22,9 +22,7 @@ import duckdb
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class DSTZoneMappingConfig(BaseJobConfig):
     """
@@ -87,7 +85,6 @@ class DSTZoneMappingConfig(BaseJobConfig):
         description="Mapping of DST regions to DAGI landsdele codes",
     )
 
-
 class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
     """
     DST Zone Mapping implementation for creating spatial lookup tables using DuckDB.
@@ -103,9 +100,9 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
     - Metadata for analysis and validation
     """
 
-    def __init__(self, config: DSTZoneMappingConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DSTZoneMappingConfig):
         """Initialize the DST zone mapping component."""
-        super().__init__(config, gcs_util)
+        super().__init__(config)
         self.conn = duckdb.connect()
         self._configure_duckdb()
         self.data_conn = None  # Track which connection has the DAGI data

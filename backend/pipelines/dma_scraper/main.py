@@ -14,21 +14,190 @@ sys.path.insert(0, ROOT)
 
 from bronze.fetch_company_data import DMAScraper
 from bronze.fetch_company_detail import DMACompanyDetailScraper
+
 from silver.transformation import transform_dma_json
 
-from backend.common.storage_interface import GCSStorage, LocalStorage
+
+def _get_optimized_storage():
+    """
+    Get optimized storage with robust import handling for different environments.
+
+    Returns GCSDataAccess if available, otherwise None for fallback.
+    """
+    try:
+        # Primary import path - should work when unified_pipeline is properly installed
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        print("✅ Successfully imported optimized GCSDataAccess")
+        return GCSDataAccess
+    except ImportError as e:
+        print(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        print("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        return None
+
+
+# Get optimized GCS access class or None if not available
+OptimizedGCSDataAccess = _get_optimized_storage()
+
+
+class OptimizedStorageBackend:
+    """Storage backend that uses optimized GCS access when available, with fallback."""
+
+    def __init__(self, bucket_name: str):
+        self.bucket_name = bucket_name
+        self.use_optimized = False
+
+        # Try to use optimized storage
+        if OptimizedGCSDataAccess:
+            try:
+                self.gcs_access = OptimizedGCSDataAccess()
+                self.use_optimized = True
+                print(f"✅ DMA Storage: Using optimized GCS access for bucket: {bucket_name}")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                self._init_fallback(bucket_name)
+        else:
+            self._init_fallback(bucket_name)
+
+    def _init_fallback(self, bucket_name: str):
+        """Initialize fallback storage using google-cloud-storage."""
+        try:
+            from google.cloud import storage
+
+            self.gcs_client = storage.Client()
+            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
+            print(f"✅ DMA Storage: Using fallback GCS for bucket: {bucket_name}")
+        except ImportError:
+            raise ImportError("google-cloud-storage is required but not available")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+
+    def save_json(self, data, blob_name: str):
+        """Save JSON data to GCS."""
+        try:
+            if self.use_optimized:
+                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
+                self.gcs_access.upload_json(data, gcs_path)
+                print(f"Saved {blob_name} to optimized GCS storage")
+            else:
+                import json
+
+                json_str = json.dumps(data, indent=2, ensure_ascii=False)
+                blob = self.gcs_bucket.blob(blob_name)
+                blob.upload_from_string(json_str, content_type="application/json")
+                print(f"Saved {blob_name} to fallback GCS storage")
+        except Exception as e:
+            print(f"Error saving JSON to {blob_name}: {e}")
+            raise
+
+    def save_parquet(self, data, blob_name: str):
+        """Save Parquet data to GCS."""
+        try:
+            if self.use_optimized:
+                # For optimized storage, we need to use DuckDB integration
+                # This requires the data to be in a DuckDB table first
+                # For now, use fallback for parquet files
+                self._save_parquet_fallback(data, blob_name)
+            else:
+                self._save_parquet_fallback(data, blob_name)
+        except Exception as e:
+            print(f"Error saving Parquet to {blob_name}: {e}")
+            raise
+
+    def _save_parquet_fallback(self, data, blob_name: str):
+        """Save Parquet using fallback method."""
+        import os
+        import tempfile
+
+        # Save to temporary file first
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+            data.to_parquet(tmp_path, index=False)
+
+        try:
+            # Upload to GCS
+            if self.use_optimized:
+                # Use optimized file upload
+                with open(tmp_path, "rb") as f:
+                    file_data = f.read()
+                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
+                with self.gcs_access.fs.open(gcs_path, "wb") as gcs_file:
+                    gcs_file.write(file_data)
+                print(f"Saved {blob_name} to optimized GCS storage (parquet)")
+            else:
+                # Use fallback upload
+                blob = self.gcs_bucket.blob(blob_name)
+                blob.upload_from_filename(tmp_path)
+                print(f"Saved {blob_name} to fallback GCS storage (parquet)")
+        finally:
+            # Clean up temporary file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def read_json(self, blob_name: str):
+        """Read JSON data from GCS."""
+        try:
+            if self.use_optimized:
+                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
+                return self.gcs_access.download_json(gcs_path)
+            else:
+                blob = self.gcs_bucket.blob(blob_name)
+                json_bytes = blob.download_as_bytes()
+                import json
+
+                return json.loads(json_bytes.decode("utf-8"))
+        except Exception as e:
+            print(f"Error reading JSON from {blob_name}: {e}")
+            raise
+
+
+class LocalStorageBackend:
+    """Local storage backend for development."""
+
+    def __init__(self, base_dir: str):
+        self.base_dir = base_dir
+        os.makedirs(base_dir, exist_ok=True)
+
+    def save_json(self, data, blob_name: str):
+        """Save JSON data locally."""
+        import json
+
+        file_path = os.path.join(self.base_dir, blob_name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"Saved {blob_name} to local storage")
+
+    def save_parquet(self, data, blob_name: str):
+        """Save Parquet data locally."""
+        file_path = os.path.join(self.base_dir, blob_name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        data.to_parquet(file_path, index=False)
+        print(f"Saved {blob_name} to local storage")
+
+    def read_json(self, blob_name: str):
+        """Read JSON data from local storage."""
+        import json
+
+        file_path = os.path.join(self.base_dir, blob_name)
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
 
 nest_asyncio.apply()
 
 PREFIX_BRONZE_SAVE_PATH = os.environ.get("BRONZE_OUTPUT_DIR", "bronze/dma")
 PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
 
-# Initialize GCS client and bucket
+# Initialize storage backend based on environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 if ENVIRONMENT.lower() in ("production", "container"):
-    storage_backend = GCSStorage(os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data"))
+    storage_backend = OptimizedStorageBackend(os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data"))
 else:
-    storage_backend = LocalStorage(os.environ.get("BRONZE_OUTPUT_DIR", "."))
+    storage_backend = LocalStorageBackend(os.environ.get("BRONZE_OUTPUT_DIR", "."))
 
 scraper = DMAScraper()
 
@@ -37,14 +206,12 @@ def save_data(data, timestamp, PATH):
     timestamp_dir = os.path.join(PATH, timestamp)
     blob_name = f"{timestamp_dir}/environmental_companies_raw.json"
     storage_backend.save_json(data, blob_name)
-    print(f"Saved {blob_name} to storage")
 
 
 def save_parquet(data, timestamp, PATH):
     timestamp_dir = os.path.join(PATH, timestamp)
     blob_name = f"{timestamp_dir}/environmental_companies.parquet"
     storage_backend.save_parquet(data, blob_name)
-    print(f"Saved {blob_name} to storage")
 
 
 def parse_args():
@@ -198,14 +365,11 @@ if __name__ == "__main__":
                     schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
                     print("Generated schema documentation for DMA data")
 
-                    # Commit to GitHub
-                    schema_manager.commit_to_github()
-                    print("DMA schema documentation committed to GitHub")
-                elif SchemaDocumentationManager is None:
-                    print("Warning: Schema documentation disabled due to import error")
                 else:
-                    print(f"Warning: Parquet file not found at {parquet_path}")
+                    print("Parquet file not found or schema documentation not available")
 
         except Exception as e:
-            print(f"Failed to generate DMA schema documentation: {e}")
-            # Don't fail the pipeline if schema documentation fails
+            print(f"Warning: Could not generate schema documentation: {e}")
+            import traceback
+
+            traceback.print_exc()

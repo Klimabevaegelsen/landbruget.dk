@@ -23,9 +23,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class DAGISilverConfig(BaseJobConfig):
     """
@@ -85,7 +83,6 @@ class DAGISilverConfig(BaseJobConfig):
         description="Mapping of Danish column names to English standardized names",
     )
 
-
 class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
     """
     Silver layer implementation for DAGI (Danish Administrative Geographic Division) data.
@@ -101,9 +98,9 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
     - Metadata enrichment
     """
 
-    def __init__(self, config: DAGISilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DAGISilverConfig):
         """Initialize the DAGI silver layer with configuration."""
-        super().__init__(config, gcs_util)
+        super().__init__(config)
         # Setup DuckDB with spatial extension
         self._setup_duckdb()
 

@@ -24,8 +24,6 @@ from typing import Any, Optional
 # from shapely import MultiPolygon, Polygon, unary_union, wkt  # MIGRATED: Replaced with DuckDB ST_* functions
 # from shapely.validation import explain_validity  # MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -94,29 +92,18 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
     6. Saving processed data back to GCS
     """
 
-    def __init__(self, config: WaterProjectsSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: WaterProjectsSilverConfig):
         """
         Initialize the WaterProjectsSilver processor.
 
         Args:
             config (WaterProjectsSilverConfig): Configuration object containing settings
-                                                for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+                                                for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for water projects processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ WaterProjectsSilver: Using unified GCS access and DuckDB connection")
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """

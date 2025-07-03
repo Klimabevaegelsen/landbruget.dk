@@ -23,9 +23,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import timed
-
 
 class DMIBronzeConfig(BaseJobConfig):
     """
@@ -62,7 +60,6 @@ class DMIBronzeConfig(BaseJobConfig):
     days_back: int = 30
 
     model_config = ConfigDict(frozen=True)
-
 
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
@@ -145,7 +142,6 @@ class DMIApiClient:
                 "end_time": end_time.isoformat(),
             }
 
-
 class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for DMI climate data.
@@ -162,15 +158,13 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     5. Return structured data for in-memory passing to silver stage
     """
 
-    def __init__(self, config: DMIBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DMIBronzeConfig):
         """
         Initialize the DMIBronze source.
 
         Args:
-            config (DMIBronzeConfig): Configuration for the data source
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (DMIBronzeConfig): Configuration for the data source        """
+        super().__init__(config)
         self.api_client = DMIApiClient(config)
 
     def _calculate_time_range(self) -> tuple[datetime, datetime]:

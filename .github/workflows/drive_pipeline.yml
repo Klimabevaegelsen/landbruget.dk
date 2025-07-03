@@ -69,7 +69,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -226,7 +231,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -317,7 +327,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .

@@ -18,9 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import timed
-
 
 class DMISilverConfig(BaseJobConfig):
     """
@@ -44,7 +42,6 @@ class DMISilverConfig(BaseJobConfig):
     target_crs: str = "EPSG:4326"  # Required target CRS
     source_crs: str = "EPSG:25832"  # DMI's native CRS
 
-
 class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     """
     Silver layer processor for DMI climate data using DuckDB-spatial.
@@ -62,15 +59,13 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     5. Saving processed data to GCS
     """
 
-    def __init__(self, config: DMISilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DMISilverConfig):
         """
         Initialize the DMISilver processor.
 
         Args:
-            config: Configuration for the silver processing job
-            gcs_util: Utility for GCS operations
-        """
-        super().__init__(config, gcs_util)
+            config: Configuration for the silver processing job        """
+        super().__init__(config)
         # Setup DuckDB with spatial extension
         self._setup_duckdb_spatial()
 

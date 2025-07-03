@@ -10,10 +10,94 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import duckdb
-from bronze.export import GCSStorage
 
 # Configure module logger
 logger = logging.getLogger("bmd_pipeline.silver.transform")
+
+
+def _get_optimized_gcs_access():
+    """
+    Get optimized GCS access with robust import handling.
+
+    Returns GCSDataAccess if available, otherwise None for fallback.
+    """
+    try:
+        # Primary import path - should work when unified_pipeline is properly installed
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        logger.info("✅ Successfully imported optimized GCSDataAccess")
+        return GCSDataAccess
+    except ImportError as e:
+        logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        return None
+
+
+# Get optimized GCS access class or None if not available
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
+
+class OptimizedGCSStorage:
+    """Optimized GCS storage for BMD silver layer with fallback support."""
+
+    def __init__(self, bucket_name: str, prefix: str = "silver/bmd"):
+        self.bucket_name = bucket_name
+        self.prefix = prefix
+        self.use_optimized = False
+
+        # Try to use optimized storage
+        if OptimizedGCSDataAccess:
+            try:
+                self.gcs_access = OptimizedGCSDataAccess()
+                self.use_optimized = True
+                logger.info(f"✅ BMD Silver: Using optimized GCS access for bucket: {bucket_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                self._init_fallback(bucket_name)
+        else:
+            self._init_fallback(bucket_name)
+
+    def _init_fallback(self, bucket_name: str):
+        """Initialize fallback GCS storage."""
+        try:
+            from google.cloud import storage
+
+            self.gcs_client = storage.Client()
+            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
+            logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
+        except ImportError:
+            raise ImportError("google-cloud-storage is required but not available")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+
+    def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
+        """Upload file to GCS with optimized or fallback method."""
+        try:
+            if gcs_path is None:
+                timestamp = local_path.parent.name
+                filename = local_path.name
+                gcs_path = f"{self.prefix}/{timestamp}/{filename}"
+
+            if self.use_optimized:
+                # Use optimized upload
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+                logger.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized)")
+            else:
+                # Use fallback upload
+                blob = self.gcs_bucket.blob(gcs_path)
+                blob.upload_from_filename(str(local_path))
+                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to upload to GCS: {e}")
+            return False
 
 
 class BMDTransformer:
@@ -618,15 +702,15 @@ def upload_to_gcs(local_path: Path, bucket_name: str) -> bool:
         True if upload successful, False otherwise
     """
     try:
-        storage = GCSStorage(bucket_name=bucket_name, prefix="silver/bmd")
+        storage = OptimizedGCSStorage(bucket_name=bucket_name, prefix="silver/bmd")
 
         # Upload the Parquet file
-        success = storage.upload_file(str(local_path))
+        success = storage.upload_file(local_path)
 
         # Upload the metadata file
         metadata_path = local_path.parent / "metadata.json"
         if metadata_path.exists():
-            storage.upload_file(str(metadata_path))
+            storage.upload_file(metadata_path)
 
         return success
     except Exception as e:
