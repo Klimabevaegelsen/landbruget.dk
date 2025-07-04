@@ -191,9 +191,9 @@ jobs:
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
           H3_RESOLUTION: ${{ matrix.h3_resolution || '10' }}
-          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '12GB' }}
-          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
-          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '25000' }}
+          MEMORY_LIMIT: 12GB
+          THREAD_COUNT: 4
+          CHUNK_SIZE: 25000
           LOG_LEVEL: INFO
           ENABLE_PROGRESS_TRACKING: true
           LOG_CHUNK_DETAILS: true
@@ -213,10 +213,14 @@ jobs:
             cmd="$cmd --years ${{ needs.prepare-matrix.outputs.years }}"
           fi
           
-          # Add custom parameters
-          cmd="$cmd --memory-limit ${{ github.event.inputs.memory_limit || '12GB' }}"
-          cmd="$cmd --thread-count ${{ github.event.inputs.thread_count || '4' }}"
-          cmd="$cmd --chunk-size ${{ github.event.inputs.chunk_size || '25000' }}"
+          # Add custom parameters (use inputs if provided, otherwise defaults)
+          memory_limit="${{ github.event.inputs.memory_limit }}"
+          thread_count="${{ github.event.inputs.thread_count }}"
+          chunk_size="${{ github.event.inputs.chunk_size }}"
+          
+          cmd="$cmd --memory-limit ${memory_limit:-12GB}"
+          cmd="$cmd --thread-count ${thread_count:-4}"
+          cmd="$cmd --chunk-size ${chunk_size:-25000}"
           
           echo "Running: $cmd"
           eval $cmd
