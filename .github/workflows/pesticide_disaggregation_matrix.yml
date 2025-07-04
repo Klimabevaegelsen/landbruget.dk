@@ -300,14 +300,4 @@ jobs:
         echo "**Years:** ${{ needs.discover-years.outputs.years }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "🔍 This was a dry run - no processing was performed." >> $GITHUB_STEP_SUMMARY
-        echo "To run the actual processing, set 'Dry run mode' to false." >> $GITHUB_STEP_SUMMARY
-
-  run-gold-layer:
-    if: steps.bronze.outputs.status == 'success' && steps.silver.outputs.status == 'success'
-    runs-on: ubuntu-latest
-    steps:
-    - name: Run Gold Layer
-      run: |
-        # Initialize processor
-        poetry run python -m unified_pipeline.app run-pipeline-job --job=pesticide_disaggregation --stage=gold
-      working-directory: backend/pipelines/unified_pipeline 
+        echo "To run the actual processing, set 'Dry run mode' to false." >> $GITHUB_STEP_SUMMARY 
