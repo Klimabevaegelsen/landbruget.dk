@@ -11,7 +11,6 @@ Migrated from the standalone field_area_analysis_pipeline to the unified pipelin
 import os
 from typing import Any, Dict, List, Optional
 
-import duckdb
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -59,20 +58,17 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         super().__init__(config)
         self.log = Logger.get_logger()
 
-        # Initialize DuckDB connection for spatial operations
-        self.conn = duckdb.connect()
-        self._configure_duckdb()
+        # Use the base class connection - don't create a new one
+        self._configure_duckdb_additional()
 
-    def _configure_duckdb(self):
-        """Configure DuckDB for optimal spatial operations."""
+    def _configure_duckdb_additional(self):
+        """Configure additional DuckDB settings for field area analysis."""
+        # Update memory settings to use config values
         self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
         self.conn.execute(f"SET threads={self.config.thread_count}")
         self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
 
-        # Install and load extensions for spatial operations
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-
+        # Spatial extension is already loaded in base class
         self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer")
         self.log.info(
             f"   Memory: {self.config.memory_limit}, Threads: {self.config.thread_count}, Batch size: {self.config.batch_size:,}"

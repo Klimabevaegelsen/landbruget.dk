@@ -27,7 +27,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Comprehensive field production estimates using DST yield data"
     frequency: str = "weekly"
-    bucket: str = os.getenv("GCS_BUCKET")
+    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
@@ -61,32 +61,43 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         super().__init__(config)
         self.log = Logger.get_logger()
 
-        # Connection is already set up by BaseSource - no need for workaround
+        # Connection and spatial extension are already set up by BaseSource
+        # Apply field production specific configuration
         self._configure_duckdb()
 
     def _configure_duckdb(self):
-        """Configure DuckDB for optimal spatial operations."""
+        """Configure DuckDB for field production specific settings."""
+        # Apply field production specific memory and performance settings
+        # Note: BaseSource already loaded spatial extension and basic configuration
         self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
         self.conn.execute("SET threads = 4")  # Use all available CPU cores
         self.conn.execute("SET enable_progress_bar = true")
         self.conn.execute("SET preserve_insertion_order = false")
 
-        # Spatial extensions already loaded by GCSDataAccess
-        # Verify SPATIAL_JOIN operator availability
+        # Verify spatial extension is available (loaded by BaseSource)
         try:
             version_result = self.conn.execute(
                 "SELECT extension_name, extension_version FROM duckdb_extensions() WHERE extension_name = 'spatial'"
             ).fetchone()
             if version_result:
-                self.log.info(f"DuckDB Spatial version: {version_result[1]}")
+                self.log.info(
+                    f"✅ DuckDB Spatial version: {version_result[1]} (inherited from BaseSource)"
+                )
                 if version_result[1] >= "1.2.2":
                     self.log.info("✅ SPATIAL_JOIN operator available")
                 else:
                     self.log.warning(
                         f"⚠️  SPATIAL_JOIN operator may not be available in version {version_result[1]}"
                     )
+            else:
+                # If spatial extension is not loaded, load it now
+                self.log.warning("Spatial extension not found, loading it now...")
+                self.conn.execute("INSTALL spatial")
+                self.conn.execute("LOAD spatial")
+                self.log.info("✅ Spatial extension loaded successfully")
         except Exception as e:
-            self.log.warning(f"Could not verify spatial extension version: {e}")
+            self.log.error(f"Failed to verify/load spatial extension: {e}")
+            raise
 
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]
@@ -238,36 +249,74 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 # Register the  and create table
                 self.conn.register(f"temp_{dataset_name}", silver_data[dataset_name])
                 # Check if block_id column exists (added after 2007, available from 2008)
+                # Also check for geometry column format (geometry_wkt vs geometry)
+                columns_info = self.conn.execute(f"DESCRIBE temp_{dataset_name}").fetchall()
+                column_names = [col[0] for col in columns_info]
+
+                # Determine geometry column and conversion function
+                if "geometry_wkt" in column_names:
+                    geometry_select = "ST_GeomFromText(geometry_wkt) as geometry"
+                    geometry_where = "geometry_wkt IS NOT NULL AND geometry_wkt != ''"
+                elif "geometry" in column_names:
+                    geometry_select = "ST_GeomFromWKB(geometry) as geometry"
+                    geometry_where = "geometry IS NOT NULL"
+                else:
+                    self.log.warning(f"No geometry column found in {dataset_name}")
+                    return 0
+
+                # Determine crop/layer type column
+                if "crop_type" in column_names:
+                    crop_type_select = "crop_type"
+                elif "layer_type" in column_names:
+                    crop_type_select = "layer_type as crop_type"
+                else:
+                    crop_type_select = "'unknown' as crop_type"
+                    self.log.warning(
+                        f"No crop_type or layer_type column found in {dataset_name}, using 'unknown'"
+                    )
+
+                # Check for other optional columns
+                field_id_select = "field_id" if "field_id" in column_names else "NULL as field_id"
+                organic_farming_select = (
+                    "organic_farming"
+                    if "organic_farming" in column_names
+                    else "false as organic_farming"
+                )
+
+                self.log.info(
+                    f"Column mapping for {dataset_name}: field_id={field_id_select}, crop_type={crop_type_select}, organic_farming={organic_farming_select}"
+                )
+
                 if year >= 2008:
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE current_year_fields AS
                         SELECT 
-                            field_id,
+                            {field_id_select},
                             block_id,
                             cvr_number,
                             area_ha,
-                            crop_type,
-                            organic_farming,
+                            {crop_type_select},
+                            {organic_farming_select},
                             {year} as year,
-                            ST_GeomFromWKB(geometry) as geometry
+                            {geometry_select}
                         FROM temp_{dataset_name}
-                        WHERE geometry IS NOT NULL
+                        WHERE {geometry_where}
                     """)
                 else:
                     # For years before 2008, block_id doesn't exist
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE current_year_fields AS
                         SELECT 
-                            field_id,
+                            {field_id_select},
                             NULL as block_id,
                             cvr_number,
                             area_ha,
-                            crop_type,
-                            organic_farming,
+                            {crop_type_select},
+                            {organic_farming_select},
                             {year} as year,
-                            ST_GeomFromWKB(geometry) as geometry
+                            {geometry_select}
                         FROM temp_{dataset_name}
-                        WHERE geometry IS NOT NULL
+                        WHERE {geometry_where}
                     """)
             else:
                 # Load from GCS using direct download and load into our connection
@@ -276,37 +325,79 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                     # Download to temp file and load into our connection
                     with self.gcs_access._temp_download(gcs_path) as temp_file:
+                        # Check column structure first
+                        columns_info = self.conn.execute(
+                            f"DESCRIBE (SELECT * FROM read_parquet('{temp_file}') LIMIT 1)"
+                        ).fetchall()
+                        column_names = [col[0] for col in columns_info]
+
+                        # Determine geometry column and conversion function
+                        if "geometry_wkt" in column_names:
+                            geometry_select = "ST_GeomFromText(geometry_wkt) as geometry"
+                            geometry_where = "geometry_wkt IS NOT NULL AND geometry_wkt != ''"
+                        elif "geometry" in column_names:
+                            geometry_select = "ST_GeomFromWKB(geometry) as geometry"
+                            geometry_where = "geometry IS NOT NULL"
+                        else:
+                            self.log.warning(f"No geometry column found in {dataset_name}")
+                            return 0
+
+                        # Determine crop/layer type column
+                        if "crop_type" in column_names:
+                            crop_type_select = "crop_type"
+                        elif "layer_type" in column_names:
+                            crop_type_select = "layer_type as crop_type"
+                        else:
+                            crop_type_select = "'unknown' as crop_type"
+                            self.log.warning(
+                                f"No crop_type or layer_type column found in {dataset_name}, using 'unknown'"
+                            )
+
+                        # Check for other optional columns
+                        field_id_select = (
+                            "field_id" if "field_id" in column_names else "NULL as field_id"
+                        )
+                        organic_farming_select = (
+                            "organic_farming"
+                            if "organic_farming" in column_names
+                            else "false as organic_farming"
+                        )
+
+                        self.log.info(
+                            f"Column mapping for {dataset_name}: field_id={field_id_select}, crop_type={crop_type_select}, organic_farming={organic_farming_select}"
+                        )
+
                         # Check if block_id column exists (added after 2007, available from 2008)
                         if year >= 2008:
                             self.conn.execute(f"""
                                 CREATE OR REPLACE TABLE current_year_fields AS
                                 SELECT 
-                                    field_id,
+                                    {field_id_select},
                                     block_id,
                                     cvr_number,
                                     area_ha,
-                                    crop_type,
-                                    organic_farming,
+                                    {crop_type_select},
+                                    {organic_farming_select},
                                     {year} as year,
-                                    ST_GeomFromWKB(geometry) as geometry
+                                    {geometry_select}
                                 FROM read_parquet('{temp_file}')
-                                WHERE geometry IS NOT NULL
+                                WHERE {geometry_where}
                             """)
                         else:
                             # For years before 2008, block_id doesn't exist
                             self.conn.execute(f"""
                                 CREATE OR REPLACE TABLE current_year_fields AS
                                 SELECT 
-                                    field_id,
+                                    {field_id_select},
                                     NULL as block_id,
                                     cvr_number,
                                     area_ha,
-                                    crop_type,
-                                    organic_farming,
+                                    {crop_type_select},
+                                    {organic_farming_select},
                                     {year} as year,
-                                    ST_GeomFromWKB(geometry) as geometry
+                                    {geometry_select}
                                 FROM read_parquet('{temp_file}')
-                                WHERE geometry IS NOT NULL
+                                WHERE {geometry_where}
                             """)
 
                     # Geometry filtering is already done in the CREATE TABLE query above
@@ -434,6 +525,18 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """Setup spatial processing with DST zones in DuckDB."""
         try:
             self.log.info("Setting up spatial processing with DST zones")
+
+            # Debug: Verify spatial extension is loaded
+            try:
+                # Test if spatial functions are available
+                self.conn.execute("SELECT ST_Point(0, 0)")
+                self.log.info("✅ Spatial extension is loaded and working")
+            except Exception as spatial_e:
+                self.log.error(f"❌ Spatial extension not available: {spatial_e}")
+                # Try to load it again
+                self.conn.execute("INSTALL spatial")
+                self.conn.execute("LOAD spatial")
+                self.log.info("✅ Spatial extension loaded on retry")
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:

@@ -249,7 +249,7 @@ class BaseSource(Generic[T], ABC):
 
         # Create path with timestamp
         timestamp = self.date_pattern
-        filename = f"{final_dataset}.parquet"
+        filename = "data.parquet"  # Standardized filename
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
@@ -903,10 +903,23 @@ class BaseSource(Generic[T], ABC):
 
     def _get_latest_silver_path(self, dataset: str) -> str:
         """Get path to latest silver data file."""
+        # Try new standardized format first
         pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
+
+        if not files:
+            # Fallback to legacy format for backward compatibility
+            self.log.warning(f"No new format files found for {dataset}, trying legacy format")
+            legacy_pattern = f"gs://{self.config.bucket}/silver/{dataset}/*.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by filename
+
         if not files:
             raise FileNotFoundError(f"No silver data found for {dataset}")
+
         return sorted(files)[-1]  # Latest by timestamp
 
     def _get_available_fvm_marker_years(self) -> list[int]:
