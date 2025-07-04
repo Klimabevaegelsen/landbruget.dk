@@ -488,7 +488,16 @@ def _append_to_streaming_json(data_type: str, data: Any) -> bool:
 
         # Initialize temp file for this stream if needed
         if stream_key not in _streaming_files:
-            temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
+            # Use /tmp for temp files to avoid filling up the working directory
+            temp_dir = "/tmp" if os.path.exists("/tmp") else None
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".jsonl",
+                delete=False,
+                encoding="utf-8",
+                dir=temp_dir,
+                prefix=f"chr_streaming_{data_type}_",
+            )
             _streaming_files[stream_key] = {"temp_file": temp_file, "temp_path": temp_file.name, "count": 0}
             logger.info(f"Initialized streaming temp file for {data_type}: {temp_file.name}")
 
@@ -504,6 +513,29 @@ def _append_to_streaming_json(data_type: str, data: Any) -> bool:
         count = _streaming_files[stream_key]["count"]
         if count % 1000 == 0:
             logger.info(f"Streamed {count} records for {data_type}")
+
+        # CRITICAL: Periodic cleanup to prevent excessive temp file accumulation
+        # Every 5000 records, force a flush and consider finalizing if memory is constrained
+        if count % 5000 == 0:
+            temp_file.flush()
+            os.fsync(temp_file.fileno())  # Force OS to write to disk
+
+            # Check if we're in a memory-constrained environment
+            if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true":
+                # Force garbage collection every 5000 records
+                import gc
+
+                gc.collect()
+
+                # Log memory usage if possible
+                try:
+                    import psutil
+
+                    process = psutil.Process(os.getpid())
+                    memory_mb = process.memory_info().rss / 1024 / 1024
+                    logger.info(f"Memory usage at {count} records for {data_type}: {memory_mb:.1f} MB")
+                except Exception:
+                    pass
 
         return True
 
@@ -524,7 +556,8 @@ def _finalize_streaming_files() -> bool:
             count = stream_info["count"]
 
             # Close the temp file
-            temp_file.close()
+            if not temp_file.closed:
+                temp_file.close()
 
             # Read all records from temp file and create consolidated JSON
             consolidated_data = []
@@ -543,19 +576,30 @@ def _finalize_streaming_files() -> bool:
                     )
                     logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
 
+                    # CRITICAL: Clear consolidated_data immediately after saving to prevent memory accumulation
+                    consolidated_data.clear()
+                    del consolidated_data
+
             except Exception as e:
                 logger.error(f"Error consolidating {data_type}: {e}")
-
-            # Clean up temp file
-            try:
-                os.unlink(temp_path)
-                logger.debug(f"Cleaned up temp file: {temp_path}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
+            finally:
+                # CRITICAL: Always clean up temp file, even if consolidation fails
+                try:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                        logger.debug(f"Cleaned up temp file: {temp_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
 
         # Clear the global registry
         _streaming_files.clear()
         logger.info("✅ Finalized all streaming files")
+
+        # Force garbage collection after finalizing all files
+        import gc
+
+        gc.collect()
+
         return True
 
     except Exception as e:

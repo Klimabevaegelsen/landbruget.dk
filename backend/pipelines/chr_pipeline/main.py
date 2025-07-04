@@ -577,6 +577,28 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                     except Exception:
                         pass  # Ignore if psutil is not available
 
+            # CRITICAL: More aggressive cleanup every chunk to prevent accumulation
+            # Clear any lingering temporary files from /tmp
+            if chunk_idx % 5 == 0:  # Every 5 chunks
+                try:
+                    import glob
+
+                    temp_files = glob.glob("/tmp/chr_streaming_*")
+                    for temp_file in temp_files:
+                        try:
+                            if os.path.exists(temp_file):
+                                os.unlink(temp_file)
+                                logging.debug(f"Cleaned up orphaned temp file: {temp_file}")
+                        except Exception as e:
+                            logging.debug(f"Could not remove temp file {temp_file}: {e}")
+                except Exception as e:
+                    logging.debug(f"Error during temp file cleanup: {e}")
+
+            # Force aggressive garbage collection for memory-constrained environments
+            if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true":
+                gc.collect()
+                gc.collect()  # Double collection for aggressive cleanup
+
         # Store only essential summary data for context (no full results to prevent memory issues)
         context["animal_movements_results"] = {
             "total_successful": total_successful,
@@ -635,6 +657,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
 def main():
     """Main pipeline execution."""
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     args = parse_args()
     setup_logging(args["log_level"])
 
@@ -861,7 +886,29 @@ def main():
         else:
             logging.warning("No bronze data to export - skipping bronze export finalization.")
 
-        logging.warning(f"Pipeline run for steps '{requested_step}' completed successfully")
+        # --- Final Cleanup and Summary ---
+        logger.info("=== CHR Pipeline Execution Complete ===")
+        logger.info(f"Total execution time: {datetime.now() - start_time}")
+
+        # Run comprehensive cleanup
+        try:
+            from .cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
+
+            logger.info("Running final cleanup of temporary files...")
+            monitor_disk_usage()
+            cleaned_files, total_size = cleanup_temp_files()
+            if cleaned_files > 0:
+                logger.info(f"Final cleanup: {cleaned_files} files removed, {total_size / (1024 * 1024):.2f} MB freed")
+            monitor_disk_usage()
+        except Exception as e:
+            logger.warning(f"Error during final cleanup: {e}")
+
+        # Force final garbage collection
+        import gc
+
+        gc.collect()
+
+        logger.info("CHR Pipeline finished successfully")
 
     except Exception as e:
         logging.error(f"Pipeline failed: {e}", exc_info=True)

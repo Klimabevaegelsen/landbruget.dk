@@ -590,14 +590,19 @@ class H3PFASProcessorRefactored:
         self.conn.execute(f"SET threads={self.config.thread_count}")
 
         # Install extensions
-        extensions = ["h3", "spatial", "httpfs"]
-        for ext in extensions:
+        extensions = [
+            ("h3", "FROM community"),  # Use community repository for H3 extension
+            ("spatial", ""),
+            ("httpfs", ""),
+        ]
+        for ext_name, ext_source in extensions:
             try:
-                self.conn.execute(f"INSTALL {ext}")
-                self.conn.execute(f"LOAD {ext}")
-                self.log.debug(f"✅ Loaded DuckDB extension: {ext}")
+                install_cmd = f"INSTALL {ext_name} {ext_source}".strip()
+                self.conn.execute(install_cmd)
+                self.conn.execute(f"LOAD {ext_name}")
+                self.log.debug(f"✅ Loaded DuckDB extension: {ext_name}")
             except Exception as e:
-                self.log.error(f"❌ Failed to load extension {ext}: {e}")
+                self.log.error(f"❌ Failed to load extension {ext_name}: {e}")
                 raise
 
         # Initialize GCS access for cloud data loading
