@@ -255,7 +255,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             for old_col, new_col in column_mapping.items():
                 if old_col in available_columns:
-                    column_mappings.append(f'"{old_col}" as "{new_col}"')
+                    # Apply proper type casting for area columns
+                    if new_col in [
+                        "area_ha",
+                        "block_area_ha",
+                        "applied_area_ha",
+                        "reported_area_ha",
+                    ]:
+                        column_mappings.append(f'CAST("{old_col}" AS DOUBLE) as "{new_col}"')
+                    else:
+                        column_mappings.append(f'"{old_col}" as "{new_col}"')
 
             # Add any unmapped columns with their original names
             for col in columns:

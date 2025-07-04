@@ -262,18 +262,25 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Create column mapping for renaming
             column_mapping = []
             for col_name, col_type in columns_info:
-                # Standardize column name: lowercase, replace spaces/special chars with underscores
-                standardized_name = "".join(
-                    c.lower() if c.isalnum() else "_" for c in str(col_name)
-                ).strip("_")
+                # Apply domain-specific column name mappings first
+                mapped_name = self._apply_domain_specific_mappings(col_name)
 
-                # Ensure it doesn't start with a number
-                if standardized_name and standardized_name[0].isdigit():
-                    standardized_name = f"col_{standardized_name}"
+                if mapped_name:
+                    # Use domain-specific mapping
+                    standardized_name = mapped_name
+                else:
+                    # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    standardized_name = "".join(
+                        c.lower() if c.isalnum() else "_" for c in str(col_name)
+                    ).strip("_")
 
-                # Handle empty names
-                if not standardized_name:
-                    standardized_name = f"column_{len(column_mapping)}"
+                    # Ensure it doesn't start with a number
+                    if standardized_name and standardized_name[0].isdigit():
+                        standardized_name = f"col_{standardized_name}"
+
+                    # Handle empty names
+                    if not standardized_name:
+                        standardized_name = f"column_{len(column_mapping)}"
 
                 column_mapping.append(f'"{col_name}" AS {standardized_name}')
 
@@ -287,6 +294,9 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 FROM {table_name}
             """)
 
+            # Add backward compatibility columns for pesticide data
+            self._add_backward_compatibility_columns(result_table)
+
             logger.debug(f"Standardized column names for table {table_name}")
             return result_table
 
@@ -294,6 +304,83 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             logger.error(f"Failed to standardize column names: {str(e)}")
             # Return original table if standardization fails
             return table_name
+
+    def _apply_domain_specific_mappings(self, col_name: str) -> str:
+        """Apply domain-specific column name mappings for known data types.
+
+        Args:
+            col_name: Original column name
+
+        Returns:
+            Mapped column name or None if no mapping applies
+        """
+        # Normalize column name for comparison (lowercase, no spaces)
+        normalized_name = col_name.lower().replace(" ", "").replace("_", "")
+
+        # Pesticide data column mappings
+        pesticide_mappings = {
+            "acreagesize": "area_ha",
+            "companyregistrationnumber": "cvr_number",
+            "code": "crop_code",
+            "pesticidename": "pesticide_name",
+            "pesticideregistrationnumber": "pesticide_registration_number",
+            "dosagequantity": "dosage_quantity",
+            "dosageunit": "dosage_unit",
+            "nopesticides": "no_pesticides",
+        }
+
+        # Check if this matches any pesticide column
+        if normalized_name in pesticide_mappings:
+            return pesticide_mappings[normalized_name]
+
+        # Add other domain-specific mappings here as needed
+
+        return None
+
+    def _add_backward_compatibility_columns(self, table_name: str) -> None:
+        """Add backward compatibility columns for pesticide data to maintain downstream compatibility.
+
+        Args:
+            table_name: Name of the table to add compatibility columns to
+        """
+        try:
+            # Get current columns to check what we're working with
+            columns_info = self.get_table_info(table_name)
+            column_names = [col[0] for col in columns_info]
+
+            # Define backward compatibility mappings (new_name -> old_name)
+            backward_compatibility_mappings = {
+                "area_ha": "acreagesize",
+                "cvr_number": "companyregistrationnumber",
+                "crop_code": "code",
+                "pesticide_name": "pesticidename",
+                "pesticide_registration_number": "pesticideregistrationnumber",
+                "dosage_quantity": "dosagequantity",
+                "dosage_unit": "dosageunit",
+                "no_pesticides": "nopesticides",
+            }
+
+            # Add backward compatibility columns if the new columns exist
+            alter_statements = []
+            for new_col, old_col in backward_compatibility_mappings.items():
+                if new_col in column_names and old_col not in column_names:
+                    alter_statements.append(
+                        f"ALTER TABLE {table_name} ADD COLUMN {old_col} AS {new_col}"
+                    )
+
+            # Execute all alter statements
+            for statement in alter_statements:
+                self.conn.execute(statement)
+
+            if alter_statements:
+                logger.debug(
+                    f"Added {len(alter_statements)} backward compatibility columns to {table_name}"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to add backward compatibility columns to {table_name}: {str(e)}"
+            )
 
     def _standardize_data_types_duckdb(self, table_name: str) -> str:
         """Apply data type standardization using DuckDB operations.
@@ -312,9 +399,21 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             column_transformations = []
 
             for col_name, col_type in columns_info:
-                # For string columns, try to detect and convert dates/numbers
-                if col_type.upper() in ["VARCHAR", "TEXT"]:
-                    # Try to convert to timestamp if it looks like a date
+                # Apply explicit type casting for known columns
+                if col_name in [
+                    "area_ha",
+                    "block_area_ha",
+                    "applied_area_ha",
+                    "reported_area_ha",
+                    "dosage_quantity",
+                ]:
+                    # Force area and dosage columns to DOUBLE
+                    transformation = f"CAST({col_name} AS DOUBLE) AS {col_name}"
+                elif col_name in ["cvr_number", "crop_code", "pesticide_registration_number"]:
+                    # Force ID columns to VARCHAR
+                    transformation = f"CAST({col_name} AS VARCHAR) AS {col_name}"
+                elif col_type.upper() in ["VARCHAR", "TEXT"]:
+                    # For string columns, try to detect and convert dates/numbers
                     transformation = f"""
                         CASE 
                             WHEN TRY_CAST({col_name} AS TIMESTAMP) IS NOT NULL 
