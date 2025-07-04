@@ -207,8 +207,7 @@ def main():
     # Set environment variables from command line arguments
     if args.h3_resolution:
         os.environ["H3_RESOLUTION"] = str(args.h3_resolution)
-    if args.memory_limit:
-        os.environ["MEMORY_LIMIT"] = args.memory_limit
+    # Memory limit is hardcoded in config - no env variable needed
     if args.thread_count:
         os.environ["THREAD_COUNT"] = str(args.thread_count)
     if args.chunk_size:
