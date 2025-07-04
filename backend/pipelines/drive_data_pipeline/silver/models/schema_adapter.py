@@ -337,4 +337,5 @@ class SchemaAdapter(DuckDBProcessor):
 
             columns.append(col_def)
 
-        return f"CREATE TABLE {table_schema.name} (\n    {',\n    '.join(columns)}\n)"
+        columns_str = ",\n    ".join(columns)
+        return f"CREATE TABLE {table_schema.name} (\n    {columns_str}\n)"
