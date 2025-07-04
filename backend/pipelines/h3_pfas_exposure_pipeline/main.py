@@ -20,7 +20,14 @@ import dotenv
 from loguru import logger
 
 # Load environment variables
-dotenv.load_dotenv()
+# Only load .env file if it exists (for local development)
+# In GitHub Actions, environment variables are set directly
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(env_path):
+    dotenv.load_dotenv(env_path)
+    print(f"Loaded environment variables from {env_path}")
+else:
+    print("No .env file found, using environment variables directly")
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
@@ -70,9 +77,6 @@ async def run_pipeline(
     """
     if config is None:
         config = H3PFASConfig.from_env()
-
-    # DEBUG: Log the config values
-    logger.info(f"🔍 DEBUG: H3PFASConfig created with memory_limit = '{config.memory_limit}'")
 
     logger.info(f"Starting H3 PFAS exposure pipeline in {mode} mode")
 
@@ -213,10 +217,6 @@ def main():
         os.environ["GCS_BUCKET"] = args.bucket
     if args.output_dir:
         os.environ["OUTPUT_DIR"] = args.output_dir
-
-    # DEBUG: Log environment variables
-    logger.info(f"🔍 DEBUG: MEMORY_LIMIT env var = '{os.environ.get('MEMORY_LIMIT', 'NOT SET')}'")
-    logger.info(f"🔍 DEBUG: args.memory_limit = '{args.memory_limit}'")
 
     # Setup directories
     output_dir = setup_directories()
