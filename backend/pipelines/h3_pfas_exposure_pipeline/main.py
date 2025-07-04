@@ -244,9 +244,12 @@ def main():
         return 0
 
     try:
+        # Create config after setting environment variables
+        config = H3PFASConfig.from_env()
+
         # Run the pipeline
         success = asyncio.run(
-            run_pipeline(mode=args.mode, years=args.years, parallel=args.parallel)
+            run_pipeline(mode=args.mode, years=args.years, config=config, parallel=args.parallel)
         )
 
         if success:
