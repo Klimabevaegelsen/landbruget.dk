@@ -25,8 +25,8 @@ dotenv.load_dotenv()
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from h3_pfas_exposure.config import H3PFASConfig
-from h3_pfas_exposure.gold import H3PFASPipeline
+from h3_pfas_exposure.config import H3PFASConfig  # noqa: E402
+from h3_pfas_exposure.gold import H3PFASPipeline  # noqa: E402
 
 
 def setup_logging():
