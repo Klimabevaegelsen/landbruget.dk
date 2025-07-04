@@ -858,9 +858,9 @@ class H3PFASProcessorRefactored:
                 {concentration_column} as koncentration_er,
                 {unit_column} as enhed_er,
                 {total_load_column} as total_load_per_unit,
-                COALESCE(belastning_miljøeffekt, environmental_effect) as environmental_effect_per_unit,
-                COALESCE(belastning_miljøadfærd, environmental_behavior) as environmental_behavior_per_unit,
-                COALESCE(belastning_sundhed, health_effect) as health_effect_per_unit,
+                belastning_miljøeffekt as environmental_effect_per_unit,
+                belastning_miljøadfærd as environmental_behavior_per_unit,
+                belastning_sundhed as health_effect_per_unit,
                 contains_pfas,
                 -- Clean concentration values (handle Danish decimal comma)
                 TRY_CAST(REPLACE(REPLACE({concentration_column}, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric
@@ -1018,28 +1018,50 @@ class H3PFASProcessorRefactored:
         self.log.info(f"🔍 Block ID column handling: {block_select}")
         self.log.info(f"🔍 Area column handling: {area_select}")
 
+        # Build the SELECT clause with proper column references
+        if "area_ha" in column_names:
+            area_field_select = "CAST(f.area_ha AS DOUBLE) as area_ha"
+        elif "field_area_ha" in column_names:
+            area_field_select = "CAST(f.field_area_ha AS DOUBLE) as area_ha"
+        else:
+            area_field_select = "NULL as area_ha"
+
+        if "cvr_number" in column_names:
+            cvr_field_select = "f.cvr_number"
+        elif "company_registration_number" in column_names:
+            cvr_field_select = "f.company_registration_number as cvr_number"
+        else:
+            cvr_field_select = "NULL as cvr_number"
+
+        if "block_id" in column_names:
+            block_field_select = "f.block_id"
+        elif "block_number" in column_names:
+            block_field_select = "f.block_number as block_id"
+        else:
+            block_field_select = "NULL as block_id"
+
         # Process fields with geometry preparation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE prepared_fields AS
             SELECT
                 f.field_id,
-                {area_select.replace("area_ha", "f.area_ha")},
-                {cvr_select.replace("cvr_number", "f.cvr_number").replace("company_registration_number", "f.company_registration_number")},
-                {block_select.replace("block_id", "f.block_id").replace("block_number", "f.block_number")},
+                {area_field_select},
+                {cvr_field_select},
+                {block_field_select},
                 f.crop_code,
                 f.crop_name,
                 f.geometry_wkt
             FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
-                COALESCE(f.cvr_number, f.company_registration_number) = p.cvr
+                {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
                 AND f.field_id = p.field_id
-                AND COALESCE(f.block_id, f.block_number) = p.block_id
+                AND {"f.block_id" if "block_id" in column_names else "f.block_number"} = p.block_id
             )
             WHERE f.geometry_wkt IS NOT NULL
             AND ST_IsValid(ST_GeomFromText(f.geometry_wkt))
-            AND COALESCE(CAST(f.area_ha AS DOUBLE), CAST(f.field_area_ha AS DOUBLE)) > 0
-            AND COALESCE(f.cvr_number, f.company_registration_number) IS NOT NULL
-            AND COALESCE(f.block_id, f.block_number) IS NOT NULL
+            AND {"CAST(f.area_ha AS DOUBLE)" if "area_ha" in column_names else "CAST(f.field_area_ha AS DOUBLE)"} > 0
+            AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} IS NOT NULL
+            AND {"f.block_id" if "block_id" in column_names else "f.block_number"} IS NOT NULL
         """)
 
         # Use coordinate transformer to prepare geometries
@@ -1137,9 +1159,9 @@ class H3PFASProcessorRefactored:
                 {pesticide_reg_column} as PesticideRegistrationNumber,
                 {dosage_quantity_column} as DosageQuantity,
                 {dosage_unit_column} as DosageUnit,
-                COALESCE(AllocatedArea, allocated_area) as AllocatedArea,
-                COALESCE(AllocationMethod, allocation_method) as AllocationMethod,
-                COALESCE(MatchConfidence, match_confidence) as MatchConfidence,
+                AllocatedArea,
+                AllocationMethod,
+                MatchConfidence,
                 -- Extract field_id and block_id for matching
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
