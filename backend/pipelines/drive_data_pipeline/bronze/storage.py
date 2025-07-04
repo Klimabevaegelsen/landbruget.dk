@@ -48,7 +48,7 @@ class BronzeStorageManager:
 
         # Store timestamp for use in create_folder_structure
         # The actual directory creation happens in create_folder_structure based on subfolder
-        if hasattr(self.storage_manager.storage, "bucket"):
+        if self.storage_manager.storage_type.lower() == "gcs":
             # GCS storage - use bronze as base
             run_dir = Path("bronze")
         else:
@@ -150,7 +150,7 @@ class BronzeStorageManager:
                         f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
                     )
                     # For GCS, try a brief retry since there might be eventual consistency issues
-                    if hasattr(self.storage_manager.storage, "bucket"):
+                    if self.storage_manager.storage_type.lower() == "gcs":
                         import time
 
                         time.sleep(0.5)  # Brief wait for GCS consistency
