@@ -76,7 +76,7 @@ class H3PFASConfig:
 
     @classmethod
     def from_env(cls) -> "H3PFASConfig":
-        """Create configuration from environment variables."""
+        """Create configuration from environment variables with sensible defaults."""
         h3_resolution = int(os.getenv("H3_RESOLUTION", "10"))
 
         # Validate resolution
@@ -86,7 +86,7 @@ class H3PFASConfig:
         return cls(
             h3_resolution=h3_resolution,
             chunk_size=int(os.getenv("CHUNK_SIZE", "25000")),
-            memory_limit=os.getenv("MEMORY_LIMIT", "12GB"),
+            memory_limit="12GB",  # Always use 12GB - no env dependency
             thread_count=int(os.getenv("THREAD_COUNT", "4")),
             bucket=os.getenv("GCS_BUCKET", "landbrugsdata-raw-data"),
             enable_progress_tracking=os.getenv("ENABLE_PROGRESS_TRACKING", "true").lower()
