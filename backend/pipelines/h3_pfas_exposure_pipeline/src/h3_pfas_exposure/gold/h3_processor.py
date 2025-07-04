@@ -683,7 +683,7 @@ class H3PFASProcessorRefactored:
 
         # Aggressive memory management
         self.conn.execute("SET checkpoint_threshold='100MB'")  # Frequent checkpoints
-        self.conn.execute("PRAGMA wal_autocheckpoint=1000")  # Frequent WAL checkpoints
+        # Temporarily disabled: self.conn.execute("PRAGMA wal_autocheckpoint=1000")  # Frequent WAL checkpoints
 
         # Install extensions
         extensions = [
