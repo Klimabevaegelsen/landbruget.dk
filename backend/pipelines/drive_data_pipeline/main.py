@@ -378,16 +378,17 @@ def main() -> int:
                     )
 
                     # For GCS storage, also check recursively
-                    if hasattr(storage_manager.storage, "bucket"):
+                    if storage_manager.storage_type.lower() == "gcs":
                         # GCS storage - list with recursive prefix
                         prefix = str(bronze_run_path).rstrip("/") + "/"
-                        blobs = storage_manager.storage.bucket.list_blobs(prefix=prefix)
-                        additional_files = [
-                            Path(blob.name)
-                            for blob in blobs
-                            if blob.name.endswith(".metadata.json")
-                        ]
-                        metadata_files.extend(additional_files)
+                        if hasattr(storage_manager, "gcs_bucket") and storage_manager.gcs_bucket:
+                            blobs = storage_manager.gcs_bucket.list_blobs(prefix=prefix)
+                            additional_files = [
+                                Path(blob.name)
+                                for blob in blobs
+                                if blob.name.endswith(".metadata.json")
+                            ]
+                            metadata_files.extend(additional_files)
 
                     # Filter by file types if specified
                     files_to_process_count = len(metadata_files)

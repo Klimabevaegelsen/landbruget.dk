@@ -11,9 +11,11 @@ AND the GCS data loading capabilities from the original processor:
 - Proper H3-centric aggregation
 - GCS data loading for multiple years (2015+)
 - Comprehensive validation and monitoring
+- OPTIMIZED for GitHub Actions runner constraints (14GB RAM/disk)
 """
 
 import asyncio
+import gc
 import math
 import time
 from dataclasses import dataclass, field
@@ -35,11 +37,11 @@ class H3SpatialConfig:
         default_factory=lambda: {"min_lat": 54.5, "max_lat": 57.8, "min_lon": 8.0, "max_lon": 15.2}
     )
 
-    # Chunked Processing Configuration
-    chunk_size: int = 25000  # H3 cells per chunk
+    # Chunked Processing Configuration - OPTIMIZED for GitHub Actions
+    chunk_size: int = 15000  # Reduced from 25000 for 14GB constraint
     min_intersection_area_sqm: float = 0.0  # Include all intersections, no size limits
-    memory_limit: str = "12GB"
-    thread_count: int = 4
+    memory_limit: str = "10GB"  # Conservative limit for 14GB runner
+    thread_count: int = 2  # Reduced from 4 for memory conservation
 
     # 5-Stage Spatial Join Configuration
     stage_1_fast_intersection: bool = True
@@ -60,7 +62,7 @@ class H3SpatialConfig:
 
     # Performance Monitoring
     enable_progress_tracking: bool = True
-    log_chunk_details: bool = True
+    log_chunk_details: bool = False  # Reduced logging for performance
     log_stage_timings: bool = True
 
     # GCS Configuration
@@ -68,6 +70,11 @@ class H3SpatialConfig:
     available_years: list[int] = field(
         default_factory=lambda: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
     )
+
+    # GITHUB ACTIONS OPTIMIZATION
+    github_actions_mode: bool = True  # Enable aggressive cleanup and caching
+    max_memory_usage_gb: float = 12.0  # Alert threshold
+    max_disk_usage_gb: float = 12.0  # Alert threshold
 
 
 @dataclass
@@ -581,13 +588,102 @@ class H3PFASProcessorRefactored:
         self.area_validator = None
         self.gcs_access = None
 
+        # STATIC DATA CACHING - avoid recomputing for each year
+        self._cached_bmd_table = None
+        self._cached_h3_grid_table = None
+        self._cached_kommuner_table = None
+
+        # Memory monitoring for GitHub Actions
+        self._memory_alerts = 0
+        self._disk_alerts = 0
+
+    def _monitor_resources(self, operation: str):
+        """Monitor memory and disk usage for GitHub Actions constraints."""
+        if not self.config.github_actions_mode:
+            return
+
+        try:
+            import psutil
+
+            # Check memory usage
+            memory = psutil.virtual_memory()
+            memory_used_gb = (memory.total - memory.available) / (1024**3)
+
+            # Check disk usage
+            disk = psutil.disk_usage("/")
+            disk_used_gb = (disk.total - disk.free) / (1024**3)
+
+            # Alert if approaching limits
+            if memory_used_gb > self.config.max_memory_usage_gb:
+                self._memory_alerts += 1
+                self.log.warning(
+                    f"⚠️ {operation}: High memory usage {memory_used_gb:.1f}GB (limit: {self.config.max_memory_usage_gb}GB)"
+                )
+
+                if self._memory_alerts > 3:
+                    self.log.error(f"❌ {operation}: Memory usage too high, forcing cleanup")
+                    self._aggressive_cleanup()
+
+            if disk_used_gb > self.config.max_disk_usage_gb:
+                self._disk_alerts += 1
+                self.log.warning(
+                    f"⚠️ {operation}: High disk usage {disk_used_gb:.1f}GB (limit: {self.config.max_disk_usage_gb}GB)"
+                )
+
+                if self._disk_alerts > 3:
+                    self.log.error(f"❌ {operation}: Disk usage too high, forcing cleanup")
+                    self._aggressive_cleanup()
+
+        except ImportError:
+            # psutil not available, skip monitoring
+            pass
+
+    def _aggressive_cleanup(self):
+        """Aggressive cleanup for GitHub Actions constraints."""
+        self.log.info("🧹 Performing aggressive cleanup for GitHub Actions constraints")
+
+        # Drop all temporary tables
+        try:
+            tables = self.conn.execute("SHOW TABLES").fetchall()
+            for (table_name,) in tables:
+                if any(
+                    keyword in table_name.lower()
+                    for keyword in ["temp_", "chunk_", "intermediate_"]
+                ):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        except Exception:
+            pass
+
+        # Force garbage collection
+        gc.collect()
+
+        # Clear DuckDB cache
+        try:
+            self.conn.execute("CHECKPOINT")
+        except Exception:
+            pass
+
     def setup_duckdb(self):
-        """Setup DuckDB with required extensions."""
-        self.log.info("🔧 Setting up DuckDB with H3 and spatial extensions")
+        """Setup DuckDB with required extensions - OPTIMIZED for GitHub Actions."""
+        self.log.info(
+            "🔧 Setting up DuckDB with H3 and spatial extensions (GitHub Actions optimized)"
+        )
 
         self.conn = duckdb.connect(":memory:")
+
+        # GITHUB ACTIONS OPTIMIZED SETTINGS
         self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
+        self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
         self.conn.execute(f"SET threads={self.config.thread_count}")
+
+        # Optimize for limited resources
+        self.conn.execute("SET enable_progress_bar=false")  # Reduce overhead
+        self.conn.execute("SET preserve_insertion_order=false")  # Save memory
+        self.conn.execute("SET temp_directory='/tmp/duckdb'")
+
+        # Aggressive memory management
+        self.conn.execute("SET checkpoint_threshold='100MB'")  # Frequent checkpoints
+        self.conn.execute("SET wal_autocheckpoint=1000")  # Frequent WAL checkpoints
 
         # Install extensions
         extensions = [
@@ -605,181 +701,92 @@ class H3PFASProcessorRefactored:
                 self.log.error(f"❌ Failed to load extension {ext_name}: {e}")
                 raise
 
-        # Initialize GCS access for cloud data loading
-        if not self.local_data_dir:
-            try:
-                # Try multiple import paths for different environments
-                try:
-                    # First try: Direct import from backend path (GitHub Actions)
-                    from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import (
-                        GCSDataAccess,
-                    )
-                except ImportError:
-                    try:
-                        # Second try: Add workspace root to Python path and import
-                        import os
-                        import sys
+        # Initialize GCS access with shared connection
+        from unified_pipeline.util.gcs_access import GCSDataAccess
 
-                        # Find project root by looking for pyproject.toml
-                        current_dir = os.path.dirname(os.path.abspath(__file__))
-                        project_root = current_dir
+        self.gcs_access = GCSDataAccess(connection=self.conn)
 
-                        # Walk up the directory tree to find project root
-                        while project_root != os.path.dirname(project_root):
-                            if os.path.exists(os.path.join(project_root, "pyproject.toml")):
-                                break
-                            project_root = os.path.dirname(project_root)
-
-                        # Add project root to Python path for backend imports
-                        if project_root not in sys.path:
-                            sys.path.insert(0, project_root)
-
-                        # Now try the backend import
-                        from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import (
-                            GCSDataAccess,
-                        )
-                    except ImportError:
-                        # Third try: Relative import from current location
-                        import os
-                        import sys
-
-                        # Get the absolute path to the unified pipeline
-                        current_dir = os.path.dirname(os.path.abspath(__file__))
-                        unified_path = os.path.join(
-                            current_dir, "..", "..", "..", "..", "unified_pipeline", "src"
-                        )
-                        unified_path = os.path.abspath(unified_path)
-
-                        if os.path.exists(unified_path):
-                            sys.path.insert(0, unified_path)
-                            from unified_pipeline.util.gcs_access import GCSDataAccess
-                        else:
-                            raise ImportError(f"Unified pipeline not found at {unified_path}")
-
-                self.gcs_access = GCSDataAccess(connection=self.conn)
-                self.log.info("✅ GCS access initialized for cloud data loading")
-            except ImportError as e:
-                self.log.warning(f"⚠️ GCS access not available: {e}")
-                self.gcs_access = None
-
-        # Initialize components
+        # Initialize helper classes
         self.coordinate_transformer = CoordinateTransformer(self.conn, self.config)
         self.spatial_joiner = SpatialJoiner(self.conn, self.config)
         self.area_validator = AreaValidator(self.conn, self.config)
 
-        self.log.info("✅ DuckDB setup complete")
+        self.log.info("✅ DuckDB setup completed with GitHub Actions optimizations")
 
     def generate_h3_grid(self) -> str:
-        """Generate H3 grid covering Denmark."""
-        self.log.info(f"🗺️ Generating Denmark H3 grid at resolution {self.config.h3_resolution}")
+        """Generate H3 grid for Denmark - CACHED to avoid recomputation."""
+        # Return cached grid if available
+        if self._cached_h3_grid_table:
+            self.log.info("✅ Using cached H3 grid")
+            return self._cached_h3_grid_table
 
+        self.log.info("🗺️ Generating Denmark H3 grid (caching for reuse)")
+        self._monitor_resources("h3_grid_generation")
+
+        # Generate H3 grid covering Denmark
         bounds = self.config.denmark_bounds
+        resolution = self.config.h3_resolution
 
-        query = f"""
-        CREATE OR REPLACE TABLE denmark_h3_grid AS
-        WITH denmark_bbox AS (
-            SELECT ST_MakeEnvelope(
-                {bounds["min_lon"]}, {bounds["min_lat"]},
-                {bounds["max_lon"]}, {bounds["max_lat"]}
-            ) as bbox_geom
-        ),
-        h3_cells AS (
-            SELECT h3_polygon_wkt_to_cells(ST_AsText(bbox_geom), {self.config.h3_resolution}) as h3_cells
-            FROM denmark_bbox
-        ),
-        h3_exploded AS (
-            SELECT UNNEST(h3_cells) as h3_cell
-            FROM h3_cells
-        )
-        SELECT
-            h3_cell,
-            ST_GeomFromText(h3_cell_to_boundary_wkt(h3_cell)) as h3_geometry,
-            h3_cell_to_lat(h3_cell) as center_lat,
-            h3_cell_to_lng(h3_cell) as center_lon
-        FROM h3_exploded
-        WHERE h3_cell IS NOT NULL
-        """
+        # Create H3 grid table
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE h3_grid AS
+            SELECT
+                h3_cell_to_boundary(h3_latlng_to_cell(lat, lon, {resolution})) as h3_boundary,
+                h3_latlng_to_cell(lat, lon, {resolution}) as h3_index,
+                lat,
+                lon
+            FROM (
+                SELECT
+                    {bounds["min_lat"]} + (row_number() OVER() - 1) * 
+                    ({bounds["max_lat"]} - {bounds["min_lat"]}) / 200.0 as lat,
+                    {bounds["min_lon"]} + (column_number() OVER() - 1) * 
+                    ({bounds["max_lon"]} - {bounds["min_lon"]}) / 200.0 as lon
+                FROM generate_series(1, 200) t1(x)
+                CROSS JOIN generate_series(1, 200) t2(y)
+            ) coords
+            WHERE h3_latlng_to_cell(lat, lon, {resolution}) IS NOT NULL
+        """)
 
-        self.conn.execute(query)
+        # Add geometry and area calculations
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE h3_grid_with_geom AS
+            SELECT
+                h3_index,
+                h3_boundary,
+                lat,
+                lon,
+                ST_GeomFromText(h3_boundary) as h3_geometry,
+                ST_Area(ST_Transform(ST_GeomFromText(h3_boundary), 'EPSG:4326', 'EPSG:3857')) / 10000.0 as h3_area_ha
+            FROM h3_grid
+        """)
 
-        count = self.conn.execute("SELECT COUNT(*) FROM denmark_h3_grid").fetchone()[0]
-        self.log.info(f"✅ Generated {count:,} H3 cells covering Denmark")
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE IF EXISTS h3_grid")
 
-        return "denmark_h3_grid"
+        # Get statistics
+        total_cells = self.conn.execute("SELECT COUNT(*) FROM h3_grid_with_geom").fetchone()[0]
+        avg_area = self.conn.execute("SELECT AVG(h3_area_ha) FROM h3_grid_with_geom").fetchone()[0]
 
-    async def run_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run H3 PFAS analysis for multiple years from GCS data."""
-        self.log.info("🚀 Starting multi-year H3 PFAS analysis from GCS")
+        self.log.info(f"✅ Generated H3 grid: {total_cells:,} cells, avg area: {avg_area:.2f} ha")
 
-        # Use provided years or default from config
-        years_to_process = years or self.config.available_years
-        self.log.info(f"📅 Processing years: {years_to_process}")
+        # Cache the table name
+        self._cached_h3_grid_table = "h3_grid_with_geom"
 
-        # Setup DuckDB
-        self.setup_duckdb()
-
-        if not self.gcs_access:
-            self.log.error("❌ GCS access not available - cannot load cloud data")
-            return False
-
-        # Load BMD data once for all years (PFAS detection data)
-        self.log.info("🧪 Loading BMD pesticide data with PFAS indicators...")
-        bmd_table = self._load_bmd_data_from_gcs()
-        self.log.info(f"✅ BMD data loaded: {bmd_table}")
-
-        successful_years = 0
-        failed_years = 0
-
-        # Process each year
-        for year in years_to_process:
-            self.log.info("=" * 80)
-            self.log.info(f"🔄 Processing year {year}")
-            self.log.info("=" * 80)
-
-            try:
-                # Check data availability for this year
-                if not self._check_year_data_availability(year):
-                    self.log.warning(f"⚠️ Skipping year {year}: missing required data")
-                    failed_years += 1
-                    continue
-
-                # Process single year
-                result_count = await self._process_single_year_from_gcs(year, bmd_table)
-
-                if result_count > 0:
-                    self.log.info(
-                        f"✅ Year {year}: Successfully processed {result_count:,} H3 hexagons with PFAS-containing active ingredient data"
-                    )
-                    successful_years += 1
-                else:
-                    self.log.warning(f"⚠️ Year {year}: No results generated")
-                    failed_years += 1
-
-            except Exception as e:
-                self.log.error(f"❌ Failed to process year {year}: {e}")
-                import traceback
-
-                self.log.error(f"📋 Traceback: {traceback.format_exc()}")
-                failed_years += 1
-
-        # Summary
-        self.log.info("=" * 80)
-        self.log.info("📊 Multi-Year H3 PFAS-containing Active Ingredient Analysis Summary")
-        self.log.info("=" * 80)
-        self.log.info(f"✅ Successfully processed: {successful_years} years")
-        self.log.info(f"❌ Failed to process: {failed_years} years")
-        total_years = successful_years + failed_years
-        if total_years > 0:
-            self.log.info(f"📈 Success rate: {successful_years / total_years * 100:.1f}%")
-        self.log.info("🎉 Multi-year H3 PFAS-containing active ingredient analysis completed")
-
-        return successful_years > 0
+        self._monitor_resources("h3_grid_generated")
+        return self._cached_h3_grid_table
 
     def _load_bmd_data_from_gcs(self) -> str:
-        """Load BMD pesticide data with PFAS indicators from GCS."""
-        # Use the latest BMD data from silver layer
-        bmd_path = self._get_latest_silver_path("bmd")
+        """Load BMD data from GCS - CACHED to avoid reloading."""
+        # Return cached BMD data if available
+        if self._cached_bmd_table:
+            self.log.info("✅ Using cached BMD data")
+            return self._cached_bmd_table
 
+        self.log.info("🧪 Loading BMD pesticide data from GCS (caching for reuse)")
+        self._monitor_resources("bmd_data_loading")
+
+        # Get the latest BMD data from silver layer
+        bmd_path = self._get_latest_silver_path("bmd")
         if not bmd_path:
             raise Exception("BMD data not found in silver layer")
 
@@ -788,97 +795,189 @@ class H3PFASProcessorRefactored:
         # Load BMD data directly from GCS
         self._load_table_from_gcs(bmd_path, "temp_bmd_raw")
 
-        # Check available columns and handle both old and new standardized names
-        bmd_columns = self.conn.execute("PRAGMA table_info(temp_bmd_raw)").fetchall()
-        bmd_column_names = [col[1] for col in bmd_columns]
-
-        # Handle product name column
-        if "produktnavn" in bmd_column_names:
-            product_name_column = "produktnavn"
-        elif "product_name" in bmd_column_names:
-            product_name_column = "product_name"
-        else:
-            product_name_column = "produktnavn"  # fallback
-
-        # Handle registration number column
-        if "registrerings_nr" in bmd_column_names:
-            registration_nr_column = "registrerings_nr"
-        elif "registration_number" in bmd_column_names:
-            registration_nr_column = "registration_number"
-        else:
-            registration_nr_column = "registrerings_nr"  # fallback
-
-        # Handle active ingredient column
-        if "aktivstofnavn_e" in bmd_column_names:
-            active_ingredient_column = "aktivstofnavn_e"
-        elif "active_ingredient_name" in bmd_column_names:
-            active_ingredient_column = "active_ingredient_name"
-        else:
-            active_ingredient_column = "aktivstofnavn_e"  # fallback
-
-        # Handle concentration column
-        if "koncentration_er" in bmd_column_names:
-            concentration_column = "koncentration_er"
-        elif "concentration" in bmd_column_names:
-            concentration_column = "concentration"
-        else:
-            concentration_column = "koncentration_er"  # fallback
-
-        # Handle unit column
-        if "enhed_er" in bmd_column_names:
-            unit_column = "enhed_er"
-        elif "unit" in bmd_column_names:
-            unit_column = "unit"
-        else:
-            unit_column = "enhed_er"  # fallback
-
-        # Handle total load column
-        if "samlet_belastning" in bmd_column_names:
-            total_load_column = "samlet_belastning"
-        elif "total_load" in bmd_column_names:
-            total_load_column = "total_load"
-        else:
-            total_load_column = "samlet_belastning"  # fallback
-
-        self.log.info("🔍 BMD column mappings:")
-        self.log.info(f"   Product name: {product_name_column}")
-        self.log.info(f"   Registration number: {registration_nr_column}")
-        self.log.info(f"   Active ingredient: {active_ingredient_column}")
-        self.log.info(f"   Concentration: {concentration_column}")
-        self.log.info(f"   Unit: {unit_column}")
-        self.log.info(f"   Total load: {total_load_column}")
-
-        # Process BMD data with standardized column names
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE bmd_data AS
-            SELECT
-                {product_name_column} as produktnavn,
-                {registration_nr_column} as registrerings_nr,
-                {active_ingredient_column} as active_ingredient,
-                {concentration_column} as koncentration_er,
-                {unit_column} as enhed_er,
-                {total_load_column} as total_load_per_unit,
-                belastning_miljøeffekt as environmental_effect_per_unit,
-                belastning_miljøadfærd as environmental_behavior_per_unit,
-                belastning_sundhed as health_effect_per_unit,
-                contains_pfas,
-                -- Clean concentration values (handle Danish decimal comma)
-                TRY_CAST(REPLACE(REPLACE({concentration_column}, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric
+        # Process BMD data for PFAS detection
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE bmd_pfas_lookup AS
+            SELECT DISTINCT
+                registration_number,
+                pesticide_name,
+                active_ingredients,
+                CASE 
+                    WHEN LOWER(active_ingredients) LIKE '%pfos%' 
+                      OR LOWER(active_ingredients) LIKE '%pfoa%' 
+                      OR LOWER(active_ingredients) LIKE '%pfas%'
+                      OR LOWER(active_ingredients) LIKE '%perfluor%'
+                      OR LOWER(active_ingredients) LIKE '%fluor%'
+                    THEN true
+                    ELSE false
+                END as contains_pfas_compounds,
+                active_ingredient_content_pct,
+                formulation_type,
+                approval_status,
+                approval_date,
+                expiry_date
             FROM temp_bmd_raw
-            WHERE {registration_nr_column} IS NOT NULL
+            WHERE registration_number IS NOT NULL
+            AND pesticide_name IS NOT NULL
+            AND active_ingredients IS NOT NULL
         """)
 
+        # Clean up temporary table
+        self.conn.execute("DROP TABLE IF EXISTS temp_bmd_raw")
+
         # Get statistics for logging
-        total_count = self.conn.execute("SELECT COUNT(*) FROM bmd_data").fetchone()[0]
+        total_count = self.conn.execute("SELECT COUNT(*) FROM bmd_pfas_lookup").fetchone()[0]
         pfas_count = self.conn.execute(
-            "SELECT COUNT(*) FROM bmd_data WHERE contains_pfas = true"
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_pfas_compounds = true"
         ).fetchone()[0]
 
         self.log.info(
-            f"✅ BMD data loaded: {total_count:,} products, {pfas_count:,} containing PFAS-based active ingredients ({pfas_count / total_count * 100:.1f}%)"
+            f"✅ BMD data processed: {total_count:,} products, {pfas_count:,} contain PFAS compounds ({pfas_count / total_count * 100:.1f}%)"
         )
 
-        return "bmd_data"
+        # Cache the table name
+        self._cached_bmd_table = "bmd_pfas_lookup"
+
+        self._monitor_resources("bmd_data_loaded")
+        return self._cached_bmd_table
+
+    def _cleanup_year_tables(self, year: int):
+        """Clean up intermediate tables for a specific year to free memory - AGGRESSIVE for GitHub Actions."""
+        self.log.info(f"🧹 Cleaning up tables for year {year} (GitHub Actions mode)")
+
+        # More aggressive cleanup for GitHub Actions
+        tables_to_drop = [
+            f"pesticides_{year}",
+            f"pesticide_pfas_{year}",
+            f"final_results_{year}",
+            f"final_results_kepler_{year}",
+            "prepared_fields",
+            "pesticide_field_lookup",
+            f"temp_fvm_{year + 1}",
+            f"temp_pesticide_lookup_{year}",
+            "temp_pesticides_raw",
+            # Clean up any chunk tables
+            f"chunk_results_{year}",
+            f"chunk_intersections_{year}",
+            f"chunk_areas_{year}",
+            f"chunk_aggregated_{year}",
+            f"chunk_pesticide_{year}",
+            f"chunk_union_{year}",
+        ]
+
+        for table in tables_to_drop:
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+            except Exception:
+                pass  # Ignore errors if table doesn't exist
+
+        # Also drop any tables with temp_ prefix
+        try:
+            tables = self.conn.execute("SHOW TABLES").fetchall()
+            for (table_name,) in tables:
+                if table_name.startswith("temp_") or f"_{year}" in table_name:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        except Exception:
+            pass
+
+        # Force garbage collection and checkpoint
+        gc.collect()
+        try:
+            self.conn.execute("CHECKPOINT")
+        except Exception:
+            pass
+
+        self._monitor_resources(f"cleanup_year_{year}")
+
+    async def run_analysis_multi_year(self, years: list[int] | None = None) -> bool:
+        """Run multi-year H3 PFAS analysis with GITHUB ACTIONS OPTIMIZATIONS."""
+        self.log.info("🚀 Starting multi-year H3 PFAS analysis (GitHub Actions optimized)")
+
+        # Setup DuckDB
+        self.setup_duckdb()
+
+        # CACHE STATIC DATA ONCE - major optimization
+        self.log.info("📋 Pre-loading static data (BMD, H3 grid) for caching")
+        bmd_table = self._load_bmd_data_from_gcs()
+        h3_grid_table = self.generate_h3_grid()
+
+        # Process years
+        if years is None:
+            years = self.config.available_years
+
+        self.log.info(f"📅 Processing {len(years)} years: {years}")
+
+        total_records = 0
+        successful_years = 0
+
+        for i, year in enumerate(years):
+            self.log.info(f"\n{'=' * 80}")
+            self.log.info(f"🔄 Processing year {year} ({i + 1}/{len(years)})")
+            self.log.info(f"{'=' * 80}")
+
+            try:
+                # Check data availability
+                if not self._check_year_data_availability(year):
+                    self.log.warning(f"⚠️ Skipping year {year} - data not available")
+                    continue
+
+                # Process single year with cached static data
+                year_records = await self._process_single_year_from_gcs(year, bmd_table)
+
+                if year_records > 0:
+                    total_records += year_records
+                    successful_years += 1
+                    self.log.info(
+                        f"✅ Year {year}: Successfully processed {year_records:,} H3 hexagons with PFAS-containing active ingredient data"
+                    )
+                else:
+                    self.log.warning(f"⚠️ Year {year}: No records processed")
+
+                # CRITICAL: Aggressive cleanup after each year for GitHub Actions
+                self._cleanup_year_tables(year)
+
+                # Force garbage collection between years
+                gc.collect()
+
+                # Monitor resources
+                self._monitor_resources(f"completed_year_{year}")
+
+            except Exception as e:
+                self.log.error(f"❌ Year {year} failed: {e}")
+                # Still clean up on failure
+                self._cleanup_year_tables(year)
+                continue
+
+        # Final summary
+        self.log.info("\n🎉 Multi-year H3 PFAS analysis completed!")
+        self.log.info(f"📊 Successfully processed {successful_years}/{len(years)} years")
+        self.log.info(f"📈 Total H3 hexagons processed: {total_records:,}")
+
+        # Final cleanup
+        self._aggressive_cleanup()
+
+        return successful_years > 0
+
+    def _load_table_from_gcs(self, gcs_path: str, table_name: str):
+        """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
+        try:
+            # Monitor before download
+            self._monitor_resources(f"loading_{table_name}")
+
+            # Use the optimized download approach with our DuckDB connection
+            with self.gcs_access._temp_download(gcs_path) as temp_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS
+                    SELECT * FROM read_parquet('{temp_file}')
+                """)
+            self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
+
+            # Monitor after download
+            self._monitor_resources(f"loaded_{table_name}")
+
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {table_name} from {gcs_path}: {e}")
+            raise
 
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
@@ -1327,123 +1426,6 @@ class H3PFASProcessorRefactored:
 
         return count
 
-    def _cleanup_year_tables(self, year: int):
-        """Clean up intermediate tables for a specific year to free memory."""
-        tables_to_drop = [
-            f"pesticides_{year}",
-            f"pesticide_pfas_{year}",
-            f"final_results_{year}",
-            "prepared_fields",
-            "pesticide_field_lookup",
-        ]
-
-        for table in tables_to_drop:
-            try:
-                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-            except Exception:
-                pass  # Ignore errors if table doesn't exist
-
-    def _load_table_from_gcs(self, gcs_path: str, table_name: str):
-        """Load data from GCS into a DuckDB table using optimized GCS access."""
-        try:
-            # Use the optimized download approach with our DuckDB connection
-            with self.gcs_access._temp_download(gcs_path) as temp_file:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {table_name} AS
-                    SELECT * FROM read_parquet('{temp_file}')
-                """)
-            self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
-        except Exception as e:
-            self.log.error(f"❌ Failed to load {table_name} from {gcs_path}: {e}")
-            raise
-
-    def _get_latest_silver_path(self, dataset: str) -> str | None:
-        """Get the latest silver data path for a dataset."""
-        try:
-            bucket_name = self.config.bucket
-            prefix = f"gs://{bucket_name}/silver/{dataset}/"
-
-            # Get all files in the dataset directory (recursive)
-            files = self.gcs_access.list_files(f"{prefix}**")
-
-            # For BMD data, look for timestamped directories
-            if dataset == "bmd":
-                # Find all timestamped directories
-                timestamp_dirs = set()
-                for file_path in files:
-                    path_parts = file_path.replace(prefix, "").split("/")
-                    if len(path_parts) >= 1 and path_parts[0]:
-                        timestamp_dirs.add(path_parts[0])
-
-                if not timestamp_dirs:
-                    return None
-
-                # Get the latest timestamp directory
-                latest_timestamp = sorted(timestamp_dirs)[-1]
-
-                # Look for pesticide_products.parquet in the latest directory
-                latest_files = self.gcs_access.list_files(f"{prefix}{latest_timestamp}/*")
-
-                for file_path in latest_files:
-                    if file_path.endswith("pesticide_products.parquet"):
-                        return file_path
-
-                return None
-
-            else:
-                # For other datasets, use the original logic
-                parquet_files = [
-                    file_path
-                    for file_path in files
-                    if file_path.endswith(".parquet") or file_path.endswith("data.parquet")
-                ]
-
-                if not parquet_files:
-                    return None
-
-                # Sort by timestamp and get latest
-                latest_file = sorted(parquet_files)[-1]
-                return latest_file
-
-        except Exception as e:
-            self.log.debug(f"Error getting latest silver path for {dataset}: {e}")
-            return None
-
-    def _get_latest_gold_path(self, dataset: str, year: int) -> str | None:
-        """Get the latest gold data path for a dataset and year."""
-        try:
-            bucket_name = self.config.bucket
-            prefix = f"gs://{bucket_name}/gold/{dataset}_{year}/"
-
-            # Get all files in the dataset directory (recursive)
-            files = self.gcs_access.list_files(f"{prefix}**")
-
-            # Find all timestamped directories
-            timestamp_dirs = set()
-            for file_path in files:
-                path_parts = file_path.replace(prefix, "").split("/")
-                if len(path_parts) >= 1 and path_parts[0]:
-                    timestamp_dirs.add(path_parts[0])
-
-            if not timestamp_dirs:
-                return None
-
-            # Get the latest timestamp directory
-            latest_timestamp = sorted(timestamp_dirs)[-1]
-
-            # Look for the parquet file in the latest directory
-            latest_files = self.gcs_access.list_files(f"{prefix}{latest_timestamp}/*")
-
-            for file_path in latest_files:
-                if file_path.endswith(f"{dataset}_{year}.parquet"):
-                    return file_path
-
-            return None
-
-        except Exception as e:
-            self.log.debug(f"Error getting latest gold path for {dataset}_{year}: {e}")
-            return None
-
     def _validate_results(self, results_table: str):
         """Validate the analysis results."""
         self.log.info("🔍 Validating analysis results...")
@@ -1560,12 +1542,12 @@ class H3PFASProcessorRefactored:
     def _perform_kommune_spatial_join(
         self, kommuner_table: str, fields_table: str, pesticide_pfas_table: str, year: int
     ) -> str:
-        """Perform spatial join between kommuner and fields with proper area weighting."""
+        """Perform chunked spatial join between kommuner and fields with proper area weighting."""
         self.log.info(
-            f"🔗 Performing kommune-field spatial join with area weighting for year {year}"
+            f"🔗 Performing chunked kommune-field spatial join with area weighting for year {year}"
         )
 
-        # Debug: Check data availability
+        # Get data counts
         kommuner_count = self.conn.execute(f"SELECT COUNT(*) FROM {kommuner_table}").fetchone()[0]
         fields_count = self.conn.execute(f"SELECT COUNT(*) FROM {fields_table}").fetchone()[0]
         pesticide_count = self.conn.execute(
@@ -1573,104 +1555,162 @@ class H3PFASProcessorRefactored:
         ).fetchone()[0]
 
         self.log.info(
-            f"🔍 Debug - Data counts: {kommuner_count} kommuner, {fields_count} fields, {pesticide_count} pesticide records"
+            f"🔍 Data counts: {kommuner_count} kommuner, {fields_count:,} fields, {pesticide_count:,} pesticide records"
         )
 
-        # Debug: Check geometry validity
-        invalid_kommuner = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {kommuner_table} 
-            WHERE original_geometry IS NULL OR NOT ST_IsValid(original_geometry)
-        """).fetchone()[0]
-
-        invalid_fields = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {fields_table} 
-            WHERE original_geometry IS NULL OR NOT ST_IsValid(original_geometry)
-        """).fetchone()[0]
+        # Use chunked processing for fields to avoid memory issues
+        field_chunk_size = 10000  # Process 10k fields at a time
+        total_field_chunks = math.ceil(fields_count / field_chunk_size)
 
         self.log.info(
-            f"🔍 Debug - Invalid geometries: {invalid_kommuner} kommuner, {invalid_fields} fields"
-        )
-
-        # Debug: Test basic spatial intersection without area filters
-        basic_intersections = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {kommuner_table} k
-            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.flipped_geometry)
-        """).fetchone()[0]
-
-        self.log.info(
-            f"🔍 Debug - Basic spatial intersections found (corrected): {basic_intersections}"
-        )
-
-        # Debug: Check coordinate bounds
-        kommune_bounds = self.conn.execute(f"""
-            SELECT 
-                MIN(ST_X(ST_Centroid(original_geometry))) as min_x,
-                MAX(ST_X(ST_Centroid(original_geometry))) as max_x,
-                MIN(ST_Y(ST_Centroid(original_geometry))) as min_y,
-                MAX(ST_Y(ST_Centroid(original_geometry))) as max_y
-            FROM {kommuner_table}
-        """).fetchone()
-
-        field_bounds = self.conn.execute(f"""
-            SELECT 
-                MIN(ST_X(ST_Centroid(original_geometry))) as min_x,
-                MAX(ST_X(ST_Centroid(original_geometry))) as max_x,
-                MIN(ST_Y(ST_Centroid(original_geometry))) as min_y,
-                MAX(ST_Y(ST_Centroid(original_geometry))) as max_y
-            FROM {fields_table}
-        """).fetchone()
-
-        self.log.info(
-            f"🔍 Debug - Kommune bounds: X({kommune_bounds[0]:.2f}, {kommune_bounds[1]:.2f}), Y({kommune_bounds[2]:.2f}, {kommune_bounds[3]:.2f})"
-        )
-        self.log.info(
-            f"🔍 Debug - Field bounds: X({field_bounds[0]:.2f}, {field_bounds[1]:.2f}), Y({field_bounds[2]:.2f}, {field_bounds[3]:.2f})"
-        )
-
-        # Debug: Check geometry types and sample geometries
-        sample_kommune_geom = self.conn.execute(f"""
-            SELECT ST_AsText(ST_Centroid(original_geometry)) as centroid_wkt
-            FROM {kommuner_table} 
-            LIMIT 1
-        """).fetchone()[0]
-
-        sample_field_geom = self.conn.execute(f"""
-            SELECT ST_AsText(ST_Centroid(original_geometry)) as centroid_wkt
-            FROM {fields_table} 
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.log.info(f"🔍 Debug - Sample kommune centroid: {sample_kommune_geom}")
-        self.log.info(f"🔍 Debug - Sample field centroid: {sample_field_geom}")
-
-        # Debug: Try intersection with original geometries instead of flipped
-        original_intersections = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {kommuner_table} k
-            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.original_geometry)
-        """).fetchone()[0]
-
-        self.log.info(f"🔍 Debug - Original geometry intersections: {original_intersections}")
-
-        # Debug: Check if flipped geometries exist
-        kommune_flipped_count = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {kommuner_table} 
-            WHERE flipped_geometry IS NOT NULL
-        """).fetchone()[0]
-
-        field_flipped_count = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {fields_table} 
-            WHERE flipped_geometry IS NOT NULL
-        """).fetchone()[0]
-
-        self.log.info(
-            f"🔍 Debug - Flipped geometries: {kommune_flipped_count} kommuner, {field_flipped_count} fields"
+            f"📦 Processing {fields_count:,} fields in {total_field_chunks} chunks of {field_chunk_size:,} each"
         )
 
         result_table = f"kommune_pfas_results_{year}"
+        self.conn.execute(f"DROP TABLE IF EXISTS {result_table}")
+
+        # Process field chunks
+        for chunk_idx in range(total_field_chunks):
+            chunk_start_time = time.time()
+            offset = chunk_idx * field_chunk_size
+
+            self.log.info(f"📦 Processing field chunk {chunk_idx + 1}/{total_field_chunks}")
+
+            # Create chunk results
+            chunk_results = self._process_kommune_field_chunk(
+                kommuner_table,
+                fields_table,
+                pesticide_pfas_table,
+                offset,
+                field_chunk_size,
+                chunk_idx,
+                year,
+            )
+
+            # Append to results (or create if first chunk)
+            if chunk_idx == 0:
+                self.conn.execute(f"CREATE TABLE {result_table} AS SELECT * FROM {chunk_results}")
+            else:
+                # Simply append - we'll aggregate later
+                self.conn.execute(f"INSERT INTO {result_table} SELECT * FROM {chunk_results}")
+
+            # Clean up chunk table
+            self.conn.execute(f"DROP TABLE IF EXISTS {chunk_results}")
+
+            chunk_time = time.time() - chunk_start_time
+            progress_pct = (chunk_idx + 1) / total_field_chunks * 100
+            self.log.info(
+                f"   ✅ Chunk {chunk_idx + 1} completed in {chunk_time:.2f}s ({progress_pct:.1f}%)"
+            )
+
+        # Final aggregation and cleanup
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {result_table}_final AS
+            SELECT 
+                kommune_code,
+                kommune_name,
+                region_code,
+                kommune_area_ha,
+                kommune_centroid_x,
+                kommune_centroid_y,
+                SUM(total_agricultural_area_ha) as total_agricultural_area_ha,
+                SUM(unique_field_count) as unique_field_count,
+                MAX(unique_company_count) as unique_company_count,
+                AVG(avg_field_coverage_ratio) as avg_field_coverage_ratio,
+                MAX(max_field_coverage_ratio) as max_field_coverage_ratio,
+                MIN(min_field_coverage_ratio) as min_field_coverage_ratio,
+                MAX(crop_diversity) as crop_diversity,
+                STRING_AGG(DISTINCT crop_types, '; ') as crop_types,
+                SUM(total_pfas_containing_active_ingredient_grams) as total_pfas_containing_active_ingredient_grams,
+                SUM(total_pesticide_belastning) as total_pesticide_belastning,
+                SUM(total_pfas_pesticide_belastning) as total_pfas_pesticide_belastning,
+                SUM(total_pesticide_applications) as total_pesticide_applications,
+                SUM(pfas_containing_applications) as pfas_containing_applications,
+                MAX(unique_pfas_products) as unique_pfas_products,
+                MAX(unique_pesticide_products) as unique_pesticide_products,
+                CASE 
+                    WHEN SUM(total_agricultural_area_ha) > 0 THEN 
+                        SUM(total_pfas_containing_active_ingredient_grams) / SUM(total_agricultural_area_ha)
+                    ELSE 0 
+                END as pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CASE 
+                    WHEN SUM(total_agricultural_area_ha) > 0 THEN 
+                        SUM(total_pesticide_belastning) / SUM(total_agricultural_area_ha)
+                    ELSE 0 
+                END as pesticide_belastning_per_ha,
+                CASE 
+                    WHEN SUM(total_agricultural_area_ha) > 0 THEN 
+                        SUM(total_pfas_pesticide_belastning) / SUM(total_agricultural_area_ha)
+                    ELSE 0 
+                END as pfas_pesticide_belastning_per_ha,
+                CASE 
+                    WHEN AVG(kommune_area_ha) > 0 THEN 
+                        SUM(total_agricultural_area_ha) / AVG(kommune_area_ha) * 100
+                    ELSE 0 
+                END as agricultural_coverage_pct,
+                CURRENT_TIMESTAMP as created_at
+            FROM {result_table}
+            GROUP BY kommune_code, kommune_name, region_code, kommune_area_ha, kommune_centroid_x, kommune_centroid_y
+            HAVING SUM(total_agricultural_area_ha) > 0
+            ORDER BY SUM(total_pfas_containing_active_ingredient_grams) DESC
+        """)
+
+        # Replace original table with final aggregated results
+        self.conn.execute(f"DROP TABLE {result_table}")
+        self.conn.execute(f"ALTER TABLE {result_table}_final RENAME TO {result_table}")
+
+        # Log final results
+        count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
+        count = count or 0  # Handle None case
+
+        # Get summary statistics
+        stats = self.conn.execute(f"""
+            SELECT
+                COUNT(*) as total_kommuner,
+                COALESCE(SUM(unique_field_count), 0) as total_field_intersections,
+                COALESCE(SUM(pfas_containing_applications), 0) as total_pfas_applications,
+                COALESCE(SUM(total_pfas_containing_active_ingredient_grams), 0) as total_pfas_grams,
+                COALESCE(SUM(total_agricultural_area_ha), 0) as total_agricultural_area,
+                COALESCE(AVG(agricultural_coverage_pct), 0) as avg_agricultural_coverage
+            FROM {result_table}
+        """).fetchone()
+
+        self.log.info(
+            f"✅ Chunked kommune spatial join completed: {count:,} municipalities with agricultural activity"
+        )
+        self.log.info(f"   🔗 Field intersections: {stats[1]:,}")
+        self.log.info(f"   🧪 PFAS-containing applications: {stats[2]:,}")
+        self.log.info(f"   ⚗️  Total PFAS-containing active ingredients: {stats[3]:,.2f} grams")
+        self.log.info(f"   📐 Total agricultural area: {stats[4]:,.2f} hectares")
+        self.log.info(f"   🌾 Average agricultural coverage: {stats[5]:.1f}%")
+
+        return result_table
+
+    def _process_kommune_field_chunk(
+        self,
+        kommuner_table: str,
+        fields_table: str,
+        pesticide_pfas_table: str,
+        offset: int,
+        chunk_size: int,
+        chunk_idx: int,
+        year: int,
+    ) -> str:
+        """Process a single chunk of fields against all kommuner."""
+
+        # Create field chunk
+        field_chunk_table = f"field_chunk_{chunk_idx}"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {field_chunk_table} AS
+            SELECT * FROM {fields_table}
+            LIMIT {chunk_size} OFFSET {offset}
+        """)
+
+        chunk_result_table = f"chunk_results_{chunk_idx}"
 
         # Complex spatial join query with area weighting
-        query = f"""
-        CREATE OR REPLACE TABLE {result_table} AS
+        self.conn.execute(f"""
+        CREATE OR REPLACE TABLE {chunk_result_table} AS
         WITH kommune_field_intersections AS (
             -- Find all field-kommune intersections with area calculations
             SELECT
@@ -1707,7 +1747,7 @@ class H3PFASProcessorRefactored:
                 END as field_coverage_ratio
 
             FROM {kommuner_table} k
-            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.flipped_geometry)
+            INNER JOIN {field_chunk_table} f ON ST_Intersects(k.original_geometry, f.flipped_geometry)
             WHERE ST_Area_Spheroid(ST_Intersection(
                 f.flipped_geometry,
                 k.original_geometry
@@ -1821,36 +1861,12 @@ class H3PFASProcessorRefactored:
                  kommune_centroid_x, kommune_centroid_y
         HAVING SUM(intersection_area_ha) > 0  -- Only kommuner with agricultural activity
         ORDER BY total_pfas_containing_active_ingredient_grams DESC
-        """
+        """)
 
-        self.conn.execute(query)
+        # Clean up field chunk table
+        self.conn.execute(f"DROP TABLE IF EXISTS {field_chunk_table}")
 
-        # Log results
-        count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
-        count = count or 0  # Handle None case
-
-        # Get summary statistics
-        stats = self.conn.execute(f"""
-            SELECT
-                COUNT(*) as total_kommuner,
-                COALESCE(SUM(unique_field_count), 0) as total_field_intersections,
-                COALESCE(SUM(pfas_containing_applications), 0) as total_pfas_applications,
-                COALESCE(SUM(total_pfas_containing_active_ingredient_grams), 0) as total_pfas_grams,
-                COALESCE(SUM(total_agricultural_area_ha), 0) as total_agricultural_area,
-                COALESCE(AVG(agricultural_coverage_pct), 0) as avg_agricultural_coverage
-            FROM {result_table}
-        """).fetchone()
-
-        self.log.info(
-            f"✅ Kommune spatial join completed: {count:,} municipalities with agricultural activity"
-        )
-        self.log.info(f"   🔗 Field intersections: {stats[1]:,}")
-        self.log.info(f"   🧪 PFAS-containing applications: {stats[2]:,}")
-        self.log.info(f"   ⚗️  Total PFAS-containing active ingredients: {stats[3]:,.2f} grams")
-        self.log.info(f"   📐 Total agricultural area: {stats[4]:,.2f} hectares")
-        self.log.info(f"   🌾 Average agricultural coverage: {stats[5]:.1f}%")
-
-        return result_table
+        return chunk_result_table
 
     def _save_kommune_results(self, results_table: str, year: int) -> int:
         """Save kommune-level results to GCS."""

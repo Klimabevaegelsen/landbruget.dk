@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -69,7 +70,7 @@ class ParquetManager(DuckDBProcessor):
             logger.info(f"Saving DuckDB table '{table_name}' to Parquet: {output_path}")
 
             # Check if we're using GCS storage
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - write to temp file first, then upload
                 with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
                     temp_path = temp_file.name
@@ -243,7 +244,7 @@ class ParquetManager(DuckDBProcessor):
             logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
 
             # Check if we're using GCS storage
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - need to convert through geopandas for GeoParquet
                 with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
                     temp_path = temp_file.name

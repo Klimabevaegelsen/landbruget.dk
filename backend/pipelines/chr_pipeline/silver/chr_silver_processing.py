@@ -511,6 +511,7 @@ def process_chr_data(
         "ejendom_oplys_table": raw_tables.get("ejendom_oplys"),
         "ejendom_vet_table": raw_tables.get("ejendom_vet"),
         "vetstat_table": raw_tables.get("vetstat"),
+        "spf_su_table": raw_tables.get("spf_su_herds"),
         "lookup_tables": lookup_tables,
     }
 
@@ -527,6 +528,9 @@ def process_chr_data(
         "silver_animal_movements",
         "silver_property_vet_events",
         "silver_antibiotic_usage",
+        "silver_spf_su_herds",
+        "silver_spf_su_health_controls",
+        "silver_spf_su_salmonella_data",
     ]
 
     # Process each silver step
@@ -595,6 +599,25 @@ def process_chr_data(
                     context.get("vetstat_table"),
                     context.get("lookup_tables", {}),
                     silver_dir,
+                )
+
+            elif step == "silver_spf_su_herds":
+                from . import spf_su
+
+                spf_su_herds_table = spf_su.create_spf_su_herds_table(con, context.get("spf_su_table"), silver_dir)
+
+            elif step == "silver_spf_su_health_controls":
+                from . import spf_su
+
+                spf_su_health_controls_table = spf_su.create_spf_su_health_controls_table(
+                    con, context.get("spf_su_table"), silver_dir
+                )
+
+            elif step == "silver_spf_su_salmonella_data":
+                from . import spf_su
+
+                spf_su_salmonella_data_table = spf_su.create_spf_su_salmonella_data_table(
+                    con, context.get("spf_su_table"), silver_dir
                 )
 
         except Exception as e:

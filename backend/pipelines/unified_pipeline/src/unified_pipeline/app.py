@@ -26,7 +26,6 @@ from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronzeConfig,
 )
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
-from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
@@ -63,7 +62,6 @@ from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilverConfig,
 )
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
-from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.log_util import Logger
@@ -168,14 +166,6 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (CadastralBronze, CadastralBronzeConfig),
                 (CadastralSilver, CadastralSilverConfig),
-            ],
-        },
-        cli.Source.spf_su: {
-            cli.Stage.bronze: [(SpfSuBronze, SpfSuBronzeConfig)],
-            cli.Stage.silver: [(SpfSuSilver, SpfSuSilverConfig)],
-            cli.Stage.all: [
-                (SpfSuBronze, SpfSuBronzeConfig),
-                (SpfSuSilver, SpfSuSilverConfig),
             ],
         },
         cli.Source.soil_types: {

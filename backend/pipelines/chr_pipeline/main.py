@@ -302,11 +302,48 @@ def get_required_steps(target_step: str) -> List[str]:
         "animal_movements": ["stamdata", "herds"],  # CHR_dyr animal movements depend on knowing the herds
         "ejendom": ["stamdata", "herds", "herd_details"],  # Assuming ejendom depends on CHR numbers from details
         "vetstat": ["stamdata", "herds", "herd_details"],  # Assuming vetstat depends on CHR numbers from details
+        "spf_su": ["stamdata", "herds", "herd_details"],  # SPF-SU depends on CHR numbers from details
         # Silver steps - all depend on all bronze steps implicitly
-        "silver_vet_practices": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"],
-        "silver_properties": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"],
-        "silver_herds": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"],
-        "silver_herd_sizes": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"],
+        "silver_vet_practices": [
+            "stamdata",
+            "herds",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ],
+        "silver_properties": [
+            "stamdata",
+            "herds",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ],
+        "silver_herds": [
+            "stamdata",
+            "herds",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ],
+        "silver_herd_sizes": [
+            "stamdata",
+            "herds",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ],
         "silver_animal_movements": [
             "stamdata",
             "herds",
@@ -315,6 +352,7 @@ def get_required_steps(target_step: str) -> List[str]:
             "animal_movements",
             "ejendom",
             "vetstat",
+            "spf_su",
         ],
         "silver_property_vet_events": [
             "stamdata",
@@ -324,6 +362,7 @@ def get_required_steps(target_step: str) -> List[str]:
             "animal_movements",
             "ejendom",
             "vetstat",
+            "spf_su",
         ],
         "silver_antibiotic_usage": [
             "stamdata",
@@ -333,8 +372,9 @@ def get_required_steps(target_step: str) -> List[str]:
             "animal_movements",
             "ejendom",
             "vetstat",
+            "spf_su",
         ],
-        "silver_all": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"],
+        "silver_all": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat", "spf_su"],
     }
     # Filter out any silver steps from dependencies, only return bronze ones
     required_bronze = [s for s in step_dependencies.get(target_step, []) if not s.startswith("silver_")]
@@ -649,6 +689,38 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             logging.error(f"Error processing VetStat tasks: {e}", exc_info=True)
             raise
+
+    elif step == "spf_su":
+        if "herd_to_species" not in context:
+            raise ValueError("Cannot run 'spf_su' step without first running 'herds'")
+
+        # Import SPF-SU functions
+        from bronze.load_spf_su import get_pig_herd_numbers, load_spf_su_data
+
+        # Get pig herd numbers (species_code = 15)
+        pig_herd_numbers = get_pig_herd_numbers(context["herd_to_species"])
+
+        if not pig_herd_numbers:
+            logging.warning("No pig herds found for SPF-SU data collection")
+            context["spf_su_results"] = []
+            return context
+
+        if context["args"]["progress"]:
+            logging.info(f"Processing {len(pig_herd_numbers)} SPF-SU tasks for pig herds")
+
+        # Run SPF-SU data collection asynchronously
+        import asyncio
+
+        try:
+            results = asyncio.run(load_spf_su_data(pig_herd_numbers, max_workers=5))
+            context["spf_su_results"] = results
+            if context["args"]["progress"]:
+                successful = len([r for r in results if r])
+                logging.info(f"Completed SPF-SU tasks. Success: {successful}/{len(pig_herd_numbers)}")
+        except Exception as e:
+            logging.error(f"Error processing SPF-SU tasks: {e}", exc_info=True)
+            raise
+
     else:
         logger.warning(f"Attempted to run unknown bronze step: {step}")
 
@@ -791,6 +863,7 @@ def main():
                 "animal_movements",
                 "ejendom",
                 "vetstat",
+                "spf_su",
             ]
             run_silver = True
         elif requested_step.startswith("silver_"):
@@ -811,7 +884,7 @@ def main():
 
         # Ensure unique bronze steps in order
         unique_bronze_steps = []
-        for step in ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]:
+        for step in ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat", "spf_su"]:
             if step in bronze_steps_to_run and step not in unique_bronze_steps:
                 unique_bronze_steps.append(step)
 

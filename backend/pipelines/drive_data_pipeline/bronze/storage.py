@@ -269,7 +269,7 @@ class BronzeStorageManager:
                 files[file_path.name] = file_path
 
             # For local storage, also check subdirectories
-            if not hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() != "gcs":
                 for root, _, _ in os.walk(run_dir):
                     root_path = Path(root)
                     if root_path != run_dir:
