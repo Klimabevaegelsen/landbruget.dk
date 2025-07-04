@@ -671,31 +671,10 @@ class H3PFASProcessorRefactored:
 
         self.conn = duckdb.connect(":memory:")
 
-        # Validate memory_limit is not empty
-        if not self.config.memory_limit or self.config.memory_limit.strip() == "":
-            self.log.error("❌ memory_limit is empty or None, using default 12GB")
-            memory_limit = "12GB"
-        else:
-            memory_limit = self.config.memory_limit
-
         # GITHUB ACTIONS OPTIMIZED SETTINGS
-        try:
-            self.conn.execute(f"SET memory_limit='{memory_limit}'")
-        except Exception as e:
-            self.log.error(f"❌ Failed to set memory_limit: {e}")
-            raise
-
-        try:
-            self.conn.execute(f"SET max_memory='{memory_limit}'")
-        except Exception as e:
-            self.log.error(f"❌ Failed to set max_memory: {e}")
-            raise
-
-        try:
-            self.conn.execute(f"SET threads={self.config.thread_count}")
-        except Exception as e:
-            self.log.error(f"❌ Failed to set threads: {e}")
-            raise
+        self.conn.execute("SET memory_limit='12GB'")
+        self.conn.execute("SET max_memory='12GB'")
+        self.conn.execute(f"SET threads={self.config.thread_count}")
 
         # Optimize for limited resources
         self.conn.execute("SET enable_progress_bar=false")  # Reduce overhead
