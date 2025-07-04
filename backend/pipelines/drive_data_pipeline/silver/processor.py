@@ -257,26 +257,25 @@ class SilverProcessor:
 
             # Also check subdirectories for metadata files
             # For GCS, we need to list files recursively
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - list with recursive prefix
                 prefix = str(bronze_run_path).rstrip("/") + "/"
-                blobs = self.storage_manager.storage.bucket.list_blobs(prefix=prefix)
-                for blob in blobs:
-                    if blob.name.endswith(".metadata.json"):
-                        all_files.append(Path(blob.name))
+                if hasattr(self.storage_manager, "gcs_bucket") and self.storage_manager.gcs_bucket:
+                    blobs = self.storage_manager.gcs_bucket.list_blobs(prefix=prefix)
+                    for blob in blobs:
+                        if blob.name.endswith(".metadata.json"):
+                            all_files.append(Path(blob.name))
             else:
                 # Local storage - use recursive glob through storage manager
                 import os
 
-                for root, dirs, files in os.walk(
-                    self.storage_manager.storage.base_dir / bronze_run_path
-                ):
+                for root, dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
                     for file in files:
                         if file.endswith(".metadata.json"):
                             file_path = Path(root) / file
                             # Convert to relative path from storage base
                             relative_path = file_path.relative_to(
-                                Path(self.storage_manager.storage.base_dir)
+                                Path(self.storage_manager.base_dir)
                             )
                             all_files.append(relative_path)
 
