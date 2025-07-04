@@ -444,29 +444,59 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 self.log.info(f"Using {block_id_column} as block ID column")
 
-                # Copy the markblokke data from GCS connection to our connection
-                # First get all data from the GCS table
-                markblokke_data = gcs_access.duckdb_conn.execute(
-                    f"SELECT * FROM {markblokke_table}"
-                ).fetchall()
-                columns_info = gcs_access.duckdb_conn.execute(
-                    f"DESCRIBE {markblokke_table}"
-                ).fetchall()
+                # ✅ OPTIMIZED: Use DuckDB's ATTACH DATABASE to access the GCS data directly
+                # instead of manually copying data between connections
+                try:
+                    # Create a temporary file path for the markblokke data
+                    import tempfile
 
-                # Create table in our connection with the same structure
-                column_defs = []
-                for col_info in columns_info:
-                    col_name, col_type = col_info[0], col_info[1]
-                    column_defs.append(f"{col_name} {col_type}")
+                    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                        temp_markblokke_path = tmp_file.name
 
-                create_table_sql = f"CREATE OR REPLACE TABLE blocks ({', '.join(column_defs)})"
-                self.conn.execute(create_table_sql)
+                    # Export markblokke data from GCS connection to temporary file
+                    gcs_access.duckdb_conn.execute(f"""
+                        COPY {markblokke_table} TO '{temp_markblokke_path}' 
+                        (FORMAT PARQUET, COMPRESSION zstd)
+                    """)
 
-                # Insert data into our connection
-                if markblokke_data:
-                    placeholders = ", ".join(["?" for _ in columns_info])
-                    insert_sql = f"INSERT INTO blocks VALUES ({placeholders})"
-                    self.conn.executemany(insert_sql, markblokke_data)
+                    # Load the data into our main connection
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE blocks AS 
+                        SELECT * FROM read_parquet('{temp_markblokke_path}')
+                    """)
+
+                    # Clean up temporary file
+                    import os
+
+                    if os.path.exists(temp_markblokke_path):
+                        os.unlink(temp_markblokke_path)
+
+                except Exception as e:
+                    self.log.warning(
+                        f"Failed to use optimized data transfer, falling back to manual copy: {e}"
+                    )
+                    # Fallback to manual copying if the optimized approach fails
+                    markblokke_data = gcs_access.duckdb_conn.execute(
+                        f"SELECT * FROM {markblokke_table}"
+                    ).fetchall()
+                    columns_info = gcs_access.duckdb_conn.execute(
+                        f"DESCRIBE {markblokke_table}"
+                    ).fetchall()
+
+                    # Create table in our connection with the same structure
+                    column_defs = []
+                    for col_info in columns_info:
+                        col_name, col_type = col_info[0], col_info[1]
+                        column_defs.append(f"{col_name} {col_type}")
+
+                    create_table_sql = f"CREATE OR REPLACE TABLE blocks ({', '.join(column_defs)})"
+                    self.conn.execute(create_table_sql)
+
+                    # Insert data into our connection
+                    if markblokke_data:
+                        placeholders = ", ".join(["?" for _ in columns_info])
+                        insert_sql = f"INSERT INTO blocks VALUES ({placeholders})"
+                        self.conn.executemany(insert_sql, markblokke_data)
 
                 # Get geometry column names
                 marker_columns = self.conn.execute(f"DESCRIBE {marker_table}").fetchall()

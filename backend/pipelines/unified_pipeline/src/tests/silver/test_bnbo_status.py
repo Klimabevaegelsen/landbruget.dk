@@ -486,7 +486,6 @@ async def test_run(
             bnbo_status_silver, "_create_dissolved_df", return_value="dissolved_table"
         ) as mock_create_dissolved_df,
         patch.object(bnbo_status_silver, "save_data_direct") as mock_save_data,
-        patch.object(bnbo_status_silver, "_copy_table_to_gcs_connection") as mock_copy_table,
     ):
         await bnbo_status_silver.run()
 
