@@ -71,6 +71,9 @@ async def run_pipeline(
     if config is None:
         config = H3PFASConfig.from_env()
 
+    # DEBUG: Log the config values
+    logger.info(f"🔍 DEBUG: H3PFASConfig created with memory_limit = '{config.memory_limit}'")
+
     logger.info(f"Starting H3 PFAS exposure pipeline in {mode} mode")
 
     # Create pipeline
@@ -210,6 +213,10 @@ def main():
         os.environ["GCS_BUCKET"] = args.bucket
     if args.output_dir:
         os.environ["OUTPUT_DIR"] = args.output_dir
+
+    # DEBUG: Log environment variables
+    logger.info(f"🔍 DEBUG: MEMORY_LIMIT env var = '{os.environ.get('MEMORY_LIMIT', 'NOT SET')}'")
+    logger.info(f"🔍 DEBUG: args.memory_limit = '{args.memory_limit}'")
 
     # Setup directories
     output_dir = setup_directories()

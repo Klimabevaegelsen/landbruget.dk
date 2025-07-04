@@ -40,7 +40,7 @@ class H3SpatialConfig:
     # Chunked Processing Configuration - OPTIMIZED for GitHub Actions
     chunk_size: int = 15000  # Reduced from 25000 for 14GB constraint
     min_intersection_area_sqm: float = 0.0  # Include all intersections, no size limits
-    memory_limit: str = "10GB"  # Conservative limit for 14GB runner
+    memory_limit: str = "12GB"  # Default memory limit, can be overridden
     thread_count: int = 2  # Reduced from 4 for memory conservation
 
     # 5-Stage Spatial Join Configuration
@@ -671,9 +671,21 @@ class H3PFASProcessorRefactored:
 
         self.conn = duckdb.connect(":memory:")
 
+        # DEBUG: Log the memory_limit value before using it
+        self.log.info(f"🔍 DEBUG: memory_limit = '{self.config.memory_limit}'")
+
+        # Validate memory_limit is not empty
+        if not self.config.memory_limit or self.config.memory_limit.strip() == "":
+            self.log.error("❌ memory_limit is empty or None, using default 12GB")
+            memory_limit = "12GB"
+        else:
+            memory_limit = self.config.memory_limit
+
+        self.log.info(f"🔧 Setting DuckDB memory_limit to: {memory_limit}")
+
         # GITHUB ACTIONS OPTIMIZED SETTINGS
-        self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
-        self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
+        self.conn.execute(f"SET memory_limit='{memory_limit}'")
+        self.conn.execute(f"SET max_memory='{memory_limit}'")
         self.conn.execute(f"SET threads={self.config.thread_count}")
 
         # Optimize for limited resources
