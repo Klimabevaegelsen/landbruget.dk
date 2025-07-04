@@ -166,6 +166,12 @@ jobs:
       - name: Install Python dependencies
         working-directory: ${{ env.PIPELINE_DIR }}
         run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd ../unified_pipeline
+          uv pip install --system -e .
+          
+          # Install H3 PFAS pipeline dependencies
+          cd ../h3_pfas_exposure_pipeline
           uv pip install --system -e ".[production]"
       
       - name: Authenticate to Google Cloud

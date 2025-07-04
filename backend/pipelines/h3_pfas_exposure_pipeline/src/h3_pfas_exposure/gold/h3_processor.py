@@ -610,20 +610,51 @@ class H3PFASProcessorRefactored:
             try:
                 # Try multiple import paths for different environments
                 try:
+                    # First try: Direct import from backend path (GitHub Actions)
                     from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import (
                         GCSDataAccess,
                     )
                 except ImportError:
-                    # Fallback for when running from pipeline directory
-                    import os
-                    import sys
+                    try:
+                        # Second try: Add workspace root to Python path and import
+                        import os
+                        import sys
 
-                    unified_path = os.path.join(
-                        os.path.dirname(__file__), "..", "..", "..", "unified_pipeline", "src"
-                    )
-                    if os.path.exists(unified_path):
-                        sys.path.insert(0, unified_path)
-                    from unified_pipeline.util.gcs_access import GCSDataAccess
+                        # Find project root by looking for pyproject.toml
+                        current_dir = os.path.dirname(os.path.abspath(__file__))
+                        project_root = current_dir
+
+                        # Walk up the directory tree to find project root
+                        while project_root != os.path.dirname(project_root):
+                            if os.path.exists(os.path.join(project_root, "pyproject.toml")):
+                                break
+                            project_root = os.path.dirname(project_root)
+
+                        # Add project root to Python path for backend imports
+                        if project_root not in sys.path:
+                            sys.path.insert(0, project_root)
+
+                        # Now try the backend import
+                        from backend.pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import (
+                            GCSDataAccess,
+                        )
+                    except ImportError:
+                        # Third try: Relative import from current location
+                        import os
+                        import sys
+
+                        # Get the absolute path to the unified pipeline
+                        current_dir = os.path.dirname(os.path.abspath(__file__))
+                        unified_path = os.path.join(
+                            current_dir, "..", "..", "..", "..", "unified_pipeline", "src"
+                        )
+                        unified_path = os.path.abspath(unified_path)
+
+                        if os.path.exists(unified_path):
+                            sys.path.insert(0, unified_path)
+                            from unified_pipeline.util.gcs_access import GCSDataAccess
+                        else:
+                            raise ImportError(f"Unified pipeline not found at {unified_path}")
 
                 self.gcs_access = GCSDataAccess(connection=self.conn)
                 self.log.info("✅ GCS access initialized for cloud data loading")
