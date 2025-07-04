@@ -12,6 +12,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+
 class Env(Enum):
     """
     Environment configuration options for the pipeline.
@@ -25,6 +26,7 @@ class Env(Enum):
     local = "local"
     dev = "dev"
     prod = "prod"
+
 
 class Source(Enum):
     """
@@ -65,6 +67,7 @@ class Source(Enum):
     dst = "dst"
     dmi = "dmi"
 
+
 class Stage(Enum):
     """
     Processing stage options for the pipeline.
@@ -84,6 +87,7 @@ class Stage(Enum):
     gold = "gold"
     all = "all"
 
+
 class FVMLayerType(Enum):
     """
     FVM WFS layer type options for matrix job processing.
@@ -92,11 +96,14 @@ class FVMLayerType(Enum):
         markblokke: Field blocks data (2005-2026)
         marker: Field markers data (2008-2025)
         smaabiotoper: Small biotopes data (2023-2025)
+        organic_areas: Organic areas data (2012-2024)
     """
 
     markblokke = "markblokke"
     marker = "marker"
     smaabiotoper = "smaabiotoper"
+    organic_areas = "organic_areas"
+
 
 class CliConfig(BaseModel):
     """

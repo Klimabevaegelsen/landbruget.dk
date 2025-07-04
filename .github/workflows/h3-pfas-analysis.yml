@@ -17,6 +17,10 @@ on:
           - 'kommune'
           - 'h3,kommune'
           - 'all'
+      h3_resolutions:
+        description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for default 10)'
+        required: false
+        default: '10'
       memory_limit:
         description: 'Memory limit for DuckDB'
         required: false
@@ -53,18 +57,60 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       years: ${{ steps.set-years.outputs.years }}
     steps:
-      - name: Set analysis modes matrix
+      - name: Set analysis modes and resolutions matrix
         id: set-matrix
         run: |
+          # Parse analysis modes
           if [[ "${{ github.event.inputs.analysis_modes }}" == "all" ]]; then
-            echo "matrix=[\"h3\", \"kommune\"]" >> $GITHUB_OUTPUT
+            modes=("h3" "kommune")
           elif [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
-            # Convert comma-separated string to JSON array
-            modes=$(echo "${{ github.event.inputs.analysis_modes }}" | sed 's/,/","/g')
-            echo "matrix=[\"$modes\"]" >> $GITHUB_OUTPUT
+            IFS=',' read -ra modes <<< "${{ github.event.inputs.analysis_modes }}"
           else
-            echo "matrix=[\"${{ github.event.inputs.analysis_modes || 'h3' }}\"]" >> $GITHUB_OUTPUT
+            modes=("${{ github.event.inputs.analysis_modes || 'h3' }}")
           fi
+          
+          # Parse H3 resolutions (only relevant for h3 mode)
+          if [[ "${{ github.event.inputs.h3_resolutions }}" == *","* ]]; then
+            IFS=',' read -ra resolutions <<< "${{ github.event.inputs.h3_resolutions }}"
+          else
+            resolutions=("${{ github.event.inputs.h3_resolutions || '10' }}")
+          fi
+          
+          # Build matrix combinations
+          matrix_items=()
+          for mode in "${modes[@]}"; do
+            if [[ "$mode" == "h3" ]]; then
+              # For h3 mode, create entries for each resolution
+              for res in "${resolutions[@]}"; do
+                matrix_items+=("{\"mode\":\"$mode\",\"h3_resolution\":\"$res\"}")
+              done
+            else
+              # For non-h3 modes, don't include resolution
+              matrix_items+=("{\"mode\":\"$mode\"}")
+            fi
+          done
+          
+          # Special handling for "all" - ensure kommune is always included
+          if [[ "${{ github.event.inputs.analysis_modes }}" == "all" ]]; then
+            # Check if kommune is already in the matrix
+            has_kommune=false
+            for item in "${matrix_items[@]}"; do
+              if [[ "$item" == *"\"mode\":\"kommune\""* ]]; then
+                has_kommune=true
+                break
+              fi
+            done
+            
+            # Add kommune if not already present
+            if [[ "$has_kommune" == false ]]; then
+              matrix_items+=("{\"mode\":\"kommune\"}")
+            fi
+          fi
+          
+          # Convert to JSON array
+          matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "Generated matrix: $matrix_json"
       
       - name: Set years parameter
         id: set-years
@@ -83,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mode: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
       fail-fast: false  # Allow other jobs to continue if one fails
     
     steps:
@@ -134,11 +180,11 @@ jobs:
         run: |
           gsutil ls gs://${{ env.GCS_BUCKET }}/ | head -5
       
-      - name: Run H3 PFAS Analysis - ${{ matrix.mode }}
+      - name: Run H3 PFAS Analysis - ${{ matrix.mode }}${{ matrix.h3_resolution && format(' (res {0})', matrix.h3_resolution) || '' }}
         working-directory: ${{ env.PIPELINE_DIR }}
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
-          H3_RESOLUTION: 10
+          H3_RESOLUTION: ${{ matrix.h3_resolution || '10' }}
           MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '12GB' }}
           THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
           CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '25000' }}
@@ -150,6 +196,11 @@ jobs:
         run: |
           # Build the command
           cmd="python main.py --mode ${{ matrix.mode }} --verbose"
+          
+          # Add H3 resolution if specified (only for h3 mode)
+          if [[ "${{ matrix.mode }}" == "h3" && -n "${{ matrix.h3_resolution }}" ]]; then
+            cmd="$cmd --h3-resolution ${{ matrix.h3_resolution }}"
+          fi
           
           # Add years if specified
           if [[ -n "${{ needs.prepare-matrix.outputs.years }}" ]]; then
@@ -168,7 +219,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: logs-${{ matrix.mode }}-${{ github.run_id }}
+          name: logs-${{ matrix.mode }}${{ matrix.h3_resolution && format('-res{0}', matrix.h3_resolution) || '' }}-${{ github.run_id }}
           path: |
             ${{ env.PIPELINE_DIR }}/*.log
             /tmp/*.log
