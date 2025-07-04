@@ -5,6 +5,7 @@
 GCS_BUCKET=landbrugsdata-raw-data
 
 # H3 Configuration
+# Supported resolutions: 7 (~516ha), 8 (~74ha), 9 (~11ha), 10 (~1.5ha)
 H3_RESOLUTION=10
 CHUNK_SIZE=25000
 

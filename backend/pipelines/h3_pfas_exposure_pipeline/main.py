@@ -121,7 +121,8 @@ def parse_args():
         "--h3-resolution",
         type=int,
         default=10,
-        help="H3 resolution level (default: 10, ~1.5 hectares per hexagon)",
+        choices=[7, 8, 9, 10],
+        help="H3 resolution level (7=~516ha, 8=~74ha, 9=~11ha, 10=~1.5ha per hexagon)",
     )
 
     parser.add_argument(

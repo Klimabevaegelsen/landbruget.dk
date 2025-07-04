@@ -4,8 +4,12 @@ A production-ready pipeline for analyzing PFAS exposure using H3 hexagonal spati
 
 ## Overview
 
-This pipeline processes agricultural data to create H3-based PFAS exposure analysis at two levels:
-- **H3 Hexagon Level**: Fine-grained exposure analysis using H3 resolution 10 (~1.5 hectares per hexagon)
+This pipeline processes agricultural data to create H3-based PFAS exposure analysis at multiple resolutions:
+- **H3 Hexagon Level**: Multi-resolution exposure analysis using H3 resolutions 7-10
+  - Resolution 7: ~516 hectares per hexagon (regional level)
+  - Resolution 8: ~74 hectares per hexagon (county level) 
+  - Resolution 9: ~11 hectares per hexagon (municipal level)
+  - Resolution 10: ~1.5 hectares per hexagon (field level)
 - **Municipality Level**: Aggregated exposure analysis by Danish municipalities (kommuner)
 
 ## Features
@@ -121,8 +125,8 @@ python main.py --mode all --years 2023
 # Run both analyses in parallel (faster)
 python main.py --mode all --parallel --years 2023
 
-# Adjust processing parameters
-python main.py --mode h3 --memory-limit 16GB --thread-count 8 --chunk-size 50000
+# Adjust processing parameters and resolution
+python main.py --mode h3 --h3-resolution 8 --memory-limit 16GB --thread-count 8 --chunk-size 50000
 
 # Dry run to validate configuration
 python main.py --dry-run --verbose
@@ -140,7 +144,7 @@ python main.py --dry-run --verbose
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--h3-resolution` | 10 | H3 resolution level (~1.5 ha per hexagon) |
+| `--h3-resolution` | 10 | H3 resolution level (7=~516ha, 8=~74ha, 9=~11ha, 10=~1.5ha) |
 | `--memory-limit` | 12GB | DuckDB memory limit |
 | `--thread-count` | 4 | Number of processing threads |
 | `--chunk-size` | 25000 | H3 cells per processing chunk |
@@ -257,14 +261,18 @@ LOG_STAGE_TIMINGS=true
 
 ## Output Locations
 
-Results are stored in GCS with timestamped directories:
+Results are stored in GCS with timestamped directories and resolution indicators:
 
 ```
 gs://landbrugsdata-raw-data/gold/
-├── h3_pesticide_2023/
+├── h3_pesticide_2023_res10/
 │   └── 20250703_214459/
-│       ├── h3_pesticide_2023.parquet
-│       └── h3_pesticide_2023_kepler.parquet
+│       ├── h3_pesticide_2023_res10.parquet
+│       └── h3_pesticide_2023_res10_kepler.parquet
+├── h3_pesticide_2023_res8/
+│   └── 20250703_214459/
+│       ├── h3_pesticide_2023_res8.parquet
+│       └── h3_pesticide_2023_res8_kepler.parquet
 └── kommune_pesticide_2023/
     └── 20250703_214459/
         ├── kommune_pesticide_2023.parquet

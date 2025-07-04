@@ -25,6 +25,7 @@ from pydantic import ConfigDict
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class FVMWFSSilverConfig(BaseJobConfig):
     """
     Configuration for FVM WFS Silver data processing.
@@ -40,11 +41,13 @@ class FVMWFSSilverConfig(BaseJobConfig):
         dataset_markblokke (str): Name of the markblokke dataset
         dataset_marker (str): Name of the marker dataset
         dataset_smaabiotoper (str): Name of the smaabiotoper dataset
+        dataset_organic_areas (str): Name of the organic areas dataset
         bucket (str): GCS bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         markblokke_years (List[int]): Years to process for Markblokke (2005-2026)
         marker_years (List[int]): Years to process for Marker (2008-2025)
         smaabiotoper_years (List[int]): Years to process for Smaabiotoper (2023-2025)
+        organic_areas_years (List[int]): Years to process for Organic Areas (2012-2024)
         column_mapping (Dict): Dictionary mapping raw field names to standardized names
     """
 
@@ -55,11 +58,13 @@ class FVMWFSSilverConfig(BaseJobConfig):
     # Bronze dataset names (for reading from bronze storage)
     bronze_dataset_markblokke: str = "fvm_markblokke"
     bronze_dataset_marker: str = "fvm_marker"
+    bronze_dataset_organic_areas: str = "fvm_organic_areas"
 
     # Silver dataset names (for saving to silver storage and test expectations)
     dataset_markblokke: str = "fvm_markblokke"
     dataset_marker: str = "fvm_marker"
     dataset_smaabiotoper: str = "fvm_smaabiotoper"
+    dataset_organic_areas: str = "fvm_organic_areas"
 
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
@@ -68,6 +73,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
     smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
+    organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
 
     # Column mapping for standardization
     # Markblokke fields
@@ -104,8 +110,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
         # Administrative fields
         "Journalnr": "journal_number",  # 2014+
         "Markblok": "block_id",  # 2016+
-        # Agricultural practice
-        "GB": "organic_farming",  # 2010+
+        # Note: GB field removed - it is NOT organic farming data
     }
 
     # Smaabiotoper fields (similar to Marker but with biotope-specific fields)
@@ -116,16 +121,28 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "CVR": "cvr_number",
         "Afgkode": "biotope_code",
         "Afgroede": "biotope_type",
-        "GB": "organic_farming",
         "GBanmeldt": "reported_area_ha",
         "Markblok": "block_id",
         "MarkblokNr": "block_number",
         "BRUGER_ID": "user_id",
         "OPRINDATO": "creation_date",
         "NOTAT": "notes",
+        # Note: GB field removed - it is NOT organic farming data
+    }
+
+    # Organic Areas fields (from Miljoe_og_oekologitilsagn:Oekologiske_arealer)
+    organic_areas_column_mapping: Dict[str, str] = {
+        "Marknr": "field_id",
+        "AutNR_Iden": "authority_id",
+        "Omlaegning": "conversion_date",  # DateTime when converted to organic
+        "Afmeldings": "deregistration_date",  # DateTime when deregistered from organic
+        "FSjournal": "fs_journal_number",
+        "OML": "conversion_status",  # Conversion status code
+        # Note: the_geom is handled as geometry automatically
     }
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
 
 class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     """
@@ -148,7 +165,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Initialize the FVMWFSSilver processor.
 
         Args:
-            config: Configuration for the silver processing job        """
+            config: Configuration for the silver processing job"""
         super().__init__(config)
 
     async def extract_geojson_from_wfs_payload(
@@ -583,7 +600,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         Args:
             raw_df:  containing raw payloads from the bronze layer
-            layer_type: Type of layer being processed (Markblokke, Marker, Smaabiotoper)
+            layer_type: Type of layer being processed (Markblokke, Marker, Smaabiotoper, OrganicAreas)
             year: Year of the data being processed
 
         Returns:
@@ -605,6 +622,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 column_mapping = self.config.markblokke_column_mapping
             elif layer_type == "Smaabiotoper":
                 column_mapping = self.config.smaabiotoper_column_mapping
+            elif layer_type == "OrganicAreas":
+                column_mapping = self.config.organic_areas_column_mapping
             else:  # Marker
                 column_mapping = self.config.marker_column_mapping
 
@@ -738,7 +757,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Process all years for a specific layer type.
 
         Args:
-            layer_type: Type of layer to process (Markblokke, Marker, Smaabiotoper)
+            layer_type: Type of layer to process (Markblokke, Marker, Smaabiotoper, OrganicAreas)
             years: List of years to process
             bronze_dataset_name: Base dataset name for reading from bronze storage
             silver_dataset_name: Base dataset name for saving to silver storage
@@ -885,6 +904,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 bronze_data,
             )
 
+            # Process Organic Areas data (organic areas) 2012-2024
+            await self._process_layer_type(
+                "OrganicAreas",
+                self.config.organic_areas_years,
+                self.config.bronze_dataset_organic_areas,
+                self.config.dataset_organic_areas,
+                bronze_data,
+            )
+
             self.log.info("FVM WFS silver job completed for all available data")
 
             # Return summary information for potential gold layer usage
@@ -893,6 +921,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 "markblokke_years": self.config.markblokke_years,
                 "marker_years": self.config.marker_years,
                 "smaabiotoper_years": self.config.smaabiotoper_years,
+                "organic_areas_years": self.config.organic_areas_years,
                 # ✅ MIGRATION: Use DuckDB current_timestamp instead of pandas
                 "processed_at": self.conn.execute("SELECT current_timestamp")
                 .fetchone()[0]
