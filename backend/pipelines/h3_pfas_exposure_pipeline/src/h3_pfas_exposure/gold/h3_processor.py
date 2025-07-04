@@ -125,7 +125,7 @@ class SpatialJoiner:
 
         # Get data counts
         h3_count = self.conn.execute(f"SELECT COUNT(*) FROM {h3_table}").fetchone()[0]
-        field_count = self.conn.execute(f"SELECT COUNT(*) FROM {fields_table}").fetchone()[0]
+        self.conn.execute(f"SELECT COUNT(*) FROM {fields_table}").fetchone()[0]
 
         self.log.info(f"🎯 Starting chunked spatial join for {h3_count:,} H3 cells")
 
@@ -141,7 +141,6 @@ class SpatialJoiner:
 
         # Process chunks
         start_time = time.time()
-        total_intersections = 0
 
         for chunk_idx in range(total_chunks):
             chunk_start_time = time.time()
@@ -244,7 +243,7 @@ class SpatialJoiner:
 
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
-        SELECT 
+        SELECT
             h.h3_cell,
             h.center_lat,
             h.center_lon,
@@ -280,7 +279,7 @@ class SpatialJoiner:
 
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
-        SELECT 
+        SELECT
             *,
             -- Calculate intersection area using original coordinates
             ST_Area_Spheroid(ST_Intersection(
@@ -288,13 +287,13 @@ class SpatialJoiner:
                 ST_FlipCoordinates(h3_geometry)
             )) / 10000.0 as intersection_area_ha,
             -- Calculate coverage ratio
-            CASE 
-                WHEN ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)) > 0 THEN 
+            CASE
+                WHEN ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)) > 0 THEN
                     LEAST(1.0, ST_Area_Spheroid(ST_Intersection(
                         original_geometry,
                         ST_FlipCoordinates(h3_geometry)
                     )) / ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)))
-                ELSE 0.0 
+                ELSE 0.0
             END as coverage_ratio
         FROM {intersections_table}
         WHERE ST_Area_Spheroid(ST_Intersection(
@@ -322,7 +321,7 @@ class SpatialJoiner:
 
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
-        SELECT 
+        SELECT
             h3_cell,
             center_lat,
             center_lon,
@@ -339,7 +338,7 @@ class SpatialJoiner:
             MAX(coverage_ratio) as coverage_ratio
         FROM {areas_table}
         WHERE h3_cell IS NOT NULL
-        GROUP BY h3_cell, center_lat, center_lon, field_id, cvr_number, block_id, 
+        GROUP BY h3_cell, center_lat, center_lon, field_id, cvr_number, block_id,
                  field_area_ha, crop_code, crop_name, h3_geometry, original_geometry
         """
 
@@ -366,7 +365,7 @@ class SpatialJoiner:
 
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
-        SELECT 
+        SELECT
             i.*,
             p.PesticideRegistrationNumber,
             p.DosageQuantity,
@@ -376,21 +375,21 @@ class SpatialJoiner:
             p.pesticide_belastning_applied,
             p.pfas_containing_pesticide_belastning_applied,
             -- Calculate weighted PFAS-containing active ingredient exposure based on coverage
-            CASE 
+            CASE
                 WHEN p.contains_pfas = true AND p.pfas_containing_active_ingredient_grams IS NOT NULL THEN
                     p.pfas_containing_active_ingredient_grams * i.coverage_ratio
                 ELSE 0
             END as weighted_pfas_containing_active_ingredient_grams,
             -- Calculate weighted pesticide load
-            CASE 
+            CASE
                 WHEN p.pesticide_belastning_applied IS NOT NULL THEN
                     p.pesticide_belastning_applied * i.coverage_ratio
                 ELSE 0
             END as weighted_pesticide_belastning
         FROM {aggregated_table} i
         LEFT JOIN {pesticide_table} p ON (
-            i.cvr_number = p.cvr 
-            AND i.field_id = p.extracted_field_id 
+            i.cvr_number = p.cvr
+            AND i.field_id = p.extracted_field_id
             AND i.block_id = p.extracted_block_id
         )
         """
@@ -419,7 +418,7 @@ class SpatialJoiner:
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
         WITH geometric_union AS (
-            SELECT 
+            SELECT
                 r.h3_cell,
                 r.center_lat,
                 r.center_lon,
@@ -437,7 +436,7 @@ class SpatialJoiner:
             GROUP BY r.h3_cell, r.center_lat, r.center_lon, r.h3_geometry
         ),
         field_stats AS (
-            SELECT 
+            SELECT
                 h3_cell,
                 COUNT(DISTINCT CONCAT(cvr_number, '_', block_id, '_', field_id)) as unique_field_count,
                 SUM(COALESCE(weighted_pfas_containing_active_ingredient_grams, 0)) as total_pfas_containing_active_ingredient_grams,
@@ -450,16 +449,16 @@ class SpatialJoiner:
             WHERE h3_cell IS NOT NULL
             GROUP BY h3_cell
         )
-        SELECT 
+        SELECT
             g.h3_cell,
             g.center_lat,
             g.center_lon,
             g.h3_cell_area_ha,
             g.actual_intersection_area_ha as total_intersection_area_ha,
-            CASE 
-                WHEN g.h3_cell_area_ha > 0 THEN 
+            CASE
+                WHEN g.h3_cell_area_ha > 0 THEN
                     LEAST(1.0, g.actual_intersection_area_ha / g.h3_cell_area_ha)
-                ELSE 0.0 
+                ELSE 0.0
             END as actual_coverage_ratio,
             COALESCE(f.unique_field_count, 0) as unique_field_count,
             COALESCE(f.total_pfas_containing_active_ingredient_grams, 0) as total_pfas_containing_active_ingredient_grams,
@@ -469,10 +468,10 @@ class SpatialJoiner:
             COALESCE(f.crop_types, '') as crop_types,
             COALESCE(f.crop_diversity, 0) as crop_diversity,
             -- Intensity metrics
-            CASE 
-                WHEN g.actual_intersection_area_ha > 0 THEN 
+            CASE
+                WHEN g.actual_intersection_area_ha > 0 THEN
                     COALESCE(f.total_pfas_containing_active_ingredient_grams, 0) / g.actual_intersection_area_ha
-                ELSE 0 
+                ELSE 0
             END as pfas_containing_active_ingredient_intensity_grams_per_ha,
             CURRENT_TIMESTAMP as created_at
         FROM geometric_union g
@@ -502,7 +501,7 @@ class AreaValidator:
         """Validate H3 cell areas are within expected bounds."""
 
         area_stats = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 MIN(h3_cell_area_ha) as min_area,
                 MAX(h3_cell_area_ha) as max_area,
                 AVG(h3_cell_area_ha) as avg_area,
@@ -537,7 +536,7 @@ class AreaValidator:
         """Validate intersection area calculations."""
 
         validation_stats = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_cells,
                 COUNT(CASE WHEN total_intersection_area_ha > h3_cell_area_ha THEN 1 END) as impossible_intersections,
                 COUNT(CASE WHEN actual_coverage_ratio < 0 OR actual_coverage_ratio > 1 THEN 1 END) as invalid_coverage,
@@ -644,7 +643,7 @@ class H3PFASProcessorRefactored:
         CREATE OR REPLACE TABLE denmark_h3_grid AS
         WITH denmark_bbox AS (
             SELECT ST_MakeEnvelope(
-                {bounds["min_lon"]}, {bounds["min_lat"]}, 
+                {bounds["min_lon"]}, {bounds["min_lat"]},
                 {bounds["max_lon"]}, {bounds["max_lat"]}
             ) as bbox_geom
         ),
@@ -656,7 +655,7 @@ class H3PFASProcessorRefactored:
             SELECT UNNEST(h3_cells) as h3_cell
             FROM h3_cells
         )
-        SELECT 
+        SELECT
             h3_cell,
             ST_GeomFromText(h3_cell_to_boundary_wkt(h3_cell)) as h3_geometry,
             h3_cell_to_lat(h3_cell) as center_lat,
@@ -753,24 +752,84 @@ class H3PFASProcessorRefactored:
         # Load BMD data directly from GCS
         self._load_table_from_gcs(bmd_path, "temp_bmd_raw")
 
-        # Process BMD data (same as original processor)
-        self.conn.execute("""
+        # Check available columns and handle both old and new standardized names
+        bmd_columns = self.conn.execute("PRAGMA table_info(temp_bmd_raw)").fetchall()
+        bmd_column_names = [col[1] for col in bmd_columns]
+
+        # Handle product name column
+        if "produktnavn" in bmd_column_names:
+            product_name_column = "produktnavn"
+        elif "product_name" in bmd_column_names:
+            product_name_column = "product_name"
+        else:
+            product_name_column = "produktnavn"  # fallback
+
+        # Handle registration number column
+        if "registrerings_nr" in bmd_column_names:
+            registration_nr_column = "registrerings_nr"
+        elif "registration_number" in bmd_column_names:
+            registration_nr_column = "registration_number"
+        else:
+            registration_nr_column = "registrerings_nr"  # fallback
+
+        # Handle active ingredient column
+        if "aktivstofnavn_e" in bmd_column_names:
+            active_ingredient_column = "aktivstofnavn_e"
+        elif "active_ingredient_name" in bmd_column_names:
+            active_ingredient_column = "active_ingredient_name"
+        else:
+            active_ingredient_column = "aktivstofnavn_e"  # fallback
+
+        # Handle concentration column
+        if "koncentration_er" in bmd_column_names:
+            concentration_column = "koncentration_er"
+        elif "concentration" in bmd_column_names:
+            concentration_column = "concentration"
+        else:
+            concentration_column = "koncentration_er"  # fallback
+
+        # Handle unit column
+        if "enhed_er" in bmd_column_names:
+            unit_column = "enhed_er"
+        elif "unit" in bmd_column_names:
+            unit_column = "unit"
+        else:
+            unit_column = "enhed_er"  # fallback
+
+        # Handle total load column
+        if "samlet_belastning" in bmd_column_names:
+            total_load_column = "samlet_belastning"
+        elif "total_load" in bmd_column_names:
+            total_load_column = "total_load"
+        else:
+            total_load_column = "samlet_belastning"  # fallback
+
+        self.log.info("🔍 BMD column mappings:")
+        self.log.info(f"   Product name: {product_name_column}")
+        self.log.info(f"   Registration number: {registration_nr_column}")
+        self.log.info(f"   Active ingredient: {active_ingredient_column}")
+        self.log.info(f"   Concentration: {concentration_column}")
+        self.log.info(f"   Unit: {unit_column}")
+        self.log.info(f"   Total load: {total_load_column}")
+
+        # Process BMD data with standardized column names
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE bmd_data AS
             SELECT
-                produktnavn,
-                registrerings_nr,
-                aktivstofnavn_e as active_ingredient,
-                koncentration_er,
-                enhed_er,
-                samlet_belastning as total_load_per_unit,
-                belastning_miljøeffekt as environmental_effect_per_unit,
-                belastning_miljøadfærd as environmental_behavior_per_unit,
-                belastning_sundhed as health_effect_per_unit,
+                {product_name_column} as produktnavn,
+                {registration_nr_column} as registrerings_nr,
+                {active_ingredient_column} as active_ingredient,
+                {concentration_column} as koncentration_er,
+                {unit_column} as enhed_er,
+                {total_load_column} as total_load_per_unit,
+                COALESCE(belastning_miljøeffekt, environmental_effect) as environmental_effect_per_unit,
+                COALESCE(belastning_miljøadfærd, environmental_behavior) as environmental_behavior_per_unit,
+                COALESCE(belastning_sundhed, health_effect) as health_effect_per_unit,
                 contains_pfas,
                 -- Clean concentration values (handle Danish decimal comma)
-                TRY_CAST(REPLACE(REPLACE(koncentration_er, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric
+                TRY_CAST(REPLACE(REPLACE({concentration_column}, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric
             FROM temp_bmd_raw
-            WHERE registrerings_nr IS NOT NULL
+            WHERE {registration_nr_column} IS NOT NULL
         """)
 
         # Get statistics for logging
@@ -890,44 +949,61 @@ class H3PFASProcessorRefactored:
                 WHERE FALSE
             """)
 
-        # Check available columns (handle older years)
+        # Check available columns (handle older years and new standardized names)
         columns = self.conn.execute(f"PRAGMA table_info({temp_table})").fetchall()
         column_names = [col[1] for col in columns]
-        cvr_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
-        block_select = "block_id" if "block_id" in column_names else "NULL as block_id"
+
+        # Handle CVR column - prioritize new standardized name
+        if "cvr_number" in column_names:
+            cvr_select = "cvr_number"
+        elif "company_registration_number" in column_names:
+            cvr_select = "company_registration_number as cvr_number"
+        else:
+            cvr_select = "NULL as cvr_number"
+
+        # Handle block ID column - prioritize new standardized name
+        if "block_id" in column_names:
+            block_select = "block_id"
+        elif "block_number" in column_names:
+            block_select = "block_number as block_id"
+        else:
+            block_select = "NULL as block_id"
+
+        # Handle area column - prioritize new standardized name with proper casting
+        if "area_ha" in column_names:
+            area_select = "CAST(area_ha AS DOUBLE) as area_ha"
+        elif "field_area_ha" in column_names:
+            area_select = "CAST(field_area_ha AS DOUBLE) as area_ha"
+        else:
+            area_select = "NULL as area_ha"
 
         self.log.info(f"🔍 Available columns: {column_names}")
         self.log.info(f"🔍 CVR column handling: {cvr_select}")
         self.log.info(f"🔍 Block ID column handling: {block_select}")
+        self.log.info(f"🔍 Area column handling: {area_select}")
 
         # Process fields with geometry preparation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE prepared_fields AS
             SELECT
                 f.field_id,
-                CAST(f.area_ha AS DOUBLE) as area_ha,
-                {cvr_select.replace("cvr_number", "f.cvr_number")},
-                {block_select.replace("block_id", "f.block_id")},
+                {area_select.replace("area_ha", "f.area_ha")},
+                {cvr_select.replace("cvr_number", "f.cvr_number").replace("company_registration_number", "f.company_registration_number")},
+                {block_select.replace("block_id", "f.block_id").replace("block_number", "f.block_number")},
                 f.crop_code,
                 f.crop_name,
                 f.geometry_wkt
             FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
-                f.cvr_number = p.cvr
+                COALESCE(f.cvr_number, f.company_registration_number) = p.cvr
                 AND f.field_id = p.field_id
-                AND f.block_id = p.block_id
+                AND COALESCE(f.block_id, f.block_number) = p.block_id
             )
             WHERE f.geometry_wkt IS NOT NULL
             AND ST_IsValid(ST_GeomFromText(f.geometry_wkt))
-            AND CAST(f.area_ha AS DOUBLE) > 0
-            AND CASE
-                WHEN '{cvr_select}' LIKE '%cvr_number%' THEN f.cvr_number IS NOT NULL
-                ELSE TRUE
-            END
-            AND CASE
-                WHEN '{block_select}' LIKE '%block_id%' THEN f.block_id IS NOT NULL
-                ELSE TRUE
-            END
+            AND COALESCE(CAST(f.area_ha AS DOUBLE), CAST(f.field_area_ha AS DOUBLE)) > 0
+            AND COALESCE(f.cvr_number, f.company_registration_number) IS NOT NULL
+            AND COALESCE(f.block_id, f.block_number) IS NOT NULL
         """)
 
         # Use coordinate transformer to prepare geometries
@@ -960,6 +1036,59 @@ class H3PFASProcessorRefactored:
         # Load pesticide data directly from GCS
         self._load_table_from_gcs(full_path, "temp_pesticides_raw")
 
+        # Check available columns and handle both old and new standardized names
+        pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticides_raw)").fetchall()
+        pest_column_names = [col[1] for col in pest_columns]
+
+        # Handle CVR column mapping
+        if "CompanyRegistrationNumber" in pest_column_names:
+            cvr_column = "CompanyRegistrationNumber"
+        elif "cvr_number" in pest_column_names:
+            cvr_column = "cvr_number"
+        elif "company_registration_number" in pest_column_names:
+            cvr_column = "company_registration_number"
+        else:
+            raise Exception("No CVR column found in pesticide disaggregation data")
+
+        # Handle pesticide name column
+        if "PesticideName" in pest_column_names:
+            pesticide_name_column = "PesticideName"
+        elif "pesticide_name" in pest_column_names:
+            pesticide_name_column = "pesticide_name"
+        else:
+            pesticide_name_column = "PesticideName"  # fallback
+
+        # Handle pesticide registration number column
+        if "PesticideRegistrationNumber" in pest_column_names:
+            pesticide_reg_column = "PesticideRegistrationNumber"
+        elif "pesticide_registration_number" in pest_column_names:
+            pesticide_reg_column = "pesticide_registration_number"
+        else:
+            pesticide_reg_column = "PesticideRegistrationNumber"  # fallback
+
+        # Handle dosage quantity column
+        if "DosageQuantity" in pest_column_names:
+            dosage_quantity_column = "DosageQuantity"
+        elif "dosage_quantity" in pest_column_names:
+            dosage_quantity_column = "dosage_quantity"
+        else:
+            dosage_quantity_column = "DosageQuantity"  # fallback
+
+        # Handle dosage unit column
+        if "DosageUnit" in pest_column_names:
+            dosage_unit_column = "DosageUnit"
+        elif "dosage_unit" in pest_column_names:
+            dosage_unit_column = "dosage_unit"
+        else:
+            dosage_unit_column = "DosageUnit"  # fallback
+
+        self.log.info("🔍 Pesticide column mappings:")
+        self.log.info(f"   CVR: {cvr_column}")
+        self.log.info(f"   Pesticide name: {pesticide_name_column}")
+        self.log.info(f"   Registration number: {pesticide_reg_column}")
+        self.log.info(f"   Dosage quantity: {dosage_quantity_column}")
+        self.log.info(f"   Dosage unit: {dosage_unit_column}")
+
         # Process pesticide data with correct field names and CVR + block_id + field_id extraction
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
@@ -967,22 +1096,22 @@ class H3PFASProcessorRefactored:
                 DisaggregatedID,
                 MatchedFieldID,
                 MatchedBlockID,
-                CompanyRegistrationNumber as cvr,
-                PesticideName,
-                PesticideRegistrationNumber,
-                DosageQuantity,
-                DosageUnit,
-                AllocatedArea,
-                AllocationMethod,
-                MatchConfidence,
+                {cvr_column} as cvr,
+                {pesticide_name_column} as PesticideName,
+                {pesticide_reg_column} as PesticideRegistrationNumber,
+                {dosage_quantity_column} as DosageQuantity,
+                {dosage_unit_column} as DosageUnit,
+                COALESCE(AllocatedArea, allocated_area) as AllocatedArea,
+                COALESCE(AllocationMethod, allocation_method) as AllocationMethod,
+                COALESCE(MatchConfidence, match_confidence) as MatchConfidence,
                 -- Extract field_id and block_id for matching
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
             FROM temp_pesticides_raw
             WHERE MatchedFieldID IS NOT NULL
             AND MatchedBlockID IS NOT NULL
-            AND CompanyRegistrationNumber IS NOT NULL
-            AND PesticideRegistrationNumber IS NOT NULL
+            AND {cvr_column} IS NOT NULL
+            AND {pesticide_reg_column} IS NOT NULL
         """)
 
         # Get count for logging
@@ -1088,21 +1217,21 @@ class H3PFASProcessorRefactored:
                 CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
-                
+
                 -- Convert BigInt counts to regular integers (32-bit max: 2.1 billion)
                 CAST(unique_field_count AS INTEGER) as unique_field_count,
                 CAST(total_pesticide_applications AS INTEGER) as total_pesticide_applications,
                 CAST(pfas_containing_applications AS INTEGER) as pfas_containing_applications,
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
-                
+
                 -- PFAS-containing active ingredient exposure metrics as doubles
                 CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                
+
                 -- String fields (no conversion needed)
                 crop_types,
-                
+
                 -- Timestamp as string for better compatibility
                 CAST(created_at AS VARCHAR) as created_at
             FROM {results_table}
@@ -1277,7 +1406,7 @@ class H3PFASProcessorRefactored:
 
         # Get summary statistics
         stats = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_h3_cells,
                 SUM(unique_field_count) as total_field_intersections,
                 SUM(pfas_containing_applications) as total_pfas_containing_applications,
@@ -1378,6 +1507,107 @@ class H3PFASProcessorRefactored:
             f"🔗 Performing kommune-field spatial join with area weighting for year {year}"
         )
 
+        # Debug: Check data availability
+        kommuner_count = self.conn.execute(f"SELECT COUNT(*) FROM {kommuner_table}").fetchone()[0]
+        fields_count = self.conn.execute(f"SELECT COUNT(*) FROM {fields_table}").fetchone()[0]
+        pesticide_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table}"
+        ).fetchone()[0]
+
+        self.log.info(
+            f"🔍 Debug - Data counts: {kommuner_count} kommuner, {fields_count} fields, {pesticide_count} pesticide records"
+        )
+
+        # Debug: Check geometry validity
+        invalid_kommuner = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {kommuner_table} 
+            WHERE original_geometry IS NULL OR NOT ST_IsValid(original_geometry)
+        """).fetchone()[0]
+
+        invalid_fields = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {fields_table} 
+            WHERE original_geometry IS NULL OR NOT ST_IsValid(original_geometry)
+        """).fetchone()[0]
+
+        self.log.info(
+            f"🔍 Debug - Invalid geometries: {invalid_kommuner} kommuner, {invalid_fields} fields"
+        )
+
+        # Debug: Test basic spatial intersection without area filters
+        basic_intersections = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {kommuner_table} k
+            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.flipped_geometry)
+        """).fetchone()[0]
+
+        self.log.info(
+            f"🔍 Debug - Basic spatial intersections found (corrected): {basic_intersections}"
+        )
+
+        # Debug: Check coordinate bounds
+        kommune_bounds = self.conn.execute(f"""
+            SELECT 
+                MIN(ST_X(ST_Centroid(original_geometry))) as min_x,
+                MAX(ST_X(ST_Centroid(original_geometry))) as max_x,
+                MIN(ST_Y(ST_Centroid(original_geometry))) as min_y,
+                MAX(ST_Y(ST_Centroid(original_geometry))) as max_y
+            FROM {kommuner_table}
+        """).fetchone()
+
+        field_bounds = self.conn.execute(f"""
+            SELECT 
+                MIN(ST_X(ST_Centroid(original_geometry))) as min_x,
+                MAX(ST_X(ST_Centroid(original_geometry))) as max_x,
+                MIN(ST_Y(ST_Centroid(original_geometry))) as min_y,
+                MAX(ST_Y(ST_Centroid(original_geometry))) as max_y
+            FROM {fields_table}
+        """).fetchone()
+
+        self.log.info(
+            f"🔍 Debug - Kommune bounds: X({kommune_bounds[0]:.2f}, {kommune_bounds[1]:.2f}), Y({kommune_bounds[2]:.2f}, {kommune_bounds[3]:.2f})"
+        )
+        self.log.info(
+            f"🔍 Debug - Field bounds: X({field_bounds[0]:.2f}, {field_bounds[1]:.2f}), Y({field_bounds[2]:.2f}, {field_bounds[3]:.2f})"
+        )
+
+        # Debug: Check geometry types and sample geometries
+        sample_kommune_geom = self.conn.execute(f"""
+            SELECT ST_AsText(ST_Centroid(original_geometry)) as centroid_wkt
+            FROM {kommuner_table} 
+            LIMIT 1
+        """).fetchone()[0]
+
+        sample_field_geom = self.conn.execute(f"""
+            SELECT ST_AsText(ST_Centroid(original_geometry)) as centroid_wkt
+            FROM {fields_table} 
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.log.info(f"🔍 Debug - Sample kommune centroid: {sample_kommune_geom}")
+        self.log.info(f"🔍 Debug - Sample field centroid: {sample_field_geom}")
+
+        # Debug: Try intersection with original geometries instead of flipped
+        original_intersections = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {kommuner_table} k
+            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.original_geometry)
+        """).fetchone()[0]
+
+        self.log.info(f"🔍 Debug - Original geometry intersections: {original_intersections}")
+
+        # Debug: Check if flipped geometries exist
+        kommune_flipped_count = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {kommuner_table} 
+            WHERE flipped_geometry IS NOT NULL
+        """).fetchone()[0]
+
+        field_flipped_count = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {fields_table} 
+            WHERE flipped_geometry IS NOT NULL
+        """).fetchone()[0]
+
+        self.log.info(
+            f"🔍 Debug - Flipped geometries: {kommune_flipped_count} kommuner, {field_flipped_count} fields"
+        )
+
         result_table = f"kommune_pfas_results_{year}"
 
         # Complex spatial join query with area weighting
@@ -1385,7 +1615,7 @@ class H3PFASProcessorRefactored:
         CREATE OR REPLACE TABLE {result_table} AS
         WITH kommune_field_intersections AS (
             -- Find all field-kommune intersections with area calculations
-            SELECT 
+            SELECT
                 k.kommune_code,
                 k.kommune_name,
                 k.region_code,
@@ -1398,36 +1628,36 @@ class H3PFASProcessorRefactored:
                 f.area_ha as field_area_ha,
                 f.crop_code,
                 f.crop_name,
-                
+
                 -- Calculate intersection area between field and kommune
                 ST_Area_Spheroid(ST_Intersection(
-                    f.original_geometry,
+                    f.flipped_geometry,
                     k.original_geometry
                 )) / 10000.0 as intersection_area_ha,
-                
+
                 -- Calculate field area for coverage ratio
-                ST_Area_Spheroid(f.original_geometry) / 10000.0 as calculated_field_area_ha,
-                
+                ST_Area_Spheroid(f.flipped_geometry) / 10000.0 as calculated_field_area_ha,
+
                 -- Calculate coverage ratio: what fraction of the field is in this kommune
-                CASE 
-                    WHEN ST_Area_Spheroid(f.original_geometry) > 0 THEN 
+                CASE
+                    WHEN ST_Area_Spheroid(f.flipped_geometry) > 0 THEN
                         LEAST(1.0, ST_Area_Spheroid(ST_Intersection(
-                            f.original_geometry,
+                            f.flipped_geometry,
                             k.original_geometry
-                        )) / ST_Area_Spheroid(f.original_geometry))
-                    ELSE 0.0 
+                        )) / ST_Area_Spheroid(f.flipped_geometry))
+                    ELSE 0.0
                 END as field_coverage_ratio
-                
+
             FROM {kommuner_table} k
-            INNER JOIN {fields_table} f ON ST_Intersects(k.flipped_geometry, f.flipped_geometry)
+            INNER JOIN {fields_table} f ON ST_Intersects(k.original_geometry, f.flipped_geometry)
             WHERE ST_Area_Spheroid(ST_Intersection(
-                f.original_geometry,
+                f.flipped_geometry,
                 k.original_geometry
             )) > 0  -- Only include actual intersections
         ),
         kommune_field_pesticide AS (
             -- Join field intersections with pesticide data
-            SELECT 
+            SELECT
                 kfi.*,
                 p.PesticideRegistrationNumber,
                 p.DosageQuantity,
@@ -1436,100 +1666,100 @@ class H3PFASProcessorRefactored:
                 p.pfas_containing_active_ingredient_grams,
                 p.pesticide_belastning_applied,
                 p.pfas_containing_pesticide_belastning_applied,
-                
+
                 -- Calculate area-weighted PFAS exposure (weight by field coverage in this kommune)
-                CASE 
+                CASE
                     WHEN p.contains_pfas = true AND p.pfas_containing_active_ingredient_grams IS NOT NULL THEN
                         p.pfas_containing_active_ingredient_grams * kfi.field_coverage_ratio
                     ELSE 0
                 END as weighted_pfas_containing_active_ingredient_grams,
-                
+
                 -- Calculate area-weighted pesticide load
-                CASE 
+                CASE
                     WHEN p.pesticide_belastning_applied IS NOT NULL THEN
                         p.pesticide_belastning_applied * kfi.field_coverage_ratio
                     ELSE 0
                 END as weighted_pesticide_belastning,
-                
+
                 -- Calculate area-weighted PFAS pesticide load
-                CASE 
+                CASE
                     WHEN p.contains_pfas = true AND p.pfas_containing_pesticide_belastning_applied IS NOT NULL THEN
                         p.pfas_containing_pesticide_belastning_applied * kfi.field_coverage_ratio
                     ELSE 0
                 END as weighted_pfas_pesticide_belastning
-                
+
             FROM kommune_field_intersections kfi
             LEFT JOIN {pesticide_pfas_table} p ON (
-                kfi.cvr_number = p.cvr 
-                AND kfi.field_id = p.extracted_field_id 
+                kfi.cvr_number = p.cvr
+                AND kfi.field_id = p.extracted_field_id
                 AND kfi.block_id = p.extracted_block_id
             )
         )
         -- Final kommune-level aggregation
-        SELECT 
+        SELECT
             kommune_code,
             kommune_name,
             region_code,
             kommune_area_ha,
             kommune_centroid_x,
             kommune_centroid_y,
-            
+
             -- Agricultural area and field statistics
             SUM(intersection_area_ha) as total_agricultural_area_ha,
             COUNT(DISTINCT CONCAT(cvr_number, '_', block_id, '_', field_id)) as unique_field_count,
             COUNT(DISTINCT cvr_number) as unique_company_count,
-            
+
             -- Coverage statistics
             AVG(field_coverage_ratio) as avg_field_coverage_ratio,
             MAX(field_coverage_ratio) as max_field_coverage_ratio,
             MIN(field_coverage_ratio) as min_field_coverage_ratio,
-            
+
             -- Crop diversity
             COUNT(DISTINCT crop_code) as crop_diversity,
             STRING_AGG(DISTINCT crop_name, '; ') as crop_types,
-            
+
             -- PFAS exposure metrics (area-weighted)
             SUM(COALESCE(weighted_pfas_containing_active_ingredient_grams, 0)) as total_pfas_containing_active_ingredient_grams,
             SUM(COALESCE(weighted_pesticide_belastning, 0)) as total_pesticide_belastning,
             SUM(COALESCE(weighted_pfas_pesticide_belastning, 0)) as total_pfas_pesticide_belastning,
-            
+
             -- Application counts
             COUNT(CASE WHEN PesticideRegistrationNumber IS NOT NULL THEN 1 END) as total_pesticide_applications,
             COUNT(CASE WHEN contains_pfas = true THEN 1 END) as pfas_containing_applications,
             COUNT(DISTINCT CASE WHEN contains_pfas = true THEN PesticideRegistrationNumber END) as unique_pfas_products,
             COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticide_products,
-            
+
             -- Intensity metrics per hectare
-            CASE 
-                WHEN SUM(intersection_area_ha) > 0 THEN 
+            CASE
+                WHEN SUM(intersection_area_ha) > 0 THEN
                     SUM(COALESCE(weighted_pfas_containing_active_ingredient_grams, 0)) / SUM(intersection_area_ha)
-                ELSE 0 
+                ELSE 0
             END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-            
-            CASE 
-                WHEN SUM(intersection_area_ha) > 0 THEN 
+
+            CASE
+                WHEN SUM(intersection_area_ha) > 0 THEN
                     SUM(COALESCE(weighted_pesticide_belastning, 0)) / SUM(intersection_area_ha)
-                ELSE 0 
+                ELSE 0
             END as pesticide_belastning_per_ha,
-            
-            CASE 
-                WHEN SUM(intersection_area_ha) > 0 THEN 
+
+            CASE
+                WHEN SUM(intersection_area_ha) > 0 THEN
                     SUM(COALESCE(weighted_pfas_pesticide_belastning, 0)) / SUM(intersection_area_ha)
-                ELSE 0 
+                ELSE 0
             END as pfas_pesticide_belastning_per_ha,
-            
+
             -- Agricultural coverage of kommune
-            CASE 
-                WHEN kommune_area_ha > 0 THEN 
+            CASE
+                WHEN kommune_area_ha > 0 THEN
                     SUM(intersection_area_ha) / kommune_area_ha * 100
-                ELSE 0 
+                ELSE 0
             END as agricultural_coverage_pct,
-            
+
             -- Timestamp
             CURRENT_TIMESTAMP as created_at
-            
+
         FROM kommune_field_pesticide
-        GROUP BY kommune_code, kommune_name, region_code, kommune_area_ha, 
+        GROUP BY kommune_code, kommune_name, region_code, kommune_area_ha,
                  kommune_centroid_x, kommune_centroid_y
         HAVING SUM(intersection_area_ha) > 0  -- Only kommuner with agricultural activity
         ORDER BY total_pfas_containing_active_ingredient_grams DESC
@@ -1543,7 +1773,7 @@ class H3PFASProcessorRefactored:
 
         # Get summary statistics
         stats = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_kommuner,
                 COALESCE(SUM(unique_field_count), 0) as total_field_intersections,
                 COALESCE(SUM(pfas_containing_applications), 0) as total_pfas_applications,
@@ -1846,12 +2076,12 @@ class H3PFASProcessorRefactored:
         # Join with BMD for PFAS detection
         self.conn.execute("""
             CREATE OR REPLACE TABLE pesticide_pfas AS
-            SELECT 
+            SELECT
                 p.*,
                 b.active_ingredient,
                 b.total_load_per_unit,
                 COALESCE(b.contains_pfas, false) as contains_pfas,
-                
+
                 -- Calculate PFAS-containing active ingredient amount
                 CASE
                     WHEN b.contains_pfas = true AND b.concentration_numeric IS NOT NULL THEN
@@ -1945,21 +2175,21 @@ class H3PFASProcessorRefactored:
                 CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
-                
+
                 -- Convert BigInt counts to regular integers for Kepler.gl compatibility
                 CAST(unique_field_count AS INTEGER) as unique_field_count,
                 CAST(total_pesticide_applications AS INTEGER) as total_pesticide_applications,
                 CAST(pfas_containing_applications AS INTEGER) as pfas_containing_applications,
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
-                
+
                 -- PFAS-containing active ingredient exposure metrics as doubles
                 CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                
+
                 -- String fields
                 crop_types,
-                
+
                 -- Timestamp as string
                 CAST(created_at AS VARCHAR) as created_at
             FROM {results_table}
@@ -2097,7 +2327,7 @@ async def test_refactored_processor():
 
     try:
         # Run analysis
-        results_table = await processor.run_analysis(year=2022)
+        await processor.run_analysis(year=2022)
         logger.info("🎉 Refactored processor test completed successfully!")
         return True
 

@@ -850,36 +850,63 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for i, col in enumerate(pest_column_names, 1):
             self.log.info(f"   {i:2d}. {col}")
 
-        # Find the CVR column in pesticide data
+        # Find the CVR column in pesticide data with extended mapping
         self.log.info("🔍 Looking for CVR column in pesticide data...")
         pest_cvr_column = None
-        if "companyregistrationnumber" in pest_column_names:
-            pest_cvr_column = "companyregistrationnumber"
-            self.log.info("✅ Found CVR column: companyregistrationnumber")
-        elif "cvr" in pest_column_names:
-            pest_cvr_column = "cvr"
-            self.log.info("✅ Found CVR column: cvr")
-        else:
+        cvr_column_candidates = [
+            "companyregistrationnumber",
+            "cvr_number",
+            "cvr",
+            "CompanyRegistrationNumber",
+        ]
+
+        for candidate in cvr_column_candidates:
+            if candidate in pest_column_names:
+                pest_cvr_column = candidate
+                self.log.info(f"✅ Found CVR column: {candidate}")
+                break
+
+        if pest_cvr_column is None:
             self.log.error("❌ CRITICAL: No CVR column found in pesticide data!")
             self.log.error("🔍 CVR matching is required for pesticide disaggregation.")
             self.log.error(f"📋 Available columns: {pest_column_names}")
-            self.log.error("💡 Expected one of: companyregistrationnumber, cvr")
+            self.log.error(f"💡 Expected one of: {cvr_column_candidates}")
             return False
 
-        # Create the final pesticide table with proper column mapping
+        # Create the final pesticide table with proper column mapping and standardized column names
         self.log.info("🏗️ Creating final pesticide table with proper column mapping...")
+
+        # Check for standardized vs raw column names - prioritize new standardized names
+        area_column = "area_ha" if "area_ha" in pest_column_names else "acreagesize"
+        crop_column = "crop_code" if "crop_code" in pest_column_names else "code"
+        pesticide_name_column = (
+            "pesticide_name" if "pesticide_name" in pest_column_names else "pesticidename"
+        )
+        pesticide_reg_column = (
+            "pesticide_registration_number"
+            if "pesticide_registration_number" in pest_column_names
+            else "pesticideregistrationnumber"
+        )
+        dosage_quantity_column = (
+            "dosage_quantity" if "dosage_quantity" in pest_column_names else "dosagequantity"
+        )
+        dosage_unit_column = "dosage_unit" if "dosage_unit" in pest_column_names else "dosageunit"
+        no_pesticides_column = (
+            "no_pesticides" if "no_pesticides" in pest_column_names else "nopesticides"
+        )
+
         self.duckdb_conn.execute(f"""
             CREATE TABLE pesticide AS 
             SELECT 
                 row_number() OVER () as OriginalPesticideRowID,
                 {pest_cvr_column} as CompanyRegistrationNumber,
-                pesticidename as PesticideName,
-                pesticideregistrationnumber as PesticideRegistrationNumber,
-                dosagequantity as DosageQuantity,
-                dosageunit as DosageUnit,
-                acreagesize as AcreageSize,
-                code as Code,
-                nopesticides as nopesticides
+                {pesticide_name_column} as PesticideName,
+                {pesticide_reg_column} as PesticideRegistrationNumber,
+                CAST({dosage_quantity_column} AS DOUBLE) as DosageQuantity,
+                {dosage_unit_column} as DosageUnit,
+                CAST({area_column} AS DOUBLE) as AcreageSize,
+                CAST({crop_column} AS VARCHAR) as Code,
+                {no_pesticides_column} as nopesticides
             FROM pesticide_temp
         """)
 
