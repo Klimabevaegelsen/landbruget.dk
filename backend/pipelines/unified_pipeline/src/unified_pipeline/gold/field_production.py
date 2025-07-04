@@ -33,10 +33,10 @@ class FieldProductionGoldConfig(BaseJobConfig):
     agricultural_fields_dataset: str = "fvm_marker"
     dst_zone_mapping_dataset: str = "dst_zone_mapping"
     dst_yield_datasets: List[str] = [
-        "hst77_processed",
-        "gartn1_processed",
-        "fro_processed",
-        "halm1_processed",
+        "dst_hst77",
+        "dst_gartn1",
+        "dst_fro",
+        "dst_halm1",
     ]
 
     # Processing configuration
@@ -277,11 +277,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                 # Check for other optional columns
                 field_id_select = "field_id" if "field_id" in column_names else "NULL as field_id"
-                organic_farming_select = (
-                    "organic_farming"
-                    if "organic_farming" in column_names
-                    else "false as organic_farming"
-                )
+                # Note: FVM marker data does NOT contain organic farming information
+                # Organic farming data is in a separate fvm_organic_areas dataset
+                organic_farming_select = "false as organic_farming"
 
                 self.log.info(
                     f"Column mapping for {dataset_name}: field_id={field_id_select}, crop_type={crop_type_select}, organic_farming={organic_farming_select}"
@@ -357,11 +355,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         field_id_select = (
                             "field_id" if "field_id" in column_names else "NULL as field_id"
                         )
-                        organic_farming_select = (
-                            "organic_farming"
-                            if "organic_farming" in column_names
-                            else "false as organic_farming"
-                        )
+                        # Note: FVM marker data does NOT contain organic farming information
+                        # Organic farming data is in a separate fvm_organic_areas dataset
+                        organic_farming_select = "false as organic_farming"
 
                         self.log.info(
                             f"Column mapping for {dataset_name}: field_id={field_id_select}, crop_type={crop_type_select}, organic_farming={organic_farming_select}"
@@ -433,7 +429,35 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
             """)
 
-            # Create production estimates for this year
+            # Debug: Check what tables are available and their schemas
+            try:
+                tables = self.conn.execute("SHOW TABLES").fetchall()
+                table_names = [table[0] for table in tables]
+                self.log.info(f"Available tables in connection: {table_names}")
+
+                # Check specifically for DST tables and their schemas
+                dst_tables = [t for t in table_names if t.startswith("dst_")]
+                self.log.info(f"DST tables found: {dst_tables}")
+
+                # Debug: Check the schema of DST tables
+                for dst_table in dst_tables:
+                    if dst_table.startswith("dst_dst_"):  # Only check the yield tables
+                        try:
+                            schema = self.conn.execute(f"DESCRIBE {dst_table}").fetchall()
+                            self.log.info(f"Schema for {dst_table}: {[col[0] for col in schema]}")
+
+                            # Also show a sample row
+                            sample = self.conn.execute(
+                                f"SELECT * FROM {dst_table} LIMIT 1"
+                            ).fetchall()
+                            if sample:
+                                self.log.info(f"Sample row from {dst_table}: {sample[0]}")
+                        except Exception as schema_e:
+                            self.log.warning(f"Could not get schema for {dst_table}: {schema_e}")
+            except Exception as debug_e:
+                self.log.warning(f"Could not debug tables: {debug_e}")
+
+            # Create production estimates for this year using LEFT JOINs instead of subqueries
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
                 WITH yield_data AS (
@@ -443,26 +467,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             WHEN f.dst_regions IS NOT NULL THEN 
                                 COALESCE(
                                     -- Try exact DST region match first
-                                    (SELECT d.value FROM dst_hst77_processed d 
-                                     WHERE d.region = f.dst_regions AND d.year = f.year 
-                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
-                                    (SELECT d.value FROM dst_gartn1_processed d 
-                                     WHERE d.region = f.dst_regions AND d.year = f.year 
-                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
-                                    (SELECT d.value FROM dst_fro_processed d 
-                                     WHERE d.region = f.dst_regions AND d.year = f.year 
-                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
-                                    (SELECT d.value FROM dst_halm1_processed d 
-                                     WHERE d.region = f.dst_regions AND d.year = f.year 
-                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1),
+                                    hst77.harvest_value,
+                                    gartn1.horticulture_value,
+                                    fro.seed_value,
+                                    halm1.straw_value,
                                     -- Fallback to national average
-                                    (SELECT d.value FROM dst_hst77_processed d 
-                                     WHERE d.region ILIKE '%Hele landet%' AND d.year = f.year 
-                                     AND d.measurement_unit ILIKE '%yield%' LIMIT 1)
+                                    hst77_national.harvest_value
                                 )
                             ELSE NULL
                         END as yield_estimate_hkg_ha
                     FROM year_fields_with_zones f
+                    LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions AND hst77.time_period = CAST(f.year AS VARCHAR) AND hst77.measure_name ILIKE '%udbytte%'
+                    LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions AND gartn1.time_period = CAST(f.year AS VARCHAR) AND gartn1.measure_name ILIKE '%udbytte%'
+                    LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) AND fro.measure_name ILIKE '%udbytte%'
+                    LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions AND halm1.time_period = CAST(f.year AS VARCHAR) AND halm1.unit_name ILIKE '%udbytte%'
+                    LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' AND hst77_national.time_period = CAST(f.year AS VARCHAR) AND hst77_national.measure_name ILIKE '%udbytte%'
                 )
                 SELECT 
                     -- JOIN KEYS
@@ -526,17 +545,23 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             self.log.info("Setting up spatial processing with DST zones")
 
-            # Debug: Verify spatial extension is loaded
+            # Ensure spatial extension is loaded and working
             try:
                 # Test if spatial functions are available
                 self.conn.execute("SELECT ST_Point(0, 0)")
                 self.log.info("✅ Spatial extension is loaded and working")
             except Exception as spatial_e:
                 self.log.error(f"❌ Spatial extension not available: {spatial_e}")
-                # Try to load it again
-                self.conn.execute("INSTALL spatial")
-                self.conn.execute("LOAD spatial")
-                self.log.info("✅ Spatial extension loaded on retry")
+                try:
+                    # Try to load it again
+                    self.conn.execute("INSTALL spatial")
+                    self.conn.execute("LOAD spatial")
+                    # Test again
+                    self.conn.execute("SELECT ST_Point(0, 0)")
+                    self.log.info("✅ Spatial extension loaded on retry")
+                except Exception as retry_e:
+                    self.log.error(f"❌ Failed to load spatial extension: {retry_e}")
+                    raise RuntimeError("Spatial extension is required but could not be loaded")
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:

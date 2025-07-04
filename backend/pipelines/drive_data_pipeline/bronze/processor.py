@@ -243,11 +243,12 @@ class BronzeProcessor:
                 return False
 
             # For local storage, we can also verify file size
-            if hasattr(self.bronze_storage.storage_manager.storage, "base_dir"):
+            if self.bronze_storage.storage_manager.storage_type.lower() == "local":
                 # Local storage - can check size
                 try:
-                    if target_path.exists():
-                        saved_size = target_path.stat().st_size
+                    full_path = self.bronze_storage.storage_manager.base_dir / target_path
+                    if full_path.exists():
+                        saved_size = full_path.stat().st_size
                         if saved_size != len(file_content):
                             logger.warning(
                                 f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
