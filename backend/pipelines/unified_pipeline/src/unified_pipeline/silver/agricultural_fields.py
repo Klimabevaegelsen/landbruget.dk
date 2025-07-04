@@ -21,6 +21,7 @@ from typing import Any, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class AgriculturalFieldsSilverConfig(BaseJobConfig):
     """
     Configuration for Agricultural Fields Silver data processing.
@@ -62,6 +63,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "MARKBLOKTY": "block_type",
     }
 
+
 class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], SilverJobInterface):
     """
     Silver layer processor for agricultural fields data using DuckDB-spatial.
@@ -84,7 +86,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         Initialize the AgriculturalFieldsSilver processor.
 
         Args:
-            config: Configuration for the silver processing job        """
+            config: Configuration for the silver processing job"""
         super().__init__(config)
         # Initialize DuckDB with spatial extension
         self._setup_duckdb()
@@ -212,7 +214,16 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 for old_col, new_col in self.config.column_mapping.items():
                     if old_col in available_columns:
-                        select_columns.append(f'"{old_col}" as {new_col}')
+                        # Apply proper type casting for area columns
+                        if new_col in [
+                            "area_ha",
+                            "block_area_ha",
+                            "applied_area_ha",
+                            "reported_area_ha",
+                        ]:
+                            select_columns.append(f'CAST("{old_col}" AS DOUBLE) as {new_col}')
+                        else:
+                            select_columns.append(f'"{old_col}" as {new_col}')
 
                 # Add unmapped columns (except geometry_json and payload_id)
                 for col in available_columns:
