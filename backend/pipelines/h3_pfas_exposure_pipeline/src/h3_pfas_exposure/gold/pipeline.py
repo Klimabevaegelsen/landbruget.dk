@@ -19,6 +19,9 @@ class H3PFASPipeline:
         """Run H3-based PFAS analysis for specified years."""
         self.log.info("🚀 Starting H3 PFAS exposure analysis")
 
+        # DEBUG: Log the memory_limit from H3PFASConfig
+        self.log.info(f"🔍 DEBUG: H3PFASConfig memory_limit = '{self.config.memory_limit}'")
+
         # Convert config to H3SpatialConfig
         h3_config = H3SpatialConfig(
             h3_resolution=self.config.h3_resolution,
@@ -36,6 +39,9 @@ class H3PFASPipeline:
             log_chunk_details=self.config.log_chunk_details,
             log_stage_timings=self.config.log_stage_timings,
         )
+
+        # DEBUG: Log the memory_limit from H3SpatialConfig
+        self.log.info(f"🔍 DEBUG: H3SpatialConfig memory_limit = '{h3_config.memory_limit}'")
 
         # Create processor
         processor = H3PFASProcessorRefactored(h3_config, local_data_dir=None)
