@@ -672,8 +672,8 @@ class H3PFASProcessorRefactored:
         self.conn = duckdb.connect(":memory:")
 
         # GITHUB ACTIONS OPTIMIZED SETTINGS
-        self.conn.execute("SET memory_limit='12GB'")
-        self.conn.execute("SET max_memory='12GB'")
+        self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
+        self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
         self.conn.execute(f"SET threads={self.config.thread_count}")
 
         # Optimize for limited resources
@@ -683,7 +683,7 @@ class H3PFASProcessorRefactored:
 
         # Aggressive memory management
         self.conn.execute("SET checkpoint_threshold='100MB'")  # Frequent checkpoints
-        self.conn.execute("SET wal_autocheckpoint=1000")  # Frequent WAL checkpoints
+        self.conn.execute("PRAGMA wal_autocheckpoint=1000")  # Frequent WAL checkpoints
 
         # Install extensions
         extensions = [
