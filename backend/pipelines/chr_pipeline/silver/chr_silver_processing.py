@@ -345,6 +345,19 @@ def process_chr_data(
                             logging.warning(f"Could not delete temporary JSONL file {temp_jsonl_path.name}: {e_del}")
                     if temp_file and not temp_file.closed:
                         temp_file.close()  # Ensure closed if error occurred before explicit close
+
+                    # CRITICAL: Force garbage collection after processing large datasets
+                    if data and len(data) > 1000:
+                        import gc
+
+                        gc.collect()
+                        logging.debug(
+                            f"Forced garbage collection after processing {len(data)} records for {table_name}"
+                        )
+
+                    # CRITICAL: Clear the data reference to free memory immediately
+                    if "data" in locals():
+                        del data
             else:
                 logging.warning(
                     f"No data (or not a list) found in memory buffer for {source_info['mem_key']}. Will attempt file fallback if configured."
@@ -643,6 +656,53 @@ def process_chr_data(
             logging.info(f"Removed intermediate file: {vetstat_antibiotics_jsonl_path}")
         except OSError as e:
             logging.warning(f"Could not remove intermediate file {vetstat_antibiotics_jsonl_path}: {e}")
+
+    # CRITICAL: Comprehensive cleanup of all temporary files and memory
+    try:
+        # Clean up any remaining temporary files in the silver directory
+        temp_pattern_files = [
+            silver_dir.glob("temp_*"),
+            silver_dir.glob("_temp_*"),
+            silver_dir.glob("*.tmp"),
+            silver_dir.glob("*.jsonl"),
+        ]
+
+        for pattern in temp_pattern_files:
+            for temp_file in pattern:
+                try:
+                    if temp_file.exists():
+                        temp_file.unlink()
+                        logging.debug(f"Cleaned up temporary file: {temp_file.name}")
+                except Exception as e:
+                    logging.warning(f"Could not remove temporary file {temp_file}: {e}")
+
+        # Close DuckDB connection to free resources
+        if "con" in locals() and con:
+            try:
+                con.con.close()
+                logging.info("Closed DuckDB connection")
+            except Exception as e:
+                logging.warning(f"Error closing DuckDB connection: {e}")
+
+        # Clear large variables from memory
+        if "raw_tables" in locals():
+            del raw_tables
+        if "context" in locals():
+            del context
+        if "lookup_tables" in locals():
+            del lookup_tables
+        if "in_memory_data" in locals() and in_memory_data:
+            in_memory_data.clear()
+            del in_memory_data
+
+        # Force final garbage collection
+        import gc
+
+        gc.collect()
+        logging.info("Completed comprehensive cleanup of temporary files and memory")
+
+    except Exception as e:
+        logging.warning(f"Error during comprehensive cleanup: {e}")
 
     logging.info(f"Silver data processing finished. Output located in: {silver_dir}")
 
