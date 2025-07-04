@@ -30,6 +30,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class FVMWFSBronzeConfig(BaseJobConfig):
     """
     Configuration for the FVM WFS Bronze source.
@@ -50,11 +51,13 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         wfs_url (str): Base URL for the FVM WFS service
         dataset_markblokke (str): Name of the markblokke dataset in storage
         dataset_marker (str): Name of the marker dataset in storage
+        dataset_organic_areas (str): Name of the organic areas dataset in storage
         frequency (str): How often the data is updated
         bucket (str): GCS bucket name for raw data storage
         markblokke_years (List[int]): Years available for Markblokke data (2005-2026)
         marker_years (List[int]): Years available for Marker data (2008-2025)
         smaabiotoper_years (List[int]): Years available for Smaabiotoper data (2023-2025)
+        organic_areas_years (List[int]): Years available for Organic Areas data (2012-2024)
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
         max_concurrent (int): Maximum concurrent requests
         timeout_config (aiohttp.ClientTimeout): Request timeout configuration
@@ -67,6 +70,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     wfs_url: str = "https://geodata.fvm.dk/geoserver/wfs"
     dataset_markblokke: str = "fvm_markblokke"
     dataset_marker: str = "fvm_marker"
+    dataset_organic_areas: str = "fvm_organic_areas"
     frequency: str = "yearly"
     bucket: str = "landbrugsdata-raw-data"
 
@@ -74,6 +78,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
     smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
+    organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
 
     # Request configuration - optimized for full dataset downloads
     # Testing showed full downloads are optimal (no chunking needed)
@@ -113,6 +118,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
             object.__setattr__(self, "markblokke_years", [])
             object.__setattr__(self, "marker_years", [])
             object.__setattr__(self, "smaabiotoper_years", [])
+            object.__setattr__(self, "organic_areas_years", [])
 
             # Apply layer type filter
             if cli_config.fvm_layer_type:
@@ -124,6 +130,8 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                     years = list(range(2008, 2026))  # 2008-2025
                 elif layer_type == FVMLayerType.smaabiotoper:
                     years = [2023, 2024, 2025]
+                elif layer_type == FVMLayerType.organic_areas:
+                    years = list(range(2012, 2025))  # 2012-2024
                 else:
                     years = []
 
@@ -141,6 +149,9 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                     object.__setattr__(self, "marker_years", years)
                 elif layer_type == FVMLayerType.smaabiotoper:
                     object.__setattr__(self, "smaabiotoper_years", years)
+                elif layer_type == FVMLayerType.organic_areas:
+                    object.__setattr__(self, "organic_areas_years", years)
+
 
 class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
     """
@@ -165,7 +176,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         Initialize the FVMWFSBronze source.
 
         Args:
-            config (FVMWFSBronzeConfig): Configuration for the data source        """
+            config (FVMWFSBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
     def _get_layer_name(self, layer_type: str, year: int) -> str:
@@ -173,7 +184,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         Get the WFS layer name for a specific type and year.
 
         Args:
-            layer_type (str): Type of layer ('Markblokke', 'Marker', or 'Smaabiotoper')
+            layer_type (str): Type of layer ('Markblokke', 'Marker', 'Smaabiotoper', or 'OrganicAreas')
             year (int): Year for the layer
 
         Returns:
@@ -181,6 +192,8 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         """
         if layer_type == "Smaabiotoper":
             return f"Marker:Smaabiotoper_{year}"
+        elif layer_type == "OrganicAreas":
+            return f"Miljoe_og_oekologitilsagn:Oekologiske_arealer_{year}"
         else:
             return f"{layer_type}:{layer_type}_{year}"
 
@@ -439,7 +452,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             ) as session,
             AsyncTimer("Total FVM WFS run time"),
         ):
-            all_data = {"markblokke": {}, "marker": {}, "smaabiotoper": {}}
+            all_data = {"markblokke": {}, "marker": {}, "smaabiotoper": {}, "organic_areas": {}}
 
             # Process Markblokke data (field blocks) 2005-2026
             self.log.info("Processing Markblokke (field blocks) data")
@@ -465,10 +478,21 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["smaabiotoper"] = smaabiotoper_data
 
+            # Process Organic Areas data (organic areas) 2012-2024
+            self.log.info("Processing Organic Areas (organic areas) data")
+            organic_areas_data = await self._process_layer_type(
+                session,
+                "OrganicAreas",
+                self.config.organic_areas_years,
+                self.config.dataset_organic_areas,
+            )
+            all_data["organic_areas"] = organic_areas_data
+
             # Log summary statistics
             total_markblokke = len(markblokke_data)
             total_marker = len(marker_data)
             total_smaabiotoper = len(smaabiotoper_data)
+            total_organic_areas = len(organic_areas_data)
 
             self.log.info("FVM WFS data processing summary:")
             self.log.info(
@@ -477,6 +501,9 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             self.log.info(f"  Marker layers: {total_marker}/{len(self.config.marker_years)}")
             self.log.info(
                 f"  Smaabiotoper layers: {total_smaabiotoper}/{len(self.config.smaabiotoper_years)}"
+            )
+            self.log.info(
+                f"  Organic Areas layers: {total_organic_areas}/{len(self.config.organic_areas_years)}"
             )
 
             self.log.info("FVM WFS bronze job completed successfully")

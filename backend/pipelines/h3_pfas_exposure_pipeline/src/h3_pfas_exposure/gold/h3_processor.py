@@ -1074,7 +1074,7 @@ class H3PFASProcessorRefactored:
     def _save_year_results_kepler_compatible(self, results_table: str, year: int) -> int:
         """Save results to GCS with Kepler.gl compatibility fixes."""
         self.log.info(
-            f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} to GCS"
+            f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} (resolution {self.config.h3_resolution}) to GCS"
         )
 
         # Create Kepler.gl compatible version by converting BigInt columns to regular numbers
@@ -1109,9 +1109,9 @@ class H3PFASProcessorRefactored:
             ORDER BY h3_cell
         """)
 
-        # Create output path for Kepler-compatible version
+        # Create output path for Kepler-compatible version with resolution in filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path_kepler = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}/{timestamp}/h3_pesticide_{year}_kepler.parquet"
+        output_path_kepler = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}_kepler.parquet"
 
         # Upload Kepler-compatible table
         self.gcs_access.upload_from_duckdb_table(f"final_results_kepler_{year}", output_path_kepler)
@@ -1126,13 +1126,15 @@ class H3PFASProcessorRefactored:
             ORDER BY h3_cell
         """)
 
-        output_path_original = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}/{timestamp}/h3_pesticide_{year}.parquet"
+        output_path_original = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}.parquet"
         self.gcs_access.upload_from_duckdb_table(f"final_results_{year}", output_path_original)
 
         # Get count for return
         count = self.conn.execute(f"SELECT COUNT(*) FROM final_results_{year}").fetchone()[0]
 
-        self.log.info(f"✅ Saved {count:,} H3 pesticide exposure records for year {year}")
+        self.log.info(
+            f"✅ Saved {count:,} H3 pesticide exposure records for year {year} (resolution {self.config.h3_resolution})"
+        )
         self.log.info(f"   📊 Original format: {output_path_original}")
         self.log.info(f"   🗺️  Kepler.gl compatible: {output_path_kepler}")
 
@@ -1537,16 +1539,17 @@ class H3PFASProcessorRefactored:
 
         # Log results
         count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
+        count = count or 0  # Handle None case
 
         # Get summary statistics
         stats = self.conn.execute(f"""
             SELECT 
                 COUNT(*) as total_kommuner,
-                SUM(unique_field_count) as total_field_intersections,
-                SUM(pfas_containing_applications) as total_pfas_applications,
-                SUM(total_pfas_containing_active_ingredient_grams) as total_pfas_grams,
-                SUM(total_agricultural_area_ha) as total_agricultural_area,
-                AVG(agricultural_coverage_pct) as avg_agricultural_coverage
+                COALESCE(SUM(unique_field_count), 0) as total_field_intersections,
+                COALESCE(SUM(pfas_containing_applications), 0) as total_pfas_applications,
+                COALESCE(SUM(total_pfas_containing_active_ingredient_grams), 0) as total_pfas_grams,
+                COALESCE(SUM(total_agricultural_area_ha), 0) as total_agricultural_area,
+                COALESCE(AVG(agricultural_coverage_pct), 0) as avg_agricultural_coverage
             FROM {result_table}
         """).fetchone()
 
@@ -1926,7 +1929,10 @@ class H3PFASProcessorRefactored:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Save Kepler.gl compatible version
-        output_path_kepler = output_dir / f"h3_pesticide_{year}_{timestamp}_kepler.parquet"
+        output_path_kepler = (
+            output_dir
+            / f"h3_pesticide_{year}_res{self.config.h3_resolution}_{timestamp}_kepler.parquet"
+        )
 
         # Create Kepler.gl compatible version
         self.conn.execute(f"""
@@ -1964,7 +1970,9 @@ class H3PFASProcessorRefactored:
         self.conn.execute(f"COPY {results_table}_kepler TO '{output_path_kepler}' (FORMAT PARQUET)")
 
         # Also save original version
-        output_path_original = output_dir / f"h3_pesticide_{year}_{timestamp}.parquet"
+        output_path_original = (
+            output_dir / f"h3_pesticide_{year}_res{self.config.h3_resolution}_{timestamp}.parquet"
+        )
         self.log.info(f"💾 Saving original results to {output_path_original}")
         self.conn.execute(f"COPY {results_table} TO '{output_path_original}' (FORMAT PARQUET)")
 
