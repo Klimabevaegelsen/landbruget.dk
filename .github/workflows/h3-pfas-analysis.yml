@@ -55,10 +55,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Set analysis modes, resolutions, and years matrix
+      - name: Set year-based matrix (optimized to avoid redundant annual data downloads)
         id: set-matrix
         run: |
-          # Parse analysis modes
+          # Parse analysis modes (h3 and kommune are different aggregation levels)
           if [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
             IFS=',' read -ra modes <<< "${{ github.event.inputs.analysis_modes }}"
           else
@@ -72,7 +72,7 @@ jobs:
             resolutions=("${{ github.event.inputs.h3_resolutions || '10' }}")
           fi
           
-          # Parse years - default to all available years if not specified
+          # Parse years - create one job per year
           if [[ -n "${{ github.event.inputs.years }}" ]]; then
             if [[ "${{ github.event.inputs.years }}" == *","* ]]; then
               IFS=',' read -ra years <<< "${{ github.event.inputs.years }}"
@@ -84,26 +84,36 @@ jobs:
             years=("2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
           fi
           
-          # Build matrix combinations - each year gets its own job
+          # Build matrix combinations - one job per YEAR
+          # Each job processes ALL requested aggregation levels (h3 resolutions + kommune) for that year
+          # This avoids downloading the same large annual data files (pesticide disaggregation, FVM fields) multiple times
           matrix_items=()
-          for mode in "${modes[@]}"; do
-            for year in "${years[@]}"; do
-              if [[ "$mode" == "h3" ]]; then
-                # For h3 mode, create entries for each resolution and year
-                for res in "${resolutions[@]}"; do
-                  matrix_items+=("{\"mode\":\"$mode\",\"h3_resolution\":\"$res\",\"year\":\"$year\"}")
-                done
-              else
-                # For non-h3 modes, don't include resolution but include year
-                matrix_items+=("{\"mode\":\"$mode\",\"year\":\"$year\"}")
-              fi
-            done
+          for year in "${years[@]}"; do
+            # Build list of all aggregation levels to process
+            aggregation_levels=()
+            
+            # Add H3 resolutions if h3 mode is requested
+            if [[ " ${modes[@]} " =~ " h3 " ]]; then
+              for res in "${resolutions[@]}"; do
+                aggregation_levels+=("h3:$res")
+              done
+            fi
+            
+            # Add kommune if kommune mode is requested
+            if [[ " ${modes[@]} " =~ " kommune " ]]; then
+              aggregation_levels+=("kommune")
+            fi
+            
+            # Convert to comma-separated string
+            aggregation_levels_str=$(IFS=','; echo "${aggregation_levels[*]}")
+            
+            matrix_items+=("{\"year\":\"$year\",\"aggregation_levels\":\"$aggregation_levels_str\"}")
           done
           
           # Convert to JSON array
           matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-          echo "Generated matrix: $matrix_json"
+          echo "Generated optimized matrix (one job per year, processes all aggregation levels): $matrix_json"
 
   # Matrix job for parallel analysis by year and resolution
   h3-pfas-analysis:
@@ -114,6 +124,8 @@ jobs:
         include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
       fail-fast: false  # Allow other jobs to continue if one fails
       max-parallel: 4   # Limit concurrent jobs to avoid overwhelming GCS
+    
+    name: Process Year ${{ matrix.year }} - All Aggregation Levels
     
     steps:
       - name: Checkout code
@@ -169,12 +181,11 @@ jobs:
         run: |
           gsutil ls gs://${{ env.GCS_BUCKET }}/ | head -5
       
-      - name: Run H3 PFAS Analysis - ${{ matrix.mode }}${{ matrix.h3_resolution && format(' (res {0})', matrix.h3_resolution) || '' }} - Year ${{ matrix.year }}
+      - name: Run H3 PFAS Analysis - Year ${{ matrix.year }} - All Aggregation Levels
         working-directory: ${{ env.PIPELINE_DIR }}
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
-          H3_RESOLUTION: ${{ matrix.h3_resolution || '10' }}
-          # Optimized for single-year processing with 16GB RAM, 4 CPU
+          # Optimized for single-year, multi-aggregation processing with 16GB RAM, 4 CPU
           MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
           THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
           CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
@@ -184,42 +195,69 @@ jobs:
           LOG_STAGE_TIMINGS: true
           PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
         run: |
-          # Build the command using the new main.py interface for SINGLE YEAR processing
-          cmd="python main.py --mode ${{ matrix.mode }} --verbose"
+          # Parse aggregation levels for this year
+          IFS=',' read -ra aggregation_levels <<< "${{ matrix.aggregation_levels }}"
           
-          # Add H3 resolution if specified (only for h3 mode)
-          if [[ "${{ matrix.mode }}" == "h3" && -n "${{ matrix.h3_resolution }}" ]]; then
-            cmd="$cmd --h3-resolution ${{ matrix.h3_resolution }}"
-          fi
-          
-          # Add SINGLE YEAR for this job
-          cmd="$cmd --years ${{ matrix.year }}"
-          
-          # Add optimized parameters for GitHub Actions 16GB RAM, 4 CPU
+          # Optimized parameters for GitHub Actions 16GB RAM, 4 CPU
           memory_limit="${{ github.event.inputs.memory_limit || '14GB' }}"
           thread_count="${{ github.event.inputs.thread_count || '4' }}"
           chunk_size="${{ github.event.inputs.chunk_size || '10000' }}"
-          
-          cmd="$cmd --memory-limit $memory_limit"
-          cmd="$cmd --thread-count $thread_count"
-          cmd="$cmd --chunk-size $chunk_size"
           
           echo "🚀 Running H3 PFAS Analysis with optimized single-year processing:"
           echo "   💾 Memory: $memory_limit (of 16GB available)"
           echo "   ⚙️ Threads: $thread_count (of 4 CPUs available)"
           echo "   📦 Chunk size: $chunk_size (optimized for 16GB RAM)"
-          echo "   🎯 Mode: ${{ matrix.mode }}"
           echo "   📅 Year: ${{ matrix.year }} (SINGLE YEAR PER JOB)"
-          echo "   🔧 Resolution: ${{ matrix.h3_resolution || 'N/A' }}"
-          echo "Command: $cmd"
+          echo "   🎯 Aggregation levels: ${{ matrix.aggregation_levels }}"
+          echo "   ⚡ Efficiency: Large annual data files (pesticide disaggregation, FVM fields) downloaded once per year"
+          echo ""
           
-          eval $cmd
+          # Process each aggregation level for this year
+          for level in "${aggregation_levels[@]}"; do
+            echo "Processing aggregation level: $level"
+            
+            if [[ "$level" == "kommune" ]]; then
+              # Run kommune analysis
+              cmd="python main.py --mode kommune --verbose"
+              cmd="$cmd --years ${{ matrix.year }}"
+              cmd="$cmd --memory-limit $memory_limit"
+              cmd="$cmd --thread-count $thread_count"
+              cmd="$cmd --chunk-size $chunk_size"
+              
+              echo "🏛️ Running kommune analysis for year ${{ matrix.year }}"
+              echo "Command: $cmd"
+              eval $cmd
+              
+            elif [[ "$level" == h3:* ]]; then
+              # Extract H3 resolution
+              resolution="${level#h3:}"
+              
+              # Run H3 analysis
+              cmd="python main.py --mode h3 --verbose"
+              cmd="$cmd --h3-resolution $resolution"
+              cmd="$cmd --years ${{ matrix.year }}"
+              cmd="$cmd --memory-limit $memory_limit"
+              cmd="$cmd --thread-count $thread_count"
+              cmd="$cmd --chunk-size $chunk_size"
+              
+              echo "🔷 Running H3 analysis (resolution $resolution) for year ${{ matrix.year }}"
+              echo "Command: $cmd"
+              eval $cmd
+              
+            else
+              echo "⚠️ Unknown aggregation level: $level"
+            fi
+            
+            echo ""
+          done
+          
+          echo "✅ Completed all aggregation levels for year ${{ matrix.year }}"
       
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.mode }}${{ matrix.h3_resolution && format('-res{0}', matrix.h3_resolution) || '' }}-year${{ matrix.year }}-${{ github.run_id }}
+          name: logs-year${{ matrix.year }}-${{ github.run_id }}
           path: |
             ${{ env.PIPELINE_DIR }}/*.log
             /tmp/*.log
@@ -228,8 +266,8 @@ jobs:
       - name: Verify output upload
         run: |
           echo "Checking for output files in GCS for year ${{ matrix.year }}..."
-          # List recent outputs for this mode and year
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pesticide|kommune_pesticide)" | grep "${{ matrix.year }}" | tail -5
+          # List recent outputs for this year across all aggregation levels
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pesticide|kommune_pesticide)" | grep "${{ matrix.year }}" | tail -10
 
   # Summary job
   analysis-summary:
