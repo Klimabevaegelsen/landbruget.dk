@@ -18,7 +18,6 @@ from drive_data_pipeline.bronze import BronzeProcessor
 from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
 from drive_data_pipeline.bronze.metadata import MetadataManager
 from drive_data_pipeline.config import get_settings, parse_args
-from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
 
@@ -386,8 +385,11 @@ def main() -> int:
                 # Traditional mode - just get the run path
                 bronze_run_path = bronze_processor.run_path
 
-        # Process Silver layer if not bronze_only
+        # Process Silver layer if requested
+        silver_processed_count = 0
         if not args.bronze_only:
+            logger.info("Starting Silver layer processing")
+
             # Initialize Silver processor with progress tracking
             silver_processor = SilverProcessor(
                 settings=settings,
@@ -451,7 +453,7 @@ def main() -> int:
                 progress.start_silver_operation(files_to_process_count)
 
                 # Process from memory
-                silver_processor.process_from_memory(
+                silver_processed_count = silver_processor.process_from_memory(
                     bronze_data=bronze_data,
                     specific_subfolders=subfolders,
                     supported_file_types=file_types,
@@ -505,7 +507,7 @@ def main() -> int:
                 progress.start_silver_operation(files_to_process_count)
 
                 logger.info(f"Processing Bronze files to Silver layer from: {bronze_run_path}")
-                silver_processor.process_bronze_files(
+                silver_processed_count = silver_processor.process_bronze_files(
                     bronze_run_path=bronze_run_path,
                     specific_subfolders=subfolders,
                     supported_file_types=file_types,
@@ -515,9 +517,27 @@ def main() -> int:
                 logger.error(error_msg)
                 if not args.quiet:
                     print(f"Error: {error_msg}")
+                return 1  # Return failure immediately if no data to process
 
         # Print summary at the end
         progress.print_summary()
+
+        # Determine success based on actual processed files
+        bronze_processed = progress.bronze_stats["downloaded_files"]
+        silver_processed = progress.silver_stats["processed_files"]
+
+        # Check if we actually processed any files
+        if not args.silver_only and bronze_processed == 0:
+            logger.error("Pipeline failed: No files were downloaded in Bronze layer")
+            if not args.quiet:
+                print("Error: No files were downloaded")
+            return 1
+
+        if not args.bronze_only and silver_processed == 0:
+            logger.error("Pipeline failed: No files were processed in Silver layer")
+            if not args.quiet:
+                print("Error: No files were processed in Silver layer")
+            return 1
 
         # Generate schema documentation for processed data
         if not args.bronze_only:
