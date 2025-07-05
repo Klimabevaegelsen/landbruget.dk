@@ -266,27 +266,68 @@ def fetch_herds(
 
 
 def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
-    """Execute tasks in parallel using a thread pool with progress tracking."""
+    """Execute tasks in parallel using a thread pool with progress tracking and timeout handling."""
     results = []
+
+    # Set timeout based on environment - more aggressive for GitHub Actions
+    github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+    task_timeout = 300 if github_actions else 600  # 5 minutes in GH Actions, 10 minutes locally
+
     with logging_redirect_tqdm():
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(func, *task) for task in tasks]
 
+            # Map futures to their task info for better error reporting
+            future_to_task = {future: i for i, future in enumerate(futures)}
+
             # Create progress bar that works in both CI and interactive environments
-            for future in tqdm(
-                concurrent.futures.as_completed(futures),
+            completed_count = 0
+            pbar = tqdm(
                 total=len(futures),
                 desc=desc or func.__name__,
                 unit="tasks",
                 mininterval=1.0,
                 bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-            ):
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    logger.error(f"Task failed: {e}")
-                    results.append(None)
+            )
+
+            try:
+                for future in concurrent.futures.as_completed(futures, timeout=task_timeout * len(futures)):
+                    task_idx = future_to_task[future]
+                    try:
+                        # Add per-task timeout to prevent individual tasks from hanging
+                        result = future.result(timeout=task_timeout)
+                        results.append(result)
+                    except concurrent.futures.TimeoutError:
+                        logger.error(f"Task {task_idx} timed out after {task_timeout} seconds")
+                        if len(tasks[task_idx]) >= 3:  # If task has herd number (3rd argument)
+                            herd_number = tasks[task_idx][2]
+                            logger.error(f"Herd {herd_number} timed out - marking as problematic")
+                            # Import and mark as problematic
+                            try:
+                                from bronze.load_chr_dyr import add_problematic_herd
+
+                                add_problematic_herd(herd_number)
+                            except ImportError:
+                                pass  # Not all tasks have herd numbers
+                        results.append(None)
+                    except Exception as e:
+                        logger.error(f"Task {task_idx} failed: {e}")
+                        results.append(None)
+
+                    completed_count += 1
+                    pbar.update(1)
+
+            except concurrent.futures.TimeoutError:
+                logger.error(f"Overall parallel processing timed out after {task_timeout * len(futures)} seconds")
+                # Cancel remaining futures
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+                        results.append(None)
+                        pbar.update(1)
+
+            finally:
+                pbar.close()
 
     return results
 
@@ -543,6 +584,20 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if context["args"]["progress"]:
             logging.info(f"Processing {len(cattle_movement_tasks)} cattle herds with smart aggregation")
 
+            # Load and report problematic herds at the start
+            try:
+                from bronze.load_chr_dyr import _load_problematic_herds, is_problematic_herd
+
+                _load_problematic_herds()  # Force load to get current count
+
+                problematic_count = sum(1 for herd_num, _ in cattle_herds.items() if is_problematic_herd(herd_num))
+                if problematic_count > 0:
+                    logging.warning(f"Found {problematic_count} problematic herds that will be skipped")
+                else:
+                    logging.info("No problematic herds found - all herds will be processed")
+            except Exception as e:
+                logging.debug(f"Could not check problematic herds: {e}")
+
         # Use the smart aggregation function that processes individual records but stores summaries
         def smart_cattle_task(client, username, herd_num, start_date, end_date):
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
@@ -564,18 +619,47 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
             if context["args"]["progress"]:
                 logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
+                # Log the herd numbers in this chunk for debugging
+                herd_numbers_in_chunk = [task[2] for task in chunk_tasks]
+                logging.info(f"Chunk {chunk_idx + 1} herd numbers: {herd_numbers_in_chunk}")
 
             # Add timeout monitoring per chunk
             chunk_start_time = time.time()
 
-            chunk_results = process_parallel(
-                smart_cattle_task,
-                chunk_tasks,
-                context["args"]["workers"],
-                f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
-            )
+            # Set maximum chunk timeout based on environment
+            github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+            max_chunk_timeout = 1800 if github_actions else 3600  # 30 min in GH Actions, 60 min locally
+
+            try:
+                chunk_results = process_parallel(
+                    smart_cattle_task,
+                    chunk_tasks,
+                    context["args"]["workers"],
+                    f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
+                )
+            except Exception as e:
+                logging.error(f"Chunk {chunk_idx + 1} failed with error: {e}")
+                # Create empty results for failed chunk
+                chunk_results = [None] * len(chunk_tasks)
 
             chunk_duration = time.time() - chunk_start_time
+
+            # Check if chunk took too long
+            if chunk_duration > max_chunk_timeout:
+                logging.error(
+                    f"Chunk {chunk_idx + 1} took {chunk_duration:.1f}s (>{max_chunk_timeout}s limit) - may indicate hanging herds"
+                )
+                # Mark all herds in this chunk as potentially problematic if they failed
+                for i, result in enumerate(chunk_results):
+                    if not result or not result.get("processed_successfully", False):
+                        herd_number = chunk_tasks[i][2]
+                        logging.warning(f"Marking herd {herd_number} as problematic due to chunk timeout")
+                        try:
+                            from bronze.load_chr_dyr import add_problematic_herd
+
+                            add_problematic_herd(herd_number)
+                        except Exception as mark_error:
+                            logging.warning(f"Could not mark herd {herd_number} as problematic: {mark_error}")
 
             # Track only herd numbers for context (no result accumulation to prevent memory issues)
             # Full data is already saved to storage by load_cattle_movement_summaries
@@ -695,6 +779,15 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             logging.info(
                 f"Completed Smart Cattle Movement tasks. Success: {total_successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
             )
+
+            # Save final problematic herds list
+            try:
+                from bronze.load_chr_dyr import _save_problematic_herds
+
+                _save_problematic_herds()
+                logging.info("Saved updated problematic herds list to persistent storage")
+            except Exception as e:
+                logging.warning(f"Could not save problematic herds: {e}")
 
     elif step == "vetstat":
         if "chr_to_species" not in context:
