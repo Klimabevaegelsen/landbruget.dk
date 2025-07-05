@@ -32,8 +32,13 @@ else:
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from h3_pfas_exposure.config import H3PFASConfig  # noqa: E402
-from h3_pfas_exposure.gold import H3PFASPipeline  # noqa: E402
+
+# Import the new refactored modules
+from h3_pfas_exposure.config import H3SpatialConfig
+from h3_pfas_exposure.gold import (
+    run_multi_year_analysis,
+    run_multi_year_kommune_analysis,
+)
 
 
 def setup_logging():
@@ -60,68 +65,101 @@ def setup_directories() -> Path:
 async def run_pipeline(
     mode: str = "h3",
     years: list[int] | None = None,
-    config: H3PFASConfig | None = None,
-    parallel: bool = False,
+    h3_resolution: int = 10,
+    memory_limit: str = "14GB",
+    thread_count: int = 4,
+    chunk_size: int = 10000,
 ) -> bool:
     """
-    Run the H3 PFAS exposure pipeline.
+    Run the H3 PFAS exposure analysis pipeline.
 
     Args:
-        mode: Analysis mode ('h3', 'kommune', or 'all')
-        years: List of years to process. If None, processes all available years.
-        config: Pipeline configuration. If None, loads from environment.
-        parallel: If True and mode is 'all', run H3 and kommune analyses in parallel.
+        mode: Analysis mode ('h3' or 'kommune')
+        years: List of years to process (None for all available)
+        h3_resolution: H3 resolution for analysis (only used in h3 mode)
+        memory_limit: Memory limit for processing
+        thread_count: Number of threads to use
+        chunk_size: Chunk size for processing
 
     Returns:
         True if successful, False otherwise
     """
-    if config is None:
-        config = H3PFASConfig.from_env()
-
-    logger.info(f"Starting H3 PFAS exposure pipeline in {mode} mode")
-
-    # Create pipeline
-    pipeline = H3PFASPipeline(config)
+    pipeline_start_time = datetime.now()
+    logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
     try:
+        # Create configuration optimized for GitHub Actions
+        config = H3SpatialConfig(
+            h3_resolution=h3_resolution,
+            chunk_size=chunk_size,
+            memory_limit=memory_limit,
+            thread_count=thread_count,
+            github_actions_mode=True,
+            enable_memory_monitoring=True,
+            enable_disk_monitoring=True,
+            enable_time_monitoring=True,
+        )
+
+        logger.info(f"📊 Configuration: {mode} mode, resolution {h3_resolution}")
+        logger.info(
+            f"⚙️ Resources: {memory_limit} memory, {thread_count} threads, {chunk_size} chunk size"
+        )
+
+        # Run the appropriate analysis
+        success = False
         if mode == "h3":
-            success = await pipeline.run_h3_analysis(years)
+            success = await run_multi_year_analysis(years)
         elif mode == "kommune":
-            success = await pipeline.run_kommune_analysis(years)
-        elif mode == "all":
-            success = await pipeline.run_all_analyses(years, parallel=parallel)
+            success = await run_multi_year_kommune_analysis(years)
         else:
-            logger.error(f"Unknown mode: {mode}")
+            logger.error(f"❌ Unknown analysis mode: {mode}")
             return False
 
         if success:
-            logger.info("H3 PFAS exposure pipeline completed successfully")
+            logger.info(f"✅ {mode} analysis completed successfully!")
+            return True
         else:
-            logger.error("H3 PFAS exposure pipeline failed")
-
-        return success
+            logger.error(f"❌ {mode} analysis failed!")
+            return False
 
     except Exception as e:
-        logger.exception(f"Error in H3 PFAS pipeline: {e}")
+        logger.error(f"❌ Pipeline failed with error: {e}")
         return False
 
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="H3 PFAS Exposure Pipeline")
+    parser = argparse.ArgumentParser(
+        description="H3 PFAS Exposure Analysis Pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run H3 analysis for all available years at resolution 10
+  python main.py --mode h3
+
+  # Run kommune analysis for specific years
+  python main.py --mode kommune --years 2022 2023
+
+  # Run H3 analysis with custom parameters
+  python main.py --mode h3 --h3-resolution 9 --memory-limit 12GB --thread-count 2
+
+  # Run with verbose logging
+  python main.py --mode h3 --verbose --years 2022
+        """,
+    )
 
     parser.add_argument(
         "--mode",
-        choices=["h3", "kommune", "all"],
+        choices=["h3", "kommune"],
         default="h3",
-        help="Analysis mode: 'h3' for H3 hexagon analysis, 'kommune' for municipality analysis, 'all' for both",
+        help="Analysis mode (default: h3)",
     )
 
     parser.add_argument(
         "--years",
-        nargs="+",
+        nargs="*",
         type=int,
-        help="Years to process (e.g., --years 2020 2021 2022). If not specified, processes all available years.",
+        help="Years to process (default: all available years)",
     )
 
     parser.add_argument(
@@ -129,148 +167,84 @@ def parse_args():
         type=int,
         default=10,
         choices=[7, 8, 9, 10],
-        help="H3 resolution level (7=~516ha, 8=~74ha, 9=~11ha, 10=~1.5ha per hexagon)",
+        help="H3 resolution for analysis (default: 10, only used in h3 mode)",
     )
 
     parser.add_argument(
         "--memory-limit",
-        default="12GB",
-        help="DuckDB memory limit (default: 12GB)",
+        default="14GB",
+        help="Memory limit for processing (default: 14GB)",
     )
 
     parser.add_argument(
         "--thread-count",
         type=int,
         default=4,
-        help="DuckDB thread count (default: 4)",
+        help="Number of threads to use (default: 4)",
     )
 
     parser.add_argument(
         "--chunk-size",
         type=int,
-        default=25000,
-        help="H3 cells per processing chunk (default: 25000)",
-    )
-
-    parser.add_argument(
-        "--bucket",
-        default="landbrugsdata-raw-data",
-        help="GCS bucket name (default: landbrugsdata-raw-data)",
-    )
-
-    parser.add_argument(
-        "--output-dir",
-        help="Local output directory (optional, mainly for development)",
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Perform a dry run without actually processing data",
-    )
-
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Reduce logging output",
+        default=10000,
+        help="Chunk size for processing (default: 10000)",
     )
 
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Increase logging output",
-    )
-
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Run H3 and kommune analyses in parallel when using --mode all",
+        help="Enable verbose logging",
     )
 
     return parser.parse_args()
 
 
 def main():
-    """Main pipeline execution."""
+    """Main entry point."""
     args = parse_args()
 
     # Set up logging
-    if args.quiet:
-        os.environ["LOG_LEVEL"] = "WARNING"
-    elif args.verbose:
+    if args.verbose:
         os.environ["LOG_LEVEL"] = "DEBUG"
-    else:
-        os.environ["LOG_LEVEL"] = "INFO"
-
     setup_logging()
 
-    # Set environment variables from command line arguments
-    if args.h3_resolution:
-        os.environ["H3_RESOLUTION"] = str(args.h3_resolution)
-    # Memory limit is hardcoded in config - no env variable needed
-    if args.thread_count:
-        os.environ["THREAD_COUNT"] = str(args.thread_count)
-    if args.chunk_size:
-        os.environ["CHUNK_SIZE"] = str(args.chunk_size)
-    if args.bucket:
-        os.environ["GCS_BUCKET"] = args.bucket
-    if args.output_dir:
-        os.environ["OUTPUT_DIR"] = args.output_dir
+    # Set up directories
+    setup_directories()
 
-    # Setup directories
-    output_dir = setup_directories()
+    logger.info("🏗️ H3 PFAS Exposure Analysis Pipeline")
+    logger.info(f"📊 Mode: {args.mode}")
+    if args.years:
+        logger.info(f"📅 Years: {args.years}")
+    else:
+        logger.info("📅 Years: all available")
 
-    logger.info("=" * 80)
-    logger.info("H3 PFAS EXPOSURE PIPELINE")
-    logger.info("=" * 80)
-    logger.info(f"Start time: {datetime.now()}")
-    logger.info(f"Mode: {args.mode}")
-    logger.info(f"Years to process: {args.years or 'all available'}")
-    logger.info(f"H3 resolution: {args.h3_resolution}")
-    logger.info(f"Memory limit: {args.memory_limit}")
-    logger.info(f"Thread count: {args.thread_count}")
-    logger.info(f"Chunk size: {args.chunk_size}")
-    logger.info(f"GCS bucket: {args.bucket}")
-    logger.info(f"Output directory: {output_dir}")
-    logger.info(f"Dry run: {args.dry_run}")
-    if args.mode == "all":
-        logger.info(f"Parallel execution: {args.parallel}")
-    logger.info("=" * 80)
-
-    if args.dry_run:
-        logger.info("DRY RUN MODE - No actual processing will be performed")
-        logger.info("Configuration validated successfully")
-        return 0
-
+    # Run the pipeline
     try:
-        # Create config after setting environment variables
-        config = H3PFASConfig.from_env()
-
-        # Run the pipeline
         success = asyncio.run(
-            run_pipeline(mode=args.mode, years=args.years, config=config, parallel=args.parallel)
+            run_pipeline(
+                mode=args.mode,
+                years=args.years,
+                h3_resolution=args.h3_resolution,
+                memory_limit=args.memory_limit,
+                thread_count=args.thread_count,
+                chunk_size=args.chunk_size,
+            )
         )
 
         if success:
-            logger.info("=" * 80)
-            logger.info("PIPELINE COMPLETED SUCCESSFULLY")
-            logger.info(f"End time: {datetime.now()}")
-            logger.info("=" * 80)
-            return 0
+            logger.info("🎉 Pipeline completed successfully!")
+            sys.exit(0)
         else:
-            logger.error("=" * 80)
-            logger.error("PIPELINE FAILED")
-            logger.error(f"End time: {datetime.now()}")
-            logger.error("=" * 80)
-            return 1
+            logger.error("❌ Pipeline failed!")
+            sys.exit(1)
 
     except KeyboardInterrupt:
-        logger.warning("Pipeline interrupted by user")
-        return 130
+        logger.warning("⚠️ Pipeline interrupted by user")
+        sys.exit(130)
     except Exception as e:
-        logger.exception(f"Unexpected error in pipeline: {e}")
-        return 1
+        logger.error(f"❌ Pipeline failed with unexpected error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
