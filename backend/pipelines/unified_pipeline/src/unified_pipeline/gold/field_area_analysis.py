@@ -68,10 +68,18 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.conn.execute(f"SET threads={self.config.thread_count}")
         self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
 
+        # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
+        self.conn.execute("SET max_temp_directory_size='30GB'")  # Allow more temp space
+        self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
+
+        # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
+        self.conn.execute("SET threads=2")  # Reduce from 4 to 2 for memory-intensive spatial ops
+        self.conn.execute("SET preserve_insertion_order=false")  # Allow reordering for efficiency
+
         # Spatial extension is already loaded in base class
         self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer")
         self.log.info(
-            f"   Memory: {self.config.memory_limit}, Threads: {self.config.thread_count}, Batch size: {self.config.batch_size:,}"
+            f"   Memory: {self.config.memory_limit}, Threads: 2 (optimized), Batch size: {self.config.batch_size:,}"
         )
 
     def _load_agricultural_fields_for_years_optimized(
@@ -795,167 +803,69 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("Starting Field Area Analysis Gold processing (optimized)")
 
         try:
-            # Get all available years and use only the latest
+            # ✅ OPTIMIZATION: Load reference datasets first (shared across all years)
+            self.log.info("🔧 Loading reference datasets...")
+            dataset_paths = self._load_silver_data_streaming(silver_data)
+            self._load_reference_data_into_duckdb_streaming(dataset_paths)
+
+            # ✅ OPTIMIZATION: Process each year separately to avoid memory overflow
             available_years = self._get_available_fvm_marker_years()
             if not available_years:
                 self.log.error("No fvm_marker years found - cannot proceed with analysis")
                 return
 
-            latest_year = max(available_years)
             self.log.info(f"Found fvm_marker data for years: {available_years}")
-            self.log.info(f"Using latest year: {latest_year}")
+            self.log.info("🚀 Processing each year separately to avoid memory overflow")
 
-            # ✅ OPTIMIZED: Load agricultural fields directly into DuckDB table
-            fields_table_name = self._load_agricultural_fields_for_years_optimized(
-                [latest_year], silver_data
-            )
-            if fields_table_name is None:
-                self.log.error(
-                    "No agricultural fields data available - cannot proceed with analysis"
+            total_fields_processed = 0
+
+            for year in available_years:
+                self.log.info(f"🚀 Processing year {year}...")
+
+                # ✅ OPTIMIZATION: Load fields for this year only
+                fields_table_name = self._load_agricultural_fields_for_years_optimized(
+                    [year], silver_data
                 )
-                return
+                if fields_table_name is None:
+                    self.log.warning(f"No agricultural fields data available for year {year}")
+                    continue
 
-            # Get count directly from DuckDB
-            fields_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {fields_table_name}"
-            ).fetchone()[0]
-            self.log.info(
-                f"✅ Loaded {fields_count:,} agricultural fields for year {latest_year} (optimized)"
-            )
+                # Get count for this year
+                fields_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {fields_table_name}"
+                ).fetchone()[0]
+                self.log.info(f"Processing {fields_count:,} fields for year {year}")
 
-            # Load silver data paths for streaming processing (excluding agricultural fields)
-            dataset_paths = self._load_silver_data_streaming(silver_data)
+                if fields_count == 0:
+                    self.log.warning(f"No fields to process for year {year}")
+                    continue
 
-            # Load reference data into DuckDB using streaming approach
-            self._load_reference_data_into_duckdb_streaming(dataset_paths)
+                # ✅ OPTIMIZATION: Prepare fields table for spatial analysis
+                self._prepare_fields_table_for_analysis(fields_table_name, year)
 
-            # ✅ OPTIMIZED: Process all fields directly in DuckDB without batching
-            # This is now possible because we're not converting to s
-            self.log.info(
-                f"🚀 Processing {fields_count:,} fields directly in DuckDB (no  conversions)"
-            )
+                # ✅ OPTIMIZATION: Run spatial analysis for this year
+                self._process_all_fields_spatial_optimized()
 
-            # Create the main fields table for processing
-            # First check what columns are available in the agricultural fields data
-            fields_columns = [
-                row[0] for row in self.conn.execute(f"DESCRIBE {fields_table_name}").fetchall()
-            ]
-            self.log.info(f"Available columns in agricultural fields data: {fields_columns}")
+                # ✅ OPTIMIZATION: Create final results table for this year
+                year_results_table = f"final_field_analysis_{year}"
+                self._create_year_results_table(year_results_table, year)
 
-            # Check for geometry column
-            if "geometry" in fields_columns:
-                geometry_column = "geometry"
-            elif "geometry_wkt" in fields_columns:
-                self.log.info(
-                    "Using 'geometry_wkt' column instead of 'geometry' for agricultural fields"
+                # ✅ OPTIMIZATION: Save this year's results immediately
+                self.log.info(f"💾 Saving results for year {year}...")
+                self.save_data_direct(
+                    year_results_table, f"{self.config.dataset}_{year}", self.config.bucket, "gold"
                 )
-                geometry_column = "geometry_wkt"
-            else:
-                self.log.error(
-                    f"No geometry column found in agricultural fields data. Available columns: {fields_columns}"
-                )
-                raise ValueError("Required geometry column not found in agricultural fields data")
 
-            # Convert geometry_wkt to geometry if needed
-            if geometry_column == "geometry_wkt":
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE current_fields AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        ST_GeomFromText({geometry_column}) as geom
-                    FROM {fields_table_name}
-                """)
-            else:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE current_fields AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        {geometry_column} as geom
-                    FROM {fields_table_name}
-                """)
+                total_fields_processed += fields_count
 
-            # Run spatial analysis directly in DuckDB
-            self._process_all_fields_spatial_optimized()
+                # ✅ CLEANUP: Clean up intermediate tables to free memory
+                self._cleanup_year_processing(fields_table_name, year)
+                self.log.info(f"✅ Completed and cleaned up year {year}")
 
-            # ✅ OPTIMIZED: Create final results table directly in DuckDB
-            self.log.info("🔗 Creating final results table in DuckDB...")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE final_field_analysis AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    COALESCE(fw.wetland_area_share, 0) as wetland_area_share,
-                    COALESCE(fwo.wetland_water_projects_share, 0) as wetland_water_projects_share,
-                    COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share,
-                    COALESCE(fpj.property_area_shares, '{}') as property_area_shares,
-                    COALESCE(fsj.soil_area_shares, '{}') as soil_area_shares,
-                    COALESCE(fbj.bnbo_area_shares, '{}') as bnbo_area_shares,
-                    COALESCE(fbwj.bnbo_water_projects_shares, '{}') as bnbo_water_projects_shares
-                FROM current_fields f
-                LEFT JOIN field_wetland_shares fw ON f.field_id = fw.field_id AND f.block_id = fw.block_id
-                LEFT JOIN field_wetland_water_overlap fwo ON f.field_id = fwo.field_id AND f.block_id = fwo.block_id
-                LEFT JOIN field_water_projects_shares fwp ON f.field_id = fwp.field_id AND f.block_id = fwp.block_id
-                LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
-                LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
-                LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
-                LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
-            """)
-
-            # ✅ OPTIMIZED: Calculate summary statistics directly in DuckDB
-            self.log.info("📊 Calculating summary statistics...")
-            stats = self.conn.execute("""
-                SELECT 
-                    COUNT(*) as total_fields,
-                    SUM(CASE WHEN wetland_area_share > 0 THEN 1 ELSE 0 END) as fields_with_wetlands,
-                    SUM(CASE WHEN water_projects_area_share > 0 THEN 1 ELSE 0 END) as fields_with_water_projects,
-                    SUM(CASE WHEN property_area_shares != '{}' THEN 1 ELSE 0 END) as fields_with_properties,
-                    SUM(CASE WHEN soil_area_shares != '{}' THEN 1 ELSE 0 END) as fields_with_soil,
-                    SUM(CASE WHEN bnbo_area_shares != '{}' THEN 1 ELSE 0 END) as fields_with_bnbo
-                FROM final_field_analysis
-            """).fetchone()
-
-            (
-                total_fields,
-                fields_with_wetlands,
-                fields_with_water_projects,
-                fields_with_properties,
-                fields_with_soil,
-                fields_with_bnbo,
-            ) = stats
-
-            self.log.info("✅ Field Area Analysis summary:")
-            self.log.info(f"  Total fields analyzed: {total_fields:,}")
-            self.log.info(f"  Year analyzed: {latest_year}")
-            self.log.info(
-                f"  Fields with wetlands: {fields_with_wetlands:,} ({fields_with_wetlands / total_fields * 100:.1f}%)"
-            )
-            self.log.info(
-                f"  Fields with water projects: {fields_with_water_projects:,} ({fields_with_water_projects / total_fields * 100:.1f}%)"
-            )
-            self.log.info(
-                f"  Fields with property data: {fields_with_properties:,} ({fields_with_properties / total_fields * 100:.1f}%)"
-            )
-            self.log.info(
-                f"  Fields with soil data: {fields_with_soil:,} ({fields_with_soil / total_fields * 100:.1f}%)"
-            )
-            self.log.info(
-                f"  Fields with BNBO data: {fields_with_bnbo:,} ({fields_with_bnbo / total_fields * 100:.1f}%)"
-            )
-
-            # ✅ OPTIMIZED: Save directly from DuckDB table to GCS without  conversion
-            self.log.info("💾 Saving results directly to GCS...")
-            self.save_data_direct(
-                "final_field_analysis", self.config.dataset, self.config.bucket, "gold"
-            )
-
-            self.log.info(
-                "✅ Field Area Analysis Gold processing completed successfully (optimized)"
-            )
+            self.log.info("✅ Field Area Analysis completed successfully")
+            self.log.info(f"   Total fields processed: {total_fields_processed:,}")
+            self.log.info(f"   Years processed: {len(available_years)}")
+            self.log.info("   Results saved per year to avoid memory overflow")
 
         except Exception as e:
             self.log.error(f"Field Area Analysis Gold processing failed: {e}")
@@ -1155,3 +1065,143 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """)
 
         self.log.info("✅ Spatial analysis completed in DuckDB")
+
+    def _prepare_fields_table_for_analysis(self, fields_table_name: str, year: int):
+        """Prepare fields table for spatial analysis."""
+        # First check what columns are available in the agricultural fields data
+        fields_columns = [
+            row[0] for row in self.conn.execute(f"DESCRIBE {fields_table_name}").fetchall()
+        ]
+        self.log.info(f"Available columns in agricultural fields data: {fields_columns}")
+
+        # Check for geometry column
+        if "geometry" in fields_columns:
+            geometry_column = "geometry"
+        elif "geometry_wkt" in fields_columns:
+            self.log.info(
+                "Using 'geometry_wkt' column instead of 'geometry' for agricultural fields"
+            )
+            geometry_column = "geometry_wkt"
+        else:
+            self.log.error(
+                f"No geometry column found in agricultural fields data. Available columns: {fields_columns}"
+            )
+            raise ValueError("Required geometry column not found in agricultural fields data")
+
+        # Convert geometry_wkt to geometry if needed
+        if geometry_column == "geometry_wkt":
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_fields AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    ST_GeomFromText({geometry_column}) as geom
+                FROM {fields_table_name}
+            """)
+        else:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_fields AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    {geometry_column} as geom
+                FROM {fields_table_name}
+            """)
+
+    def _create_year_results_table(self, year_results_table: str, year: int):
+        """Create final results table for a specific year."""
+        self.log.info(f"🔗 Creating final results table for year {year}...")
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {year_results_table} AS
+            SELECT 
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                COALESCE(fw.wetland_area_share, 0) as wetland_area_share,
+                COALESCE(fwo.wetland_water_projects_share, 0) as wetland_water_projects_share,
+                COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share,
+                COALESCE(fpj.property_area_shares, '{{}}') as property_area_shares,
+                COALESCE(fsj.soil_area_shares, '{{}}') as soil_area_shares,
+                COALESCE(fbj.bnbo_area_shares, '{{}}') as bnbo_area_shares,
+                COALESCE(fbwj.bnbo_water_projects_shares, '{{}}') as bnbo_water_projects_shares
+            FROM current_fields f
+            LEFT JOIN field_wetland_shares fw ON f.field_id = fw.field_id AND f.block_id = fw.block_id
+            LEFT JOIN field_wetland_water_overlap fwo ON f.field_id = fwo.field_id AND f.block_id = fwo.block_id
+            LEFT JOIN field_water_projects_shares fwp ON f.field_id = fwp.field_id AND f.block_id = fwp.block_id
+            LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
+            LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
+            LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
+            LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
+        """)
+
+    def _cleanup_year_processing(self, fields_table_name: str, year: int):
+        """Clean up intermediate tables after processing a year to free memory."""
+        self.log.info(f"🧹 Cleaning up intermediate tables for year {year}...")
+
+        # List of intermediate tables to clean up
+        intermediate_tables = [
+            fields_table_name,
+            "current_fields",
+            "field_property_intersections",
+            "field_property_shares",
+            "field_soil_intersections",
+            "field_soil_shares",
+            "field_bnbo_intersections",
+            "field_bnbo_shares",
+            "field_wetland_shares",
+            "field_water_projects_shares",
+            "field_wetland_water_overlap",
+            "field_bnbo_water_overlap",
+            "field_property_json",
+            "field_soil_json",
+            "field_bnbo_json",
+            "field_bnbo_water_json",
+        ]
+
+        # Drop all intermediate tables
+        for table in intermediate_tables:
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+            except Exception as e:
+                self.log.debug(f"Could not drop table {table}: {e}")
+
+        # Force garbage collection
+        import gc
+
+        gc.collect()
+
+        self.log.info(f"✅ Cleaned up intermediate tables for year {year}")
+
+    def _get_available_fvm_marker_years(self) -> List[int]:
+        """Get list of available FVM marker years from GCS."""
+        try:
+            # Look for fvm_marker datasets in silver layer
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
+
+            # Extract years from file paths
+            years = set()
+            for file_path in files:
+                # Extract year from path like: gs://bucket/silver/fvm_marker_2023/...
+                parts = file_path.split("/")
+                for part in parts:
+                    if part.startswith("fvm_marker_"):
+                        year_str = part.replace("fvm_marker_", "")
+                        try:
+                            year = int(year_str)
+                            years.add(year)
+                        except ValueError:
+                            continue
+
+            available_years = sorted(list(years))
+            self.log.info(f"Found FVM marker data for years: {available_years}")
+            return available_years
+
+        except Exception as e:
+            self.log.error(f"Error finding available FVM marker years: {e}")
+            return []
