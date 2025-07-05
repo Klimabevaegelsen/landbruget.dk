@@ -232,6 +232,7 @@ def load_animal_movements(
                 time.sleep(wait_time)
 
             # Create request structure according to WSDL/XSD
+            logger.debug(f"Herd {herd_number}: Creating SOAP request structure...")
             GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
             common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
 
@@ -250,9 +251,17 @@ def load_animal_movements(
             payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
 
             # Call the operation with timeout monitoring
+            logger.debug(f"Herd {herd_number}: Starting SOAP request...")
             request_start_time = time.time()
-            response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
-            request_duration = time.time() - request_start_time
+
+            try:
+                response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
+                request_duration = time.time() - request_start_time
+                logger.debug(f"Herd {herd_number}: SOAP request completed in {request_duration:.1f}s")
+            except Exception as soap_error:
+                request_duration = time.time() - request_start_time
+                logger.error(f"Herd {herd_number}: SOAP request failed after {request_duration:.1f}s: {soap_error}")
+                raise
 
             if response is None:
                 logger.warning(f"No response received for herd {herd_number} (attempt {attempt + 1})")
@@ -284,9 +293,17 @@ def load_animal_movements(
             # Process and aggregate the response instead of saving raw individual records
             aggregation_start_time = time.time()
             logger.info(f"Herd {herd_number}: Starting data aggregation...")
-            movement_summaries = _aggregate_cattle_movements(response, herd_number)
-            aggregation_duration = time.time() - aggregation_start_time
-            logger.info(f"Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s")
+
+            try:
+                movement_summaries = _aggregate_cattle_movements(response, herd_number)
+                aggregation_duration = time.time() - aggregation_start_time
+                logger.info(f"Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s")
+            except Exception as agg_error:
+                aggregation_duration = time.time() - aggregation_start_time
+                logger.error(
+                    f"Herd {herd_number}: Data aggregation failed after {aggregation_duration:.1f}s: {agg_error}"
+                )
+                raise
 
             # Log memory savings - show what we would have saved vs what we actually save
             if hasattr(response, "Response") and response.Response:
@@ -529,6 +546,9 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 },
             }
 
+        # Log dataset size for monitoring
+        logger.info(f"Herd {reporting_herd}: Processing {len(animals)} animals for aggregation")
+
         # Group movements by date and counterparty
         # Key: (movement_date, counterparty_herd, movement_type)
         movement_groups = defaultdict(
@@ -545,7 +565,7 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
         for i, animal in enumerate(animals):
             try:
                 # Progress logging for large datasets and timeout check
-                if i > 0 and i % 10000 == 0:
+                if i > 0 and i % 5000 == 0:  # More frequent progress updates
                     elapsed_time = time.time() - aggregation_start_time
                     logger.info(
                         f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
@@ -556,6 +576,8 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                         logger.error(
                             f"Herd {reporting_herd}: Aggregation timeout after {elapsed_time:.1f}s - stopping at animal {i}/{len(animals)}"
                         )
+                        # Mark this herd as problematic before breaking
+                        add_problematic_herd(reporting_herd)
                         break
 
                 # Extract key movement information (using ACTUAL field names from CHR_dyr)
