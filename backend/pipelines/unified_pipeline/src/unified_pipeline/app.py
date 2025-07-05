@@ -29,6 +29,10 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.cvr_enrichment import (
+    CVREnrichmentGold,
+    CVREnrichmentGoldConfig,
+)
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -300,6 +304,14 @@ def execute(cli_config: cli.CliConfig) -> None:
                 # Note: This requires silver datasets to be available:
                 # agricultural_fields, pesticides
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
+            ],
+        },
+        cli.Source.cvr_enrichment: {
+            cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
+            cli.Stage.all: [
+                # Note: This collects CVR numbers from all pipeline CVR collections
+                # and fetches CVR register data for enrichment
+                (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
         },
         cli.Source.dst: {
