@@ -281,21 +281,57 @@ class SpatialJoiner:
             p.DosageQuantity,
             p.DosageUnit,
             p.contains_pfas,
+            p.contains_diquat,
+            p.contains_glyphosate,
             p.pfas_containing_active_ingredient_grams,
+            p.diquat_containing_active_ingredient_grams,
+            p.glyphosate_containing_active_ingredient_grams,
             p.pesticide_belastning_applied,
             p.pfas_containing_pesticide_belastning_applied,
+            p.diquat_containing_pesticide_belastning_applied,
+            p.glyphosate_containing_pesticide_belastning_applied,
             -- Calculate weighted PFAS-containing active ingredient exposure based on coverage
             CASE
                 WHEN p.contains_pfas = true AND p.pfas_containing_active_ingredient_grams IS NOT NULL THEN
                     p.pfas_containing_active_ingredient_grams * i.coverage_ratio
                 ELSE 0
             END as weighted_pfas_containing_active_ingredient_grams,
+            -- Calculate weighted diquat-containing active ingredient exposure based on coverage
+            CASE
+                WHEN p.contains_diquat = true AND p.diquat_containing_active_ingredient_grams IS NOT NULL THEN
+                    p.diquat_containing_active_ingredient_grams * i.coverage_ratio
+                ELSE 0
+            END as weighted_diquat_containing_active_ingredient_grams,
+            -- Calculate weighted glyphosate-containing active ingredient exposure based on coverage
+            CASE
+                WHEN p.contains_glyphosate = true AND p.glyphosate_containing_active_ingredient_grams IS NOT NULL THEN
+                    p.glyphosate_containing_active_ingredient_grams * i.coverage_ratio
+                ELSE 0
+            END as weighted_glyphosate_containing_active_ingredient_grams,
             -- Calculate weighted pesticide load
             CASE
                 WHEN p.pesticide_belastning_applied IS NOT NULL THEN
                     p.pesticide_belastning_applied * i.coverage_ratio
                 ELSE 0
-            END as weighted_pesticide_belastning
+            END as weighted_pesticide_belastning,
+            -- Calculate weighted PFAS pesticide load
+            CASE
+                WHEN p.pfas_containing_pesticide_belastning_applied IS NOT NULL THEN
+                    p.pfas_containing_pesticide_belastning_applied * i.coverage_ratio
+                ELSE 0
+            END as weighted_pfas_pesticide_belastning,
+            -- Calculate weighted diquat pesticide load
+            CASE
+                WHEN p.diquat_containing_pesticide_belastning_applied IS NOT NULL THEN
+                    p.diquat_containing_pesticide_belastning_applied * i.coverage_ratio
+                ELSE 0
+            END as weighted_diquat_pesticide_belastning,
+            -- Calculate weighted glyphosate pesticide load
+            CASE
+                WHEN p.glyphosate_containing_pesticide_belastning_applied IS NOT NULL THEN
+                    p.glyphosate_containing_pesticide_belastning_applied * i.coverage_ratio
+                ELSE 0
+            END as weighted_glyphosate_pesticide_belastning
         FROM {aggregated_table} i
         LEFT JOIN {pesticide_table} p ON (
             i.cvr_number = p.cvr
@@ -350,9 +386,16 @@ class SpatialJoiner:
                 h3_cell,
                 COUNT(DISTINCT CONCAT(cvr_number, '_', block_id, '_', field_id)) as unique_field_count,
                 SUM(COALESCE(weighted_pfas_containing_active_ingredient_grams, 0)) as total_pfas_containing_active_ingredient_grams,
+                SUM(COALESCE(weighted_diquat_containing_active_ingredient_grams, 0)) as total_diquat_containing_active_ingredient_grams,
+                SUM(COALESCE(weighted_glyphosate_containing_active_ingredient_grams, 0)) as total_glyphosate_containing_active_ingredient_grams,
                 SUM(COALESCE(weighted_pesticide_belastning, 0)) as total_pesticide_belastning,
+                SUM(COALESCE(weighted_pfas_pesticide_belastning, 0)) as total_pfas_pesticide_belastning,
+                SUM(COALESCE(weighted_diquat_pesticide_belastning, 0)) as total_diquat_pesticide_belastning,
+                SUM(COALESCE(weighted_glyphosate_pesticide_belastning, 0)) as total_glyphosate_pesticide_belastning,
                 COUNT(CASE WHEN PesticideRegistrationNumber IS NOT NULL THEN 1 END) as total_pesticide_applications,
                 COUNT(CASE WHEN contains_pfas = true THEN 1 END) as pfas_containing_applications,
+                COUNT(CASE WHEN contains_diquat = true THEN 1 END) as diquat_containing_applications,
+                COUNT(CASE WHEN contains_glyphosate = true THEN 1 END) as glyphosate_containing_applications,
                 STRING_AGG(DISTINCT crop_name, '; ') as crop_types,
                 COUNT(DISTINCT crop_code) as crop_diversity
             FROM {pesticide_table}
@@ -371,18 +414,39 @@ class SpatialJoiner:
                 ELSE 0.0
             END as actual_coverage_ratio,
             COALESCE(f.unique_field_count, 0) as unique_field_count,
+            -- Active ingredient totals
             COALESCE(f.total_pfas_containing_active_ingredient_grams, 0) as total_pfas_containing_active_ingredient_grams,
+            COALESCE(f.total_diquat_containing_active_ingredient_grams, 0) as total_diquat_containing_active_ingredient_grams,
+            COALESCE(f.total_glyphosate_containing_active_ingredient_grams, 0) as total_glyphosate_containing_active_ingredient_grams,
+            -- Pesticide load totals
             COALESCE(f.total_pesticide_belastning, 0) as total_pesticide_belastning,
+            COALESCE(f.total_pfas_pesticide_belastning, 0) as total_pfas_pesticide_belastning,
+            COALESCE(f.total_diquat_pesticide_belastning, 0) as total_diquat_pesticide_belastning,
+            COALESCE(f.total_glyphosate_pesticide_belastning, 0) as total_glyphosate_pesticide_belastning,
+            -- Application counts
             COALESCE(f.total_pesticide_applications, 0) as total_pesticide_applications,
             COALESCE(f.pfas_containing_applications, 0) as pfas_containing_applications,
+            COALESCE(f.diquat_containing_applications, 0) as diquat_containing_applications,
+            COALESCE(f.glyphosate_containing_applications, 0) as glyphosate_containing_applications,
+            -- Crop information
             COALESCE(f.crop_types, '') as crop_types,
             COALESCE(f.crop_diversity, 0) as crop_diversity,
-            -- Intensity metrics
+            -- Intensity metrics (grams per hectare)
             CASE
                 WHEN g.actual_intersection_area_ha > 0 THEN
                     COALESCE(f.total_pfas_containing_active_ingredient_grams, 0) / g.actual_intersection_area_ha
                 ELSE 0
             END as pfas_containing_active_ingredient_intensity_grams_per_ha,
+            CASE
+                WHEN g.actual_intersection_area_ha > 0 THEN
+                    COALESCE(f.total_diquat_containing_active_ingredient_grams, 0) / g.actual_intersection_area_ha
+                ELSE 0
+            END as diquat_containing_active_ingredient_intensity_grams_per_ha,
+            CASE
+                WHEN g.actual_intersection_area_ha > 0 THEN
+                    COALESCE(f.total_glyphosate_containing_active_ingredient_grams, 0) / g.actual_intersection_area_ha
+                ELSE 0
+            END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
             CURRENT_TIMESTAMP as created_at
         FROM geometric_union g
         LEFT JOIN field_stats f ON g.h3_cell = f.h3_cell
