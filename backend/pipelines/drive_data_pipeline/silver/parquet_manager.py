@@ -112,7 +112,22 @@ class ParquetManager(DuckDBProcessor):
                         os.unlink(temp_path)
             else:
                 # Local storage - direct export
-                output_path.parent.mkdir(parents=True, exist_ok=True)
+                # CRITICAL FIX: Always ensure directory exists before DuckDB writes
+                # This prevents "No such file or directory" errors in any environment
+                try:
+                    # First try to use the storage manager's directory creation
+                    self.storage_manager.ensure_directory_exists(output_path.parent)
+                except Exception as e:
+                    logger.warning(f"Storage manager directory creation failed: {e}")
+                    # Fallback to direct directory creation
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Additional safety check - ensure parent directory exists
+                if not output_path.parent.exists():
+                    logger.warning(f"Directory still doesn't exist, creating: {output_path.parent}")
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                logger.info(f"Writing DuckDB table to path: {output_path}")
 
                 # Export directly from DuckDB
                 self.conn.execute(f"""

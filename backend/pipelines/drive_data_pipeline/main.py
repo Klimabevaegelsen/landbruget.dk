@@ -304,6 +304,7 @@ def main() -> int:
         storage_manager = get_storage_manager(
             storage_type=settings.storage_type.value,
             bucket_name=settings.gcs_bucket,
+            base_dir=str(settings.base_path),
         )
 
         # Initialize metadata manager
