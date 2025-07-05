@@ -260,7 +260,8 @@ class GCSDataAccess:
             # ✅ DIRECT: Create table without  conversion
             full_query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                {query} FROM read_parquet('{temp_file}')
+                {query}
+                FROM read_parquet('{temp_file}')
             """
             self.duckdb_conn.execute(full_query)
 
@@ -389,7 +390,8 @@ class GCSDataAccess:
             file_list = "', '".join(temp_files)
             self.duckdb_conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                {query} FROM read_parquet(['{file_list}'])
+                {query}
+                FROM read_parquet(['{file_list}'])
             """)
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
