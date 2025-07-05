@@ -142,6 +142,22 @@ class H3DataLoader:
 
         return pesticide_available and field_available
 
+    def get_available_years(self) -> list[int]:
+        """Get list of years for which both pesticide and field data are available."""
+        self.log.info("🔍 Checking data availability for all years")
+
+        available_years = []
+        for year in self.config.available_years:
+            if self._check_year_data_availability(year):
+                available_years.append(year)
+
+        if available_years:
+            self.log.info(f"✅ Found data for {len(available_years)} years: {available_years}")
+        else:
+            self.log.warning("❌ No years with complete data available")
+
+        return available_years
+
     def load_bmd_data_from_gcs(self) -> str:
         """Load BMD data from GCS - CACHED to avoid reloading."""
         self.log.info("🧪 Loading BMD pesticide data from GCS")

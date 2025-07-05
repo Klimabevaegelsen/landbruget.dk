@@ -80,7 +80,7 @@ class DMAScraper:
                     "miljoeaktoerUrl": item["miljoeaktoerUrl"],
                     "myndighedUrl": item["myndighedUrl"],
                     "navn": miljoeaktoer["navn"],
-                    "cvr": miljoeaktoer["cvr"],
+                    "cvr_number": miljoeaktoer["cvr"],
                     "chr": miljoeaktoer["chr"],
                     "pnr": miljoeaktoer["pnr"],
                     "mstNoegle": miljoeaktoer["mstNoegle"],

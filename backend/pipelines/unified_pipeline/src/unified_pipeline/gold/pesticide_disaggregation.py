@@ -21,6 +21,7 @@ from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.timing import timed
 
 print("DEBUG: pesticide_disaggregation.py module loaded!")
 logger = logging.getLogger(__name__)
@@ -255,28 +256,29 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
         self.log.info("🏁 Pesticide disaggregation gold layer processing completed successfully")
 
+    @timed(name="Saving year results directly")
     def _save_year_results_direct(self, year: int) -> bool:
         """
-        Save results for a single year to GCS storage directly from DuckDB table.
-        This avoids converting to Python lists which causes memory issues.
+        Save disaggregation results for a specific year directly from DuckDB table.
+        This is the optimized version that avoids loading large datasets into Python memory.
 
         Args:
-            year: The year being processed
+            year: The pesticide year being processed
 
         Returns:
-            bool: True if save was successful, False otherwise
+            True if results were saved successfully, False otherwise
         """
         try:
-            # Get record count for logging
+            # Check if we have results to save
             result_count = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
             ).fetchone()[0]
 
-            self.log.info(
-                f"💾 Preparing to save {result_count:,} records for year {year} directly from DuckDB"
-            )
-
             if result_count > 0:
+                self.log.info(
+                    f"💾 Saving {result_count:,} disaggregated applications for year {year}"
+                )
+
                 # Create the final table name for this year
                 table_name = f"pesticide_disaggregation_{year}"
 
@@ -792,15 +794,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info("🏗️ Creating final marker table with proper column mapping...")
 
-        # Check if geometry column exists for spatial clustering
-        has_geometry = "geometry" in temp_column_names or "geometry_wkt" in temp_column_names
+        # Check if standardized geometry column exists for spatial clustering
+        has_geometry = "geometry" in temp_column_names
 
-        if "geometry_wkt" in temp_column_names:
-            geometry_select = ", ST_GeomFromText(geometry_wkt) as geometry"
-            self.log.info(
-                "✅ Found geometry_wkt column - converting to geometry for spatial operations"
-            )
-        elif "geometry" in temp_column_names:
+        if "geometry" in temp_column_names:
             geometry_select = ", geometry"
             self.log.info("✅ Found geometry column for spatial operations")
         else:
@@ -854,8 +851,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("🔍 Looking for CVR column in pesticide data...")
         pest_cvr_column = None
         cvr_column_candidates = [
-            "companyregistrationnumber",
             "cvr_number",
+            "companyregistrationnumber",
             "cvr",
             "CompanyRegistrationNumber",
         ]
@@ -899,7 +896,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             CREATE TABLE pesticide AS 
             SELECT 
                 row_number() OVER () as OriginalPesticideRowID,
-                {pest_cvr_column} as CompanyRegistrationNumber,
+                CAST({pest_cvr_column} AS VARCHAR) as cvr_number,
                 {pesticide_name_column} as PesticideName,
                 {pesticide_reg_column} as PesticideRegistrationNumber,
                 CAST({dosage_quantity_column} AS DOUBLE) as DosageQuantity,
@@ -932,7 +929,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         CREATE TABLE disaggregated_pesticide_applications (
             DisaggregatedID VARCHAR,
             OriginalPesticideRowID VARCHAR,
-            CompanyRegistrationNumber VARCHAR,
+            cvr_number VARCHAR,
             PesticideName VARCHAR,
             PesticideRegistrationNumber VARCHAR,
             DosageQuantity DOUBLE,
@@ -973,11 +970,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Check if there are any CVR numbers that exist in both pesticide and marker data
             cvr_match_count = self.duckdb_conn.execute("""
                 WITH PesticideCVRs AS (
-                    SELECT DISTINCT CAST(CAST(CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR
+                    SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
                     FROM pending_pesticide_rows 
-                    WHERE CompanyRegistrationNumber IS NOT NULL
-                      AND TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)) != ''
-                      AND REGEXP_MATCHES(TRIM(CAST(CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                    WHERE cvr_number IS NOT NULL
+                      AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
                 ),
                 MarkerCVRs AS (
                     SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
@@ -1003,9 +1000,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 # Log some diagnostic information
                 pesticide_cvr_count = self.duckdb_conn.execute("""
-                    SELECT COUNT(DISTINCT CompanyRegistrationNumber) 
+                    SELECT COUNT(DISTINCT cvr_number) 
                     FROM pending_pesticide_rows 
-                    WHERE CompanyRegistrationNumber IS NOT NULL
+                    WHERE cvr_number IS NOT NULL
                 """).fetchone()[0]
 
                 marker_cvr_count = self.duckdb_conn.execute("""
@@ -1083,7 +1080,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 SELECT
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    CAST(p.CompanyRegistrationNumber AS VARCHAR) as CompanyRegistrationNumber,
+                    CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName, 
                     p.PesticideRegistrationNumber, 
                     p.DosageQuantity, 
@@ -1097,7 +1094,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate
                 FROM pending_pesticide_rows p
                 JOIN MarkerFieldCVRCropTotals marker_totals
-                    ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = marker_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR 
                     AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
                 JOIN marker m_fields 
                     ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
@@ -1175,7 +1172,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 SELECT
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    CAST(p.CompanyRegistrationNumber AS VARCHAR) as CompanyRegistrationNumber,
+                    CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName, 
                     p.PesticideRegistrationNumber, 
                     p.DosageQuantity, 
@@ -1189,7 +1186,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                    ON CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = non_organic_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
                     AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                 JOIN marker m_fields 
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
@@ -1261,7 +1258,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 PendingForSingleFields AS (
                     SELECT 
                         p.OriginalPesticideRowID,
-                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                        TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
                         p.AcreageSize,
                         p.PesticideName,
@@ -1269,7 +1266,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         p.DosageQuantity,
                         p.DosageUnit
                     FROM pending_pesticide_rows p
-                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL 
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                 ),
@@ -1297,7 +1294,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 SELECT
                     uuid() as DisaggregatedID,
                     CAST(c.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    c.CVR_Str as CompanyRegistrationNumber,
+                    c.CVR_Str as cvr_number,
                     c.PesticideName,
                     c.PesticideRegistrationNumber,
                     c.DosageQuantity,
@@ -1387,13 +1384,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pending_cvr_crops = self.duckdb_conn.execute("""
                 WITH PendingCombinations AS (
                     SELECT DISTINCT
-                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) as CVR_Str,
+                        TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as pending_count
                     FROM pending_pesticide_rows p
-                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
-                      AND TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)) != '' 
-                      AND REGEXP_MATCHES(TRIM(CAST(p.CompanyRegistrationNumber AS VARCHAR)), '^[0-9]+$')
+                    WHERE p.cvr_number IS NOT NULL 
+                      AND TRIM(CAST(p.cvr_number AS VARCHAR)) != '' 
+                      AND REGEXP_MATCHES(TRIM(CAST(p.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND p.Code IS NOT NULL 
                       AND p.AcreageSize > 0.0
                     GROUP BY CVR_Str, Crop_Str
@@ -1559,7 +1556,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pending_for_chunk = self.duckdb_conn.execute(f"""
                 SELECT COUNT(*) as total_pending
                 FROM pending_pesticide_rows p
-                WHERE (CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
                       IN ({cvr_crop_in_clause})
             """).fetchone()[0]
 
@@ -1691,7 +1688,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 MatchedClusters AS (
                     SELECT 
                         p.OriginalPesticideRowID,
-                        p.CompanyRegistrationNumber,
+                        p.cvr_number,
                         p.PesticideName,
                         p.PesticideRegistrationNumber,
                         p.DosageQuantity,
@@ -1706,9 +1703,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 as area_diff_pct
                     FROM pending_pesticide_rows p
                     JOIN ClusterAreas ca ON 
-                        CAST(CAST(p.CompanyRegistrationNumber AS BIGINT) AS VARCHAR) = ca.CVR_Str
+                        TRIM(CAST(p.cvr_number AS VARCHAR)) = ca.CVR_Str
                         AND CAST(CAST(p.Code AS BIGINT) AS VARCHAR) = ca.Crop_Str
-                    WHERE p.CompanyRegistrationNumber IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL 
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                       -- CRITICAL: Area must match within tolerance (2%)
@@ -1718,7 +1715,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FieldAllocations AS (
                     SELECT 
                         mc.OriginalPesticideRowID,
-                        mc.CompanyRegistrationNumber,
+                        mc.cvr_number,
                         mc.PesticideName,
                         mc.PesticideRegistrationNumber,
                         mc.DosageQuantity,
@@ -1735,7 +1732,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 SELECT
                     uuid() as DisaggregatedID,
                     CAST(fa.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
-                    CAST(fa.CompanyRegistrationNumber AS VARCHAR) as CompanyRegistrationNumber,
+                    CAST(fa.cvr_number AS VARCHAR) as cvr_number,
                     fa.PesticideName,
                     fa.PesticideRegistrationNumber,
                     fa.DosageQuantity,

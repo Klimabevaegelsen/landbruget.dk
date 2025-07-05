@@ -230,11 +230,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 properties_path,
                 """SELECT 
                     bfe_number,
-                    ST_GeomFromWKB(geometry) as geom
-                FROM read_parquet_auto()
-                WHERE bfe_number IS NOT NULL""",
-                "properties",
+                    geometry as geom""",
+                "properties_temp",
             )
+            # Apply WHERE filter after loading
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE properties AS
+                SELECT * FROM properties_temp
+                WHERE bfe_number IS NOT NULL
+            """)
+            self.conn.execute("DROP TABLE properties_temp")
             property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
             self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
 
@@ -306,7 +311,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 """SELECT 
                     soil_description,
                     soil_code,
-                    ST_GeomFromWKB(geometry) as geom""",
+                    geometry as geom""",
                 "soil_types",
             )
             count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
@@ -317,7 +322,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 gcs_path,
                 """SELECT 
                     status_category,
-                    ST_GeomFromWKB(geometry) as geom""",
+                    geometry as geom""",
                 "bnbo_areas",
             )
             count = self.conn.execute("SELECT COUNT(*) FROM bnbo_areas").fetchone()[0]
@@ -328,7 +333,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 gcs_path,
                 """SELECT 
                     wetland_id,
-                    ST_GeomFromWKB(geometry) as geom""",
+                    geometry as geom""",
                 "wetlands",
             )
             count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
@@ -339,7 +344,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 gcs_path,
                 """SELECT 
                     project_id,
-                    ST_GeomFromWKB(geometry) as geom""",
+                    geometry as geom""",
                 "water_projects",
             )
             count = self.conn.execute("SELECT COUNT(*) FROM water_projects").fetchone()[0]

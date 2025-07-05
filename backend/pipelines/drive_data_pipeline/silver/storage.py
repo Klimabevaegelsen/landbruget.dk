@@ -88,8 +88,13 @@ class SilverStorageManager(DuckDBProcessor):
         Returns:
             Path to the created output directory
         """
-        # Get the timestamp from the stored value
-        timestamp = getattr(self, "_current_timestamp", generate_timestamp())
+        # Get the timestamp from the stored value and ensure it's a string
+        timestamp = getattr(self, "_current_timestamp", None)
+        if timestamp is None:
+            timestamp = generate_timestamp()
+
+        # Ensure timestamp is a string for path concatenation
+        timestamp_str = str(timestamp)
 
         # New structure: silver/{subfolder_name}/{timestamp}/{content_type}
         if source_subfolder:
@@ -98,7 +103,7 @@ class SilverStorageManager(DuckDBProcessor):
             sanitized_subfolder = sanitized_subfolder.strip(". ").lower()
 
             # Create path: silver/{subfolder_name}/{timestamp}
-            output_dir = run_dir / sanitized_subfolder / timestamp
+            output_dir = run_dir / sanitized_subfolder / timestamp_str
 
             # Add content type if provided
             if content_type:
@@ -107,7 +112,7 @@ class SilverStorageManager(DuckDBProcessor):
                 output_dir = output_dir / sanitized_content_type
         else:
             # No subfolder provided, use 'root' as default
-            output_dir = run_dir / "root" / timestamp
+            output_dir = run_dir / "root" / timestamp_str
             if content_type:
                 sanitized_content_type = re.sub(r'[<>:"/\\|?*]', "_", content_type)
                 sanitized_content_type = sanitized_content_type.strip(". ")

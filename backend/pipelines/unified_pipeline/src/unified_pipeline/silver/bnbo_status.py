@@ -432,7 +432,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
 
             # Check what categories we have
             categories_result = self.conn.execute(f"""
-                SELECT status_category, ST_AsText(dissolved_geometry) as geometry_wkt
+                SELECT status_category, dissolved_geometry
                 FROM {dissolved_table_name}
                 ORDER BY status_category
             """).fetchall()
@@ -444,7 +444,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
                         CAST(NULL AS VARCHAR) as status_category,
-                        CAST(NULL AS GEOMETRY) as dissolved_geometry
+                        CAST(NULL AS GEOMETRY) as geometry,
+                        CAST(NULL AS TIMESTAMP) as dissolved_at
                     WHERE FALSE
                 """)
                 return dissolved_table_name
@@ -453,11 +454,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             action_required_geom = None
             completed_geom = None
 
-            for category, geom_wkt in categories_result:
+            for category, dissolved_geom in categories_result:
                 if category == "Action Required":
-                    action_required_geom = geom_wkt
+                    action_required_geom = dissolved_geom
                 elif category == "Completed":
-                    completed_geom = geom_wkt
+                    completed_geom = dissolved_geom
 
             # Process overlaps using DuckDB-spatial ST_Difference
             if action_required_geom and completed_geom:
@@ -468,8 +469,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
                     SELECT 
                         'Action Required' as status_category,
-                        dissolved_geometry,
-                        ST_AsText(dissolved_geometry) as geometry_wkt
+                        dissolved_geometry as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                     WHERE status_category = 'Action Required'
                     
@@ -480,11 +481,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                         ST_Difference(
                             (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
                             (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
-                        ) as dissolved_geometry,
-                        ST_AsText(ST_Difference(
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
-                        )) as geometry_wkt
+                        ) as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                 """)
             else:
                 # No overlaps to handle, use original dissolved geometries
@@ -492,8 +490,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
                     SELECT 
                         status_category,
-                        dissolved_geometry,
-                        ST_AsText(dissolved_geometry) as geometry_wkt
+                        dissolved_geometry as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                 """)
 
@@ -506,8 +504,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Get final count
             final_count = self.conn.execute(f"""
                 SELECT COUNT(*) FROM {dissolved_table_name}
-                WHERE dissolved_geometry IS NOT NULL
-                    AND NOT ST_IsEmpty(dissolved_geometry)
+                WHERE geometry IS NOT NULL
+                    AND NOT ST_IsEmpty(geometry)
             """).fetchone()[0]
 
             self.log.info(
@@ -523,8 +521,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 CREATE OR REPLACE TABLE {empty_table_name} AS
                 SELECT 
                     CAST(NULL AS VARCHAR) as status_category,
-                    CAST(NULL AS GEOMETRY) as dissolved_geometry,
-                    CAST(NULL AS VARCHAR) as geometry_wkt
+                    CAST(NULL AS GEOMETRY) as geometry,
+                    CAST(NULL AS TIMESTAMP) as dissolved_at
                 WHERE FALSE
             """)
             return empty_table_name
