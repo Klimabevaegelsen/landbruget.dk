@@ -36,8 +36,28 @@ def _get_optimized_storage():
         return None
 
 
+def _get_cvr_collection_utility():
+    """
+    Get CVR collection utility with robust import handling.
+
+    Returns CVR collection functions if available, otherwise None.
+    """
+    try:
+        from unified_pipeline.util.cvr_collection import extract_cvr_numbers_from_table, save_pipeline_cvr_numbers
+
+        print("✅ Successfully imported CVR collection utilities")
+        return extract_cvr_numbers_from_table, save_pipeline_cvr_numbers
+    except ImportError as e:
+        print(f"⚠️ Could not import CVR collection utilities: {e}")
+        print("⚠️ CVR numbers will not be saved for enrichment")
+        return None, None
+
+
 # Get optimized GCS access class or None if not available
 OptimizedGCSDataAccess = _get_optimized_storage()
+
+# Get CVR collection utilities
+extract_cvr_numbers_from_table, save_pipeline_cvr_numbers = _get_cvr_collection_utility()
 
 
 class OptimizedStorageBackend:
@@ -245,9 +265,61 @@ def parse_args():
     return parser.parse_args()
 
 
+def _save_discovered_cvr_numbers(data, timestamp: str):
+    """
+    Extract and save CVR numbers discovered in the DMA scraper data.
+
+    Args:
+        data: Raw DMA data containing company information
+        timestamp: Pipeline timestamp for identification
+    """
+    try:
+        print("📊 Extracting CVR numbers from DMA scraper data")
+
+        # Extract CVR numbers from the raw data
+        cvr_numbers = []
+        for company in data:
+            # Look for CVR numbers in the detailed data sections
+            for section in ["Tilsyn", "Håndhævelser", "Afgørelser"]:
+                section_data = company.get(section, [])
+                for item in section_data:
+                    cvr = item.get("cvr_number")
+                    if cvr and isinstance(cvr, str) and len(cvr.strip()) == 8 and cvr.strip().isdigit():
+                        cvr_numbers.append(cvr.strip())
+
+        # Remove duplicates and sort
+        unique_cvr_numbers = sorted(list(set(cvr_numbers)))
+
+        if unique_cvr_numbers:
+            # Use optimized GCS access if available
+            if OptimizedGCSDataAccess:
+                gcs_access = OptimizedGCSDataAccess()
+
+                gcs_path = save_pipeline_cvr_numbers(
+                    pipeline_name="dma_scraper",
+                    cvr_numbers=unique_cvr_numbers,
+                    gcs_access=gcs_access,
+                    bucket="landbrugsdata-raw-data",
+                    timestamp=timestamp,
+                )
+
+                print(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+            else:
+                print(f"⚠️ Found {len(unique_cvr_numbers)} CVR numbers but cannot save without optimized GCS access")
+        else:
+            print("⚠️ No CVR numbers found in DMA scraper data")
+
+    except Exception as e:
+        print(f"❌ Failed to save CVR numbers for DMA scraper: {e}")
+
+
 def silver(data, timestamp: str):
     df = transform_dma_json(data)
     save_parquet(df, timestamp, PREFIX_SILVER_SAVE_PATH)
+
+    # Save CVR numbers for enrichment if utilities are available
+    if save_pipeline_cvr_numbers is not None:
+        _save_discovered_cvr_numbers(data, timestamp)
 
 
 def bronze(timestamp: str):

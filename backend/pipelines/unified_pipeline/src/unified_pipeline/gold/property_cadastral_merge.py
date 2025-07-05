@@ -5,6 +5,17 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
+# Add CVR collection import
+try:
+    from unified_pipeline.util.cvr_collection import (
+        extract_cvr_numbers_from_table,
+        save_pipeline_cvr_numbers,
+    )
+except ImportError:
+    # Graceful fallback if CVR collection is not available
+    extract_cvr_numbers_from_table = None
+    save_pipeline_cvr_numbers = None
+
 
 class PropertyCadastralMergeGoldConfig(BaseJobConfig):
     """Configuration for Property-Cadastral merge gold layer."""
@@ -187,8 +198,60 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             self.log.info(f"Merge quality: {quality_stats['match_rate_percent']:.1f}% match rate")
 
-            # Upload the parquet file directly to GCS
+            # Get timestamp for both CVR collection and file upload
             timestamp = self.date_pattern
+
+            # Extract and save CVR numbers from company ownership data
+            if save_pipeline_cvr_numbers is not None:
+                self.log.info("🔍 Extracting CVR numbers from company ownership data...")
+                try:
+                    # Extract CVR numbers from the company_data JSON structure
+                    cvr_extraction_query = """
+                    SELECT DISTINCT 
+                        TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) as cvr_number
+                    FROM merged_properties 
+                    WHERE company_data IS NOT NULL
+                      AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
+                      AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
+                      AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
+                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    ORDER BY cvr_number
+                    """
+
+                    cvr_results = self.conn.execute(cvr_extraction_query).fetchall()
+                    cvr_numbers = [row[0] for row in cvr_results]
+
+                    if cvr_numbers:
+                        self.log.info(
+                            f"✅ Found {len(cvr_numbers)} unique CVR numbers from property ownership"
+                        )
+
+                        # Save CVR numbers using the collection utility
+                        cvr_gcs_path = save_pipeline_cvr_numbers(
+                            pipeline_name="property_cadastral_merge",
+                            cvr_numbers=cvr_numbers,
+                            gcs_access=self.gcs_access,
+                            bucket=self.config.bucket,
+                            timestamp=timestamp,
+                        )
+
+                        self.log.info(f"📋 CVR numbers saved to: {cvr_gcs_path}")
+
+                        # Add CVR stats to quality stats
+                        quality_stats["cvr_numbers_found"] = len(cvr_numbers)
+                        quality_stats["cvr_collection_path"] = cvr_gcs_path
+                    else:
+                        self.log.warning("⚠️ No CVR numbers found in company ownership data")
+                        quality_stats["cvr_numbers_found"] = 0
+
+                except Exception as e:
+                    self.log.error(f"❌ Error extracting CVR numbers: {e}")
+                    quality_stats["cvr_numbers_found"] = 0
+                    quality_stats["cvr_extraction_error"] = str(e)
+            else:
+                self.log.info("ℹ️ CVR collection utility not available - skipping CVR extraction")
+
+            # Upload the parquet file directly to GCS
             gcs_path = f"gold/{self.config.dataset}/{timestamp}/{self.config.dataset}.parquet"
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
