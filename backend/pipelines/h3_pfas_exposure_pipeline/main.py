@@ -183,7 +183,7 @@ Examples:
     parser.add_argument(
         "--h3-resolution",
         default="10",
-        help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 8,9,10)",
+        help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 7,8,9,10)",
     )
 
     parser.add_argument(

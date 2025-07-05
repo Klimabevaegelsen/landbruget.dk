@@ -126,7 +126,10 @@ python main.py --mode all --years 2023
 python main.py --mode all --parallel --years 2023
 
 # Adjust processing parameters and resolution
-python main.py --mode h3 --h3-resolution 8 --memory-limit 16GB --thread-count 8 --chunk-size 50000
+python main.py --mode h3 --h3-resolution 7 --memory-limit 16GB --thread-count 8 --chunk-size 50000
+
+# Run multiple resolutions in one command (new optimized approach)
+python main.py --mode h3 --h3-resolution 7,8,9,10 --include-kommune --years 2023
 
 # Dry run to validate configuration
 python main.py --dry-run --verbose
