@@ -594,24 +594,73 @@ class H3PFASProcessorRefactored:
 
         kommune_table = "kommune_boundaries"
 
-        # Load kommune data from GCS
-        kommune_path = (
-            f"gs://{self.config.bucket}/silver/dst/kommune_boundaries/kommune_boundaries.parquet"
-        )
+        # Load kommune data from GCS (bronze layer, latest available)
+        try:
+            # Use GCSDataAccess to find the latest DAGI kommune data
+            from unified_pipeline.util.gcs_access import GCSDataAccess
+
+            gcs_access = GCSDataAccess()
+
+            # List all files in the dagi_kommuner directory
+            kommune_files = gcs_access.list_files(
+                f"gs://{self.config.bucket}/bronze/dagi_kommuner/*/*.json"
+            )
+
+            if not kommune_files:
+                # Try parquet files as well
+                kommune_files = gcs_access.list_files(
+                    f"gs://{self.config.bucket}/bronze/dagi_kommuner/*/*.parquet"
+                )
+
+            if not kommune_files:
+                raise ValueError("No DAGI kommune data found in GCS")
+
+            # Extract timestamps and find the latest
+            timestamps = []
+            for file_path in kommune_files:
+                # Extract timestamp from path like "gs://bucket/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
+                parts = file_path.split("/")
+                if len(parts) >= 6:  # gs, , bucket, bronze, dagi_kommuner, timestamp, filename
+                    timestamp = parts[5]
+                    if timestamp and timestamp.replace("_", "").isdigit():
+                        timestamps.append((timestamp, file_path))
+
+            if not timestamps:
+                raise ValueError("No valid timestamp found in DAGI kommune files")
+
+            # Sort by timestamp and get the latest
+            latest_timestamp, kommune_path = sorted(timestamps, key=lambda x: x[0])[-1]
+
+            self.log.info(f"Using latest DAGI kommune data: {latest_timestamp}")
+
+        except Exception as e:
+            self.log.warning(f"Could not find latest DAGI kommune data: {e}")
+            # Fallback to a reasonable default
+            kommune_path = (
+                f"gs://{self.config.bucket}/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
+            )
 
         try:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {kommune_table} AS
+                WITH geojson_data AS (
+                    SELECT json_extract_string(payload, '$.features[*].properties.KOMNAVN') as kommune_name,
+                           json_extract_string(payload, '$.features[*].properties.KOMKODE') as kommune_code,
+                           json_extract_string(payload, '$.features[*].properties.REGIONKODE') as region_code,
+                           json_extract_string(payload, '$.features[*].properties.REGIONNAVN') as region_name,
+                           json_extract_string(payload, '$.features[*].geometry') as geometry_json
+                    FROM read_json_auto('{kommune_path}')
+                )
                 SELECT
-                    kommune_code,
+                    CAST(kommune_code AS INTEGER) as kommune_code,
                     kommune_name,
-                    region_code,
+                    CAST(region_code AS INTEGER) as region_code,
                     region_name,
-                    ST_GeomFromWKB(geometry) as geometry,
-                    ST_Area_Spheroid(ST_GeomFromWKB(geometry)) / 10000.0 as kommune_area_ha,
-                    ST_Centroid(ST_GeomFromWKB(geometry)) as centroid
-                FROM read_parquet('{kommune_path}')
-                WHERE geometry IS NOT NULL
+                    ST_GeomFromGeoJSON(geometry_json) as geometry,
+                    ST_Area_Spheroid(ST_GeomFromGeoJSON(geometry_json)) / 10000.0 as kommune_area_ha,
+                    ST_Centroid(ST_GeomFromGeoJSON(geometry_json)) as centroid
+                FROM geojson_data
+                WHERE geometry_json IS NOT NULL
             """)
 
             count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_table}").fetchone()[0]
@@ -695,12 +744,12 @@ class H3PFASProcessorRefactored:
                     f.crop_code,
                     f.crop_name,
                     ST_Area_Spheroid(
-                        ST_Intersection(f.prepared_geometry, k.geometry)
+                        ST_Intersection(f.flipped_geometry, k.geometry)
                     ) / 10000.0 as intersection_area_ha,
-                    f.field_area_ha
+                    f.area_ha as field_area_ha
                 FROM {kommune_table} k
-                INNER JOIN {fields_table} f ON ST_Intersects(f.prepared_geometry, k.geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.prepared_geometry, k.geometry)) > 0
+                INNER JOIN {fields_table} f ON ST_Intersects(f.flipped_geometry, k.geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.flipped_geometry, k.geometry)) > 0
             ),
             pesticide_kommune_data AS (
                 SELECT

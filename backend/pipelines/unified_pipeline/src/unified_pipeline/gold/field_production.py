@@ -90,13 +90,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         f"⚠️  SPATIAL_JOIN operator may not be available in version {version_result[1]}"
                     )
             else:
-                # If spatial extension is not loaded, load it now
-                self.log.warning("Spatial extension not found, loading it now...")
-                self.conn.execute("INSTALL spatial")
-                self.conn.execute("LOAD spatial")
-                self.log.info("✅ Spatial extension loaded successfully")
+                self.log.error(
+                    "❌ Spatial extension not found - this is required for field production"
+                )
+                raise RuntimeError("Spatial extension is required but not available")
         except Exception as e:
-            self.log.error(f"Failed to verify/load spatial extension: {e}")
+            self.log.error(f"Failed to verify spatial extension: {e}")
             raise
 
     def _load_agricultural_fields_for_years(
@@ -539,31 +538,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             self.log.info("Setting up spatial processing with DST zones")
 
-            # Ensure spatial extension is loaded and working
+            # Spatial extension should already be loaded by BaseSource
+            # Just verify it's working
             try:
-                # Test if spatial functions are available
                 self.conn.execute("SELECT ST_Point(0, 0)")
                 self.log.info("✅ Spatial extension is loaded and working")
             except Exception as spatial_e:
                 self.log.error(f"❌ Spatial extension not available: {spatial_e}")
-                try:
-                    # Try to load it again
-                    self.conn.execute("INSTALL spatial")
-                    self.conn.execute("LOAD spatial")
-                    # Test again
-                    self.conn.execute("SELECT ST_Point(0, 0)")
-                    self.log.info("✅ Spatial extension loaded on retry")
-                except Exception as retry_e:
-                    self.log.error(f"❌ Failed to load spatial extension: {retry_e}")
-                    raise RuntimeError("Spatial extension is required but could not be loaded")
+                raise RuntimeError(
+                    "Spatial extension is required but not available from BaseSource"
+                )
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:
                 columns = self.conn.execute("DESCRIBE dst_zones_raw").fetchall()
                 self.log.info(f"dst_zones_raw table structure: {columns}")
-
-                sample_data = self.conn.execute("SELECT * FROM dst_zones_raw LIMIT 3").fetchall()
-                self.log.info(f"Sample dst_zones_raw data: {sample_data}")
 
                 # Check for NULL geometries
                 null_count = self.conn.execute(
@@ -580,7 +569,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             except Exception as debug_e:
                 self.log.warning(f"Debug info failed: {debug_e}")
 
-                # Create optimized DST zones table with spatial geometry
+            # Create optimized DST zones table with spatial geometry
             # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS

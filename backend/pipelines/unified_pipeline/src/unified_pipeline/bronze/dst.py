@@ -25,6 +25,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import timed
 
+
 class DSTBronzeConfig(BaseJobConfig):
     """
     Configuration for the DST Bronze source.
@@ -59,6 +60,7 @@ class DSTBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True)
 
+
 class DSTApiClient:
     """Client for interacting with Danmarks Statistik API"""
 
@@ -78,10 +80,11 @@ class DSTApiClient:
         """Fetch table metadata from the API"""
         try:
             url = f"{self.base_url}/tableinfo"
-            params = {"table": table_id, "lang": self.lang, "format": "JSON"}
+            # DST API requires POST with JSON payload, not GET with params
+            payload = {"table": table_id, "lang": self.lang, "format": "JSON"}
 
             logging.info(f"Fetching table info for {table_id}")
-            response = self.session.get(url, params=params, timeout=30)
+            response = self.session.post(url, json=payload, timeout=30)
             response.raise_for_status()
 
             # Return raw JSON response exactly as received
@@ -102,8 +105,13 @@ class DSTApiClient:
         try:
             url = f"{self.base_url}/data"
 
-            # Build request payload based on table configuration
-            payload = self._build_request_payload(table_id, variables, start_time, end_time)
+            # Build request payload - use simplified wildcard approach
+            payload = {
+                "table": table_id,
+                "lang": self.lang,
+                "format": "JSONSTAT",
+                "variables": [{"code": "*", "values": ["*"]}],
+            }
 
             logging.info(f"Fetching data for {table_id}")
             logging.debug(f"Request payload: {json.dumps(payload, indent=2)}")
@@ -127,47 +135,13 @@ class DSTApiClient:
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Build request payload based on table ID and parameters"""
-
-        # Build payload based on known table configurations
+        """Build request payload based on table ID and parameters - DEPRECATED"""
+        # This method is now deprecated since we use the simplified wildcard approach
+        # Keeping for backward compatibility but not used anymore
         payload = {"table": table_id, "lang": self.lang, "format": "JSONSTAT"}
 
-        # Add variable selections based on table type
-        if table_id == "HST77":
-            payload["variables"] = [
-                {
-                    "code": "OMRÅDE",
-                    "values": ["000", "15", "04", "085", "07", "08", "09", "10", "081"],
-                },
-                {"code": "AFGRØDE", "values": ["*"]},
-                {"code": "MÆNGDE4", "values": ["020"]},
-                {"code": "Tid", "values": ["*"]},
-            ]
-        elif table_id == "GARTN1":
-            payload["variables"] = [
-                {
-                    "code": "OMRÅDE",
-                    "values": ["000", "15", "04", "085", "07", "08", "09", "10", "081"],
-                },
-                {"code": "TAL", "values": ["*"]},
-                {"code": "AFGRØDE", "values": ["*"]},
-                {"code": "Tid", "values": ["*"]},
-            ]
-        elif table_id == "FRO":
-            payload["variables"] = [
-                {"code": "AFGRØDE", "values": ["*"]},
-                {"code": "MÆNGDE4", "values": ["*"]},
-                {"code": "Tid", "values": ["*"]},
-            ]
-        elif table_id == "HALM1":
-            payload["variables"] = [
-                {"code": "AFGRØDE", "values": ["*"]},
-                {"code": "MÆNGDE4", "values": ["*"]},
-                {"code": "Tid", "values": ["*"]},
-            ]
-        else:
-            # Generic payload for unknown tables
-            payload["variables"] = [{"code": "*", "values": ["*"]}]
+        # Use wildcard to get all data - much simpler and more reliable
+        payload["variables"] = [{"code": "*", "values": ["*"]}]
 
         return payload
 
@@ -187,6 +161,7 @@ class DSTApiClient:
         except requests.RequestException as e:
             logging.warning(f"Request failed: {e}, retrying...")
             raise
+
 
 class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
     """
@@ -208,7 +183,7 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
         Initialize the DSTBronze source.
 
         Args:
-            config (DSTBronzeConfig): Configuration for the data source        """
+            config (DSTBronzeConfig): Configuration for the data source"""
         super().__init__(config)
         self.api_client = DSTApiClient(base_url=self.config.api_base_url, lang=self.config.lang)
 
