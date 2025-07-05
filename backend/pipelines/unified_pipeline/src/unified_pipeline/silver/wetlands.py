@@ -459,16 +459,16 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM {input_table_name}
             """)
 
-            # Optimized SPATIAL_JOIN query for adjacency detection
-            # Based on DuckDB-spatial PR #545, use ST_Touches directly in JOIN for optimal performance
+            # ✅ OPTIMIZED: Single-condition SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
+            # Based on PR #545: SPATIAL_JOIN operator only supports a single join condition
+            # Use ONLY the spatial predicate in JOIN, filter duplicates afterwards
             adjacency_query = """
-                SELECT 
-                    w1.wetland_id as id1,
-                    w2.wetland_id as id2
+                SELECT DISTINCT
+                    LEAST(w1.wetland_id, w2.wetland_id) as id1,
+                    GREATEST(w1.wetland_id, w2.wetland_id) as id2
                 FROM wetlands_spatial w1
-                JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
-                WHERE w1.wetland_id < w2.wetland_id
-                    AND ST_Length(ST_Intersection(w1.geometry, w2.geometry)) >= 10
+                INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
+                WHERE w1.wetland_id != w2.wetland_id
             """
 
             # Verify SPATIAL_JOIN is being used
@@ -478,7 +478,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             if spatial_join_detected:
                 self.log.info("✅ Using optimized SPATIAL_JOIN operator for adjacency detection")
             else:
-                self.log.warning("⚠️ SPATIAL_JOIN not detected - performance may be suboptimal")
+                self.log.warning(
+                    "⚠️ SPATIAL_JOIN not detected - query may use fallback nested loop join"
+                )
 
             # Create adjacency table using optimized SPATIAL_JOIN
             self.log.info("Finding adjacent wetlands using SPATIAL_JOIN...")
@@ -489,6 +491,30 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             adjacency_count = conn.execute("SELECT COUNT(*) FROM wetland_adjacency").fetchone()[0]
             self.log.info(f"Found {adjacency_count:,} adjacent wetland pairs")
+
+            # Add additional filtering for meaningful adjacency after spatial join
+            if adjacency_count > 0:
+                self.log.info("Filtering adjacency results for meaningful connections...")
+                conn.execute("""
+                    CREATE TABLE wetland_adjacency_filtered AS
+                    SELECT 
+                        wa.id1,
+                        wa.id2
+                    FROM wetland_adjacency wa
+                    JOIN wetlands_spatial w1 ON wa.id1 = w1.wetland_id
+                    JOIN wetlands_spatial w2 ON wa.id2 = w2.wetland_id
+                    WHERE ST_Length(ST_Intersection(w1.geometry, w2.geometry)) >= 10
+                """)
+
+                filtered_count = conn.execute(
+                    "SELECT COUNT(*) FROM wetland_adjacency_filtered"
+                ).fetchone()[0]
+                self.log.info(f"Filtered to {filtered_count:,} meaningful adjacent wetland pairs")
+
+                # Replace the original adjacency table with filtered results
+                conn.execute("DROP TABLE wetland_adjacency")
+                conn.execute("ALTER TABLE wetland_adjacency_filtered RENAME TO wetland_adjacency")
+                adjacency_count = filtered_count
 
             if adjacency_count > 0:
                 # Create connected components for merging
