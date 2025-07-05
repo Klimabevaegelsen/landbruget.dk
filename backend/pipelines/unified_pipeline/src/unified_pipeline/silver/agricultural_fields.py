@@ -310,30 +310,29 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: table_name}, "blocks": {year: table_name}}
+                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
                             if isinstance(bronze_data, dict):
                                 # Map dataset names to bronze data keys
                                 bronze_key = "fields" if "fields" in dataset else "blocks"
                                 if bronze_key in bronze_data and year in bronze_data[bronze_key]:
-                                    # Bronze data should contain table names now
+                                    # Bronze data should contain raw data lists now
                                     raw_data_table = bronze_data[bronze_key][year]
-                                    if isinstance(raw_data_table, str):
-                                        # It's already a table name
-                                        raw_data = raw_data_table
-                                    else:
-                                        # Convert raw data to table
+                                    if isinstance(raw_data_table, list):
+                                        # List of JSON strings - create table in silver layer's connection
                                         table_name = f"bronze_raw_{dataset}_{year}"
-                                        if isinstance(raw_data_table, list):
-                                            # List of JSON strings
-
-                                            df = {"payload": raw_data_table}
-                                            self.conn.register(table_name, df)
-                                            raw_data = table_name
-                                        else:
-                                            self.log.error(
-                                                f"Unsupported bronze data type: {type(raw_data_table)}"
+                                        self.conn.execute(
+                                            f"CREATE OR REPLACE TABLE {table_name} (payload VARCHAR)"
+                                        )
+                                        for json_str in raw_data_table:
+                                            self.conn.execute(
+                                                f"INSERT INTO {table_name} VALUES (?)", [json_str]
                                             )
-                                            continue
+                                        raw_data = table_name
+                                    else:
+                                        self.log.error(
+                                            f"Expected list of JSON strings from bronze, got {type(raw_data_table)}"
+                                        )
+                                        continue
                                 else:
                                     self.log.warning(
                                         f"No in-memory data found for {bronze_key} year {year}"
@@ -377,6 +376,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                         # Store table name for potential gold stage consumption
                         processed_data[dataset_with_year] = table_name
+
+                        # ✅ CLEANUP: Clean up temporary tables after processing each year
+                        self.conn.execute(f"DROP TABLE IF EXISTS bronze_raw_{dataset}_{year}")
+                        self.conn.execute("DROP TABLE IF EXISTS temp_features")
+                        self.conn.execute("DROP TABLE IF EXISTS features_raw")
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
                         # Clean up temporary connection if it was created for bronze data processing
                         if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:

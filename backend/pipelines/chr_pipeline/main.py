@@ -5,6 +5,7 @@ import argparse
 import concurrent.futures
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -547,13 +548,14 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
         # Process in chunks to avoid overwhelming GitHub Actions runner
-        chunk_size = 50  # Process 50 herds at a time (reduced for better memory management)
+        chunk_size = 25  # Reduced from 50 to 25 for better progress tracking and memory management
         total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
 
         # Track overall statistics (no result accumulation to prevent memory issues)
         total_successful = 0
         total_movements = 0
         processed_herds = []  # Only track herd numbers for context, not full results
+        failed_herds = []  # Track failed herds for retry or exclusion
 
         for chunk_idx in range(total_chunks):
             start_idx = chunk_idx * chunk_size
@@ -563,6 +565,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             if context["args"]["progress"]:
                 logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
 
+            # Add timeout monitoring per chunk
+            chunk_start_time = time.time()
+
             chunk_results = process_parallel(
                 smart_cattle_task,
                 chunk_tasks,
@@ -570,14 +575,23 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
             )
 
+            chunk_duration = time.time() - chunk_start_time
+
             # Track only herd numbers for context (no result accumulation to prevent memory issues)
             # Full data is already saved to storage by load_cattle_movement_summaries
-            successful_herd_numbers = [
-                r.get("reporting_herd_number")
-                for r in chunk_results
-                if r and r.get("processed_successfully", False) and r.get("reporting_herd_number")
-            ]
+            successful_herd_numbers = []
+            failed_herd_numbers = []
+
+            for i, result in enumerate(chunk_results):
+                herd_number = chunk_tasks[i][2]  # Extract herd number from task
+
+                if result and result.get("processed_successfully", False):
+                    successful_herd_numbers.append(result.get("reporting_herd_number", herd_number))
+                else:
+                    failed_herd_numbers.append(herd_number)
+
             processed_herds.extend(successful_herd_numbers)
+            failed_herds.extend(failed_herd_numbers)
 
             # Update totals
             total_successful += sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
@@ -585,25 +599,33 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
             )
 
-            # Log progress after each chunk
+            # Log progress after each chunk with timing information
             if context["args"]["progress"]:
+                success_rate = len(successful_herd_numbers) / len(chunk_tasks) * 100 if chunk_tasks else 0
+                avg_time_per_herd = chunk_duration / len(chunk_tasks) if chunk_tasks else 0
+
                 logging.info(
-                    f"Chunk {chunk_idx + 1} completed: {sum(1 for r in chunk_results if r and r.get('processed_successfully', False))} successful, {total_movements} movements"
+                    f"Chunk {chunk_idx + 1} completed: {len(successful_herd_numbers)}/{len(chunk_tasks)} successful ({success_rate:.1f}%), "
+                    f"duration: {chunk_duration:.1f}s (avg {avg_time_per_herd:.1f}s/herd)"
                 )
                 logging.info(
-                    f"Overall progress: {total_successful} successful herds, {total_movements} total movements"
+                    f"Overall progress: {total_successful}/{len(cattle_movement_tasks)} herds ({total_successful / len(cattle_movement_tasks) * 100:.1f}%), {total_movements} total movements"
                 )
+
+                if failed_herd_numbers:
+                    logging.warning(f"Failed herds in chunk {chunk_idx + 1}: {failed_herd_numbers}")
 
             # Progressive cleanup: Clear chunk results from memory after processing
             # (Individual herd data is already saved directly to storage by load_cattle_movement_summaries)
             del chunk_results
-            del successful_herd_numbers  # Also clear the herd numbers list
+            del successful_herd_numbers
+            del failed_herd_numbers
 
             # Force garbage collection and memory monitoring for large datasets
             import gc
             import os
 
-            if chunk_idx % 3 == 0:  # Every 3 chunks
+            if chunk_idx % 2 == 0:  # Every 2 chunks (reduced from 3)
                 gc.collect()
 
                 # Log memory usage for monitoring
@@ -614,12 +636,21 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                         process = psutil.Process(os.getpid())
                         memory_mb = process.memory_info().rss / 1024 / 1024
                         logging.info(f"Memory usage after chunk {chunk_idx + 1}: {memory_mb:.1f} MB")
+
+                        # Warning if memory usage is getting high (updated for 16GB GitHub Actions runners)
+                        if memory_mb > 8000:  # 8GB warning (50% of 16GB limit)
+                            logging.warning(f"High memory usage detected: {memory_mb:.1f} MB")
+                        elif memory_mb > 12000:  # 12GB critical (75% of 16GB limit)
+                            logging.error(
+                                f"Critical memory usage: {memory_mb:.1f} MB - approaching GitHub Actions limit"
+                            )
+
                     except Exception:
                         pass  # Ignore if psutil is not available
 
             # CRITICAL: More aggressive cleanup every chunk to prevent accumulation
             # Clear any lingering temporary files from /tmp
-            if chunk_idx % 5 == 0:  # Every 5 chunks
+            if chunk_idx % 3 == 0:  # Every 3 chunks
                 try:
                     import glob
 
@@ -644,7 +675,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             "total_successful": total_successful,
             "total_movements": total_movements,
             "processed_herd_count": len(processed_herds),
+            "failed_herd_count": len(failed_herds),
             "processed_herds_sample": processed_herds[:10],  # Only keep first 10 for debugging
+            "failed_herds_sample": failed_herds[:10] if failed_herds else [],  # Track failed herds
             "processing_completed": True,
         }
 

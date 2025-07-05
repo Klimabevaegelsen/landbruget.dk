@@ -95,7 +95,7 @@ class SilverJobInterface:
 - ✅ `dagi.py` - Returns dictionary mapping layer names to raw JSON data
 - ✅ `jordbrugsanalyser.py` - Returns dictionary mapping years to WFS response lists
 - ✅ `soil_types.py` - Returns GeoDataFrame for in-memory passing
-- ✅ `spf_su.py` - Returns list of dictionaries for in-memory passing
+
 - ✅ `water_projects.py` - Returns list of tuples with raw XML data
 - ✅ `wetlands.py` - Returns raw XML data list for in-memory passing
 
@@ -108,7 +108,7 @@ class SilverJobInterface:
 - ✅ `dagi.py` - Handles dictionary data from bronze stage with layer-specific processing
 - ✅ `jordbrugsanalyser.py` - Processes year-based data structure from bronze stage
 - ✅ `soil_types.py` - Fixed broken run method, added proper data validation and transformation
-- ✅ `spf_su.py` - Handles list data from bronze stage
+
 - ✅ `water_projects.py` - Processes list of XML tuples from bronze stage
 - ✅ `wetlands.py` - Handles raw XML data list from bronze stage
 

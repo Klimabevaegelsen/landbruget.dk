@@ -199,6 +199,113 @@ class BaseSource(Generic[T], ABC):
             except:
                 pass
 
+    def cleanup_resources(self):
+        """
+        🧹 CLEANUP: Manually clean up resources to free memory.
+
+        This method can be called to free up DuckDB connections, temporary tables,
+        and force garbage collection. Useful for GitHub runners with limited memory.
+        """
+        try:
+            # Clean up temporary tables
+            if hasattr(self, "conn") and self.conn:
+                # Get list of all tables
+                tables = self.conn.execute("SHOW TABLES").fetchall()
+
+                # Identify tables to clean up
+                temp_tables = []
+                for table in tables:
+                    table_name = table[0]
+                    # Clean up temporary tables and data tables from processing
+                    if (
+                        table_name.startswith(
+                            (
+                                "temp_",
+                                "tmp_",
+                                "bronze_data_",
+                                "silver_data_",
+                                "gcs_bronze_",
+                                "local_bronze_",
+                            )
+                        )
+                        or table_name.startswith(("test_", "data_", "processing_"))
+                        or table_name.endswith("_temp")
+                        or "cleanup" in table_name.lower()
+                    ):
+                        temp_tables.append(table_name)
+
+                for table in temp_tables:
+                    try:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+                        self.log.debug(f"🧹 Dropped table: {table}")
+                    except:
+                        pass
+
+                # Force DuckDB cleanup
+                try:
+                    self.conn.execute("PRAGMA force_checkpoint")
+                    self.conn.execute("PRAGMA wal_autocheckpoint = 1")
+                except:
+                    pass
+
+                self.log.info(f"🧹 Cleaned up {len(temp_tables)} tables")
+
+            # Force Python garbage collection
+            import gc
+
+            collected = gc.collect()
+            self.log.info(f"🧹 Garbage collection freed {collected} objects")
+
+        except Exception as e:
+            self.log.warning(f"🧹 Cleanup warning (non-critical): {e}")
+
+    def get_memory_usage(self) -> dict:
+        """
+        Get current memory usage statistics.
+
+        Returns:
+            dict: Memory usage information including DuckDB and system memory
+        """
+        try:
+            import psutil
+
+            # System memory
+            memory = psutil.virtual_memory()
+            system_memory = {
+                "total_gb": memory.total / (1024**3),
+                "available_gb": memory.available / (1024**3),
+                "used_gb": (memory.total - memory.available) / (1024**3),
+                "percent": memory.percent,
+            }
+
+            # DuckDB memory (if available)
+            duckdb_memory = {}
+            if hasattr(self, "conn") and self.conn:
+                try:
+                    # Get DuckDB memory usage
+                    result = self.conn.execute("PRAGMA memory_usage").fetchone()
+                    if result:
+                        duckdb_memory["usage_mb"] = result[0]
+                except:
+                    pass
+
+                # Get table count
+                try:
+                    tables = self.conn.execute("SHOW TABLES").fetchall()
+                    duckdb_memory["table_count"] = len(tables)
+                except:
+                    duckdb_memory["table_count"] = 0
+
+            return {
+                "system": system_memory,
+                "duckdb": duckdb_memory,
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            self.log.warning(f"Failed to get memory usage: {e}")
+            return {"error": str(e)}
+
     @abstractmethod
     async def run(self) -> None:
         """
