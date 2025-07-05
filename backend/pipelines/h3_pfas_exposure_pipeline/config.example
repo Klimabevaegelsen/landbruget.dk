@@ -16,8 +16,8 @@ THREAD_COUNT=4
 # Logging Configuration
 LOG_LEVEL=INFO
 ENABLE_PROGRESS_TRACKING=true
-LOG_CHUNK_DETAILS=true
-LOG_STAGE_TIMINGS=true
+LOG_CHUNK_DETAILS=false
+LOG_STAGE_TIMINGS=false
 
 # Output Configuration (optional)
 OUTPUT_DIR=data/gold/h3_pfas_exposure

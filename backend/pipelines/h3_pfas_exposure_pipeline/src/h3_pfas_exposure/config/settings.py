@@ -59,8 +59,8 @@ class H3PFASConfig:
 
     # Performance Configuration
     enable_progress_tracking: bool = True
-    log_chunk_details: bool = True
-    log_stage_timings: bool = True
+    log_chunk_details: bool = False  # Reduced logging for performance
+    log_stage_timings: bool = False  # Reduced logging for performance
 
     def __post_init__(self):
         """Validate and set resolution-specific parameters after initialization."""
@@ -91,8 +91,8 @@ class H3PFASConfig:
             bucket=os.getenv("GCS_BUCKET", "landbrugsdata-raw-data"),
             enable_progress_tracking=os.getenv("ENABLE_PROGRESS_TRACKING", "true").lower()
             == "true",
-            log_chunk_details=os.getenv("LOG_CHUNK_DETAILS", "true").lower() == "true",
-            log_stage_timings=os.getenv("LOG_STAGE_TIMINGS", "true").lower() == "true",
+            log_chunk_details=os.getenv("LOG_CHUNK_DETAILS", "false").lower() == "true",
+            log_stage_timings=os.getenv("LOG_STAGE_TIMINGS", "false").lower() == "true",
         )
 
     def get_resolution_description(self) -> str:
