@@ -461,6 +461,9 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             result_table = f"{table_name}_typed"
             transformations_sql = ",\n                ".join(column_transformations)
 
+            # Cast all columns to VARCHAR for the unnest operation to avoid type conflicts
+            varchar_columns = [f"CAST({col_info[0]} AS VARCHAR)" for col_info in columns_info]
+
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
                 SELECT 
@@ -468,8 +471,8 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 FROM {table_name}
                 WHERE NOT (
                     -- Remove completely empty rows
-                    SELECT bool_and(column_value IS NULL OR TRIM(CAST(column_value AS VARCHAR)) = '') 
-                    FROM unnest([{", ".join([col_info[0] for col_info in columns_info])}]) AS t(column_value)
+                    SELECT bool_and(column_value IS NULL OR TRIM(column_value) = '') 
+                    FROM unnest([{", ".join(varchar_columns)}]) AS t(column_value)
                 )
             """)
 
