@@ -125,7 +125,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
       fail-fast: false  # Allow other jobs to continue if one fails
-      max-parallel: 4   # Limit concurrent jobs to avoid overwhelming GCS
+      max-parallel: 10  # Allow up to 10 concurrent jobs for faster processing
     
     name: Process Year ${{ matrix.year }} - All Aggregation Levels
     
