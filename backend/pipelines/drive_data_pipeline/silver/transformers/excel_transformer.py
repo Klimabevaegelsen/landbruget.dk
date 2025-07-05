@@ -1,4 +1,4 @@
-"""Excel transformer for Silver layer - DuckDB optimized."""
+"""Excel file transformer using pandas for reading, then DuckDB for processing."""
 
 import time
 from pathlib import Path
@@ -7,35 +7,25 @@ import pandas as pd
 
 # Handle imports for both standalone and package usage
 try:
-    from ...bronze.metadata import FileMetadata
-    from ...utils.logging import get_logger, set_context
-    from ...utils.storage import get_storage_manager
+    from ...utils.logging import get_logger
     from ..duckdb_base import DuckDBProcessor
-    from ..storage import SilverStorageManager
+    from .base import BaseTransformer, FileMetadata, TransformResult
 except ImportError:
     # Fallback for standalone usage
     import logging
 
     get_logger = lambda: logging.getLogger(__name__)
-    set_context = lambda x: None
-    get_storage_manager = lambda: None
     from silver.duckdb_base import DuckDBProcessor
-    from silver.storage import SilverStorageManager
+    from silver.transformers.base import BaseTransformer, FileMetadata, TransformResult
 
-    FileMetadata = None
-from .base import BaseTransformer, TransformResult
-
-# Get logger
 logger = get_logger()
 
 
 class ExcelTransformer(BaseTransformer, DuckDBProcessor):
-    """Transformer for Excel files using DuckDB."""
+    """Transform Excel files using pandas for reading, then DuckDB for processing."""
 
     def __init__(self):
-        """Initialize the Excel transformer with DuckDB support."""
-        DuckDBProcessor.__init__(self, dataset_name="excel_transformer")
-        logger.info("Initialized DuckDB-based Excel transformer")
+        super().__init__()
 
     def transform(
         self,
@@ -43,51 +33,37 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         metadata: FileMetadata,
         output_dir: Path,
     ) -> TransformResult:
-        """Transform Excel file to Parquet format using DuckDB.
+        """Transform Excel file to standardized format using pandas + DuckDB.
 
         Args:
             file_path: Path to the Excel file
-            metadata: Metadata for the file
-            output_dir: Directory to save the transformed file
+            metadata: File metadata
+            output_dir: Output directory for transformed files
 
         Returns:
-            TransformResult with the result of the transformation
+            TransformResult with success status and metadata
         """
         try:
-            set_context(
-                file_id=metadata.file_id,
-                file_name=metadata.original_filename,
-            )
-            logger.info(f"Transforming Excel file using DuckDB: {file_path}")
-
-            # Read Excel file and convert to DuckDB tables
-            sheets_data = self._read_excel_to_duckdb(file_path)
-            if not sheets_data:
-                return TransformResult(
-                    success=False,
-                    error="Excel file has no valid sheets",
-                )
-
-            # Create a storage manager instance
-            storage_manager = get_storage_manager("local")
+            logger.info(f"Transforming Excel file using pandas + DuckDB: {file_path}")
 
             # Create output directory for this file
-            silver_storage = SilverStorageManager(
-                storage_manager=storage_manager,
-                base_path=output_dir,
-            )
-            # Create run directory first to set the timestamp
-            run_dir = silver_storage.create_run_directory()
+            file_output_dir = output_dir / "Excel"
+            file_output_dir.mkdir(parents=True, exist_ok=True)
 
-            file_output_dir = silver_storage.create_output_directory(
-                run_dir=run_dir,
-                source_subfolder=metadata.original_subfolder,
-                content_type="Excel",
-            )
+            # Read Excel file and get all sheets using pandas
+            sheets_data = self._read_excel_sheets_pandas(file_path)
 
-            # Process each sheet
+            if not sheets_data:
+                logger.warning(f"No valid sheets found in Excel file: {file_path}")
+                return TransformResult(
+                    success=False,
+                    error="No valid sheets found in Excel file",
+                )
+
             output_paths = []
             total_rows = 0
+            last_standardized_table = None
+            standardized_tables = []  # Track all standardized tables for cleanup
 
             for sheet_name, table_name in sheets_data:
                 # Clean column names using DuckDB
@@ -95,6 +71,10 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
                 # Apply data type standardization using DuckDB
                 standardized_table = self._standardize_data_types_duckdb(cleaned_table)
+
+                # Keep track of standardized tables
+                last_standardized_table = standardized_table
+                standardized_tables.append(standardized_table)
 
                 # Generate output filename
                 base_filename = Path(metadata.original_filename).stem
@@ -112,25 +92,23 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 ).fetchone()[0]
                 total_rows += row_count
 
-                # Clean up intermediate tables
+                # Clean up intermediate tables (but keep standardized tables for schema)
                 self.drop_table(table_name)
                 self.drop_table(cleaned_table)
-                self.drop_table(standardized_table)
 
             # Create schema dictionary from the last table (for compatibility)
             schema = {"columns": [], "data_types": []}
-            if sheets_data:
+            if sheets_data and last_standardized_table:
                 # Get schema from last processed table before cleanup
-                last_table = f"temp_schema_{int(time.time())}"
-                self.conn.execute(
-                    f"CREATE TABLE {last_table} AS SELECT * FROM {standardized_table} LIMIT 0"
-                )
-                table_info = self.get_table_info(last_table)
+                table_info = self.get_table_info(last_standardized_table)
                 schema = {
                     "columns": [col[0] for col in table_info],
                     "data_types": [col[1] for col in table_info],
                 }
-                self.drop_table(last_table)
+
+                # Now clean up all standardized tables
+                for standardized_table in standardized_tables:
+                    self.drop_table(standardized_table)
 
             return TransformResult(
                 success=True,
@@ -151,8 +129,8 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 error=error_msg,
             )
 
-    def _read_excel_to_duckdb(self, file_path: Path) -> list[tuple[str, str]]:
-        """Read Excel file and convert to DuckDB tables.
+    def _read_excel_sheets_pandas(self, file_path: Path) -> list[tuple[str, str]]:
+        """Read Excel file sheets using pandas, then register as DuckDB tables.
 
         Args:
             file_path: Path to the Excel file
@@ -161,92 +139,52 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             List of tuples containing (sheet_name, table_name)
         """
         try:
-            logger.debug(f"Reading Excel file to DuckDB: {file_path}")
+            logger.debug(f"Reading Excel file sheets using pandas: {file_path}")
 
-            # Read all sheets using pandas (DuckDB doesn't have native Excel support yet)
+            # Use pandas ExcelFile to get sheet names and read data
             excel_file = pd.ExcelFile(file_path)
             sheets_data = []
 
+            logger.info(f"Found {len(excel_file.sheet_names)} sheets: {excel_file.sheet_names}")
+
             for sheet_name in excel_file.sheet_names:
                 try:
-                    # First, read the sheet without any header processing to detect structure
-                    df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
+                    # Read the sheet with pandas
+                    df = pd.read_excel(excel_file, sheet_name=sheet_name)
 
                     # Skip empty sheets
-                    if df_raw.empty:
+                    if df.empty:
                         logger.debug(f"Skipping empty sheet: {sheet_name}")
                         continue
 
-                    # Auto-detect header row by finding the first row that isn't mostly empty/NaN
-                    header_row = 0
-                    for i in range(min(5, len(df_raw))):  # Check first 5 rows max
-                        row = df_raw.iloc[i]
-                        # Count non-null, non-empty values
-                        valid_values = row.dropna()
-                        valid_values = valid_values[valid_values.astype(str).str.strip() != ""]
-
-                        # If row has at least 3 valid values, consider it a potential header
-                        if len(valid_values) >= 3:
-                            # Check if this looks like a header row (contains text, not mostly numbers)
-                            text_count = sum(
-                                1
-                                for val in valid_values
-                                if isinstance(val, str)
-                                or (
-                                    pd.notna(val)
-                                    and not str(val).replace(".", "").replace("-", "").isdigit()
-                                )
-                            )
-
-                            if text_count >= len(valid_values) * 0.6:  # At least 60% text values
-                                header_row = i
-                                break
-
-                    # Now read with the detected header row
-                    if header_row > 0:
-                        logger.debug(
-                            f"Auto-detected header row at position {header_row} for sheet {sheet_name}"
-                        )
-                        # Skip rows before header and use the detected row as header
-                        df = pd.read_excel(
-                            excel_file,
-                            sheet_name=sheet_name,
-                            header=header_row,
-                            skiprows=list(range(header_row)),
-                        )
-                    else:
-                        # Standard parsing if header is in row 0
-                        df = pd.read_excel(excel_file, sheet_name=sheet_name)
-
-                    # Skip empty sheets after processing
-                    if df.empty:
-                        logger.debug(f"Skipping empty sheet after processing: {sheet_name}")
-                        continue
-
                     # Clean sheet name for table name
-                    clean_sheet_name = "".join(
-                        c if c.isalnum() else "_" for c in sheet_name
-                    ).lower()
+                    clean_sheet_name = (
+                        "".join(c if c.isalnum() else "_" for c in str(sheet_name))
+                        .lower()
+                        .strip("_")
+                    )
+
+                    if not clean_sheet_name:
+                        clean_sheet_name = f"sheet_{len(sheets_data) + 1}"
 
                     # Register DataFrame as DuckDB table
                     table_name = f"excel_{clean_sheet_name}_{int(time.time())}"
-                    self.register_dataframe(df, table_name)
+                    self.register_table(df, table_name)
 
-                    # Append sheet data
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
-                        f"Registered sheet {sheet_name} as table {table_name} with {len(df)} rows"
+                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' with {len(df)} rows"
                     )
 
                 except Exception as e:
-                    logger.warning(f"Failed to read sheet {sheet_name}: {str(e)}")
+                    logger.warning(f"Failed to read sheet '{sheet_name}': {str(e)}")
                     continue
 
-            logger.info(f"Successfully read {len(sheets_data)} sheets from Excel file")
+            logger.info(f"Successfully processed {len(sheets_data)} sheets from Excel file")
             return sheets_data
 
         except Exception as e:
-            logger.error(f"Failed to read Excel file: {str(e)}")
+            logger.error(f"Failed to read Excel file with pandas: {str(e)}")
             return []
 
     def _standardize_column_names_duckdb(self, table_name: str) -> str:
@@ -442,18 +380,19 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     transformation = f"CAST({col_name} AS VARCHAR) AS {col_name}"
                 elif col_type.upper() in ["VARCHAR", "TEXT"]:
                     # For string columns, try to detect and convert dates/numbers
+                    # Cast all branches to VARCHAR to avoid type mixing in CASE
                     transformation = f"""
                         CASE 
                             WHEN TRY_CAST({col_name} AS TIMESTAMP) IS NOT NULL 
-                            THEN TRY_CAST({col_name} AS TIMESTAMP)
+                            THEN CAST(TRY_CAST({col_name} AS TIMESTAMP) AS VARCHAR)
                             WHEN TRY_CAST({col_name} AS DOUBLE) IS NOT NULL 
-                            THEN TRY_CAST({col_name} AS DOUBLE)
-                            ELSE {col_name}
+                            THEN CAST(TRY_CAST({col_name} AS DOUBLE) AS VARCHAR)
+                            ELSE CAST({col_name} AS VARCHAR)
                         END AS {col_name}
                     """
                 else:
-                    # Keep existing type
-                    transformation = f"{col_name}"
+                    # Keep existing type but cast to VARCHAR for consistency
+                    transformation = f"CAST({col_name} AS VARCHAR) AS {col_name}"
 
                 column_transformations.append(transformation)
 
