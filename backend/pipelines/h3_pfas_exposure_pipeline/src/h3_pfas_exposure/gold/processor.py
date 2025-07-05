@@ -351,20 +351,34 @@ class H3PFASProcessorRefactored:
                 "H3 grid generation failed bounds validation - areas outside expected range"
             )
 
-        # Check cell count is reasonable for resolution 10 (Denmark bounding box includes water and neighboring areas)
-        # Bounding box covers much more than just Denmark, so expect 10-20 million cells
-        min_expected = 5_000_000  # Minimum reasonable cells for this bounding box
-        max_expected = 20_000_000  # Maximum reasonable cells for this bounding box
+        # Check cell count is reasonable for the given resolution (Denmark bounding box includes water and neighboring areas)
+        # Expected cell counts for Denmark bounding box at different resolutions
+        expected_cells = {
+            7: (30_000, 50_000),  # Resolution 7: ~39k cells
+            8: (200_000, 400_000),  # Resolution 8: ~280k cells
+            9: (1_500_000, 3_000_000),  # Resolution 9: ~2M cells
+            10: (10_000_000, 20_000_000),  # Resolution 10: ~15M cells
+        }
 
-        if total_cells < min_expected or total_cells > max_expected:
-            self.log.error("❌ H3 grid cell count validation FAILED!")
-            self.log.error(
-                f"   Expected: {min_expected:,} - {max_expected:,} cells for resolution 10 in Denmark bounding box"
-            )
-            self.log.error(f"   Actual: {total_cells:,} cells")
-            raise ValueError(
-                f"H3 grid generation failed - unreasonable cell count ({total_cells:,}) for resolution 10"
-            )
+        if resolution in expected_cells:
+            min_expected, max_expected = expected_cells[resolution]
+
+            if total_cells < min_expected or total_cells > max_expected:
+                self.log.error("❌ H3 grid cell count validation FAILED!")
+                self.log.error(
+                    f"   Expected: {min_expected:,} - {max_expected:,} cells for resolution {resolution} in Denmark bounding box"
+                )
+                self.log.error(f"   Actual: {total_cells:,} cells")
+                raise ValueError(
+                    f"H3 grid generation failed - unreasonable cell count ({total_cells:,}) for resolution {resolution}"
+                )
+        else:
+            self.log.warning(f"⚠️ No cell count validation available for resolution {resolution}")
+            # Just do a basic sanity check
+            if total_cells < 1000 or total_cells > 50_000_000:
+                raise ValueError(
+                    f"H3 grid generation failed - extreme cell count ({total_cells:,}) for resolution {resolution}"
+                )
 
         self.log.info(
             f"✅ H3 grid validation passed: {avg_deviation_pct:.1f}% deviation from expected"
