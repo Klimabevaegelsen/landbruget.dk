@@ -38,9 +38,9 @@ class H3SpatialConfig:
     )
 
     # Chunked Processing Configuration - OPTIMIZED for GitHub Actions
-    chunk_size: int = 15000  # Reduced from 25000 for 14GB constraint
+    chunk_size: int = 10000  # Reduced from 25000 for 14GB constraint
     min_intersection_area_sqm: float = 0.0  # Include all intersections, no size limits
-    memory_limit: str = "12GB"  # Default memory limit, can be overridden
+    memory_limit: str = "10GB"  # Default memory limit, can be overridden
     thread_count: int = 2  # Reduced from 4 for memory conservation
 
     # 5-Stage Spatial Join Configuration
@@ -73,8 +73,8 @@ class H3SpatialConfig:
 
     # GITHUB ACTIONS OPTIMIZATION
     github_actions_mode: bool = True  # Enable aggressive cleanup and caching
-    max_memory_usage_gb: float = 12.0  # Alert threshold
-    max_disk_usage_gb: float = 12.0  # Alert threshold
+    max_memory_usage_gb: float = 10.0  # Alert threshold
+    max_disk_usage_gb: float = 10.0  # Alert threshold
 
 
 @dataclass
@@ -168,6 +168,14 @@ class SpatialJoiner:
 
             # Clean up chunk table
             self.conn.execute(f"DROP TABLE IF EXISTS {chunk_results}")
+
+            # Force garbage collection and checkpoint every few chunks
+            if chunk_idx % 5 == 0:
+                gc.collect()
+                try:
+                    self.conn.execute("CHECKPOINT")
+                except Exception:
+                    pass
 
             chunk_time = time.time() - chunk_start_time
             progress_pct = (chunk_idx + 1) / total_chunks * 100
@@ -597,6 +605,17 @@ class H3PFASProcessorRefactored:
         self._memory_alerts = 0
         self._disk_alerts = 0
 
+        # Protected tables that should not be cleaned up during processing
+        self._protected_tables = set()
+
+    def _protect_table(self, table_name: str):
+        """Mark a table as protected from cleanup."""
+        self._protected_tables.add(table_name)
+
+    def _unprotect_table(self, table_name: str):
+        """Remove protection from a table."""
+        self._protected_tables.discard(table_name)
+
     def _monitor_resources(self, operation: str):
         """Monitor memory and disk usage for GitHub Actions constraints."""
         if not self.config.github_actions_mode:
@@ -605,54 +624,140 @@ class H3PFASProcessorRefactored:
         try:
             import psutil
 
-            # Check memory usage
-            memory = psutil.virtual_memory()
-            memory_used_gb = (memory.total - memory.available) / (1024**3)
+            # Check PROCESS memory usage (not system total)
+            process = psutil.Process()
+            process_memory_gb = process.memory_info().rss / (1024**3)
 
-            # Check disk usage
+            # Check AVAILABLE disk space (not total used)
             disk = psutil.disk_usage("/")
-            disk_used_gb = (disk.total - disk.free) / (1024**3)
+            available_disk_gb = disk.free / (1024**3)
 
-            # Alert if approaching limits
-            if memory_used_gb > self.config.max_memory_usage_gb:
+            # GitHub Actions runners have ~14GB total disk, we need to keep some free
+            min_free_disk_gb = 2.0  # Keep at least 2GB free
+            max_process_memory_gb = 12.0  # Limit our process to 12GB
+
+            # Alert if our process is using too much memory
+            if process_memory_gb > max_process_memory_gb:
                 self._memory_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: High memory usage {memory_used_gb:.1f}GB (limit: {self.config.max_memory_usage_gb}GB)"
+                    f"⚠️ {operation}: High process memory usage {process_memory_gb:.1f}GB (limit: {max_process_memory_gb}GB)"
                 )
 
-                if self._memory_alerts > 3:
-                    self.log.error(f"❌ {operation}: Memory usage too high, forcing cleanup")
-                    self._aggressive_cleanup()
+                # Only trigger cleanup after more alerts and avoid during critical operations
+                if self._memory_alerts > 3 and not operation.startswith(("loading_", "loaded_")):
+                    self.log.error(
+                        f"❌ {operation}: Process memory usage too high, forcing selective cleanup"
+                    )
+                    self._selective_cleanup()
 
-            if disk_used_gb > self.config.max_disk_usage_gb:
+            # Alert if available disk space is getting low
+            if available_disk_gb < min_free_disk_gb:
                 self._disk_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: High disk usage {disk_used_gb:.1f}GB (limit: {self.config.max_disk_usage_gb}GB)"
+                    f"⚠️ {operation}: Low available disk space {available_disk_gb:.1f}GB (minimum: {min_free_disk_gb}GB)"
                 )
 
-                if self._disk_alerts > 3:
-                    self.log.error(f"❌ {operation}: Disk usage too high, forcing cleanup")
-                    self._aggressive_cleanup()
+                # Only trigger cleanup after more alerts and avoid during critical operations
+                if self._disk_alerts > 3 and not operation.startswith(("loading_", "loaded_")):
+                    self.log.error(
+                        f"❌ {operation}: Available disk space too low, forcing selective cleanup"
+                    )
+                    self._selective_cleanup()
+
+            # Log resource usage for debugging (but only occasionally to avoid spam)
+            if self._memory_alerts % 10 == 0 or self._disk_alerts % 10 == 0:
+                self.log.debug(
+                    f"📊 {operation}: Process memory: {process_memory_gb:.1f}GB, Available disk: {available_disk_gb:.1f}GB"
+                )
 
         except ImportError:
             # psutil not available, skip monitoring
             pass
+        except Exception as e:
+            # Don't let monitoring errors break the pipeline
+            self.log.debug(f"Resource monitoring error: {e}")
+            pass
+
+    def _selective_cleanup(self):
+        """Selective cleanup that avoids protected tables and critical processing tables."""
+        self.log.info("🧹 Performing selective cleanup for GitHub Actions constraints")
+
+        # Drop only safe temporary tables, avoiding protected ones
+        try:
+            tables = self.conn.execute("SHOW TABLES").fetchall()
+            for (table_name,) in tables:
+                # Skip protected tables
+                if table_name in self._protected_tables:
+                    continue
+
+                # Only clean up clearly temporary tables that are safe to drop
+                if any(
+                    keyword in table_name.lower()
+                    for keyword in [
+                        "chunk_",
+                        "stage1_",
+                        "stage2_",
+                        "stage3_",
+                        "stage4_",
+                        "stage5_",
+                        "intermediate_",
+                    ]
+                ):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+                # Also clean up old temp tables that are clearly not in use
+                if table_name.startswith("temp_") and not any(
+                    protected in table_name for protected in self._protected_tables
+                ):
+                    # Check if table was created more than 5 minutes ago (rough heuristic)
+                    try:
+                        # Only drop if it's clearly an old temporary table
+                        if any(
+                            old_pattern in table_name
+                            for old_pattern in ["_old", "_backup", "_legacy"]
+                        ):
+                            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Force garbage collection
+        gc.collect()
+
+        # Clear DuckDB cache
+        try:
+            self.conn.execute("CHECKPOINT")
+        except Exception:
+            pass
 
     def _aggressive_cleanup(self):
-        """Aggressive cleanup for GitHub Actions constraints."""
+        """Aggressive cleanup for GitHub Actions constraints - only used at end of processing."""
         self.log.info("🧹 Performing aggressive cleanup for GitHub Actions constraints")
 
-        # Drop all temporary tables
+        # Drop all temporary tables (this should only be called at the end)
         try:
             tables = self.conn.execute("SHOW TABLES").fetchall()
             for (table_name,) in tables:
                 if any(
                     keyword in table_name.lower()
-                    for keyword in ["temp_", "chunk_", "intermediate_"]
+                    for keyword in [
+                        "temp_",
+                        "chunk_",
+                        "intermediate_",
+                        "stage1_",
+                        "stage2_",
+                        "stage3_",
+                        "stage4_",
+                        "stage5_",
+                    ]
                 ):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         except Exception:
             pass
+
+        # Clear protected tables set
+        self._protected_tables.clear()
 
         # Force garbage collection
         gc.collect()
@@ -793,7 +898,9 @@ class H3PFASProcessorRefactored:
         self.log.info(f"📄 Loading BMD data from: {bmd_path}")
 
         # Load BMD data directly from GCS
-        self._load_table_from_gcs(bmd_path, "temp_bmd_raw")
+        temp_bmd_table = "temp_bmd_raw"
+        self._protect_table(temp_bmd_table)
+        self._load_table_from_gcs(bmd_path, temp_bmd_table)
 
         # Process BMD data - use existing PFAS, diquat, and glyphosate detection from BMD pipeline
         self.conn.execute("""
@@ -823,8 +930,9 @@ class H3PFASProcessorRefactored:
             AND aktivstofnavn_e IS NOT NULL
         """)
 
-        # Clean up temporary table
-        self.conn.execute("DROP TABLE IF EXISTS temp_bmd_raw")
+        # Clean up temporary table and remove protection
+        self._unprotect_table(temp_bmd_table)
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_bmd_table}")
 
         # Get statistics for logging
         total_count = self.conn.execute("SELECT COUNT(*) FROM bmd_pfas_lookup").fetchone()[0]
@@ -935,6 +1043,13 @@ class H3PFASProcessorRefactored:
                     self.log.warning(f"⚠️ Skipping year {year} - data not available")
                     continue
 
+                # Check if we should skip due to memory pressure
+                if self._memory_alerts > 10 or self._disk_alerts > 10:
+                    self.log.warning(
+                        f"⚠️ Skipping year {year} - too many resource alerts, system under pressure"
+                    )
+                    continue
+
                 # Process single year with cached static data
                 year_records = await self._process_single_year_from_gcs(year, bmd_table)
 
@@ -988,6 +1103,9 @@ class H3PFASProcessorRefactored:
 
             # Monitor after download
             self._monitor_resources(f"loaded_{table_name}")
+
+            # Force garbage collection after loading large files
+            gc.collect()
 
         except Exception as e:
             self.log.error(f"❌ Failed to load {table_name} from {gcs_path}: {e}")
@@ -1128,6 +1246,8 @@ class H3PFASProcessorRefactored:
 
         # Load into temporary table
         temp_table = f"temp_fvm_{field_year}"
+        # Protect this table from cleanup while we're using it
+        self._protect_table(temp_table)
         self._load_table_from_gcs(silver_path, temp_table)
 
         # Get pesticide field lookup for filtering
@@ -1137,6 +1257,8 @@ class H3PFASProcessorRefactored:
                 f"🔗 Filtering FVM fields to only those with pesticide data from {pesticide_year}"
             )
             temp_pesticide_table = f"temp_pesticide_lookup_{pesticide_year}"
+            # Protect this table from cleanup while we're using it
+            self._protect_table(temp_pesticide_table)
             self._load_table_from_gcs(pesticide_path, temp_pesticide_table)
 
             # Create lookup table
@@ -1151,6 +1273,7 @@ class H3PFASProcessorRefactored:
                 AND MatchedBlockID IS NOT NULL
                 AND CompanyRegistrationNumber IS NOT NULL
             """)
+            self._unprotect_table(temp_pesticide_table)
             self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticide_table}")
         else:
             # Create empty lookup
@@ -1244,7 +1367,8 @@ class H3PFASProcessorRefactored:
         self.conn.execute("DROP TABLE prepared_fields")
         self.conn.execute(f"ALTER TABLE {prepared_table} RENAME TO prepared_fields")
 
-        # Clean up temporary table
+        # Clean up temporary table and remove protection
+        self._unprotect_table(temp_table)
         self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
         count = self.conn.execute("SELECT COUNT(*) FROM prepared_fields").fetchone()[0]
@@ -1267,7 +1391,9 @@ class H3PFASProcessorRefactored:
         self.log.info(f"📄 Loading pesticides from: {full_path}")
 
         # Load pesticide data directly from GCS
-        self._load_table_from_gcs(full_path, "temp_pesticides_raw")
+        temp_pesticides_table = "temp_pesticides_raw"
+        self._protect_table(temp_pesticides_table)
+        self._load_table_from_gcs(full_path, temp_pesticides_table)
 
         # Check available columns and handle both old and new standardized names
         pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticides_raw)").fetchall()
@@ -1346,6 +1472,10 @@ class H3PFASProcessorRefactored:
             AND {cvr_column} IS NOT NULL
             AND {pesticide_reg_column} IS NOT NULL
         """)
+
+        # Clean up temporary table and remove protection
+        self._unprotect_table(temp_pesticides_table)
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticides_table}")
 
         # Get count for logging
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
