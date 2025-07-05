@@ -102,6 +102,25 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
             bronze_data = await instance.run()
             log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
 
+            # 🧹 CLEANUP: For GitHub runners, clear large bronze data after processing
+            # Only keep data in memory if save_local is True (development mode)
+            if hasattr(config_instance, "save_local") and not config_instance.save_local:
+                # Check if bronze_data is large (indicating it might cause memory issues)
+                if bronze_data and isinstance(bronze_data, dict):
+                    total_size = (
+                        sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                    )
+                    if total_size > 10_000_000:  # More than 10MB of string data
+                        log.info(
+                            f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                        )
+                        bronze_data = {"status": "saved_to_gcs", "job": job_cls.__name__}
+
+                        # Force garbage collection
+                        import gc
+
+                        gc.collect()
+
         elif issubclass(job_cls, SilverJobInterface):
             # Silver stage - pass in-memory data if available and collect results
             result = await instance.run(bronze_data=bronze_data)
@@ -112,10 +131,26 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
                 f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
             )
 
+            # 🧹 CLEANUP: Clear bronze data after silver processing to free memory
+            if bronze_data:
+                log.info("🧹 Clearing bronze data after silver processing")
+                bronze_data = None
+                import gc
+
+                gc.collect()
+
         elif issubclass(job_cls, GoldJobInterface):
             # Gold stage - pass collected silver data
             await instance.run(silver_data=silver_data)
             log.info(f"Gold job {job_cls.__name__} completed using silver data")
+
+            # 🧹 CLEANUP: Clear silver data after gold processing to free memory
+            if silver_data:
+                log.info("🧹 Clearing silver data after gold processing")
+                silver_data.clear()
+                import gc
+
+                gc.collect()
 
         else:
             # Legacy support - jobs that don't implement the new interfaces
@@ -123,6 +158,20 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
             log.info(f"Legacy job {job_cls.__name__} completed")
 
         log.info(f"Finished {job_cls.__name__} for stage {stage}")
+
+        # 🧹 CLEANUP: Force cleanup of job instance to free DuckDB connections and memory
+        if hasattr(instance, "conn") and instance.conn:
+            try:
+                instance.conn.close()
+                log.debug(f"🧹 Closed DuckDB connection for {job_cls.__name__}")
+            except:
+                pass
+
+        # Additional cleanup for large job instances
+        del instance
+        import gc
+
+        gc.collect()
 
 
 def execute(cli_config: cli.CliConfig) -> None:

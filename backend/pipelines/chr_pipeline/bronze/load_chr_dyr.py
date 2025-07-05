@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import date, timedelta
 from typing import Any, Dict, Optional
@@ -54,19 +55,19 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
 
     # Configure timeouts to prevent hanging on slow/unresponsive herds
     # Connection timeout: 30 seconds to establish connection
-    # Read timeout: 300 seconds (5 minutes) to wait for response
+    # Read timeout: 600 seconds (10 minutes) for very large herds - increased from 300s
     # This is especially important for cattle movement data which can be large
     adapter = requests.adapters.HTTPAdapter()
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    # Set timeouts on the session instead
-    session.timeout = (30, 300)  # (connect_timeout, read_timeout)
+    # Set timeouts on the session instead - increased read timeout
+    session.timeout = (30, 600)  # (connect_timeout, read_timeout)
 
     transport = Transport(session=session)
     try:
         client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / 300s read timeouts")
+        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / 600s read timeouts")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
@@ -96,6 +97,7 @@ def load_animal_movements(
     herd_number: int,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    max_retries: int = 3,
 ) -> Optional[Any]:
     """
     Fetches animal movement data for a given herd using besListAktOms.
@@ -106,6 +108,7 @@ def load_animal_movements(
         herd_number: The herd number to fetch data for
         start_date: Optional start date for filtering (if None, gets all available data)
         end_date: Optional end date for filtering (if None, uses today)
+        max_retries: Maximum number of retry attempts for failed requests
 
     Returns:
         Raw response object or None if failed
@@ -125,94 +128,143 @@ def load_animal_movements(
         + (f" from {start_date} to {end_date}" if start_date else " (all available data)")
     )
 
-    try:
-        # Create request structure according to WSDL/XSD
-        GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
-
-        CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
-
-        # Build request parameters
-        request_params_dict = {"BesaetningsNummer": herd_number}
-        if start_date:
-            request_params_dict["PeriodeFra"] = start_date
-        if end_date:
-            request_params_dict["PeriodeTil"] = end_date
-
-        request_params = CHR_dyrChrBesListeRequestTypeFactory(**request_params_dict)
-
-        # Combine into payload
-        payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
-
-        # Call the operation
-        response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
-
-        if response is None:
-            logger.warning(f"No response received for herd {herd_number}")
-            return None
-
-        # Process and aggregate the response instead of saving raw individual records
-        movement_summaries = _aggregate_cattle_movements(response, herd_number)
-
-        # Log memory savings - show what we would have saved vs what we actually save
-        if hasattr(response, "Response") and response.Response:
-            resp = response.Response[0] if isinstance(response.Response, list) else response.Response
-            animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-            individual_record_count = len(animals) if animals else 0
-            summary_record_count = len(movement_summaries.get("movements", []))
-
-            if individual_record_count > 0:
-                reduction_ratio = (individual_record_count - summary_record_count) / individual_record_count * 100
+    # Retry logic for problematic herds
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                wait_time = 2**attempt  # Exponential backoff: 2s, 4s, 8s
                 logger.info(
-                    f"Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
+                    f"Retrying herd {herd_number} (attempt {attempt + 1}/{max_retries + 1}) after {wait_time}s delay"
+                )
+                time.sleep(wait_time)
+
+            # Create request structure according to WSDL/XSD
+            GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+            common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
+
+            CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+
+            # Build request parameters
+            request_params_dict = {"BesaetningsNummer": herd_number}
+            if start_date:
+                request_params_dict["PeriodeFra"] = start_date
+            if end_date:
+                request_params_dict["PeriodeTil"] = end_date
+
+            request_params = CHR_dyrChrBesListeRequestTypeFactory(**request_params_dict)
+
+            # Combine into payload
+            payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
+
+            # Call the operation with timeout monitoring
+            request_start_time = time.time()
+            response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
+            request_duration = time.time() - request_start_time
+
+            if response is None:
+                logger.warning(f"No response received for herd {herd_number} (attempt {attempt + 1})")
+                if attempt < max_retries:
+                    continue
+                return None
+
+            # Log request timing for monitoring
+            if request_duration > 300:  # Log slow requests (>5 minutes)
+                logger.warning(f"Slow request for herd {herd_number}: {request_duration:.1f}s")
+            elif request_duration > 60:  # Log moderately slow requests (>1 minute)
+                logger.info(f"Moderate request for herd {herd_number}: {request_duration:.1f}s")
+
+            # Process and aggregate the response instead of saving raw individual records
+            movement_summaries = _aggregate_cattle_movements(response, herd_number)
+
+            # Log memory savings - show what we would have saved vs what we actually save
+            if hasattr(response, "Response") and response.Response:
+                resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+                animals = getattr(resp, "Enkeltdyrsoplysninger", [])
+                individual_record_count = len(animals) if animals else 0
+                summary_record_count = len(movement_summaries.get("movements", []))
+
+                if individual_record_count > 0:
+                    reduction_ratio = (individual_record_count - summary_record_count) / individual_record_count * 100
+                    logger.info(
+                        f"Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
+                    )
+
+            # Save to streaming buffer to prevent memory buildup while maintaining consolidated output
+            if movement_summaries and movement_summaries.get("movements"):
+                # Use streaming save to prevent memory accumulation
+                _save_to_streaming_buffer(
+                    data_type="chr_dyr_movement_summaries",
+                    identifier=f"{herd_number}{date_suffix}",
+                    data=movement_summaries,
+                )
+                logger.info(
+                    f"Herd {herd_number}: Streamed {len(movement_summaries['movements'])} movement summaries to buffer"
+                )
+            else:
+                # Still save a minimal record indicating we processed this herd
+                minimal_record = {"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True}
+                _save_to_streaming_buffer(
+                    data_type="chr_dyr_movement_summaries",
+                    identifier=f"{herd_number}{date_suffix}",
+                    data=minimal_record,
                 )
 
-        # Save to streaming buffer to prevent memory buildup while maintaining consolidated output
-        if movement_summaries and movement_summaries.get("movements"):
-            # Use streaming save to prevent memory accumulation
-            _save_to_streaming_buffer(
-                data_type="chr_dyr_movement_summaries",
-                identifier=f"{herd_number}{date_suffix}",
-                data=movement_summaries,
-            )
-            logger.info(
-                f"Herd {herd_number}: Streamed {len(movement_summaries['movements'])} movement summaries to buffer"
-            )
-        else:
-            # Still save a minimal record indicating we processed this herd
-            minimal_record = {"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True}
-            _save_to_streaming_buffer(
-                data_type="chr_dyr_movement_summaries",
-                identifier=f"{herd_number}{date_suffix}",
-                data=minimal_record,
-            )
+            # Log statistics
+            if hasattr(response, "Response") and response.Response:
+                resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+                animals = getattr(resp, "Enkeltdyrsoplysninger", [])
+                animal_count = len(animals) if animals else 0
 
-        # Log statistics
-        if hasattr(response, "Response") and response.Response:
-            resp = response.Response[0] if isinstance(response.Response, list) else response.Response
-            animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-            animal_count = len(animals) if animals else 0
+                period_fra = getattr(resp, "PeriodeFra", None)
+                period_til = getattr(resp, "PeriodeTil", None)
 
-            period_fra = getattr(resp, "PeriodeFra", None)
-            period_til = getattr(resp, "PeriodeTil", None)
+                logger.info(
+                    f"Herd {herd_number}: {animal_count} animals found "
+                    + (f"(period: {period_fra} to {period_til})" if period_fra else "")
+                )
 
-            logger.info(
-                f"Herd {herd_number}: {animal_count} animals found "
-                + (f"(period: {period_fra} to {period_til})" if period_fra else "")
-            )
+                if animal_count > 0:
+                    logger.debug(
+                        f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}"
+                    )
 
-            if animal_count > 0:
-                logger.debug(f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}")
+            # Return aggregated summaries instead of massive raw response
+            return movement_summaries
 
-        # Return aggregated summaries instead of massive raw response
-        return movement_summaries
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Timeout error for herd {herd_number} (attempt {attempt + 1}): {e}")
+            if attempt < max_retries:
+                continue
+            else:
+                logger.error(f"Max retries exceeded for herd {herd_number} due to timeout")
+                return None
 
-    except Fault as soap_fault:
-        logger.error(f"SOAP fault for herd {herd_number}: {soap_fault}")
-        return None
-    except Exception as e:
-        logger.error(f"Error fetching animal movements for herd {herd_number}: {e}")
-        return None
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Connection error for herd {herd_number} (attempt {attempt + 1}): {e}")
+            if attempt < max_retries:
+                continue
+            else:
+                logger.error(f"Max retries exceeded for herd {herd_number} due to connection error")
+                return None
+
+        except Fault as soap_fault:
+            logger.error(f"SOAP fault for herd {herd_number} (attempt {attempt + 1}): {soap_fault}")
+            if attempt < max_retries and "timeout" in str(soap_fault).lower():
+                continue
+            else:
+                logger.error(f"Max retries exceeded for herd {herd_number} due to SOAP fault: {soap_fault}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error fetching animal movements for herd {herd_number} (attempt {attempt + 1}): {e}")
+            if attempt < max_retries:
+                continue
+            else:
+                logger.error(f"Max retries exceeded for herd {herd_number} due to error: {e}")
+                return None
+
+    # Should not reach here, but just in case
+    return None
 
 
 def load_animal_movements_task(

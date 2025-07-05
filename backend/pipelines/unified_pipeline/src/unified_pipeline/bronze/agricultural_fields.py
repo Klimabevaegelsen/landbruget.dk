@@ -28,6 +28,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     """
     Configuration for the Agricultural Fields Bronze source.
@@ -93,6 +94,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
 
 class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], BronzeJobInterface):
     """
@@ -312,7 +314,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             self.save_data_direct(table_name, dataset_with_year, self.config.bucket, "bronze")
             self.log.info(f"Data processing completed for {dataset}")
 
-            # ✅ MIGRATION: Return table name instead of raw data
+            # ✅ MIGRATION: Return table name for cleanup
             return table_name
 
     async def run(self) -> Optional[dict]:
@@ -338,25 +340,36 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
         """
         self.log.info("Running Agricultural Fields bronze job for all available years")
         async with AsyncTimer("Total run time"):
+            # ✅ OPTIMIZATION: Process one year at a time to avoid memory overflow
+            # Instead of accumulating all data, we'll save each year and return metadata
             all_data = {"fields": {}, "blocks": {}}
 
             # Process agricultural fields for all available years
             self.log.info("Processing agricultural fields data for all years")
             for year, url in self.config.fields_urls.items():
                 self.log.info(f"Processing fields data for year {year}")
-                # ✅ MIGRATION: Store table name instead of raw data
+                # Process and save data, but don't accumulate in memory
                 fields_table_name = await self._process_data(url, self.config.fields_dataset, year)
-                all_data["fields"][year] = fields_table_name
+                # Store metadata instead of raw data to avoid memory overflow
+                all_data["fields"][year] = f"bronze_saved_{self.config.fields_dataset}_{year}"
+
+                # Clean up the table from memory after saving
+                self.conn.execute(f"DROP TABLE IF EXISTS {fields_table_name}")
 
             # Process agricultural blocks for all available years
             self.log.info("Processing agricultural blocks data for all years")
             for year, url in self.config.blocks_urls.items():
                 self.log.info(f"Processing blocks data for year {year}")
-                # ✅ MIGRATION: Store table name instead of raw data
+                # Process and save data, but don't accumulate in memory
                 blocks_table_name = await self._process_data(url, self.config.blocks_dataset, year)
-                all_data["blocks"][year] = blocks_table_name
+                # Store metadata instead of raw data to avoid memory overflow
+                all_data["blocks"][year] = f"bronze_saved_{self.config.blocks_dataset}_{year}"
+
+                # Clean up the table from memory after saving
+                self.conn.execute(f"DROP TABLE IF EXISTS {blocks_table_name}")
 
             self.log.info("Agricultural Fields bronze job completed successfully for all years")
 
-            # Return table names for in-memory passing
-            return all_data
+            # Return metadata indicating data was saved to storage
+            # Silver layer will read from storage instead of using in-memory data
+            return None  # Force silver layer to read from storage
