@@ -153,12 +153,39 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             if len(processed_tables) == 1:
                 final_table = processed_tables[0]
             else:
-                # Union all tables (they should have same structure after standardization)
+                # Union all tables - but handle different column structures
                 final_table = f"pdf_combined_{filename.replace('.', '_')}"
-                union_query = " UNION ALL ".join(
-                    [f"SELECT * FROM {table}" for table in processed_tables]
-                )
-                self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
+
+                # Find common columns across all tables
+                all_columns = {}
+                for table in processed_tables:
+                    columns = self.conn.execute(f"DESCRIBE {table}").fetchall()
+                    all_columns[table] = [col[0] for col in columns]
+
+                # Find intersection of all column sets
+                common_columns = set(all_columns[processed_tables[0]])
+                for table in processed_tables[1:]:
+                    common_columns = common_columns.intersection(set(all_columns[table]))
+
+                if common_columns:
+                    # Union with common columns only
+                    common_cols_list = sorted(list(common_columns))  # Sort for consistency
+                    common_cols_str = ", ".join([f'"{col}"' for col in common_cols_list])
+
+                    union_query = " UNION ALL ".join(
+                        [f"SELECT {common_cols_str} FROM {table}" for table in processed_tables]
+                    )
+                    self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
+
+                    logger.info(
+                        f"Combined {len(processed_tables)} tables using {len(common_columns)} common columns"
+                    )
+                else:
+                    # No common columns - just use the first table as fallback
+                    logger.warning(
+                        f"No common columns found across {len(processed_tables)} tables, using first table only"
+                    )
+                    final_table = processed_tables[0]
 
             logger.info(f"Successfully transformed PDF {filename} into table {final_table}")
             return final_table
