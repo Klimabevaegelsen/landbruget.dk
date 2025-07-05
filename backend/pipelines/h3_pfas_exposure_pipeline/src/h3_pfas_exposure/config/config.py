@@ -114,6 +114,10 @@ class H3SpatialConfig:
 
     def __post_init__(self):
         """Set resolution-specific validation parameters after initialization."""
+        self._update_resolution_parameters()
+
+    def _update_resolution_parameters(self):
+        """Update resolution-specific validation parameters."""
         if self.h3_resolution not in self.h3_resolution_areas:
             raise ValueError(f"H3 resolution must be 7, 8, 9, or 10. Got: {self.h3_resolution}")
 
@@ -122,6 +126,11 @@ class H3SpatialConfig:
         self.min_h3_area_ha = area_config["min_area_ha"]
         self.max_h3_area_ha = area_config["max_area_ha"]
         self.theoretical_avg_area_ha = area_config["theoretical_avg_area_ha"]
+
+    def update_resolution(self, new_resolution: int):
+        """Update the H3 resolution and corresponding validation parameters."""
+        self.h3_resolution = new_resolution
+        self._update_resolution_parameters()
 
 
 @dataclass

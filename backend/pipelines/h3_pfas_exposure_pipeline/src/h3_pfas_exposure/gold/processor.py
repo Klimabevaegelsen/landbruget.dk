@@ -32,7 +32,7 @@ class H3PFASProcessorRefactored:
 
         # STATIC DATA CACHING - avoid recomputing for each year
         self._cached_bmd_table = None
-        self._cached_h3_grid_table = None
+        self._cached_h3_grids = {}  # Cache grids by resolution
         self._cached_kommuner_table = None
 
         # Memory monitoring for GitHub Actions
@@ -252,11 +252,13 @@ class H3PFASProcessorRefactored:
         self.log.info("✅ DuckDB setup completed with GitHub Actions optimizations")
 
     def generate_h3_grid(self) -> str:
-        """Generate H3 grid for Denmark - CACHED to avoid recomputation."""
-        # Return cached grid if available
-        if self._cached_h3_grid_table:
-            self.log.info("✅ Using cached H3 grid")
-            return self._cached_h3_grid_table
+        """Generate H3 grid for Denmark - CACHED by resolution to avoid recomputation."""
+        resolution = self.config.h3_resolution
+
+        # Return cached grid if available for this resolution
+        if resolution in self._cached_h3_grids:
+            self.log.info(f"✅ Using cached H3 grid for resolution {resolution}")
+            return self._cached_h3_grids[resolution]
 
         self.log.info("🗺️ Generating Denmark H3 grid (caching for reuse)")
         self._monitor_resources("h3_grid_generation")
@@ -368,11 +370,16 @@ class H3PFASProcessorRefactored:
             f"✅ H3 grid validation passed: {avg_deviation_pct:.1f}% deviation from expected"
         )
 
-        # Cache the table name
-        self._cached_h3_grid_table = "h3_grid_with_geom"
+        # Cache the table name by resolution
+        table_name = f"h3_grid_with_geom_res_{resolution}"
+        self.conn.execute(
+            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM h3_grid_with_geom"
+        )
+        self.conn.execute("DROP TABLE IF EXISTS h3_grid_with_geom")
+        self._cached_h3_grids[resolution] = table_name
 
         self._monitor_resources("h3_grid_generated")
-        return self._cached_h3_grid_table
+        return table_name
 
     def _validate_results(self, results_table: str):
         """Validate the analysis results."""
