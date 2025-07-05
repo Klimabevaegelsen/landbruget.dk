@@ -14,8 +14,12 @@ The process reads in bronze layer data, transforms it using DuckDB-spatial,
 validates geometries, and stores the processed data in GCS.
 """
 
+import gc
 import json
+import os
 from typing import Any, Optional
+
+import psutil
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -37,6 +41,8 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         bucket (str): GCS bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         column_mapping (dict): Dictionary mapping raw field names to standardized names
+        debug_memory (bool): Whether to log memory usage for debugging
+        processing_batch_size (int): Batch size for processing features to reduce memory usage
     """
 
     dataset: str = "agricultural_fields"  # Primary dataset name for app.py silver data collection
@@ -44,6 +50,8 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
     blocks_dataset: str = "agricultural_blocks"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
+    debug_memory: bool = True  # Enable memory logging by default
+    processing_batch_size: int = 10000  # Process features in batches to reduce memory usage
 
     # Years to process (these should match what's available in bronze)
     # Note: Fields have 2020-2025, Blocks have 2020-2024
@@ -97,6 +105,151 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB-spatial initialized for agricultural fields processing")
+
+    def _cleanup_after_year(self, dataset: str, year: int, table_name: str, temp_conn):
+        """
+        Comprehensive cleanup after processing each year to prevent memory accumulation.
+
+        Args:
+            dataset: Dataset name being processed
+            year: Year being processed
+            table_name: Name of the processed table
+            temp_conn: Temporary connection used for processing
+        """
+        self.log.info(f"🧹 Starting comprehensive cleanup for {dataset} year {year}")
+
+        try:
+            # 1. Drop all temporary tables from main connection
+            cleanup_tables = [
+                f"bronze_raw_{dataset}_{year}",
+                "temp_features",
+                "features_raw",
+                table_name,
+                f"temp_{table_name}",
+                f"raw_data_{dataset}_{year}",
+                f"temp_bronze_{dataset}_{year}",
+            ]
+
+            for table in cleanup_tables:
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+                except Exception:
+                    # Ignore errors for tables that don't exist
+                    pass
+
+            # 2. Clean up temporary connection if it exists
+            if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:
+                try:
+                    temp_conn.close()
+                except Exception as e:
+                    self.log.warning(f"Error closing temp connection: {e}")
+
+            # 3. Force DuckDB to release memory by running VACUUM and CHECKPOINT
+            try:
+                self.conn.execute("VACUUM")
+                self.conn.execute("CHECKPOINT")
+            except Exception as e:
+                self.log.warning(f"Error during DuckDB cleanup: {e}")
+
+            # 4. Force Python garbage collection
+            collected = gc.collect()
+            self.log.info(f"🧹 Cleaned up {dataset} year {year} - collected {collected} objects")
+
+        except Exception as e:
+            self.log.error(f"Error during cleanup for {dataset} year {year}: {e}")
+            # Continue processing even if cleanup fails
+
+    def _cleanup_between_datasets(self, dataset: str):
+        """
+        Clean up memory between processing different datasets.
+
+        Args:
+            dataset: Dataset name being processed
+        """
+        self.log.info(f"🧹 Cleaning up before processing {dataset}")
+
+        try:
+            # Drop any remaining temporary tables
+            temp_tables = [
+                "temp_features",
+                "features_raw",
+                "temp_responses",
+                "bronze_raw_*",
+                "processed_features_*",
+            ]
+
+            for table_pattern in temp_tables:
+                try:
+                    if "*" in table_pattern:
+                        # Get all tables matching pattern
+                        tables = self.conn.execute(
+                            f"SELECT table_name FROM information_schema.tables WHERE table_name LIKE '{table_pattern.replace('*', '%')}'"
+                        ).fetchall()
+                        for table_row in tables:
+                            self.conn.execute(f"DROP TABLE IF EXISTS {table_row[0]}")
+                    else:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
+                except Exception:
+                    pass
+
+            # Force DuckDB memory cleanup
+            self.conn.execute("VACUUM")
+            self.conn.execute("CHECKPOINT")
+
+            # Force garbage collection
+            collected = gc.collect()
+            self.log.info(f"🧹 Pre-{dataset} cleanup collected {collected} objects")
+
+        except Exception as e:
+            self.log.warning(f"Error during pre-dataset cleanup: {e}")
+
+    def _final_cleanup(self):
+        """
+        Final comprehensive cleanup after all processing is complete.
+        """
+        self.log.info("🧹 Starting final comprehensive cleanup")
+
+        try:
+            # Get all table names and drop them
+            all_tables = self.conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+
+            for table_row in all_tables:
+                table_name = table_row[0]
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                except Exception:
+                    pass
+
+            # Final DuckDB cleanup
+            self.conn.execute("VACUUM")
+            self.conn.execute("CHECKPOINT")
+
+            # Final garbage collection
+            collected = gc.collect()
+            self.log.info(f"🧹 Final cleanup collected {collected} objects")
+
+        except Exception as e:
+            self.log.warning(f"Error during final cleanup: {e}")
+
+    def _log_memory_usage(self, context: str):
+        """
+        Log current memory usage to help monitor cleanup effectiveness.
+
+        Args:
+            context: Context description for the memory measurement
+        """
+        if not self.config.debug_memory:
+            return
+
+        try:
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024  # Convert to MB
+            self.log.info(f"📊 Memory usage {context}: {memory_mb:.1f} MB")
+        except Exception as e:
+            self.log.warning(f"Error getting memory usage: {e}")
 
     async def _process_payloads_with_duckdb(self, raw_data_input, dataset: str, year: int):
         """
@@ -162,45 +315,64 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         continue
 
                 if not all_features:
-                    self.log.warning("No valid features extracted from payloads")
+                    self.log.warning("No features found in payloads")
                     return None, None
 
-                # ✅ MIGRATION: Convert to table using DuckDB (no pandas conversion)
-                # Create table directly from the list of dictionaries
-                if not all_features:
-                    self.log.warning("No features to process")
-                    return None, None
+                # ✅ MIGRATION: Create temporary table using DuckDB directly
+                processing_conn.execute(
+                    "CREATE OR REPLACE TABLE temp_features AS SELECT * FROM (VALUES (1)) t(dummy) WHERE false"
+                )
 
-                # Get column names from the first feature
-                columns = list(all_features[0].keys())
+                # Get column names from first feature
+                if all_features:
+                    first_feature = all_features[0]
+                    columns = list(first_feature.keys())
 
-                # Create the table schema with properly quoted column names
-                quoted_column_definitions = [f'"{col}" VARCHAR' for col in columns]
-                processing_conn.execute(f"""
-                    CREATE OR REPLACE TABLE temp_features (
-                        {", ".join(quoted_column_definitions)}
+                    # Create table with proper column types
+                    column_defs = []
+                    for col in columns:
+                        if col == "geometry_json":
+                            column_defs.append(f"{col} VARCHAR")
+                        elif col == "payload_id":
+                            column_defs.append(f"{col} INTEGER")
+                        else:
+                            column_defs.append(f"{col} VARCHAR")
+
+                    processing_conn.execute("DROP TABLE IF EXISTS temp_features")
+                    processing_conn.execute(
+                        f"CREATE TABLE temp_features ({', '.join(column_defs)})"
                     )
-                """)
 
-                # Insert data in batches
-                batch_size = 1000
-                for i in range(0, len(all_features), batch_size):
-                    batch = all_features[i : i + batch_size]
+                    # Insert data in batches to reduce memory usage
+                    batch_size = self.config.processing_batch_size
+                    total_features = len(all_features)
 
-                    # Use parameterized queries instead of string concatenation
-                    for feature in batch:
-                        values = [feature.get(col) for col in columns]
+                    for batch_start in range(0, total_features, batch_size):
+                        batch_end = min(batch_start + batch_size, total_features)
+                        batch_features = all_features[batch_start:batch_end]
+
+                        # Prepare batch insert
                         placeholders = ", ".join(["?" for _ in columns])
-                        # Properly quote column names to handle special characters
-                        quoted_columns = [f'"{col}"' for col in columns]
+                        values = []
+                        for feature in batch_features:
+                            values.append([feature.get(col) for col in columns])
 
-                        processing_conn.execute(
-                            f"""
-                            INSERT INTO temp_features ({", ".join(quoted_columns)})
-                            VALUES ({placeholders})
-                        """,
+                        # Insert batch
+                        processing_conn.executemany(
+                            f"INSERT INTO temp_features ({', '.join(columns)}) VALUES ({placeholders})",
                             values,
                         )
+
+                        # Clear batch from memory
+                        del batch_features, values
+
+                        # Periodic cleanup during processing
+                        if batch_start > 0 and batch_start % (batch_size * 5) == 0:
+                            gc.collect()
+
+                    # Clear the full features list from memory
+                    del all_features
+
                 processing_conn.execute(
                     "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
                 )
@@ -268,6 +440,10 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 ).fetchone()[0]
                 self.log.info(f"Processed {row_count} valid features using DuckDB-spatial")
 
+                # Clean up intermediate tables within the processing method
+                processing_conn.execute("DROP TABLE IF EXISTS temp_features")
+                processing_conn.execute("DROP TABLE IF EXISTS features_raw")
+
                 # Return table name and connection for further processing
                 return final_table_name, processing_conn
 
@@ -298,9 +474,16 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         processed_data = {}
 
         async with AsyncTimer("Agricultural Fields Silver Job (DuckDB-spatial)"):
+            # Log initial memory usage
+            self._log_memory_usage("at start of processing")
+
             # Process agricultural fields for all years
             for dataset in [self.config.fields_dataset, self.config.blocks_dataset]:
                 self.log.info(f"Processing {dataset} for all years using DuckDB-spatial")
+
+                # Clean up before starting each dataset
+                self._cleanup_between_datasets(dataset)
+                self._log_memory_usage(f"after cleanup before {dataset}")
 
                 for year in self.config.available_years:
                     try:
@@ -377,15 +560,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Store table name for potential gold stage consumption
                         processed_data[dataset_with_year] = table_name
 
-                        # ✅ CLEANUP: Clean up temporary tables after processing each year
-                        self.conn.execute(f"DROP TABLE IF EXISTS bronze_raw_{dataset}_{year}")
-                        self.conn.execute("DROP TABLE IF EXISTS temp_features")
-                        self.conn.execute("DROP TABLE IF EXISTS features_raw")
-                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-
-                        # Clean up temporary connection if it was created for bronze data processing
-                        if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:
-                            temp_conn.close()
+                        # ✅ ENHANCED CLEANUP: Comprehensive memory cleanup after each year
+                        self._cleanup_after_year(dataset, year, table_name, temp_conn)
+                        self._log_memory_usage(f"after processing {dataset} year {year}")
 
                     except Exception as e:
                         self.log.error(f"Error processing {dataset} for year {year}: {e}")
@@ -394,6 +571,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
             self.log.info(
                 "Agricultural Fields silver job completed for all available years using DuckDB-spatial"
             )
+
+            # Final cleanup after all processing
+            self._final_cleanup()
+
+            # Log memory usage after final cleanup
+            self._log_memory_usage("after final cleanup")
 
             # Return processed data for gold stage if any data was processed
             return processed_data if processed_data else None
