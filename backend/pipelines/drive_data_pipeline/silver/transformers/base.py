@@ -115,33 +115,29 @@ class BaseTransformer(abc.ABC):
                         temp_conn.close()
                         return df
                     elif result.metadata and "output_paths" in result.metadata:
-                        # Multiple output files - combine them
+                        # Multiple output files - return them as separate files, don't combine
                         output_paths = result.metadata["output_paths"]
                         if output_paths:
-                            # ✅ MIGRATION: Read and combine all output files using DuckDB
+                            # Return a dictionary with all the separate DataFrames
                             import duckdb
 
                             temp_conn = duckdb.connect()
 
-                            # Register all parquet files and combine with UNION
-                            union_parts = []
-                            for i, path_str in enumerate(output_paths):
+                            # Read each file as a separate DataFrame
+                            sheets_data = {}
+                            for path_str in output_paths:
                                 path = Path(path_str)
                                 if path.exists():
                                     sheet_name = path.stem.split("_")[-1]
-                                    union_parts.append(f"""
-                                        SELECT *, '{sheet_name}' as sheet_name 
-                                        FROM read_parquet('{path}')
-                                    """)
-
-                            if union_parts:
-                                # Combine all sheets with UNION ALL
-                                union_query = " UNION ALL ".join(union_parts)
-                                combined_df = temp_conn.execute(union_query).df()
-                                temp_conn.close()
-                                return combined_df
+                                    df = temp_conn.execute(
+                                        f"SELECT * FROM read_parquet('{path}')"
+                                    ).df()
+                                    sheets_data[sheet_name] = df
 
                             temp_conn.close()
+
+                            # Return the dictionary of separate sheets
+                            return sheets_data
 
                     logger.error("Transform succeeded but no output files found")
                     return None
