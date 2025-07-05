@@ -16,23 +16,22 @@ on:
           - 'h3'
           - 'kommune'
           - 'h3,kommune'
-          - 'all'
       h3_resolutions:
         description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for default 10)'
         required: false
         default: '10'
       memory_limit:
-        description: 'Memory limit for DuckDB'
+        description: 'Memory limit for processing (optimized for 16GB GitHub Actions)'
         required: false
-        default: '12GB'
+        default: '14GB'
       thread_count:
-        description: 'Number of threads'
+        description: 'Number of threads (optimized for 4 CPU GitHub Actions)'
         required: false
         default: '4'
       chunk_size:
-        description: 'H3 cells per chunk'
+        description: 'H3 cells per chunk (optimized for 16GB RAM)'
         required: false
-        default: '25000'
+        default: '10000'
   
   schedule:
     # Run weekly on Sunday at 02:00 UTC
@@ -61,9 +60,7 @@ jobs:
         id: set-matrix
         run: |
           # Parse analysis modes
-          if [[ "${{ github.event.inputs.analysis_modes }}" == "all" ]]; then
-            modes=("h3" "kommune")
-          elif [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
+          if [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
             IFS=',' read -ra modes <<< "${{ github.event.inputs.analysis_modes }}"
           else
             modes=("${{ github.event.inputs.analysis_modes || 'h3' }}")
@@ -89,23 +86,6 @@ jobs:
               matrix_items+=("{\"mode\":\"$mode\"}")
             fi
           done
-          
-          # Special handling for "all" - ensure kommune is always included
-          if [[ "${{ github.event.inputs.analysis_modes }}" == "all" ]]; then
-            # Check if kommune is already in the matrix
-            has_kommune=false
-            for item in "${matrix_items[@]}"; do
-              if [[ "$item" == *"\"mode\":\"kommune\""* ]]; then
-                has_kommune=true
-                break
-              fi
-            done
-            
-            # Add kommune if not already present
-            if [[ "$has_kommune" == false ]]; then
-              matrix_items+=("{\"mode\":\"kommune\"}")
-            fi
-          fi
           
           # Convert to JSON array
           matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
@@ -191,16 +171,17 @@ jobs:
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
           H3_RESOLUTION: ${{ matrix.h3_resolution || '10' }}
-          MEMORY_LIMIT: 12GB
-          THREAD_COUNT: 4
-          CHUNK_SIZE: 25000
+          # Updated for GitHub Actions 16GB RAM, 4 CPU specifications
+          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
+          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
+          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
           LOG_LEVEL: INFO
           ENABLE_PROGRESS_TRACKING: true
           LOG_CHUNK_DETAILS: true
           LOG_STAGE_TIMINGS: true
           PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
         run: |
-          # Build the command
+          # Build the command using the new main.py interface
           cmd="python main.py --mode ${{ matrix.mode }} --verbose"
           
           # Add H3 resolution if specified (only for h3 mode)
@@ -213,16 +194,22 @@ jobs:
             cmd="$cmd --years ${{ needs.prepare-matrix.outputs.years }}"
           fi
           
-          # Add custom parameters (use inputs if provided, otherwise defaults)
-          memory_limit="${{ github.event.inputs.memory_limit }}"
-          thread_count="${{ github.event.inputs.thread_count }}"
-          chunk_size="${{ github.event.inputs.chunk_size }}"
+          # Add optimized parameters for GitHub Actions 16GB RAM, 4 CPU
+          memory_limit="${{ github.event.inputs.memory_limit || '14GB' }}"
+          thread_count="${{ github.event.inputs.thread_count || '4' }}"
+          chunk_size="${{ github.event.inputs.chunk_size || '10000' }}"
           
-          cmd="$cmd --memory-limit ${memory_limit:-12GB}"
-          cmd="$cmd --thread-count ${thread_count:-4}"
-          cmd="$cmd --chunk-size ${chunk_size:-25000}"
+          cmd="$cmd --memory-limit $memory_limit"
+          cmd="$cmd --thread-count $thread_count"
+          cmd="$cmd --chunk-size $chunk_size"
           
-          echo "Running: $cmd"
+          echo "🚀 Running H3 PFAS Analysis with GitHub Actions optimized settings:"
+          echo "   💾 Memory: $memory_limit (of 16GB available)"
+          echo "   ⚙️ Threads: $thread_count (of 4 CPUs available)"
+          echo "   📦 Chunk size: $chunk_size (optimized for 16GB RAM)"
+          echo "   🎯 Mode: ${{ matrix.mode }}"
+          echo "Command: $cmd"
+          
           eval $cmd
       
       - name: Upload logs on failure

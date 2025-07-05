@@ -23,13 +23,13 @@ services:
       # GCS Configuration
       - GCS_BUCKET=landbrugsdata-raw-data
       
-      # H3 Configuration
+      # H3 Configuration - Updated for refactored structure
       - H3_RESOLUTION=10
-      - CHUNK_SIZE=25000
+      - CHUNK_SIZE=10000  # Optimized for 16GB RAM
       
-      # Processing Configuration
-      - MEMORY_LIMIT=12GB
-      - THREAD_COUNT=4
+      # Processing Configuration - Updated for GitHub Actions specs
+      - MEMORY_LIMIT=14GB  # Optimized for 16GB available
+      - THREAD_COUNT=4     # Optimized for 4 CPU cores
       
       # Logging Configuration
       - LOG_LEVEL=INFO
@@ -37,13 +37,13 @@ services:
       - LOG_CHUNK_DETAILS=true
       - LOG_STAGE_TIMINGS=true
       
-    # Default command (can be overridden)
-    command: ["python", "main.py", "--mode", "h3", "--verbose"]
+    # Default command using new CLI interface
+    command: ["python", "main.py", "--mode", "h3", "--verbose", "--memory-limit", "14GB", "--thread-count", "4", "--chunk-size", "10000"]
     
     # For development, uncomment to keep container running
     # command: tail -f /dev/null
     
-    # Resource limits
+    # Resource limits - Updated for 16GB optimized settings
     deploy:
       resources:
         limits:
@@ -53,9 +53,9 @@ services:
           memory: 8G
           cpus: '2'
     
-    # Health check
+    # Health check - Updated for new config structure
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, '/app/src'); from h3_pfas_exposure.config import H3PFASConfig; print('OK')"]
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, '/app/src'); from h3_pfas_exposure.config import H3SpatialConfig; print('OK')"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -32,29 +32,29 @@ class H3PFASConfig:
                 "min_area_ha": 312.68,
                 "max_area_ha": 622.74,
                 "theoretical_avg_area_ha": 516.13,
-            },  # 5.161293360 km²
+            },  # 5.161293360 km² avg
             8: {
                 "min_area_ha": 44.65,
                 "max_area_ha": 88.96,
                 "theoretical_avg_area_ha": 73.73,
-            },  # 0.737327598 km²
+            },  # 0.737327598 km² avg
             9: {
                 "min_area_ha": 6.38,
                 "max_area_ha": 12.71,
                 "theoretical_avg_area_ha": 10.53,
-            },  # 0.105332513 km²
+            },  # 0.105332513 km² avg
             10: {
-                "min_area_ha": 0.91,
-                "max_area_ha": 1.82,
-                "theoretical_avg_area_ha": 1.50,
-            },  # 0.015047502 km²
+                "min_area_ha": 0.9111,
+                "max_area_ha": 1.8156,
+                "theoretical_avg_area_ha": 1.5048,
+            },  # 0.015047502 km² - official H3 specs
         }
     )
 
     # Validation Configuration (will be set based on resolution)
-    min_h3_area_ha: float = 0.91
-    max_h3_area_ha: float = 1.82
-    theoretical_avg_area_ha: float = 1.50
+    min_h3_area_ha: float = 0.9111
+    max_h3_area_ha: float = 1.8156
+    theoretical_avg_area_ha: float = 1.5048
     max_area_deviation_pct: float = 30.0  # More lenient for different resolutions
 
     # Performance Configuration
