@@ -264,7 +264,11 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
             # Create column mapping for renaming
             column_mapping = []
-            for col_name, col_type in columns_info:
+            for col_info in columns_info:
+                # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
+                col_name = col_info[0]
+                col_type = col_info[1]
+
                 # Apply domain-specific column name mappings first
                 mapped_name = self._apply_domain_specific_mappings(col_name)
 
@@ -418,7 +422,11 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Build column transformations
             column_transformations = []
 
-            for col_name, col_type in columns_info:
+            for col_info in columns_info:
+                # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
+                col_name = col_info[0]
+                col_type = col_info[1]
+
                 # Apply explicit type casting for known columns
                 if col_name in [
                     "area_ha",
@@ -461,7 +469,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 WHERE NOT (
                     -- Remove completely empty rows
                     SELECT bool_and(column_value IS NULL OR TRIM(CAST(column_value AS VARCHAR)) = '') 
-                    FROM unnest([{", ".join([col[0] for col in columns_info])}]) AS t(column_value)
+                    FROM unnest([{", ".join([col_info[0] for col_info in columns_info])}]) AS t(column_value)
                 )
             """)
 
