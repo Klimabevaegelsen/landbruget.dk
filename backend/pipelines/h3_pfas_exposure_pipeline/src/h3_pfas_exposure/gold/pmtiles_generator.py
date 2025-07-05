@@ -37,6 +37,9 @@ class H3PMTilesGenerator:
                 self.log.warning("⚠️ Tippecanoe not available, skipping PMTiles generation")
                 return None
 
+            # Clean up any existing files first
+            self._cleanup_temp_files_for_year(year)
+
             # Get data count
             count = self.conn.execute(f"SELECT COUNT(*) FROM {results_table}").fetchone()[0]
             if count == 0:
@@ -53,19 +56,36 @@ class H3PMTilesGenerator:
             # Generate PMTiles
             pmtiles_path = self._generate_pmtiles(geojson_path, year)
             if not pmtiles_path:
+                # Clean up GeoJSON on PMTiles generation failure
+                if geojson_path and os.path.exists(geojson_path):
+                    os.remove(geojson_path)
                 return None
 
             # Upload to GCS if available
             if self.gcs_access:
                 gcs_path = self._upload_pmtiles_to_gcs(pmtiles_path, year)
-                self.log.info(f"✅ PMTiles uploaded to: {gcs_path}")
-                return gcs_path
+                if gcs_path:
+                    self.log.info(f"✅ PMTiles uploaded to: {gcs_path}")
+                    # Clean up GeoJSON file after successful upload
+                    if geojson_path and os.path.exists(geojson_path):
+                        os.remove(geojson_path)
+                    return gcs_path
+                else:
+                    # Clean up files on upload failure
+                    if geojson_path and os.path.exists(geojson_path):
+                        os.remove(geojson_path)
+                    return None
             else:
                 self.log.info(f"✅ PMTiles generated locally: {pmtiles_path}")
+                # Clean up GeoJSON file even for local generation to save space
+                if geojson_path and os.path.exists(geojson_path):
+                    os.remove(geojson_path)
                 return pmtiles_path
 
         except Exception as e:
             self.log.error(f"❌ PMTiles generation failed for year {year}: {e}")
+            # Clean up temporary files on error
+            self._cleanup_temp_files_for_year(year)
             return None
 
     def generate_kommune_pmtiles_for_year(self, results_table: str, year: int) -> str | None:
@@ -77,6 +97,9 @@ class H3PMTilesGenerator:
             if not self._check_tippecanoe():
                 self.log.warning("⚠️ Tippecanoe not available, skipping kommune PMTiles generation")
                 return None
+
+            # Clean up any existing files first
+            self._cleanup_temp_files_for_year(year)
 
             # Get data count
             count = self.conn.execute(f"SELECT COUNT(*) FROM {results_table}").fetchone()[0]
@@ -96,19 +119,36 @@ class H3PMTilesGenerator:
             # Generate PMTiles
             pmtiles_path = self._generate_kommune_pmtiles(geojson_path, year)
             if not pmtiles_path:
+                # Clean up GeoJSON on PMTiles generation failure
+                if geojson_path and os.path.exists(geojson_path):
+                    os.remove(geojson_path)
                 return None
 
             # Upload to GCS if available
             if self.gcs_access:
                 gcs_path = self._upload_kommune_pmtiles_to_gcs(pmtiles_path, year)
-                self.log.info(f"✅ Kommune PMTiles uploaded to: {gcs_path}")
-                return gcs_path
+                if gcs_path:
+                    self.log.info(f"✅ Kommune PMTiles uploaded to: {gcs_path}")
+                    # Clean up GeoJSON file after successful upload
+                    if geojson_path and os.path.exists(geojson_path):
+                        os.remove(geojson_path)
+                    return gcs_path
+                else:
+                    # Clean up files on upload failure
+                    if geojson_path and os.path.exists(geojson_path):
+                        os.remove(geojson_path)
+                    return None
             else:
                 self.log.info(f"✅ Kommune PMTiles generated locally: {pmtiles_path}")
+                # Clean up GeoJSON file even for local generation to save space
+                if geojson_path and os.path.exists(geojson_path):
+                    os.remove(geojson_path)
                 return pmtiles_path
 
         except Exception as e:
             self.log.error(f"❌ Kommune PMTiles generation failed for year {year}: {e}")
+            # Clean up temporary files on error
+            self._cleanup_temp_files_for_year(year)
             return None
 
     def _check_tippecanoe(self) -> bool:
@@ -125,6 +165,10 @@ class H3PMTilesGenerator:
             # Create temporary file for GeoJSON
             temp_dir = Path(tempfile.gettempdir())
             geojson_path = temp_dir / f"h3_pfas_{year}_res{self.config.h3_resolution}.geojson"
+
+            # Clean up any existing file first
+            if geojson_path.exists():
+                geojson_path.unlink()
 
             self.log.info(f"📄 Creating GeoJSON: {geojson_path}")
 
@@ -237,6 +281,10 @@ class H3PMTilesGenerator:
             temp_dir = Path(tempfile.gettempdir())
             pmtiles_path = temp_dir / f"h3_pfas_{year}_res{self.config.h3_resolution}.pmtiles"
 
+            # Clean up any existing PMTiles file first
+            if pmtiles_path.exists():
+                pmtiles_path.unlink()
+
             self.log.info(f"🔧 Generating PMTiles: {pmtiles_path}")
 
             # Adjust zoom levels based on H3 resolution
@@ -304,6 +352,7 @@ class H3PMTilesGenerator:
     def _upload_pmtiles_to_gcs(self, pmtiles_path: str, year: int) -> str | None:
         """Upload PMTiles to GCS."""
         try:
+            import shutil
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -311,16 +360,25 @@ class H3PMTilesGenerator:
 
             self.log.info(f"☁️ Uploading PMTiles to: {gcs_path}")
 
-            # Upload using GCS access
-            self.gcs_access.upload_file_to_gcs(pmtiles_path, gcs_path)
+            # Upload using GCS access - use the correct streaming method
+            with open(pmtiles_path, "rb") as src:
+                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
-            # Clean up local file
-            os.remove(pmtiles_path)
+            # Clean up local file after successful upload
+            if os.path.exists(pmtiles_path):
+                os.remove(pmtiles_path)
 
             return gcs_path
 
         except Exception as e:
             self.log.error(f"❌ PMTiles upload failed: {e}")
+            # Clean up local file on error too
+            if os.path.exists(pmtiles_path):
+                try:
+                    os.remove(pmtiles_path)
+                except Exception:
+                    pass
             return None
 
     def _create_kommune_geojson(self, results_table: str, year: int) -> str | None:
@@ -329,6 +387,10 @@ class H3PMTilesGenerator:
             # Create temporary file for GeoJSON
             temp_dir = Path(tempfile.gettempdir())
             geojson_path = temp_dir / f"kommune_pfas_{year}.geojson"
+
+            # Clean up any existing file first
+            if geojson_path.exists():
+                geojson_path.unlink()
 
             self.log.info(f"📄 Creating kommune GeoJSON: {geojson_path}")
 
@@ -431,6 +493,10 @@ class H3PMTilesGenerator:
             temp_dir = Path(tempfile.gettempdir())
             pmtiles_path = temp_dir / f"kommune_pfas_{year}.pmtiles"
 
+            # Clean up any existing PMTiles file first
+            if pmtiles_path.exists():
+                pmtiles_path.unlink()
+
             self.log.info(f"🔧 Generating kommune PMTiles: {pmtiles_path}")
 
             # Kommune polygon data needs different zoom levels and optimization
@@ -515,6 +581,7 @@ class H3PMTilesGenerator:
     def _upload_kommune_pmtiles_to_gcs(self, pmtiles_path: str, year: int) -> str | None:
         """Upload kommune PMTiles to GCS."""
         try:
+            import shutil
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -522,16 +589,25 @@ class H3PMTilesGenerator:
 
             self.log.info(f"☁️ Uploading kommune PMTiles to: {gcs_path}")
 
-            # Upload using GCS access
-            self.gcs_access.upload_file_to_gcs(pmtiles_path, gcs_path)
+            # Upload using GCS access - use the correct streaming method
+            with open(pmtiles_path, "rb") as src:
+                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
-            # Clean up local file
-            os.remove(pmtiles_path)
+            # Clean up local file after successful upload
+            if os.path.exists(pmtiles_path):
+                os.remove(pmtiles_path)
 
             return gcs_path
 
         except Exception as e:
             self.log.error(f"❌ Kommune PMTiles upload failed: {e}")
+            # Clean up local file on error too
+            if os.path.exists(pmtiles_path):
+                try:
+                    os.remove(pmtiles_path)
+                except Exception:
+                    pass
             return None
 
     def generate_pmtiles_for_multiple_years(self, years_data: dict[int, str]) -> dict[int, str]:
@@ -552,3 +628,55 @@ class H3PMTilesGenerator:
 
         self.log.info(f"✅ Generated PMTiles for {len(results)}/{len(years_data)} years")
         return results
+
+    def _cleanup_temp_files_for_year(self, year: int) -> None:
+        """Clean up temporary files created during PMTiles generation for a specific year."""
+        try:
+            temp_dir = Path(tempfile.gettempdir())
+
+            # PMTiles-specific cleanup patterns - expanded for comprehensive cleanup
+            patterns = [
+                # Year-specific H3 patterns
+                f"h3_pfas_{year}_*.geojson",
+                f"h3_pfas_{year}_*.pmtiles",
+                f"h3_pfas_{year}_res*.geojson",
+                f"h3_pfas_{year}_res*.pmtiles",
+                # Year-specific kommune patterns
+                f"kommune_pfas_{year}.geojson",
+                f"kommune_pfas_{year}.pmtiles",
+                f"kommune_pfas_{year}_*.geojson",
+                f"kommune_pfas_{year}_*.pmtiles",
+                # Tippecanoe temporary files
+                f"tippecanoe_*_{year}_*",
+                f"*_{year}_tippecanoe*",
+                f"tippecanoe_{year}_*",
+                # Resolution-specific patterns
+                f"*_res{self.config.h3_resolution}_{year}*",
+                f"*_{year}_res{self.config.h3_resolution}*",
+                # General PMTiles artifacts
+                f"*_{year}_*.mbtiles",
+                f"*_{year}_*.geojsonl",
+                f"*_{year}_*.jsonl",
+                # Processing artifacts for the year
+                f"processing_{year}_*",
+                f"analysis_{year}_*",
+                f"results_{year}_*",
+            ]
+
+            files_cleaned = 0
+            for pattern in patterns:
+                for file_path in temp_dir.glob(pattern):
+                    try:
+                        if file_path.exists():
+                            file_path.unlink()
+                            files_cleaned += 1
+                    except Exception as e:
+                        self.log.debug(f"Could not remove {file_path}: {e}")
+
+            if files_cleaned > 0:
+                self.log.debug(
+                    f"🧹 PMTiles generator cleaned up {files_cleaned} temporary files for year {year}"
+                )
+
+        except Exception as e:
+            self.log.debug(f"PMTiles cleanup warning for year {year}: {e}")

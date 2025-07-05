@@ -21,11 +21,11 @@ on:
         required: false
         default: '7,8,9,10'
       memory_limit:
-        description: 'Memory limit for processing (optimized for 16GB GitHub Actions)'
+        description: 'Memory limit for processing (optimized for 16GB GitHub Actions free tier)'
         required: false
         default: '14GB'
       thread_count:
-        description: 'Number of threads (optimized for 4 CPU GitHub Actions)'
+        description: 'Number of threads (optimized for 4 CPU GitHub Actions free tier - max available)'
         required: false
         default: '4'
       chunk_size:
@@ -167,10 +167,11 @@ jobs:
           echo "🗺️ Installing tippecanoe for PMTiles generation..."
           
           # Build tippecanoe from source (no pre-built binaries available)
-          echo "Building tippecanoe from source..."
+          echo "Building tippecanoe from source using all 4 available CPU cores..."
           git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
           cd /tmp/tippecanoe
-          make -j$(nproc)
+          # Use all 4 CPU cores for maximum build speed on GitHub Actions free tier (4-vCPU, 16GB RAM)
+          make -j4
           sudo make install
           cd /
           rm -rf /tmp/tippecanoe
@@ -216,8 +217,8 @@ jobs:
           CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
           LOG_LEVEL: INFO
           ENABLE_PROGRESS_TRACKING: true
-          LOG_CHUNK_DETAILS: true
-          LOG_STAGE_TIMINGS: true
+          LOG_CHUNK_DETAILS: false
+          LOG_STAGE_TIMINGS: false
           PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
         run: |
           # Parse aggregation levels for this year
@@ -229,8 +230,8 @@ jobs:
           chunk_size="${{ github.event.inputs.chunk_size || '10000' }}"
           
           echo "🚀 Running H3 PFAS Analysis with optimized single-year processing:"
-          echo "   💾 Memory: $memory_limit (of 16GB available)"
-          echo "   ⚙️ Threads: $thread_count (of 4 CPUs available)"
+          echo "   💾 Memory: $memory_limit (of 16GB available - free tier - max available)"
+          echo "   ⚙️ Threads: $thread_count (of 4 CPUs available - free tier - max available)"
           echo "   📦 Chunk size: $chunk_size (optimized for 16GB RAM)"
           echo "   📅 Year: ${{ matrix.year }} (SINGLE YEAR PER JOB)"
           echo "   🎯 Aggregation levels: ${{ matrix.aggregation_levels }}"

@@ -26,6 +26,7 @@ dependencies = [
     # Utilities
     "simple-singleton>=2.0.0",
     "psutil>=5.9.0",
+    "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]
