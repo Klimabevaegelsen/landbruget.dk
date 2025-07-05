@@ -73,7 +73,9 @@ from unified_pipeline.util.log_util import Logger
 load_dotenv()
 
 
-async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.CliConfig) -> None:
+async def execute_pipeline_jobs(
+    jobs: list, stage: cli.Stage, cli_config: cli.CliConfig
+) -> tuple[int, int]:
     """
     Execute pipeline jobs with support for gold layer and in-memory data passing.
 
@@ -86,10 +88,15 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
         jobs: List of (job_class, config_class) tuples to execute
         stage: The stage being executed (bronze, silver, or all)
         cli_config: CLI configuration containing filtering parameters
+
+    Returns:
+        tuple[int, int]: (successful_jobs, total_jobs) counts
     """
     log = Logger.get_logger()
     bronze_data = None
     silver_data = {}
+    successful_jobs = 0
+    total_jobs = len(jobs)
 
     for job_cls, config_cls in jobs:
         log.info(f"Running {job_cls.__name__} for stage {stage}")
@@ -100,68 +107,92 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
             config_instance.apply_cli_filters(cli_config)
 
         instance = job_cls(config=config_instance)
+        job_successful = False
 
-        if issubclass(job_cls, BronzeJobInterface):
-            # Bronze stage - get data for memory passing
-            bronze_data = await instance.run()
-            log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
-
-            # 🧹 CLEANUP: For GitHub runners, clear large bronze data after processing
-            # Only keep data in memory if save_local is True (development mode)
-            if hasattr(config_instance, "save_local") and not config_instance.save_local:
-                # Check if bronze_data is large (indicating it might cause memory issues)
-                if bronze_data and isinstance(bronze_data, dict):
-                    total_size = (
-                        sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+        try:
+            if issubclass(job_cls, BronzeJobInterface):
+                # Bronze stage - get data for memory passing
+                bronze_data = await instance.run()
+                if bronze_data is not None:
+                    job_successful = True
+                    log.info(
+                        f"Bronze job {job_cls.__name__} completed successfully with data for in-memory passing"
                     )
-                    if total_size > 10_000_000:  # More than 10MB of string data
-                        log.info(
-                            f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                else:
+                    log.error(f"Bronze job {job_cls.__name__} failed - no data returned")
+
+                # 🧹 CLEANUP: For GitHub runners, clear large bronze data after processing
+                # Only keep data in memory if save_local is True (development mode)
+                if hasattr(config_instance, "save_local") and not config_instance.save_local:
+                    # Check if bronze_data is large (indicating it might cause memory issues)
+                    if bronze_data and isinstance(bronze_data, dict):
+                        total_size = (
+                            sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
                         )
-                        bronze_data = {"status": "saved_to_gcs", "job": job_cls.__name__}
+                        if total_size > 10_000_000:  # More than 10MB of string data
+                            log.info(
+                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                            )
+                            bronze_data = {"status": "saved_to_gcs", "job": job_cls.__name__}
 
-                        # Force garbage collection
-                        import gc
+                            # Force garbage collection
+                            import gc
 
-                        gc.collect()
+                            gc.collect()
 
-        elif issubclass(job_cls, SilverJobInterface):
-            # Silver stage - pass in-memory data if available and collect results
-            result = await instance.run(bronze_data=bronze_data)
-            # Collect silver data for gold stage
-            dataset_name = instance.config.dataset
-            silver_data[dataset_name] = result
-            log.info(
-                f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
-            )
+            elif issubclass(job_cls, SilverJobInterface):
+                # Silver stage - pass in-memory data if available and collect results
+                result = await instance.run(bronze_data=bronze_data)
+                if result is not None:
+                    job_successful = True
+                    # Collect silver data for gold stage
+                    dataset_name = instance.config.dataset
+                    silver_data[dataset_name] = result
+                    log.info(
+                        f"Silver job {job_cls.__name__} completed successfully using {'in-memory' if bronze_data is not None else 'storage'} data"
+                    )
+                else:
+                    log.error(f"Silver job {job_cls.__name__} failed - no data returned")
 
-            # 🧹 CLEANUP: Clear bronze data after silver processing to free memory
-            if bronze_data:
-                log.info("🧹 Clearing bronze data after silver processing")
-                bronze_data = None
-                import gc
+                # 🧹 CLEANUP: Clear bronze data after silver processing to free memory
+                if bronze_data:
+                    log.info("🧹 Clearing bronze data after silver processing")
+                    bronze_data = None
+                    import gc
 
-                gc.collect()
+                    gc.collect()
 
-        elif issubclass(job_cls, GoldJobInterface):
-            # Gold stage - pass collected silver data
-            await instance.run(silver_data=silver_data)
-            log.info(f"Gold job {job_cls.__name__} completed using silver data")
+            elif issubclass(job_cls, GoldJobInterface):
+                # Gold stage - pass collected silver data
+                await instance.run(silver_data=silver_data)
+                # Gold jobs don't return data, so we consider them successful if they don't raise an exception
+                job_successful = True
+                log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
 
-            # 🧹 CLEANUP: Clear silver data after gold processing to free memory
-            if silver_data:
-                log.info("🧹 Clearing silver data after gold processing")
-                silver_data.clear()
-                import gc
+                # 🧹 CLEANUP: Clear silver data after gold processing to free memory
+                if silver_data:
+                    log.info("🧹 Clearing silver data after gold processing")
+                    silver_data.clear()
+                    import gc
 
-                gc.collect()
+                    gc.collect()
 
+            else:
+                # Legacy support - jobs that don't implement the new interfaces
+                await instance.run()
+                # Legacy jobs don't return data, so we consider them successful if they don't raise an exception
+                job_successful = True
+                log.info(f"Legacy job {job_cls.__name__} completed")
+
+        except Exception as e:
+            log.error(f"Job {job_cls.__name__} failed with exception: {e}")
+            job_successful = False
+
+        if job_successful:
+            successful_jobs += 1
+            log.info(f"✅ {job_cls.__name__} completed successfully")
         else:
-            # Legacy support - jobs that don't implement the new interfaces
-            await instance.run()
-            log.info(f"Legacy job {job_cls.__name__} completed")
-
-        log.info(f"Finished {job_cls.__name__} for stage {stage}")
+            log.error(f"❌ {job_cls.__name__} failed")
 
         # 🧹 CLEANUP: Force cleanup of job instance to free DuckDB connections and memory
         if hasattr(instance, "conn") and instance.conn:
@@ -177,8 +208,10 @@ async def execute_pipeline_jobs(jobs: list, stage: cli.Stage, cli_config: cli.Cl
 
         gc.collect()
 
+    return successful_jobs, total_jobs
 
-def execute(cli_config: cli.CliConfig) -> None:
+
+def execute(cli_config: cli.CliConfig) -> int:
     """
     Main execution function for processing pipeline data.
 
@@ -188,6 +221,9 @@ def execute(cli_config: cli.CliConfig) -> None:
 
     Args:
         cli_config (cli.CliConfig): Configuration containing source and stage settings
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
 
     Raises:
         ValueError: If the requested source/stage combination is not supported
@@ -339,9 +375,24 @@ def execute(cli_config: cli.CliConfig) -> None:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing
-    asyncio.run(execute_pipeline_jobs(jobs, cli_config.stage, cli_config))
+    successful_jobs, total_jobs = asyncio.run(
+        execute_pipeline_jobs(jobs, cli_config.stage, cli_config)
+    )
 
-    log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
+    # Determine exit code based on job success
+    if successful_jobs == 0:
+        log.error(f"❌ Pipeline failed: No jobs completed successfully (0/{total_jobs})")
+        return 1
+    elif successful_jobs < total_jobs:
+        log.warning(
+            f"⚠️  Pipeline completed with partial success: {successful_jobs}/{total_jobs} jobs completed successfully"
+        )
+        return 0  # Still consider it a success if at least one job completed
+    else:
+        log.info(
+            f"✅ Pipeline completed successfully: {successful_jobs}/{total_jobs} jobs completed successfully"
+        )
+        return 0
 
 
 @click.command()
@@ -416,7 +467,8 @@ def run_cli(
         fvm_year=fvm_year,
     )
     print(app_config)
-    execute(app_config)
+    exit_code = execute(app_config)
+    exit(exit_code)
 
 
 def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
