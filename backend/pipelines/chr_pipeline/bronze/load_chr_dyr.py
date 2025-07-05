@@ -5,7 +5,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional
 
 import certifi
@@ -78,16 +78,82 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
 
 # Global set to track problematic herds that consistently timeout
 PROBLEMATIC_HERDS = set()
+PROBLEMATIC_HERDS_LOADED = False
+
+
+def _load_problematic_herds() -> None:
+    """Load problematic herds from persistent storage (GCS)."""
+    global PROBLEMATIC_HERDS, PROBLEMATIC_HERDS_LOADED
+
+    if PROBLEMATIC_HERDS_LOADED:
+        return
+
+    try:
+        # Try to load from GCS using the unified pipeline's GCS access
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        gcs = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        problematic_herds_path = "bronze/chr/problematic_herds.json"
+
+        try:
+            data = gcs.download_json(bucket_name, problematic_herds_path)
+            if data and "problematic_herds" in data:
+                PROBLEMATIC_HERDS.update(data["problematic_herds"])
+                logger.info(f"Loaded {len(PROBLEMATIC_HERDS)} problematic herds from GCS")
+            else:
+                logger.info("No problematic herds found in GCS - starting with empty set")
+        except Exception as e:
+            logger.debug(f"Could not load problematic herds from GCS: {e}")
+            # This is expected on first run or if file doesn't exist
+
+    except ImportError:
+        logger.debug("GCS access not available - problematic herds will not persist across runs")
+
+    PROBLEMATIC_HERDS_LOADED = True
+
+
+def _save_problematic_herds() -> None:
+    """Save problematic herds to persistent storage (GCS)."""
+    global PROBLEMATIC_HERDS
+
+    if not PROBLEMATIC_HERDS:
+        return
+
+    try:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        gcs = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        problematic_herds_path = "bronze/chr/problematic_herds.json"
+
+        data = {
+            "problematic_herds": list(PROBLEMATIC_HERDS),
+            "last_updated": datetime.now().isoformat(),
+            "total_count": len(PROBLEMATIC_HERDS),
+        }
+
+        gcs.upload_json(bucket_name, problematic_herds_path, data)
+        logger.info(f"Saved {len(PROBLEMATIC_HERDS)} problematic herds to GCS")
+
+    except Exception as e:
+        logger.warning(f"Could not save problematic herds to GCS: {e}")
 
 
 def add_problematic_herd(herd_number: int) -> None:
     """Add a herd to the problematic herds list."""
+    _load_problematic_herds()  # Ensure we have the latest data
+
     PROBLEMATIC_HERDS.add(herd_number)
     logger.warning(f"Added herd {herd_number} to problematic herds list (will be skipped in future)")
+
+    # Save immediately to persist the change
+    _save_problematic_herds()
 
 
 def is_problematic_herd(herd_number: int) -> bool:
     """Check if a herd is in the problematic herds list."""
+    _load_problematic_herds()  # Ensure we have the latest data
     return herd_number in PROBLEMATIC_HERDS
 
 
