@@ -1006,6 +1006,51 @@ class H3PFASProcessorRefactored:
             self.log.debug(f"Error checking GCS path {path}: {e}")
             return False
 
+    def _get_latest_silver_path(self, dataset: str) -> str:
+        """Get path to latest silver data file."""
+        # Try new standardized format first
+        pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
+        files = self.gcs_access.list_files(pattern)
+
+        if not files:
+            # Fallback to legacy format for backward compatibility
+            self.log.warning(f"No new format files found for {dataset}, trying legacy format")
+            legacy_pattern = f"gs://{self.config.bucket}/silver/{dataset}/*.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by filename
+
+        if not files:
+            raise FileNotFoundError(f"No silver data found for {dataset}")
+
+        return sorted(files)[-1]  # Latest by timestamp
+
+    def _get_latest_gold_path(self, dataset: str, year: int) -> str:
+        """Get path to latest gold data file for a specific year."""
+        # Try new standardized format first
+        pattern = f"gs://{self.config.bucket}/gold/{dataset}/{year}/*/data.parquet"
+        files = self.gcs_access.list_files(pattern)
+
+        if not files:
+            # Fallback to legacy format for backward compatibility
+            self.log.warning(
+                f"No new format files found for {dataset} {year}, trying legacy format"
+            )
+            legacy_pattern = f"gs://{self.config.bucket}/gold/{dataset}/*{year}*.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset} {year}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by filename
+
+        if not files:
+            self.log.warning(f"No gold data found for {dataset} {year}")
+            return None
+
+        return sorted(files)[-1]  # Latest by timestamp
+
     async def _process_single_year_from_gcs(self, year: int, bmd_table: str) -> int:
         """Process a single year using GCS data with the refactored spatial methodology."""
         self.log.info(
