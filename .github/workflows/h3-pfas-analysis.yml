@@ -17,9 +17,9 @@ on:
           - 'kommune'
           - 'h3,kommune'
       h3_resolutions:
-        description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for default 10)'
+        description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for all resolutions)'
         required: false
-        default: '10'
+        default: '7,8,9,10'
       memory_limit:
         description: 'Memory limit for processing (optimized for 16GB GitHub Actions)'
         required: false
@@ -59,17 +59,19 @@ jobs:
         id: set-matrix
         run: |
           # Parse analysis modes (h3 and kommune are different aggregation levels)
-          if [[ "${{ github.event.inputs.analysis_modes }}" == *","* ]]; then
-            IFS=',' read -ra modes <<< "${{ github.event.inputs.analysis_modes }}"
+          analysis_modes_input="${{ github.event.inputs.analysis_modes || 'h3,kommune' }}"
+          if [[ "$analysis_modes_input" == *","* ]]; then
+            IFS=',' read -ra modes <<< "$analysis_modes_input"
           else
-            modes=("${{ github.event.inputs.analysis_modes || 'h3' }}")
+            modes=("$analysis_modes_input")
           fi
           
           # Parse H3 resolutions (only relevant for h3 mode)
-          if [[ "${{ github.event.inputs.h3_resolutions }}" == *","* ]]; then
-            IFS=',' read -ra resolutions <<< "${{ github.event.inputs.h3_resolutions }}"
+          h3_resolutions_input="${{ github.event.inputs.h3_resolutions || '7,8,9,10' }}"
+          if [[ "$h3_resolutions_input" == *","* ]]; then
+            IFS=',' read -ra resolutions <<< "$h3_resolutions_input"
           else
-            resolutions=("${{ github.event.inputs.h3_resolutions || '10' }}")
+            resolutions=("$h3_resolutions_input")
           fi
           
           # Parse years - create one job per year
@@ -157,6 +159,14 @@ jobs:
             libgeos-dev \
             libproj-dev \
             libgdal-dev
+          
+          # Install tippecanoe for PMTiles generation
+          echo "🗺️ Installing tippecanoe for PMTiles generation..."
+          curl -L https://github.com/felt/tippecanoe/releases/download/2.34.0/tippecanoe-linux.zip -o tippecanoe.zip
+          unzip tippecanoe.zip
+          sudo install tippecanoe /usr/local/bin/
+          rm tippecanoe.zip tippecanoe
+          echo "✅ Tippecanoe installed: $(tippecanoe --version)"
       
       - name: Install Python dependencies
         working-directory: ${{ env.PIPELINE_DIR }}
