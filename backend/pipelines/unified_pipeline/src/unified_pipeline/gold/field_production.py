@@ -62,41 +62,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.log = Logger.get_logger()
 
         # Connection and spatial extension are already set up by BaseSource
-        # Apply field production specific configuration
-        self._configure_duckdb()
-
-    def _configure_duckdb(self):
-        """Configure DuckDB for field production specific settings."""
-        # Apply field production specific memory and performance settings
-        # Note: BaseSource already loaded spatial extension and basic configuration
-        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
-        self.conn.execute("SET threads = 4")  # Use all available CPU cores
-        self.conn.execute("SET enable_progress_bar = true")
-        self.conn.execute("SET preserve_insertion_order = false")
-
-        # Verify spatial extension is available (loaded by BaseSource)
+        # Just verify spatial extension is working (it should be loaded by BaseSource)
         try:
-            version_result = self.conn.execute(
-                "SELECT extension_name, extension_version FROM duckdb_extensions() WHERE extension_name = 'spatial'"
-            ).fetchone()
-            if version_result:
-                self.log.info(
-                    f"✅ DuckDB Spatial version: {version_result[1]} (inherited from BaseSource)"
-                )
-                if version_result[1] >= "1.2.2":
-                    self.log.info("✅ SPATIAL_JOIN operator available")
-                else:
-                    self.log.warning(
-                        f"⚠️  SPATIAL_JOIN operator may not be available in version {version_result[1]}"
-                    )
-            else:
-                self.log.error(
-                    "❌ Spatial extension not found - this is required for field production"
-                )
-                raise RuntimeError("Spatial extension is required but not available")
+            self.conn.execute("SELECT ST_Point(0, 0)")
+            self.log.info("✅ Spatial extension is working (loaded by BaseSource)")
         except Exception as e:
-            self.log.error(f"Failed to verify spatial extension: {e}")
-            raise
+            self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
+            raise RuntimeError("Spatial extension is required but not available from BaseSource")
 
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]

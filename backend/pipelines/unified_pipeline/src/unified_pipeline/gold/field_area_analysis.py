@@ -226,13 +226,64 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.log.info("🏠 Streaming property cadastral data from GCS...")
 
             # ✅ OPTIMIZED: Load directly into DuckDB without temp files
-            self.gcs_access.query_parquet_direct(
-                properties_path,
-                """SELECT 
-                    bfe_number,
-                    geometry as geom""",
-                "properties_temp",
+            # First, check what columns are available in the property cadastral merged data
+            self.gcs_access.create_table_from_gcs("properties_check", properties_path)
+            available_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE properties_check").fetchall()
+            ]
+            self.log.info(
+                f"Available columns in property cadastral merged data: {available_columns}"
             )
+
+            # Check if we have the expected columns
+            if "bfe_number" not in available_columns:
+                # Check if we have the old column name
+                if "bestemtFastEjendomBFENr" in available_columns:
+                    self.log.info(
+                        "Using legacy column name 'bestemtFastEjendomBFENr' instead of 'bfe_number'"
+                    )
+                    bfe_column = "bestemtFastEjendomBFENr"
+                else:
+                    self.log.error(
+                        f"Neither 'bfe_number' nor 'bestemtFastEjendomBFENr' found in property data. Available columns: {available_columns}"
+                    )
+                    raise ValueError(
+                        "Required BFE column not found in property cadastral merged data"
+                    )
+            else:
+                bfe_column = "bfe_number"
+
+                # Check for geometry column
+            if "geometry" in available_columns:
+                geometry_column = "geometry"
+            elif "geometry_wkt" in available_columns:
+                self.log.info("Using 'geometry_wkt' column instead of 'geometry'")
+                geometry_column = "geometry_wkt"
+            else:
+                self.log.error(
+                    f"No geometry column found in property data. Available columns: {available_columns}"
+                )
+                raise ValueError(
+                    "Required geometry column not found in property cadastral merged data"
+                )
+
+            # Convert geometry_wkt to geometry if needed
+            if geometry_column == "geometry_wkt":
+                self.gcs_access.query_parquet_direct(
+                    properties_path,
+                    f"""SELECT 
+                        {bfe_column} as bfe_number,
+                        ST_GeomFromText({geometry_column}) as geom""",
+                    "properties_temp",
+                )
+            else:
+                self.gcs_access.query_parquet_direct(
+                    properties_path,
+                    f"""SELECT 
+                        {bfe_column} as bfe_number,
+                        {geometry_column} as geom""",
+                    "properties_temp",
+                )
             # Apply WHERE filter after loading
             self.conn.execute("""
                 CREATE OR REPLACE TABLE properties AS
@@ -240,6 +291,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 WHERE bfe_number IS NOT NULL
             """)
             self.conn.execute("DROP TABLE properties_temp")
+            self.conn.execute("DROP TABLE properties_check")
             property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
             self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
 
@@ -249,14 +301,64 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 f"🏠 Loading property cadastral data from memory ({len(properties_path)} records)..."
             )
             self.conn.register("properties_df", properties_path)
-            self.conn.execute("""
-                CREATE TABLE properties AS
-                SELECT 
-                    bfe_number,
-                    geometry as geom
-                FROM properties_df
-                WHERE bfe_number IS NOT NULL
-            """)
+
+            # Check what columns are available in the in-memory data
+            available_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE properties_df").fetchall()
+            ]
+            self.log.info(f"Available columns in in-memory property data: {available_columns}")
+
+            # Check if we have the expected columns
+            if "bfe_number" not in available_columns:
+                # Check if we have the old column name
+                if "bestemtFastEjendomBFENr" in available_columns:
+                    self.log.info(
+                        "Using legacy column name 'bestemtFastEjendomBFENr' instead of 'bfe_number'"
+                    )
+                    bfe_column = "bestemtFastEjendomBFENr"
+                else:
+                    self.log.error(
+                        f"Neither 'bfe_number' nor 'bestemtFastEjendomBFENr' found in in-memory property data. Available columns: {available_columns}"
+                    )
+                    raise ValueError(
+                        "Required BFE column not found in property cadastral merged data"
+                    )
+            else:
+                bfe_column = "bfe_number"
+
+            # Check for geometry column
+            if "geometry" in available_columns:
+                geometry_column = "geometry"
+            elif "geometry_wkt" in available_columns:
+                self.log.info("Using 'geometry_wkt' column instead of 'geometry' in in-memory data")
+                geometry_column = "geometry_wkt"
+            else:
+                self.log.error(
+                    f"No geometry column found in in-memory property data. Available columns: {available_columns}"
+                )
+                raise ValueError(
+                    "Required geometry column not found in property cadastral merged data"
+                )
+
+            # Convert geometry_wkt to geometry if needed
+            if geometry_column == "geometry_wkt":
+                self.conn.execute(f"""
+                    CREATE TABLE properties AS
+                    SELECT 
+                        {bfe_column} as bfe_number,
+                        ST_GeomFromText({geometry_column}) as geom
+                    FROM properties_df
+                    WHERE {bfe_column} IS NOT NULL
+                """)
+            else:
+                self.conn.execute(f"""
+                    CREATE TABLE properties AS
+                    SELECT 
+                        {bfe_column} as bfe_number,
+                        {geometry_column} as geom
+                    FROM properties_df
+                    WHERE {bfe_column} IS NOT NULL
+                """)
         else:
             self.log.warning("No property data available - creating empty table")
             self.conn.execute("CREATE TABLE properties (bfe_number VARCHAR, geom GEOMETRY)")
@@ -734,15 +836,47 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             )
 
             # Create the main fields table for processing
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE current_fields AS
-                SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    geometry as geom
-                FROM {fields_table_name}
-            """)
+            # First check what columns are available in the agricultural fields data
+            fields_columns = [
+                row[0] for row in self.conn.execute(f"DESCRIBE {fields_table_name}").fetchall()
+            ]
+            self.log.info(f"Available columns in agricultural fields data: {fields_columns}")
+
+            # Check for geometry column
+            if "geometry" in fields_columns:
+                geometry_column = "geometry"
+            elif "geometry_wkt" in fields_columns:
+                self.log.info(
+                    "Using 'geometry_wkt' column instead of 'geometry' for agricultural fields"
+                )
+                geometry_column = "geometry_wkt"
+            else:
+                self.log.error(
+                    f"No geometry column found in agricultural fields data. Available columns: {fields_columns}"
+                )
+                raise ValueError("Required geometry column not found in agricultural fields data")
+
+            # Convert geometry_wkt to geometry if needed
+            if geometry_column == "geometry_wkt":
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE current_fields AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        ST_GeomFromText({geometry_column}) as geom
+                    FROM {fields_table_name}
+                """)
+            else:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE current_fields AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        {geometry_column} as geom
+                    FROM {fields_table_name}
+                """)
 
             # Run spatial analysis directly in DuckDB
             self._process_all_fields_spatial_optimized()

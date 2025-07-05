@@ -171,7 +171,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 c.is_common_lot,
                 c.has_owner_apartments,
                 c.registration_from as cadastral_registration_from,
-                c.effect_from as cadastral_effect_from
+                c.effect_from as cadastral_effect_from,
+                c.geometry
             FROM property_owners p
             INNER JOIN cadastral c ON p.{bfe_column} = c.bfe_number
             WHERE p.{bfe_column} IS NOT NULL
