@@ -150,21 +150,38 @@ class BMDTransformer:
             # Add more mappings as needed
         }
 
-        # PFAS active ingredients list from https://www.dn.dk/media/115884/forbrug-af-pfas-pesticider-23-24.pdf
+        # PFAS active ingredients list - Danish official list of PFAS pesticides
+        # Sources:
+        # - Danish Parliament response on PFAS pesticides: https://www.ft.dk/samling/20222/almdel/mof/spm/65/svar/1938502/2674771/index.htm
+        # - PAN Europe report "Europe's Toxic Harvest": https://www.pan-europe.info/sites/pan-europe.info/files/public/resources/reports/PFAS%20Pesticides%20report%20November%202023.pdf
         self.pfas_active_ingredients = {
-            "fluazinam",
-            "fluopyram",
+            # Group 1: Primary PFAS active ingredients
             "diflufenican",
-            "mefentrifluconazol",
-            "tau-fluvalinat",
-            "lambda-cyhalothrin",
-            "pyroxsulam",
-            "oxathiapiprolin",
             "flonicamid",
+            "fluazinam",
             "fludioxonil",
-            "triflusulfuron-methyl",
+            "fluopyram",
             "gamma-cyhalothrin",
+            "lambda-cyhalothrin",
+            "mefentrifluconazol",
+            "oxathiapiprolin",
             "picolinafen",
+            "pyroxsulam",
+            "tau-fluvalinat",
+            "tefluthrin",
+            "triflusulfuron-methyl",
+            # Group 2: Additional PFAS active ingredients
+            "fipronil",
+            "fluazifop-butyl",
+            "fluazifop-p-butyl",
+            "flupyrsulfuron-methyl",
+            "flurprimidol",
+            "fluvalinate",
+            "haloxyfop-ethoxyethyl",
+            "indoxacarb",
+            "mefluidid",
+            "picoxystrobin",
+            "trifluralin",
         }
 
         # Create the DuckDB connection to be used throughout the transformation
@@ -517,7 +534,7 @@ class BMDTransformer:
 
             pfas_check_sql = " OR ".join(pfas_conditions)
 
-            # Create new table with PFAS indicator
+            # Create new table with PFAS, diquat, and glyphosate indicators
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
@@ -525,15 +542,37 @@ class BMDTransformer:
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
-                    END AS contains_pfas
+                    END AS contains_pfas,
+                    CASE 
+                        WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
+                        WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
+                        ELSE false
+                    END AS contains_diquat,
+                    CASE 
+                        WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        ELSE false
+                    END AS contains_glyphosate
                 FROM {table_name};
             """)
 
-            # Log PFAS detection statistics
+            # Log detection statistics
             pfas_count = self.conn.execute("""
                 SELECT COUNT(*) 
                 FROM pfas_enhanced 
                 WHERE contains_pfas = true
+            """).fetchone()[0]
+
+            diquat_count = self.conn.execute("""
+                SELECT COUNT(*) 
+                FROM pfas_enhanced 
+                WHERE contains_diquat = true
+            """).fetchone()[0]
+
+            glyphosate_count = self.conn.execute("""
+                SELECT COUNT(*) 
+                FROM pfas_enhanced 
+                WHERE contains_glyphosate = true
             """).fetchone()[0]
 
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
@@ -541,14 +580,30 @@ class BMDTransformer:
             logger.info(
                 f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
             )
+            logger.info(
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+            )
+            logger.info(
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+            )
 
-            # Store PFAS detection metadata
-            self.silver_metadata["pfas_detection"] = {
-                "pfas_ingredients_checked": list(self.pfas_active_ingredients),
-                "active_ingredient_column": active_ingredient_col,
-                "pfas_products_count": pfas_count,
+            # Store detection metadata
+            self.silver_metadata["substance_detection"] = {
+                "pfas_detection": {
+                    "pfas_ingredients_checked": list(self.pfas_active_ingredients),
+                    "active_ingredient_column": active_ingredient_col,
+                    "pfas_products_count": pfas_count,
+                    "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
+                "diquat_detection": {
+                    "diquat_products_count": diquat_count,
+                    "diquat_percentage": round(diquat_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
+                "glyphosate_detection": {
+                    "glyphosate_products_count": glyphosate_count,
+                    "glyphosate_percentage": round(glyphosate_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
                 "total_products_count": total_count,
-                "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
             }
 
             return "pfas_enhanced"

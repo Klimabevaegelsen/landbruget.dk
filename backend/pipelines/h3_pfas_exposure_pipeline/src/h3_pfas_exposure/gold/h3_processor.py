@@ -731,15 +731,15 @@ class H3PFASProcessorRefactored:
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE h3_grid AS
             SELECT
-                h3_cell_to_boundary(h3_latlng_to_cell(lat, lon, {resolution})) as h3_boundary,
+                h3_cell_to_boundary_wkt(h3_latlng_to_cell(lat, lon, {resolution})) as h3_boundary,
                 h3_latlng_to_cell(lat, lon, {resolution}) as h3_index,
                 lat,
                 lon
             FROM (
                 SELECT
-                    {bounds["min_lat"]} + (row_number() OVER() - 1) * 
+                    {bounds["min_lat"]} + (t1.x - 1) * 
                     ({bounds["max_lat"]} - {bounds["min_lat"]}) / 200.0 as lat,
-                    {bounds["min_lon"]} + (column_number() OVER() - 1) * 
+                    {bounds["min_lon"]} + (t2.y - 1) * 
                     ({bounds["max_lon"]} - {bounds["min_lon"]}) / 200.0 as lon
                 FROM generate_series(1, 200) t1(x)
                 CROSS JOIN generate_series(1, 200) t2(y)
@@ -795,31 +795,32 @@ class H3PFASProcessorRefactored:
         # Load BMD data directly from GCS
         self._load_table_from_gcs(bmd_path, "temp_bmd_raw")
 
-        # Process BMD data for PFAS detection
+        # Process BMD data - use existing PFAS, diquat, and glyphosate detection from BMD pipeline
         self.conn.execute("""
             CREATE OR REPLACE TABLE bmd_pfas_lookup AS
             SELECT DISTINCT
-                registration_number,
-                pesticide_name,
-                active_ingredients,
-                CASE 
-                    WHEN LOWER(active_ingredients) LIKE '%pfos%' 
-                      OR LOWER(active_ingredients) LIKE '%pfoa%' 
-                      OR LOWER(active_ingredients) LIKE '%pfas%'
-                      OR LOWER(active_ingredients) LIKE '%perfluor%'
-                      OR LOWER(active_ingredients) LIKE '%fluor%'
-                    THEN true
-                    ELSE false
-                END as contains_pfas_compounds,
-                active_ingredient_content_pct,
-                formulation_type,
-                approval_status,
-                approval_date,
-                expiry_date
+                registrerings_nr as registration_number,
+                produktnavn as pesticide_name,
+                aktivstofnavn_e as active_ingredients,
+                COALESCE(contains_pfas, false) as contains_pfas_compounds,
+                COALESCE(contains_diquat, false) as contains_diquat,
+                COALESCE(contains_glyphosate, false) as contains_glyphosate,
+                koncentration_er as active_ingredient_content_pct,
+                formulering as formulation_type,
+                produktstatus as approval_status,
+                godkendelsesdato as approval_date,
+                udløbsdato as expiry_date,
+                -- Include additional BMD-specific columns
+                samlet_belastning as total_load_per_unit,
+                belastning_miljøeffekt as environmental_effect_per_unit,
+                belastning_miljøadfærd as environmental_behavior_per_unit,
+                belastning_sundhed as health_effect_per_unit,
+                TRY_CAST(REPLACE(REPLACE(koncentration_er, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric,
+                enhed_er
             FROM temp_bmd_raw
-            WHERE registration_number IS NOT NULL
-            AND pesticide_name IS NOT NULL
-            AND active_ingredients IS NOT NULL
+            WHERE registrerings_nr IS NOT NULL
+            AND produktnavn IS NOT NULL
+            AND aktivstofnavn_e IS NOT NULL
         """)
 
         # Clean up temporary table
@@ -830,9 +831,22 @@ class H3PFASProcessorRefactored:
         pfas_count = self.conn.execute(
             "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_pfas_compounds = true"
         ).fetchone()[0]
+        diquat_count = self.conn.execute(
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_diquat = true"
+        ).fetchone()[0]
+        glyphosate_count = self.conn.execute(
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_glyphosate = true"
+        ).fetchone()[0]
 
+        self.log.info(f"✅ BMD data processed: {total_count:,} products")
         self.log.info(
-            f"✅ BMD data processed: {total_count:,} products, {pfas_count:,} contain PFAS compounds ({pfas_count / total_count * 100:.1f}%)"
+            f"   - PFAS compounds: {pfas_count:,} ({pfas_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Diquat compounds: {diquat_count:,} ({diquat_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Glyphosate compounds: {glyphosate_count:,} ({glyphosate_count / total_count * 100:.1f}%)"
         )
 
         # Cache the table name
@@ -1021,6 +1035,23 @@ class H3PFASProcessorRefactored:
             if files:
                 self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
                 return sorted(files)[-1]  # Latest by filename
+
+        # Special handling for BMD data with different file naming patterns
+        if not files and dataset == "bmd":
+            self.log.warning(
+                f"No standard format files found for {dataset}, trying BMD-specific patterns"
+            )
+            # Try BMD-specific patterns
+            bmd_patterns = [
+                f"gs://{self.config.bucket}/silver/{dataset}/*/pesticide_products.parquet",
+                f"gs://{self.config.bucket}/silver/{dataset}/*/bmd_data_*.parquet",
+            ]
+
+            for pattern in bmd_patterns:
+                files = self.gcs_access.list_files(pattern)
+                if files:
+                    self.log.info(f"Found BMD files with pattern {pattern}: {len(files)} files")
+                    return sorted(files)[-1]  # Latest by timestamp
 
         if not files:
             raise FileNotFoundError(f"No silver data found for {dataset}")
@@ -1345,14 +1376,16 @@ class H3PFASProcessorRefactored:
                 p.AllocationMethod,
                 p.MatchConfidence,
 
-                -- BMD PFAS data
-                b.active_ingredient,
+                -- BMD substance detection data
+                b.active_ingredients,
                 b.total_load_per_unit,
-                COALESCE(b.contains_pfas, false) as contains_pfas,
+                COALESCE(b.contains_pfas_compounds, false) as contains_pfas,
+                COALESCE(b.contains_diquat, false) as contains_diquat,
+                COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
 
                 -- Calculate actual PFAS-containing active ingredient amount applied (grams) with proper unit conversion
                 CASE
-                    WHEN b.contains_pfas = true AND b.concentration_numeric IS NOT NULL THEN
+                    WHEN b.contains_pfas_compounds = true AND b.concentration_numeric IS NOT NULL THEN
                         CASE
                             -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
                             WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
@@ -1367,6 +1400,40 @@ class H3PFASProcessorRefactored:
                     ELSE 0
                 END as pfas_containing_active_ingredient_grams,
 
+                -- Calculate diquat-containing active ingredient amount applied (grams)
+                CASE
+                    WHEN b.contains_diquat = true AND b.concentration_numeric IS NOT NULL THEN
+                        CASE
+                            -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
+                            WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
+                                p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            -- Kg dosage (Unit 2) with g/kg concentration: kg × g/kg = g
+                            WHEN p.DosageUnit = 2 AND b.enhed_er LIKE '%g/kg%' THEN
+                                p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            ELSE 0
+                        END
+                    ELSE 0
+                END as diquat_containing_active_ingredient_grams,
+
+                -- Calculate glyphosate-containing active ingredient amount applied (grams)
+                CASE
+                    WHEN b.contains_glyphosate = true AND b.concentration_numeric IS NOT NULL THEN
+                        CASE
+                            -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
+                            WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
+                                p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            -- Kg dosage (Unit 2) with g/kg concentration: kg × g/kg = g
+                            WHEN p.DosageUnit = 2 AND b.enhed_er LIKE '%g/kg%' THEN
+                                p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            ELSE 0
+                        END
+                    ELSE 0
+                END as glyphosate_containing_active_ingredient_grams,
+
                 -- Pesticide load applied
                 CASE
                     WHEN b.total_load_per_unit IS NOT NULL THEN
@@ -1376,10 +1443,24 @@ class H3PFASProcessorRefactored:
 
                 -- PFAS-containing pesticide load
                 CASE
-                    WHEN b.contains_pfas = true AND b.total_load_per_unit IS NOT NULL THEN
+                    WHEN b.contains_pfas_compounds = true AND b.total_load_per_unit IS NOT NULL THEN
                         p.DosageQuantity * b.total_load_per_unit
                     ELSE 0
-                END as pfas_containing_pesticide_belastning_applied
+                END as pfas_containing_pesticide_belastning_applied,
+
+                -- Diquat-containing pesticide load
+                CASE
+                    WHEN b.contains_diquat = true AND b.total_load_per_unit IS NOT NULL THEN
+                        p.DosageQuantity * b.total_load_per_unit
+                    ELSE 0
+                END as diquat_containing_pesticide_belastning_applied,
+
+                -- Glyphosate-containing pesticide load
+                CASE
+                    WHEN b.contains_glyphosate = true AND b.total_load_per_unit IS NOT NULL THEN
+                        p.DosageQuantity * b.total_load_per_unit
+                    ELSE 0
+                END as glyphosate_containing_pesticide_belastning_applied
 
             FROM {pesticide_table} p
             LEFT JOIN {bmd_table} b ON (
@@ -1395,9 +1476,22 @@ class H3PFASProcessorRefactored:
         pfas_count = self.conn.execute(
             f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_pfas = true"
         ).fetchone()[0]
+        diquat_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_diquat = true"
+        ).fetchone()[0]
+        glyphosate_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_glyphosate = true"
+        ).fetchone()[0]
 
+        self.log.info(f"✅ Pesticide-BMD join completed: {total_count:,} records")
         self.log.info(
-            f"✅ Pesticide-BMD join completed: {total_count:,} records, {pfas_count:,} with PFAS-containing active ingredients ({pfas_count / total_count * 100:.1f}%)"
+            f"   - PFAS-containing applications: {pfas_count:,} ({pfas_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Diquat-containing applications: {diquat_count:,} ({diquat_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Glyphosate-containing applications: {glyphosate_count:,} ({glyphosate_count / total_count * 100:.1f}%)"
         )
 
         return pesticide_pfas_table
