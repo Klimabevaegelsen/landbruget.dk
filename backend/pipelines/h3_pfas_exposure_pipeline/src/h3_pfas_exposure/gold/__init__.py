@@ -1,6 +1,25 @@
-"""Gold layer for H3 PFAS exposure pipeline."""
+"""Gold layer modules for H3 PFAS exposure analysis."""
 
-from .h3_processor import H3PFASProcessorRefactored, H3SpatialConfig
-from .pipeline import H3PFASPipeline
+from .analysis_functions import (
+    run_multi_year_analysis,
+    run_multi_year_kommune_analysis,
+    test_refactored_processor,
+)
+from .area_validator import AreaValidator
+from .coordinate_transformer import CoordinateTransformer
+from .data_loader import H3DataLoader
+from .processor import H3PFASProcessorRefactored
+from .result_saver import H3ResultSaver
+from .spatial_joiner import SpatialJoiner
 
-__all__ = ["H3PFASProcessorRefactored", "H3SpatialConfig", "H3PFASPipeline"]
+__all__ = [
+    "AreaValidator",
+    "CoordinateTransformer",
+    "H3DataLoader",
+    "H3PFASProcessorRefactored",
+    "H3ResultSaver",
+    "SpatialJoiner",
+    "run_multi_year_analysis",
+    "run_multi_year_kommune_analysis",
+    "test_refactored_processor",
+]
