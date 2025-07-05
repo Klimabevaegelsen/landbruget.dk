@@ -131,7 +131,7 @@ async def run_combined_analysis(
                 logger.info(f"🔷 Running H3 analysis at resolution {resolution} for year {year}")
 
                 # Update processor resolution for this analysis
-                processor.config.h3_resolution = resolution
+                processor.config.update_resolution(resolution)
 
                 # Generate H3 grid for this resolution (cached)
                 h3_grid_table = processor.generate_h3_grid()
@@ -158,7 +158,7 @@ async def run_combined_analysis(
                 logger.info(f"🏛️ Running kommune analysis for year {year}")
 
                 # Reset processor resolution to base
-                processor.config.h3_resolution = base_resolution
+                processor.config.update_resolution(base_resolution)
 
                 # Perform kommune spatial join
                 kommune_results_table = processor._perform_kommune_spatial_join(
