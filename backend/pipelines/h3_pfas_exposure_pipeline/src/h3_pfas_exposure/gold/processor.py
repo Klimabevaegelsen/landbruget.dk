@@ -710,13 +710,23 @@ class H3PFASProcessorRefactored:
                     p.DosageQuantity,
                     p.DosageUnit,
                     p.contains_pfas,
+                    p.contains_diquat,
+                    p.contains_glyphosate,
                     -- Weight pesticide amounts by intersection area ratio
                     (fki.intersection_area_ha / fki.field_area_ha) * 
                         COALESCE(p.pfas_containing_active_ingredient_grams, 0) as weighted_pfas_grams,
                     (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.diquat_containing_active_ingredient_grams, 0) as weighted_diquat_grams,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.glyphosate_containing_active_ingredient_grams, 0) as weighted_glyphosate_grams,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
                         COALESCE(p.pesticide_belastning_applied, 0) as weighted_pesticide_belastning,
                     (fki.intersection_area_ha / fki.field_area_ha) * 
-                        COALESCE(p.pfas_containing_pesticide_belastning_applied, 0) as weighted_pfas_belastning
+                        COALESCE(p.pfas_containing_pesticide_belastning_applied, 0) as weighted_pfas_belastning,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.diquat_containing_pesticide_belastning_applied, 0) as weighted_diquat_belastning,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.glyphosate_containing_pesticide_belastning_applied, 0) as weighted_glyphosate_belastning
                 FROM field_kommune_intersections fki
                 LEFT JOIN {pesticide_table} p ON (
                     fki.cvr_number = p.cvr AND 
@@ -739,19 +749,42 @@ class H3PFASProcessorRefactored:
                 MIN(intersection_area_ha / field_area_ha) as min_field_coverage_ratio,
                 COUNT(DISTINCT crop_code) as crop_diversity,
                 STRING_AGG(DISTINCT crop_name, '; ') as crop_types,
+                -- Active ingredient totals
                 SUM(COALESCE(weighted_pfas_grams, 0)) as total_pfas_containing_active_ingredient_grams,
+                SUM(COALESCE(weighted_diquat_grams, 0)) as total_diquat_containing_active_ingredient_grams,
+                SUM(COALESCE(weighted_glyphosate_grams, 0)) as total_glyphosate_containing_active_ingredient_grams,
+                -- Pesticide load totals
                 SUM(COALESCE(weighted_pesticide_belastning, 0)) as total_pesticide_belastning,
                 SUM(COALESCE(weighted_pfas_belastning, 0)) as total_pfas_pesticide_belastning,
+                SUM(COALESCE(weighted_diquat_belastning, 0)) as total_diquat_pesticide_belastning,
+                SUM(COALESCE(weighted_glyphosate_belastning, 0)) as total_glyphosate_pesticide_belastning,
+                -- Application counts
                 COUNT(CASE WHEN PesticideRegistrationNumber IS NOT NULL THEN 1 END) as total_pesticide_applications,
                 COUNT(CASE WHEN contains_pfas = true THEN 1 END) as pfas_containing_applications,
+                COUNT(CASE WHEN contains_diquat = true THEN 1 END) as diquat_containing_applications,
+                COUNT(CASE WHEN contains_glyphosate = true THEN 1 END) as glyphosate_containing_applications,
+                -- Unique product counts
                 COUNT(DISTINCT CASE WHEN contains_pfas = true THEN PesticideRegistrationNumber END) as unique_pfas_products,
+                COUNT(DISTINCT CASE WHEN contains_diquat = true THEN PesticideRegistrationNumber END) as unique_diquat_products,
+                COUNT(DISTINCT CASE WHEN contains_glyphosate = true THEN PesticideRegistrationNumber END) as unique_glyphosate_products,
                 COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticide_products,
-                -- Intensity metrics
+                -- Intensity metrics (grams per hectare)
                 CASE 
                     WHEN SUM(intersection_area_ha) > 0 THEN 
                         SUM(COALESCE(weighted_pfas_grams, 0)) / SUM(intersection_area_ha)
                     ELSE 0 
                 END as pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_diquat_grams, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_glyphosate_grams, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                -- Pesticide load intensity metrics
                 CASE 
                     WHEN SUM(intersection_area_ha) > 0 THEN 
                         SUM(COALESCE(weighted_pesticide_belastning, 0)) / SUM(intersection_area_ha)
@@ -762,6 +795,16 @@ class H3PFASProcessorRefactored:
                         SUM(COALESCE(weighted_pfas_belastning, 0)) / SUM(intersection_area_ha)
                     ELSE 0 
                 END as pfas_pesticide_belastning_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_diquat_belastning, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as diquat_pesticide_belastning_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_glyphosate_belastning, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as glyphosate_pesticide_belastning_per_ha,
                 -- Coverage metrics
                 CASE 
                     WHEN kommune_area_ha > 0 THEN 
