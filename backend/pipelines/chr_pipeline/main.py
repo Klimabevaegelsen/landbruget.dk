@@ -707,7 +707,6 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
             # Force garbage collection and memory monitoring for large datasets
             import gc
-            import os
 
             if chunk_idx % 2 == 0:  # Every 2 chunks (reduced from 3)
                 gc.collect()
