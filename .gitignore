@@ -62,6 +62,7 @@ backend/pipelines/vetstat.p12
 *.dbf
 *.prj
 *.zip
+*.pmtiles
 backend/data/
 data/bronze/
 temp_data/
@@ -134,3 +135,7 @@ backend/test_wfs.py
 /data_cache/
 /cvr_analysis_31373077/
 /scripts/
+
+# PMTiles (generated files, should be stored in GCS)
+pmtiles/
+*.pmtiles
