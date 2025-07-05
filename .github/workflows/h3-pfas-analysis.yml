@@ -238,44 +238,46 @@ jobs:
           echo "   ⚡ Efficiency: Large annual data files (pesticide disaggregation, FVM fields) downloaded once per year"
           echo ""
           
-          # Process each aggregation level for this year
+          # Build single command with all aggregation levels to avoid redundant processing
+          # This ensures data is loaded once and cached across all aggregation levels
+          cmd="python main.py --verbose"
+          cmd="$cmd --years ${{ matrix.year }}"
+          cmd="$cmd --memory-limit $memory_limit"
+          cmd="$cmd --thread-count $thread_count"
+          cmd="$cmd --chunk-size $chunk_size"
+          
+          # Parse aggregation levels and build mode-specific arguments
+          h3_resolutions=()
+          include_kommune=false
+          
           for level in "${aggregation_levels[@]}"; do
-            echo "Processing aggregation level: $level"
-            
             if [[ "$level" == "kommune" ]]; then
-              # Run kommune analysis
-              cmd="python main.py --mode kommune --verbose"
-              cmd="$cmd --years ${{ matrix.year }}"
-              cmd="$cmd --memory-limit $memory_limit"
-              cmd="$cmd --thread-count $thread_count"
-              cmd="$cmd --chunk-size $chunk_size"
-              
-              echo "🏛️ Running kommune analysis for year ${{ matrix.year }}"
-              echo "Command: $cmd"
-              eval $cmd
-              
+              include_kommune=true
             elif [[ "$level" == h3:* ]]; then
-              # Extract H3 resolution
               resolution="${level#h3:}"
-              
-              # Run H3 analysis
-              cmd="python main.py --mode h3 --verbose"
-              cmd="$cmd --h3-resolution $resolution"
-              cmd="$cmd --years ${{ matrix.year }}"
-              cmd="$cmd --memory-limit $memory_limit"
-              cmd="$cmd --thread-count $thread_count"
-              cmd="$cmd --chunk-size $chunk_size"
-              
-              echo "🔷 Running H3 analysis (resolution $resolution) for year ${{ matrix.year }}"
-              echo "Command: $cmd"
-              eval $cmd
-              
-            else
-              echo "⚠️ Unknown aggregation level: $level"
+              h3_resolutions+=("$resolution")
             fi
-            
-            echo ""
           done
+          
+          # Add mode arguments based on what's requested
+          if [[ ${#h3_resolutions[@]} -gt 0 ]]; then
+            cmd="$cmd --mode h3"
+            # Join resolutions with commas for multi-resolution support
+            h3_res_str=$(IFS=','; echo "${h3_resolutions[*]}")
+            cmd="$cmd --h3-resolution $h3_res_str"
+            
+            if [[ "$include_kommune" == true ]]; then
+              cmd="$cmd --include-kommune"
+            fi
+          elif [[ "$include_kommune" == true ]]; then
+            cmd="$cmd --mode kommune"
+          fi
+          
+          echo "🚀 Running optimized single-process analysis for year ${{ matrix.year }}"
+          echo "   🎯 Aggregation levels: ${{ matrix.aggregation_levels }}"
+          echo "   ⚡ Efficiency: Single process, shared data loading and caching"
+          echo "Command: $cmd"
+          eval $cmd
           
           echo "✅ Completed all aggregation levels for year ${{ matrix.year }}"
       

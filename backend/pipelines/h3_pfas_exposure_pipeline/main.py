@@ -34,9 +34,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 
 # Import the new refactored modules
-from h3_pfas_exposure.config import H3SpatialConfig
 from h3_pfas_exposure.gold import (
-    run_multi_year_analysis,
+    run_combined_analysis,
     run_multi_year_kommune_analysis,
 )
 
@@ -65,10 +64,11 @@ def setup_directories() -> Path:
 async def run_pipeline(
     mode: str = "h3",
     years: list[int] | None = None,
-    h3_resolution: int = 10,
+    h3_resolution: str = "10",
     memory_limit: str = "14GB",
     thread_count: int = 4,
     chunk_size: int = 10000,
+    include_kommune: bool = False,
 ) -> bool:
     """
     Run the H3 PFAS exposure analysis pipeline.
@@ -76,10 +76,11 @@ async def run_pipeline(
     Args:
         mode: Analysis mode ('h3' or 'kommune')
         years: List of years to process (None for all available)
-        h3_resolution: H3 resolution for analysis (only used in h3 mode)
+        h3_resolution: H3 resolution(s) for analysis (comma-separated for multiple)
         memory_limit: Memory limit for processing
         thread_count: Number of threads to use
         chunk_size: Chunk size for processing
+        include_kommune: Include kommune analysis when running H3 mode
 
     Returns:
         True if successful, False otherwise
@@ -88,38 +89,55 @@ async def run_pipeline(
     logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
     try:
-        # Create configuration optimized for GitHub Actions
-        config = H3SpatialConfig(
-            h3_resolution=h3_resolution,
-            chunk_size=chunk_size,
-            memory_limit=memory_limit,
-            thread_count=thread_count,
-            github_actions_mode=True,
-            enable_memory_monitoring=True,
-            enable_disk_monitoring=True,
-            enable_time_monitoring=True,
-        )
+        # Parse H3 resolutions
+        h3_resolutions = []
+        if mode == "h3":
+            resolutions_str = h3_resolution.split(",")
+            for res_str in resolutions_str:
+                res = int(res_str.strip())
+                if res not in [7, 8, 9, 10]:
+                    logger.error(f"❌ Invalid H3 resolution: {res}. Must be 7, 8, 9, or 10")
+                    return False
+                h3_resolutions.append(res)
+        else:
+            # For kommune mode, use default resolution for any H3 operations
+            h3_resolutions = [10]
 
-        logger.info(f"📊 Configuration: {mode} mode, resolution {h3_resolution}")
+        logger.info(f"📊 Configuration: {mode} mode")
+        if mode == "h3":
+            logger.info(f"   🎯 H3 resolutions: {h3_resolutions}")
+            if include_kommune:
+                logger.info("   🏛️ Including kommune analysis")
         logger.info(
             f"⚙️ Resources: {memory_limit} memory, {thread_count} threads, {chunk_size} chunk size"
         )
 
-        # Run the appropriate analysis
-        success = False
+        # Run analyses for each resolution
+        all_success = True
+
         if mode == "h3":
-            success = await run_multi_year_analysis(years)
+            # Use combined analysis for efficiency (shared data loading)
+            success = await run_combined_analysis(
+                years=years,
+                h3_resolutions=h3_resolutions,
+                include_kommune=include_kommune,
+            )
+            all_success = success
+
         elif mode == "kommune":
             success = await run_multi_year_kommune_analysis(years)
+            if not success:
+                logger.error("❌ Kommune analysis failed")
+                all_success = False
         else:
             logger.error(f"❌ Unknown analysis mode: {mode}")
             return False
 
-        if success:
-            logger.info(f"✅ {mode} analysis completed successfully!")
+        if all_success:
+            logger.info("✅ All analyses completed successfully!")
             return True
         else:
-            logger.error(f"❌ {mode} analysis failed!")
+            logger.error("❌ Some analyses failed!")
             return False
 
     except Exception as e:
@@ -164,10 +182,14 @@ Examples:
 
     parser.add_argument(
         "--h3-resolution",
-        type=int,
-        default=10,
-        choices=[7, 8, 9, 10],
-        help="H3 resolution for analysis (default: 10, only used in h3 mode)",
+        default="10",
+        help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 8,9,10)",
+    )
+
+    parser.add_argument(
+        "--include-kommune",
+        action="store_true",
+        help="Include kommune analysis when running H3 mode (combines both analyses)",
     )
 
     parser.add_argument(
@@ -228,6 +250,7 @@ def main():
                 memory_limit=args.memory_limit,
                 thread_count=args.thread_count,
                 chunk_size=args.chunk_size,
+                include_kommune=args.include_kommune,
             )
         )
 
