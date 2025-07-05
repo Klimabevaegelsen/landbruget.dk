@@ -1,6 +1,7 @@
 """Gold layer modules for H3 PFAS exposure analysis."""
 
 from .analysis_functions import (
+    run_combined_analysis,
     run_multi_year_analysis,
     run_multi_year_kommune_analysis,
     test_refactored_processor,
@@ -23,5 +24,6 @@ __all__ = [
     "SpatialJoiner",
     "run_multi_year_analysis",
     "run_multi_year_kommune_analysis",
+    "run_combined_analysis",
     "test_refactored_processor",
 ]
