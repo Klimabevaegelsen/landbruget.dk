@@ -15,7 +15,7 @@ This document contains schema information for all tables in this pipeline.
 ```sql
 -- Table: bmd_processed
 -- Rows: 10,518
--- Columns: 45
+-- Columns: 47
 --
 -- Schema:
 --   produktnavn: VARCHAR NULL
@@ -63,4 +63,6 @@ This document contains schema information for all tables in this pipeline.
 --   belastningsafgift: DOUBLE NULL
 --   belastningsafgiftdato: DATE NULL
 --   contains_pfas: BOOLEAN NULL
+--   contains_diquat: BOOLEAN NULL
+--   contains_glyphosate: BOOLEAN NULL
 ```

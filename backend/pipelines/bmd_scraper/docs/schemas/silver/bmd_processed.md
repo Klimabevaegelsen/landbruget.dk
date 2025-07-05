@@ -7,7 +7,7 @@
 ## Table Overview
 
 - **Row count:** 10,518
-- **Columns:** 45
+- **Columns:** 47
 
 ## Columns
 
@@ -58,6 +58,8 @@
 | belastningsafgift | DOUBLE | ✓ |  |  |
 | belastningsafgiftdato | DATE | ✓ |  |  |
 | contains_pfas | BOOLEAN | ✓ |  |  |
+| contains_diquat | BOOLEAN | ✓ |  |  |
+| contains_glyphosate | BOOLEAN | ✓ |  |  |
 
 ## Column Statistics
 
@@ -108,3 +110,5 @@
 | belastningsafgift | 0.0 | 129148.0 | 508 | 132.48 | 0.0% |
 | belastningsafgiftdato |  |  | 0 |  | 100.0% |
 | contains_pfas | false | true | 2 |  | 0.1% |
+| contains_diquat | false | true | 2 |  | 0.1% |
+| contains_glyphosate | false | true | 2 |  | 0.1% |
