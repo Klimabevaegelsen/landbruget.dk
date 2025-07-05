@@ -8,6 +8,7 @@ import duckdb
 from loguru import logger
 
 from ..config import H3SpatialConfig
+from .pmtiles_generator import H3PMTilesGenerator
 
 
 class H3ResultSaver:
@@ -18,6 +19,9 @@ class H3ResultSaver:
         self.config = config
         self.gcs_access = gcs_access
         self.log = logger.bind(component="H3ResultSaver")
+
+        # Initialize PMTiles generator
+        self.pmtiles_generator = H3PMTilesGenerator(conn, config, gcs_access)
 
     def save_year_results_kepler_compatible(self, results_table: str, year: int) -> int:
         """Save results to GCS with Kepler.gl compatibility fixes."""
@@ -97,6 +101,16 @@ class H3ResultSaver:
         self.log.info(f"   📊 Original format: {output_path_original}")
         self.log.info(f"   🗺️  Kepler.gl compatible: {output_path_kepler}")
 
+        # Generate PMTiles for frontend visualization
+        self.log.info(f"🗺️ Generating PMTiles for year {year}...")
+        pmtiles_path = self.pmtiles_generator.generate_pmtiles_for_year(
+            f"final_results_{year}", year
+        )
+        if pmtiles_path:
+            self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
+        else:
+            self.log.warning(f"   ⚠️  PMTiles generation skipped for year {year}")
+
         return count
 
     def save_kommune_results(self, results_table: str, year: int) -> int:
@@ -174,6 +188,16 @@ class H3ResultSaver:
         self.log.info(f"✅ Saved {count:,} kommune pesticide exposure records for year {year}")
         self.log.info(f"   📊 Parquet format: {output_path_parquet}")
         self.log.info(f"   📄 CSV format: {output_path_csv}")
+
+        # Generate PMTiles for frontend visualization
+        self.log.info(f"🗺️ Generating kommune PMTiles for year {year}...")
+        pmtiles_path = self.pmtiles_generator.generate_kommune_pmtiles_for_year(
+            f"final_kommune_results_{year}", year
+        )
+        if pmtiles_path:
+            self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
+        else:
+            self.log.warning(f"   ⚠️  PMTiles generation skipped for year {year}")
 
         return count
 
