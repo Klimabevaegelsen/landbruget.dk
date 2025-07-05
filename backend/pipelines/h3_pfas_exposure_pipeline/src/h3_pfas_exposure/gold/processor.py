@@ -415,12 +415,14 @@ class H3PFASProcessorRefactored:
         """Clean up intermediate tables for a specific year to free memory - AGGRESSIVE for GitHub Actions."""
         self.log.info(f"🧹 Cleaning up tables for year {year} (GitHub Actions mode)")
 
-        # More aggressive cleanup for GitHub Actions
+        # More aggressive cleanup for GitHub Actions - expanded list for single-year processing
         tables_to_drop = [
             f"pesticides_{year}",
             f"pesticide_pfas_{year}",
             f"final_results_{year}",
             f"final_results_kepler_{year}",
+            f"h3_spatial_results_{year}",
+            f"kommune_results_{year}",
             "prepared_fields",
             "pesticide_field_lookup",
             f"temp_fvm_{year + 1}",
@@ -433,6 +435,23 @@ class H3PFASProcessorRefactored:
             f"chunk_aggregated_{year}",
             f"chunk_pesticide_{year}",
             f"chunk_union_{year}",
+            # Clean up stage tables
+            f"stage1_intersections_{year}",
+            f"stage2_areas_{year}",
+            f"stage3_aggregated_{year}",
+            f"stage4_pesticide_{year}",
+            f"stage5_union_{year}",
+            # Clean up any h3 chunk tables
+            "h3_chunk_0",
+            "h3_chunk_1",
+            "h3_chunk_2",
+            "h3_chunk_3",
+            "h3_chunk_4",
+            "h3_chunk_5",
+            "h3_chunk_6",
+            "h3_chunk_7",
+            "h3_chunk_8",
+            "h3_chunk_9",
         ]
 
         for table in tables_to_drop:
@@ -441,12 +460,20 @@ class H3PFASProcessorRefactored:
             except Exception:
                 pass  # Ignore errors if table doesn't exist
 
-        # Also drop any tables with temp_ prefix
+        # Also drop any tables with temp_ prefix or year suffix
         try:
             tables = self.conn.execute("SHOW TABLES").fetchall()
             for (table_name,) in tables:
-                if table_name.startswith("temp_") or f"_{year}" in table_name:
-                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                if (
+                    table_name.startswith("temp_")
+                    or f"_{year}" in table_name
+                    or table_name.startswith("chunk_")
+                    or table_name.startswith("stage")
+                    or table_name.startswith("h3_chunk_")
+                ):
+                    # Don't drop protected tables or cached static data
+                    if table_name not in self._protected_tables:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         except Exception:
             pass
 
@@ -476,8 +503,11 @@ class H3PFASProcessorRefactored:
         data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
         result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
 
-        # Load BMD data once for all years
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        # Load BMD data once for all years (cache for efficiency)
+        if self._cached_bmd_table is None:
+            self._cached_bmd_table = data_loader.load_bmd_data_from_gcs()
+            self._protect_table(self._cached_bmd_table)
+        bmd_table = self._cached_bmd_table
 
         # Determine years to process
         if years is None:
@@ -485,6 +515,12 @@ class H3PFASProcessorRefactored:
             self.log.info(f"📅 Processing all available years: {years}")
         else:
             self.log.info(f"📅 Processing specified years: {years}")
+
+        # Optimize for single-year processing (GitHub Actions matrix jobs)
+        if len(years) == 1:
+            self.log.info(
+                f"🎯 Single-year processing mode enabled for year {years[0]} (optimized for GitHub Actions)"
+            )
 
         # Process each year
         successful_years = 0
@@ -538,11 +574,17 @@ class H3PFASProcessorRefactored:
         data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
         result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
 
-        # Load BMD data once for all years
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        # Load BMD data once for all years (cache for efficiency)
+        if self._cached_bmd_table is None:
+            self._cached_bmd_table = data_loader.load_bmd_data_from_gcs()
+            self._protect_table(self._cached_bmd_table)
+        bmd_table = self._cached_bmd_table
 
-        # Load kommune boundaries once
-        kommune_table = self._load_kommune_boundaries()
+        # Load kommune boundaries once (cache for efficiency)
+        if self._cached_kommuner_table is None:
+            self._cached_kommuner_table = self._load_kommune_boundaries()
+            self._protect_table(self._cached_kommuner_table)
+        kommune_table = self._cached_kommuner_table
 
         # Determine years to process
         if years is None:
@@ -550,6 +592,12 @@ class H3PFASProcessorRefactored:
             self.log.info(f"📅 Processing all available years: {years}")
         else:
             self.log.info(f"📅 Processing specified years: {years}")
+
+        # Optimize for single-year processing (GitHub Actions matrix jobs)
+        if len(years) == 1:
+            self.log.info(
+                f"🎯 Single-year kommune processing mode enabled for year {years[0]} (optimized for GitHub Actions)"
+            )
 
         # Process each year
         successful_years = 0
@@ -897,8 +945,11 @@ class H3PFASProcessorRefactored:
             pesticide_table, bmd_table, year
         )
 
-        # Step 4: Generate H3 grid
-        h3_grid_table = self.generate_h3_grid()
+        # Step 4: Generate H3 grid (cache for efficiency in single-year mode)
+        if self._cached_h3_grid_table is None:
+            self._cached_h3_grid_table = self.generate_h3_grid()
+            self._protect_table(self._cached_h3_grid_table)
+        h3_grid_table = self._cached_h3_grid_table
 
         # Step 5: Perform chunked spatial join using the refactored methodology
         results_table = self.spatial_joiner.perform_chunked_spatial_join(

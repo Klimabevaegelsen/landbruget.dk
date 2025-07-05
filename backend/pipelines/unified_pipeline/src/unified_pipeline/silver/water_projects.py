@@ -710,27 +710,19 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
 
             self.log.info(f"Dissolving {feature_count} features for {dataset} using DuckDB-spatial")
 
-            # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT 
-                    'water_project_' || ROW_NUMBER() OVER (ORDER BY current_timestamp) as project_id,
-                    ST_Transform(ST_Union_Agg(geometry_spatial), 'EPSG:25832', 'EPSG:4326') as geometry,
-                    COUNT(*) as feature_count,
-                    current_timestamp as dissolved_at
-                FROM {input_table_name}
+            # First, let's check how many valid geometries we have
+            valid_geom_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {input_table_name}
                 WHERE geometry_spatial IS NOT NULL
                 AND ST_IsValid(geometry_spatial)
-            """)
-
-            # Check if dissolve operation produced valid geometry
-            result_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {dissolved_table_name}
-                WHERE geometry IS NOT NULL
             """).fetchone()[0]
 
-            if result_count == 0:
-                self.log.warning(f"Dissolve operation produced no valid geometry for {dataset}")
+            self.log.info(
+                f"Found {valid_geom_count} valid geometries out of {feature_count} total features"
+            )
+
+            if valid_geom_count == 0:
+                self.log.warning(f"No valid geometries found for dissolving {dataset}")
                 # Create empty table
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
@@ -743,24 +735,31 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 """)
                 return dissolved_table_name
 
-            # Apply final validation using DuckDB-spatial buffer operation
+            # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
+            # Transform geometries to EPSG:4326 first, then dissolve
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {dissolved_table_name}_validated AS
+                CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
                 SELECT 
-                    project_id,
-                    ST_Buffer(geometry, 0) as geometry,
-                    feature_count,
-                    dissolved_at
-                FROM {dissolved_table_name}
-                WHERE geometry IS NOT NULL
-                AND ST_IsValid(geometry)
+                    ST_Transform(geometry_spatial, 'EPSG:25832', 'EPSG:4326') as geometry_4326
+                FROM {input_table_name}
+                WHERE geometry_spatial IS NOT NULL
+                AND ST_IsValid(geometry_spatial)
             """)
 
-            # Replace original table with validated one
-            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
-            self.conn.execute(
-                f"ALTER TABLE {dissolved_table_name}_validated RENAME TO {dissolved_table_name}"
-            )
+            # Now dissolve the transformed geometries
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {dissolved_table_name} AS
+                SELECT 
+                    'water_project_dissolved' as project_id,
+                    ST_Union_Agg(geometry_4326) as geometry,
+                    COUNT(*) as feature_count,
+                    current_timestamp as dissolved_at
+                FROM {dissolved_table_name}_temp
+                WHERE geometry_4326 IS NOT NULL
+            """)
+
+            # Clean up temp table
+            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}_temp")
 
             final_count = self.conn.execute(
                 f"SELECT COUNT(*) FROM {dissolved_table_name}"
@@ -787,13 +786,17 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             """)
             return empty_table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
         Run the Water Projects silver layer processing.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
                         this data will be used instead of reading from storage.
+
+        Returns:
+            Optional[Any]: Processed data that can be passed to gold stage,
+                          or None if processing fails.
         """
         self.log.info("Running Water Projects silver job for")
         async with AsyncTimer("Water Projects silver job"):
@@ -819,7 +822,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # Create table directly from the list of dictionaries
                     if not raw_data_list:
                         self.log.warning("No raw data to process")
-                        return
+                        return None
 
                     # Get column names from the first item
                     columns = list(raw_data_list[0].keys())
@@ -863,20 +866,20 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     self.log.error(
                         f"Expected list of tuples from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
                 raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
                 if raw_data is None:
                     self.log.error("Failed to read raw data")
-                    return
+                    return None
 
             self.log.info("Read raw data successfully")
             table_name = self._process_data(raw_data)
             if table_name is None:
                 self.log.error("Failed to process raw data")
-                return
+                return None
             self.log.info("Processed raw data successfully")
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
@@ -893,3 +896,10 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             )
 
             self.log.info("Saved processed data successfully")
+
+            # Return processed data for potential gold layer consumption
+            return {
+                "processed_data": table_name,
+                "dissolved_data": dissolved_table_name,
+                "dataset": self.config.dataset,
+            }
