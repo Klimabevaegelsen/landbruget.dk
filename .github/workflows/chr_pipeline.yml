@@ -19,6 +19,7 @@ on:
           - herd_details
           - diko
           - animal_movements
+          - spf_su
           - ejendom
           - vetstat
           - silver_all
@@ -69,7 +70,7 @@ jobs:
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -133,7 +134,7 @@ jobs:
       run: |
         # Determine which foundation step to run
         INPUT_STEP="${{ inputs.step || 'all' }}"
-        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
           STEP="herds"  # This will run stamdata -> herds
         elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
           STEP="$INPUT_STEP"
@@ -182,7 +183,7 @@ jobs:
   bronze-parallel-group-1:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' }}
     
     permissions:
       contents: 'read'
@@ -190,7 +191,7 @@ jobs:
 
     strategy:
       matrix:
-        data_type: [diko, animal_movements]
+        data_type: [diko, animal_movements, spf_su]
 
     steps:
     - uses: actions/checkout@v4
@@ -674,7 +675,7 @@ jobs:
   # Job 6: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
     
     permissions:
       contents: 'read'
