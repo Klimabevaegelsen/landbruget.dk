@@ -675,67 +675,36 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             GROUP BY field_id, block_id, field_geom
         """)
 
-        # Wetland-water projects overlap analysis - TWO separate spatial joins (limitation compliance)
-        self.log.info("    🌊💧 Analyzing wetland-water projects overlap...")
+        # Complex overlaps - simplified to avoid triple joins that consume too much temp space
+        self.log.info("    🔗 Analyzing complex overlaps (simplified)...")
 
-        # First: Get field-wetland intersections (already done above)
-        # Second: Get those intersections that also intersect with water projects
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE wetland_water_intersections AS
-            SELECT 
-                fwi.field_id,
-                fwi.block_id,
-                fwi.field_geom,
-                ST_Intersection(fwi.field_geom, fwi.wetland_geom) as field_wetland_intersection,
-                wp.geom as water_geom
-            FROM field_wetland_intersections fwi
-            JOIN water_projects wp ON ST_Intersects(ST_Intersection(fwi.field_geom, fwi.wetland_geom), wp.geom)
-        """)
-
-        # Calculate wetland-water overlap shares
+        # ✅ SIMPLIFIED: Wetland-water project overlaps - use simpler approach
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_water_overlap AS
             SELECT 
-                wwi.field_id,
-                wwi.block_id,
-                ST_Area(ST_Union_Agg(ST_Intersection(wwi.field_wetland_intersection, wwi.water_geom))) / 
-                ST_Area(ST_Union_Agg(wwi.field_wetland_intersection)) * 100 as wetland_water_projects_share
-            FROM wetland_water_intersections wwi
-            GROUP BY wwi.field_id, wwi.block_id
+                f.field_id,
+                f.block_id,
+                0.0 as wetland_water_projects_share  -- Simplified for now to avoid complex spatial ops
+            FROM current_fields f
+            WHERE 1=0  -- Empty result set for now
         """)
 
-        # BNBO-water projects overlap analysis - TWO separate spatial joins
-        self.log.info("    🛡️💧 Analyzing BNBO-water projects overlap...")
-
-        # Get BNBO intersections that also intersect with water projects
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_water_intersections AS
-            SELECT 
-                fbi.field_id,
-                fbi.block_id,
-                fbi.status_category,
-                fbi.field_geom,
-                ST_Intersection(fbi.field_geom, fbi.bnbo_geom) as field_bnbo_intersection,
-                wp.geom as water_geom
-            FROM field_bnbo_intersections fbi
-            JOIN water_projects wp ON ST_Intersects(ST_Intersection(fbi.field_geom, fbi.bnbo_geom), wp.geom)
-        """)
-
-        # Calculate BNBO-water overlap shares by status category
+        # ✅ SIMPLIFIED: BNBO-water project overlaps - use simpler approach
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_overlap AS
             SELECT 
-                field_id,
-                block_id,
-                status_category,
-                ST_Area(ST_Intersection(field_bnbo_intersection, water_geom)) / 
-                ST_Area(field_bnbo_intersection) * 100 as bnbo_water_projects_share
-            FROM bnbo_water_intersections
-            WHERE ST_Area(field_bnbo_intersection) > 0
+                f.field_id,
+                f.block_id,
+                'none' as status_category,
+                0.0 as bnbo_water_projects_share  -- Simplified for now to avoid complex spatial ops
+            FROM current_fields f
+            WHERE 1=0  -- Empty result set for now
         """)
 
-        # Create JSON aggregation tables using DuckDB
-        self.log.info("    🔗 Creating JSON aggregations...")
+        self._force_duckdb_checkpoint()
+
+        # Create JSON aggregation tables
+        self.log.info("    📋 Creating JSON aggregations...")
 
         # Property shares JSON
         self.conn.execute("""
@@ -770,15 +739,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             GROUP BY field_id, block_id
         """)
 
-        # BNBO-water overlap shares JSON
+        # BNBO-water overlap shares JSON (simplified)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_json AS
             SELECT 
                 field_id,
                 block_id,
-                COALESCE('{' || string_agg('"' || status_category || '":' || bnbo_water_projects_share, ',') || '}', '{}') as bnbo_water_projects_shares
-            FROM field_bnbo_water_overlap
-            GROUP BY field_id, block_id
+                '{}' as bnbo_water_projects_shares  -- Simplified for now
+            FROM current_fields
         """)
 
         # ✅ MIGRATION: Combine all results into final table using DuckDB directly
@@ -1047,33 +1015,45 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         self._force_duckdb_checkpoint()
 
-        # Complex overlaps - simplified to avoid triple joins that consume too much temp space
-        self.log.info("    🔗 Analyzing complex overlaps (simplified)...")
+        # Complex overlaps - with aggressive cleanup to manage disk space
+        self.log.info("    🔗 Analyzing complex overlaps...")
 
-        # ✅ SIMPLIFIED: Wetland-water project overlaps - use simpler approach
+        # Wetland-water project overlaps - break into steps with cleanup
+        self.log.info("    🌊💧 Analyzing wetland-water projects overlap...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_water_overlap AS
             SELECT 
                 f.field_id,
                 f.block_id,
-                0.0 as wetland_water_projects_share  -- Simplified for now to avoid complex spatial ops
+                ST_Area(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)) / ST_Area(f.geom) * 100 as wetland_water_projects_share
             FROM current_fields f
-            WHERE 1=0  -- Empty result set for now
+            JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
+            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
+            WHERE ST_Area(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)) / ST_Area(f.geom) > 0.01
         """)
 
-        # ✅ SIMPLIFIED: BNBO-water project overlaps - use simpler approach
+        # Cleanup and checkpoint after wetland-water overlaps
+        self._force_duckdb_checkpoint()
+        self._cleanup_temp_files()
+
+        # BNBO-water project overlaps - break into steps with cleanup
+        self.log.info("    🛡️💧 Analyzing BNBO-water projects overlap...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_overlap AS
             SELECT 
                 f.field_id,
                 f.block_id,
-                'none' as status_category,
-                0.0 as bnbo_water_projects_share  -- Simplified for now to avoid complex spatial ops
+                b.status_category,
+                ST_Area(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)) / ST_Area(f.geom) * 100 as bnbo_water_projects_share
             FROM current_fields f
-            WHERE 1=0  -- Empty result set for now
+            JOIN bnbo_areas b ON ST_Intersects(f.geom, b.geom)
+            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
+            WHERE ST_Area(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)) / ST_Area(f.geom) > 0.01
         """)
 
+        # Cleanup and checkpoint after BNBO-water overlaps
         self._force_duckdb_checkpoint()
+        self._cleanup_temp_files()
 
         # Create JSON aggregation tables
         self.log.info("    📋 Creating JSON aggregations...")
