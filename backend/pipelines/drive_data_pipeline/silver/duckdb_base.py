@@ -132,9 +132,45 @@ class DuckDBProcessor:
             return False
 
     def drop_table(self, table_name: str):
-        """Drop a table if it exists."""
-        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        logger.debug(f"Dropped table: {table_name}")
+        """Drop a table or view if it exists."""
+        try:
+            # Check if it's a table or view by querying information schema
+            result = self.conn.execute(f"""
+                SELECT table_type FROM information_schema.tables 
+                WHERE table_name = '{table_name}'
+                UNION ALL
+                SELECT 'VIEW' as table_type FROM information_schema.views 
+                WHERE table_name = '{table_name}'
+            """).fetchall()
+
+            if result:
+                object_type = result[0][0]
+                if object_type == "VIEW":
+                    self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
+                    logger.debug(f"Dropped view: {table_name}")
+                else:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    logger.debug(f"Dropped table: {table_name}")
+            else:
+                # Object doesn't exist, try both just in case
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                except Exception:
+                    self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
+                logger.debug(f"Dropped object: {table_name}")
+
+        except Exception as e:
+            # Fallback: try both drop commands
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                logger.debug(f"Dropped table: {table_name}")
+            except Exception:
+                try:
+                    self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
+                    logger.debug(f"Dropped view: {table_name}")
+                except Exception:
+                    logger.warning(f"Failed to drop table/view {table_name}: {str(e)}")
+                    # Don't raise exception since this is cleanup
 
     def close(self):
         """Close database connection."""

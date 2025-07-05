@@ -611,6 +611,52 @@ class GCSDataAccess:
         path_without_gs = gcs_path.replace("gs://", "")
         return self.fs.info(path_without_gs)
 
+    def list_files_with_metadata(self, bucket_name: str, prefix: str = "") -> List[Any]:
+        """
+        List files with metadata in GCS bucket with optional prefix.
+
+        Returns list of file objects with metadata compatible with Google Cloud Storage client.
+        Each file object has a 'name' attribute with the full path.
+
+        Args:
+            bucket_name: GCS bucket name
+            prefix: Optional prefix to filter files
+
+        Returns:
+            List of file objects with metadata
+        """
+        try:
+            # Build the pattern for gcsfs
+            if prefix:
+                pattern = f"{bucket_name}/{prefix}*"
+            else:
+                pattern = f"{bucket_name}/*"
+
+            # Get file paths
+            files = self.fs.glob(pattern)
+
+            # Create file objects with metadata
+            file_objects = []
+            for file_path in files:
+                # Skip directories
+                if self.fs.isdir(file_path):
+                    continue
+
+                # Create a simple file object with name attribute
+                class FileObject:
+                    def __init__(self, name):
+                        self.name = name
+
+                # The file path from gcsfs.glob() doesn't include gs:// prefix
+                # but the calling code expects the full path without gs://
+                file_objects.append(FileObject(file_path))
+
+            return file_objects
+
+        except Exception as e:
+            self.log.error(f"Error listing files with metadata for {bucket_name}/{prefix}: {e}")
+            return []
+
     def handle_oversized_files(self, gcs_path: str):
         """Strategies for files exceeding runner capabilities."""
         try:
