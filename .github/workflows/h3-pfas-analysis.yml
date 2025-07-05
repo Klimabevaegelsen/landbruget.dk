@@ -158,15 +158,30 @@ jobs:
             build-essential \
             libgeos-dev \
             libproj-dev \
-            libgdal-dev
+            libgdal-dev \
+            git \
+            libsqlite3-dev \
+            zlib1g-dev
           
           # Install tippecanoe for PMTiles generation
           echo "🗺️ Installing tippecanoe for PMTiles generation..."
-          curl -L https://github.com/felt/tippecanoe/releases/download/2.34.0/tippecanoe-linux.zip -o tippecanoe.zip
-          unzip tippecanoe.zip
-          sudo install tippecanoe /usr/local/bin/
-          rm tippecanoe.zip tippecanoe
-          echo "✅ Tippecanoe installed: $(tippecanoe --version)"
+          
+          # Build tippecanoe from source (no pre-built binaries available)
+          echo "Building tippecanoe from source..."
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j$(nproc)
+          sudo make install
+          cd /
+          rm -rf /tmp/tippecanoe
+          
+          # Verify installation
+          if command -v tippecanoe &> /dev/null; then
+            echo "✅ Tippecanoe installed successfully: $(tippecanoe --version)"
+          else
+            echo "❌ Tippecanoe installation failed"
+            exit 1
+          fi
       
       - name: Install Python dependencies
         working-directory: ${{ env.PIPELINE_DIR }}
