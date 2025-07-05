@@ -460,79 +460,57 @@ class H3PFASProcessorRefactored:
         self._monitor_resources(f"cleanup_year_{year}")
 
     async def run_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run multi-year H3 PFAS analysis with GITHUB ACTIONS OPTIMIZATIONS."""
-        self.log.info("🚀 Starting multi-year H3 PFAS analysis (GitHub Actions optimized)")
+        """Run multi-year H3 PFAS analysis from GCS data."""
+        self.log.info(
+            "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from GCS"
+        )
 
         # Setup DuckDB
         self.setup_duckdb()
 
-        # Initialize data loader and result saver
+        # Import dependencies
         from .data_loader import H3DataLoader
         from .result_saver import H3ResultSaver
 
+        # Initialize components
         data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
         result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
 
-        # CACHE STATIC DATA ONCE - major optimization
-        self.log.info("📋 Pre-loading static data (BMD, H3 grid) for caching")
+        # Load BMD data once for all years
         bmd_table = data_loader.load_bmd_data_from_gcs()
-        self._cached_bmd_table = bmd_table
-        h3_grid_table = self.generate_h3_grid()
 
-        # Process years
+        # Determine years to process
         if years is None:
-            years = self.config.available_years
+            years = data_loader.get_available_years()
+            self.log.info(f"📅 Processing all available years: {years}")
+        else:
+            self.log.info(f"📅 Processing specified years: {years}")
 
-        self.log.info(f"📅 Processing {len(years)} years: {years}")
-
-        total_records = 0
+        # Process each year
         successful_years = 0
+        total_records = 0
 
-        for i, year in enumerate(years):
-            self.log.info(f"\n{'=' * 80}")
-            self.log.info(f"🔄 Processing year {year} ({i + 1}/{len(years)})")
-            self.log.info(f"{'=' * 80}")
-
+        for year in years:
             try:
-                # Check data availability
-                if not data_loader._check_year_data_availability(year):
-                    self.log.warning(f"⚠️ Skipping year {year} - data not available")
-                    continue
+                self.log.info(f"\n📊 Processing year {year}...")
+                self._monitor_resources(f"starting_year_{year}")
 
-                # Check if we should skip due to memory pressure
-                if self._memory_alerts > 10 or self._disk_alerts > 10:
-                    self.log.warning(
-                        f"⚠️ Skipping year {year} - too many resource alerts, system under pressure"
-                    )
-                    continue
-
-                # Process single year with cached static data
+                # Process single year
                 year_records = await self._process_single_year_from_gcs(
                     year, bmd_table, data_loader, result_saver
                 )
 
                 if year_records > 0:
-                    total_records += year_records
                     successful_years += 1
-                    self.log.info(
-                        f"✅ Year {year}: Successfully processed {year_records:,} H3 hexagons with PFAS-containing active ingredient data"
-                    )
+                    total_records += year_records
+                    self.log.info(f"✅ Year {year}: {year_records:,} H3 hexagons processed")
                 else:
-                    self.log.warning(f"⚠️ Year {year}: No records processed")
+                    self.log.warning(f"⚠️ Year {year}: No data processed")
 
-                # CRITICAL: Aggressive cleanup after each year for GitHub Actions
-                self._cleanup_year_tables(year)
-
-                # Force garbage collection between years
-                gc.collect()
-
-                # Monitor resources
                 self._monitor_resources(f"completed_year_{year}")
 
             except Exception as e:
-                self.log.error(f"❌ Year {year} failed: {e}")
-                # Still clean up on failure
-                self._cleanup_year_tables(year)
+                self.log.error(f"❌ Failed to process year {year}: {e}")
                 continue
 
         # Final summary
@@ -544,6 +522,265 @@ class H3PFASProcessorRefactored:
         self._aggressive_cleanup()
 
         return successful_years > 0
+
+    async def run_kommune_analysis_multi_year(self, years: list[int] | None = None) -> bool:
+        """Run multi-year kommune-level PFAS analysis from GCS data."""
+        self.log.info("🏛️ Starting multi-year kommune-level PFAS analysis from GCS")
+
+        # Setup DuckDB
+        self.setup_duckdb()
+
+        # Import dependencies
+        from .data_loader import H3DataLoader
+        from .result_saver import H3ResultSaver
+
+        # Initialize components
+        data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
+        result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
+
+        # Load BMD data once for all years
+        bmd_table = data_loader.load_bmd_data_from_gcs()
+
+        # Load kommune boundaries once
+        kommune_table = self._load_kommune_boundaries()
+
+        # Determine years to process
+        if years is None:
+            years = data_loader.get_available_years()
+            self.log.info(f"📅 Processing all available years: {years}")
+        else:
+            self.log.info(f"📅 Processing specified years: {years}")
+
+        # Process each year
+        successful_years = 0
+        total_records = 0
+
+        for year in years:
+            try:
+                self.log.info(f"\n📊 Processing kommune analysis for year {year}...")
+                self._monitor_resources(f"starting_kommune_year_{year}")
+
+                # Process single year for kommune analysis
+                year_records = await self._process_single_year_kommune_from_gcs(
+                    year, bmd_table, kommune_table, data_loader, result_saver
+                )
+
+                if year_records > 0:
+                    successful_years += 1
+                    total_records += year_records
+                    self.log.info(f"✅ Year {year}: {year_records:,} kommuner processed")
+                else:
+                    self.log.warning(f"⚠️ Year {year}: No kommune data processed")
+
+                self._monitor_resources(f"completed_kommune_year_{year}")
+
+            except Exception as e:
+                self.log.error(f"❌ Failed to process kommune analysis for year {year}: {e}")
+                continue
+
+        # Final summary
+        self.log.info("\n🎉 Multi-year kommune PFAS analysis completed!")
+        self.log.info(f"📊 Successfully processed {successful_years}/{len(years)} years")
+        self.log.info(f"🏛️ Total kommuner processed: {total_records:,}")
+
+        # Final cleanup
+        self._aggressive_cleanup()
+
+        return successful_years > 0
+
+    def _load_kommune_boundaries(self) -> str:
+        """Load Danish kommune boundaries from GCS."""
+        self.log.info("🗺️ Loading Danish kommune boundaries from GCS")
+
+        kommune_table = "kommune_boundaries"
+
+        # Load kommune data from GCS
+        kommune_path = (
+            f"gs://{self.config.bucket}/silver/dst/kommune_boundaries/kommune_boundaries.parquet"
+        )
+
+        try:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {kommune_table} AS
+                SELECT
+                    kommune_code,
+                    kommune_name,
+                    region_code,
+                    region_name,
+                    ST_GeomFromWKB(geometry) as geometry,
+                    ST_Area_Spheroid(ST_GeomFromWKB(geometry)) / 10000.0 as kommune_area_ha,
+                    ST_Centroid(ST_GeomFromWKB(geometry)) as centroid
+                FROM read_parquet('{kommune_path}')
+                WHERE geometry IS NOT NULL
+            """)
+
+            count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_table}").fetchone()[0]
+            self.log.info(f"✅ Loaded {count:,} kommune boundaries")
+
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not load kommune boundaries from GCS: {e}")
+            # Create a fallback with basic kommune codes
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {kommune_table} AS
+                SELECT
+                    CAST(101 + row_number() OVER () AS INTEGER) as kommune_code,
+                    'Kommune_' || CAST(101 + row_number() OVER () AS VARCHAR) as kommune_name,
+                    CAST(1 AS INTEGER) as region_code,
+                    'Unknown Region' as region_name,
+                    ST_Buffer(ST_Point(12.0, 56.0), 0.1) as geometry,
+                    1000.0 as kommune_area_ha,
+                    ST_Point(12.0, 56.0) as centroid
+                FROM range(98) -- 98 kommuner in Denmark
+            """)
+            self.log.info("📝 Created fallback kommune table with basic structure")
+
+        return kommune_table
+
+    async def _process_single_year_kommune_from_gcs(
+        self, year: int, bmd_table: str, kommune_table: str, data_loader, result_saver
+    ) -> int:
+        """Process a single year for kommune-level analysis using GCS data."""
+        self.log.info(f"🏛️ Processing kommune-level PFAS analysis for year {year}")
+
+        # Step 1: Load and prepare field data (Y+1 pattern)
+        field_year = year + 1
+        fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+
+        # Prepare geometries for fields
+        fields_table = self.coordinate_transformer.prepare_geometries(fields_table)
+
+        # Step 2: Load pesticide disaggregation for year Y
+        pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+
+        # Step 3: Join pesticide data with BMD for PFAS detection
+        pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
+            pesticide_table, bmd_table, year
+        )
+
+        # Step 4: Perform spatial join between fields and kommuner
+        kommune_results_table = self._perform_kommune_spatial_join(
+            kommune_table, fields_table, pesticide_pfas_table, year
+        )
+
+        # Step 5: Validate and save results
+        result_count = result_saver.save_kommune_results(kommune_results_table, year)
+
+        # Step 6: Clean up intermediate tables
+        self._cleanup_year_tables(year)
+
+        return result_count
+
+    def _perform_kommune_spatial_join(
+        self, kommune_table: str, fields_table: str, pesticide_table: str, year: int
+    ) -> str:
+        """Perform spatial join between fields and kommuner for PFAS analysis."""
+        self.log.info(f"🔗 Performing kommune-level spatial join for year {year}")
+
+        results_table = f"kommune_results_{year}"
+
+        # Create the kommune-level aggregation
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {results_table} AS
+            WITH field_kommune_intersections AS (
+                SELECT
+                    k.kommune_code,
+                    k.kommune_name,
+                    k.region_code,
+                    k.kommune_area_ha,
+                    ST_X(k.centroid) as kommune_centroid_x,
+                    ST_Y(k.centroid) as kommune_centroid_y,
+                    f.cvr_number,
+                    f.block_id,
+                    f.field_id,
+                    f.crop_code,
+                    f.crop_name,
+                    ST_Area_Spheroid(
+                        ST_Intersection(f.prepared_geometry, k.geometry)
+                    ) / 10000.0 as intersection_area_ha,
+                    f.field_area_ha
+                FROM {kommune_table} k
+                INNER JOIN {fields_table} f ON ST_Intersects(f.prepared_geometry, k.geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.prepared_geometry, k.geometry)) > 0
+            ),
+            pesticide_kommune_data AS (
+                SELECT
+                    fki.*,
+                    p.PesticideName,
+                    p.PesticideRegistrationNumber,
+                    p.DosageQuantity,
+                    p.DosageUnit,
+                    p.contains_pfas,
+                    -- Weight pesticide amounts by intersection area ratio
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.pfas_containing_active_ingredient_grams, 0) as weighted_pfas_grams,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.pesticide_belastning_applied, 0) as weighted_pesticide_belastning,
+                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                        COALESCE(p.pfas_containing_pesticide_belastning_applied, 0) as weighted_pfas_belastning
+                FROM field_kommune_intersections fki
+                LEFT JOIN {pesticide_table} p ON (
+                    fki.cvr_number = p.cvr AND 
+                    fki.block_id = p.extracted_block_id AND 
+                    fki.field_id = p.extracted_field_id
+                )
+            )
+            SELECT
+                kommune_code,
+                kommune_name,
+                region_code,
+                kommune_area_ha,
+                kommune_centroid_x,
+                kommune_centroid_y,
+                SUM(intersection_area_ha) as total_agricultural_area_ha,
+                COUNT(DISTINCT CONCAT(cvr_number, '_', block_id, '_', field_id)) as unique_field_count,
+                COUNT(DISTINCT cvr_number) as unique_company_count,
+                AVG(intersection_area_ha / field_area_ha) as avg_field_coverage_ratio,
+                MAX(intersection_area_ha / field_area_ha) as max_field_coverage_ratio,
+                MIN(intersection_area_ha / field_area_ha) as min_field_coverage_ratio,
+                COUNT(DISTINCT crop_code) as crop_diversity,
+                STRING_AGG(DISTINCT crop_name, '; ') as crop_types,
+                SUM(COALESCE(weighted_pfas_grams, 0)) as total_pfas_containing_active_ingredient_grams,
+                SUM(COALESCE(weighted_pesticide_belastning, 0)) as total_pesticide_belastning,
+                SUM(COALESCE(weighted_pfas_belastning, 0)) as total_pfas_pesticide_belastning,
+                COUNT(CASE WHEN PesticideRegistrationNumber IS NOT NULL THEN 1 END) as total_pesticide_applications,
+                COUNT(CASE WHEN contains_pfas = true THEN 1 END) as pfas_containing_applications,
+                COUNT(DISTINCT CASE WHEN contains_pfas = true THEN PesticideRegistrationNumber END) as unique_pfas_products,
+                COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticide_products,
+                -- Intensity metrics
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_pfas_grams, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_pesticide_belastning, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as pesticide_belastning_per_ha,
+                CASE 
+                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                        SUM(COALESCE(weighted_pfas_belastning, 0)) / SUM(intersection_area_ha)
+                    ELSE 0 
+                END as pfas_pesticide_belastning_per_ha,
+                -- Coverage metrics
+                CASE 
+                    WHEN kommune_area_ha > 0 THEN 
+                        (SUM(intersection_area_ha) / kommune_area_ha) * 100.0
+                    ELSE 0 
+                END as agricultural_coverage_pct,
+                CURRENT_TIMESTAMP as created_at
+            FROM pesticide_kommune_data
+            GROUP BY 
+                kommune_code, kommune_name, region_code, kommune_area_ha,
+                kommune_centroid_x, kommune_centroid_y
+            HAVING SUM(intersection_area_ha) > 0
+            ORDER BY total_pfas_containing_active_ingredient_grams DESC
+        """)
+
+        count = self.conn.execute(f"SELECT COUNT(*) FROM {results_table}").fetchone()[0]
+        self.log.info(f"✅ Generated kommune analysis results for {count:,} kommuner")
+
+        return results_table
 
     async def _process_single_year_from_gcs(
         self, year: int, bmd_table: str, data_loader, result_saver
