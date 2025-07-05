@@ -12,6 +12,8 @@ from bronze.process import (
     upload_to_gcs
 )
 
+from gold.process import upload_nature_report_data
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +42,23 @@ def mere_bedre_stoerre_natur():
     fetch_file(url, zip_file)
     extract_zip_file(zip_file, work_path)
     gdf = gdp_read_file(shp_file)
+    gdf = gdf.to_crs('EPSG:4326')
     save_gpkg_file(gdf, gpkg_file)
     upload_to_gcs(gpkg_file)
+
+    upload_nature_report_data(
+        report_name='Mere, bedre og større natur i Danmark',
+        report_data=gdf,
+        category_scores={
+            '1. prioritet': {'biodiversity': 1.0, 'climate': 0.7, 'nitrogen': 0.5, 'recreation': 0.5},
+            '2A. prioritet': {'biodiversity': 0.85, 'climate': 0.6, 'nitrogen': 0.4, 'recreation': 0.4},
+            '2B. prioritet': {'biodiversity': 0.4, 'climate': 0.8, 'nitrogen': 0.6, 'recreation': 0.5},
+            '3. prioritet': {'biodiversity': 0.3, 'climate': 0.6, 'nitrogen': 0.6, 'recreation': 0.5},
+            '4. prioritet': {'biodiversity': 0.2, 'climate': 0.4, 'nitrogen': 0.4, 'recreation': 0.4}
+        },
+        category_column='Prioritet',
+        geometry_column='geometry'
+    )
    
 
 def prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_lavbundsjorde():
@@ -67,12 +84,35 @@ def prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_l
 
     response = make_request(wfs_url, params)
     gdf = gdp_read_file(response.content)
+    gdf = gdf.to_crs('EPSG:4326')
     save_gpkg_file(gdf, gpkg_file)
-    upload_to_gcs(gpkg_file)
+    #upload_to_gcs(gpkg_file)
+
+    upload_nature_report_data(
+        report_name='Prioritering af biodiversitet ved udtagning og genopretning af kulstofrige lavbundsjorder',
+        report_data=gdf,
+        category_scores={
+            1:  {'biodiversity': 1.0, 'climate': 0.8, 'nitrogen': 0.6, 'recreation': 0.7},
+            2:  {'biodiversity': 0.95, 'climate': 0.8, 'nitrogen': 0.6, 'recreation': 0.7},
+            3:  {'biodiversity': 0.9, 'climate': 0.75, 'nitrogen': 0.6, 'recreation': 0.6},
+            4:  {'biodiversity': 0.8, 'climate': 0.7, 'nitrogen': 0.6, 'recreation': 0.6},
+            5:  {'biodiversity': 0.7, 'climate': 0.7, 'nitrogen': 0.6, 'recreation': 0.6},
+            6:  {'biodiversity': 0.6, 'climate': 0.7, 'nitrogen': 0.6, 'recreation': 0.6},
+            7:  {'biodiversity': 0.5, 'climate': 0.65, 'nitrogen': 0.6, 'recreation': 0.5},
+            8:  {'biodiversity': 0.4, 'climate': 0.65, 'nitrogen': 0.6, 'recreation': 0.5},
+            9:  {'biodiversity': 0.3, 'climate': 0.6, 'nitrogen': 0.7, 'recreation': 0.4},
+            10: {'biodiversity': 0.2, 'climate': 0.5, 'nitrogen': 0.7, 'recreation': 0.4},
+            11: {'biodiversity': 0.1, 'climate': 0.4, 'nitrogen': 0.6, 'recreation': 0.3},
+            12: {'biodiversity': 0.0, 'climate': 0.1, 'nitrogen': 0.1, 'recreation': 0.2}
+        },
+        category_column='kategori',
+        geometry_column='geometry'
+    )
+
 
 
 def main():
-    mere_bedre_stoerre_natur()
+    #mere_bedre_stoerre_natur()
     prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_lavbundsjorde()
 
 
