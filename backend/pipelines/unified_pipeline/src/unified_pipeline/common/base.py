@@ -184,19 +184,49 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("SET temp_directory = '/tmp/duckdb'")
             self.conn.execute("SET default_order = 'ASC'")
 
-            # ✅ MIGRATION: Install spatial extension once with proper error handling
+            # ✅ MIGRATION: Install latest spatial extension with SPATIAL_JOIN operator support
+            # Based on DuckDB-spatial PR #545 merged in v1.2.2+
             try:
-                self.conn.execute("INSTALL spatial")
+                # Force install latest spatial extension to ensure SPATIAL_JOIN operator is available
+                self.conn.execute("FORCE INSTALL spatial")
                 self.conn.execute("LOAD spatial")
 
                 # Verify spatial extension is working
                 self.conn.execute("SELECT ST_Point(0, 0)")
-                self.log.info("✅ DuckDB configured with spatial extensions")
+
+                # Check if we have SPATIAL_JOIN operator support
+                try:
+                    # Test query to verify SPATIAL_JOIN operator availability
+                    test_result = self.conn.execute("""
+                        EXPLAIN SELECT * FROM (
+                            SELECT 1 as id, ST_Point(0, 0) as geom
+                        ) t1 
+                        INNER JOIN (
+                            SELECT 1 as id, ST_Point(0, 0) as geom
+                        ) t2 ON ST_Intersects(t1.geom, t2.geom)
+                    """).fetchdf()
+
+                    spatial_join_available = any(
+                        "SPATIAL_JOIN" in str(row) for row in test_result.values.flatten()
+                    )
+
+                    if spatial_join_available:
+                        self.log.info(
+                            "✅ DuckDB configured with spatial extensions and SPATIAL_JOIN operator"
+                        )
+                    else:
+                        self.log.warning(
+                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator not detected"
+                        )
+
+                except Exception as test_e:
+                    self.log.warning(f"Could not verify SPATIAL_JOIN operator: {test_e}")
+
             except Exception as spatial_e:
                 self.log.error(f"❌ Failed to load spatial extension: {spatial_e}")
                 # Try alternative approach
                 try:
-                    self.conn.execute("FORCE INSTALL spatial")
+                    self.conn.execute("INSTALL spatial")
                     self.conn.execute("LOAD spatial")
                     self.conn.execute("SELECT ST_Point(0, 0)")
                     self.log.info("✅ DuckDB spatial extension loaded on retry")
