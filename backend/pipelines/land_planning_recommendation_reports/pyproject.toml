@@ -13,4 +13,5 @@ dependencies = [
     "matplotlib",
     "requests",
     "google-cloud-storage",
+    "supabase"
 ]
