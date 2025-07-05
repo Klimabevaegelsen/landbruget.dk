@@ -228,48 +228,66 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             select_parts = []
 
             for col_name, col_type, *_ in columns_info:
+                # Properly escape column names with double quotes
+                escaped_col_name = f'"{col_name}"'
+
                 # Standardize column names (convert to snake_case)
                 clean_col_name = self._standardize_column_name(col_name)
 
-                # Apply data type standardization
+                # Apply data type standardization based on column type
                 if "VARCHAR" in col_type.upper() or "TEXT" in col_type.upper():
                     # Handle string columns - try to detect dates, booleans, numbers
                     select_parts.append(f"""
                         CASE 
-                            WHEN {col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
-                                 {col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
-                            THEN TRY_CAST({col_name} AS DATE)::VARCHAR
-                            WHEN LOWER({col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
-                            THEN CASE LOWER({col_name}) 
+                            WHEN {escaped_col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
+                                 {escaped_col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                            THEN TRY_CAST({escaped_col_name} AS DATE)::VARCHAR
+                            WHEN LOWER({escaped_col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
+                            THEN CASE LOWER({escaped_col_name}) 
                                      WHEN 'yes' THEN '1'
                                      WHEN 'true' THEN '1' 
                                      WHEN 'ja' THEN '1'
                                      WHEN 'no' THEN '0'
                                      WHEN 'false' THEN '0'
                                      WHEN 'nej' THEN '0'
-                                     ELSE {col_name}
+                                     ELSE {escaped_col_name}
                                  END
-                            WHEN {col_name} ~ '^-?\\d+\\.?\\d*$' 
-                            THEN TRY_CAST({col_name} AS DOUBLE)::VARCHAR
-                            ELSE {col_name}
+                            WHEN {escaped_col_name} ~ '^-?\\d+\\.?\\d*$' 
+                            THEN TRY_CAST({escaped_col_name} AS DOUBLE)::VARCHAR
+                            ELSE {escaped_col_name}
                         END AS {clean_col_name}
                     """)
+                elif "INTEGER" in col_type.upper() or "BIGINT" in col_type.upper():
+                    # Handle integer columns - cast to string first, then apply date pattern detection
+                    select_parts.append(f"""
+                        CASE 
+                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
+                                 CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                            THEN TRY_CAST(CAST({escaped_col_name} AS VARCHAR) AS DATE)::VARCHAR
+                            ELSE CAST({escaped_col_name} AS VARCHAR)
+                        END AS {clean_col_name}
+                    """)
+                elif "DOUBLE" in col_type.upper() or "FLOAT" in col_type.upper():
+                    # Handle float columns - convert to string
+                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
                 else:
-                    # Keep numeric/date columns as-is but with clean names
-                    select_parts.append(f"{col_name} AS {clean_col_name}")
+                    # Keep other column types as-is but with clean names, cast to string for consistency
+                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
 
             # Add metadata columns
             select_parts.append(f"{table_number} AS table_number")
             select_parts.append(f"'{source_file}' AS source_file")
 
-            # Create the cleaned table
+            # Create the cleaned table - also properly escape column names in WHERE clause
+            escaped_column_nulls = [f'"{col[0]}" IS NULL' for col in columns_info]
+
             self.conn.execute(f"""
                 CREATE TABLE {clean_table} AS
                 SELECT {", ".join(select_parts)}
                 FROM {table_name}
                 WHERE NOT (
                     -- Remove rows where all original columns are null
-                    {" AND ".join([f"{col[0]} IS NULL" for col in columns_info])}
+                    {" AND ".join(escaped_column_nulls)}
                 )
             """)
 

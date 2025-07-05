@@ -48,7 +48,7 @@ class H3SpatialConfig:
     max_intersection_ratio: float = 1.1  # Allow 10% tolerance for intersection calculations
 
     # GCS Configuration
-    gcs_bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbrugsdata-raw-data"
     gcs_base_path: str = "gs://landbrugsdata-raw-data"
 
     # Processing Configuration

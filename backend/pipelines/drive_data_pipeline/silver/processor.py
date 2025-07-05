@@ -454,31 +454,58 @@ class SilverProcessor:
                 output_path = saved_files[0]
 
             else:
-                # Single DataFrame
+                # Single result - could be DataFrame, table name, or other data
 
-                if transformed_data is None or (
+                # Check if it's a DuckDB table name (string)
+                if isinstance(transformed_data, str):
+                    # It's a DuckDB table name - use it directly
+                    table_name = transformed_data
+
+                    # Create output directory for the subfolder
+                    output_dir = self.silver_storage.create_output_directory(
+                        silver_run_path, metadata.original_subfolder
+                    )
+                    # Use original filename for single files
+                    output_filename = f"{Path(original_filename).stem}.parquet"
+                    output_path = output_dir / output_filename
+
+                    # Save the DuckDB table directly
+                    try:
+                        # Use the transformer's connection to save the table
+                        transformer.save_table_to_parquet(table_name, output_path)
+                        logger.info(f"Saved transformed data to: {output_path}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                        )
+                        return False
+
+                elif transformed_data is None or (
                     hasattr(transformed_data, "empty") and transformed_data.empty
                 ):
                     logger.warning(f"No valid data extracted from {original_filename}")
                     return False
-
-                # Create output directory for the subfolder
-                output_dir = self.silver_storage.create_output_directory(
-                    silver_run_path, metadata.original_subfolder
-                )
-                # Use original filename for single files
-                output_filename = f"{Path(original_filename).stem}.parquet"
-                output_path = output_dir / output_filename
-
-                # Save the transformed data
-                try:
-                    self.parquet_manager.save_dataframe_to_parquet(transformed_data, output_path)
-                    logger.info(f"Saved transformed data to: {output_path}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to save transformed data for {original_filename}: {str(e)}"
+                else:
+                    # It's a DataFrame or other data
+                    # Create output directory for the subfolder
+                    output_dir = self.silver_storage.create_output_directory(
+                        silver_run_path, metadata.original_subfolder
                     )
-                    return False
+                    # Use original filename for single files
+                    output_filename = f"{Path(original_filename).stem}.parquet"
+                    output_path = output_dir / output_filename
+
+                    # Save the transformed data
+                    try:
+                        self.parquet_manager.save_dataframe_to_parquet(
+                            transformed_data, output_path
+                        )
+                        logger.info(f"Saved transformed data to: {output_path}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                        )
+                        return False
 
             # Apply schema if requested
             if apply_schemas:

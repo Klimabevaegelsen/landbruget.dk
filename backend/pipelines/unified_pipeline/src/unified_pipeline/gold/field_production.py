@@ -253,12 +253,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 columns_info = self.conn.execute(f"DESCRIBE temp_{dataset_name}").fetchall()
                 column_names = [col[0] for col in columns_info]
 
-                # Determine geometry column and conversion function
-                if "geometry_wkt" in column_names:
-                    geometry_select = "ST_GeomFromText(geometry_wkt) as geometry"
-                    geometry_where = "geometry_wkt IS NOT NULL AND geometry_wkt != ''"
-                elif "geometry" in column_names:
-                    geometry_select = "ST_GeomFromWKB(geometry) as geometry"
+                # Use standardized geometry column
+                if "geometry" in column_names:
+                    geometry_select = "geometry"
                     geometry_where = "geometry IS NOT NULL"
                 else:
                     self.log.warning(f"No geometry column found in {dataset_name}")
@@ -329,12 +326,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         ).fetchall()
                         column_names = [col[0] for col in columns_info]
 
-                        # Determine geometry column and conversion function
-                        if "geometry_wkt" in column_names:
-                            geometry_select = "ST_GeomFromText(geometry_wkt) as geometry"
-                            geometry_where = "geometry_wkt IS NOT NULL AND geometry_wkt != ''"
-                        elif "geometry" in column_names:
-                            geometry_select = "ST_GeomFromWKB(geometry) as geometry"
+                        # Use standardized geometry column
+                        if "geometry" in column_names:
+                            geometry_select = "geometry"
                             geometry_where = "geometry IS NOT NULL"
                         else:
                             self.log.warning(f"No geometry column found in {dataset_name}")
