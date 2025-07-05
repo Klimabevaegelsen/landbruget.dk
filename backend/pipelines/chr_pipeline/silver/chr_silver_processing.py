@@ -29,6 +29,27 @@ from .helpers import (
     run_xml_parser,
 )
 
+# Try to import CVR collection utilities
+try:
+    from unified_pipeline.util.cvr_collection import extract_cvr_numbers_from_table, save_pipeline_cvr_numbers
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    CVR_COLLECTION_AVAILABLE = True
+    logging.info("✅ CVR collection utilities imported successfully")
+except ImportError as e:
+    logging.warning(f"⚠️ CVR collection utilities not available: {e}")
+    CVR_COLLECTION_AVAILABLE = False
+    extract_cvr_numbers_from_table = None
+    save_pipeline_cvr_numbers = None
+    GCSDataAccess = None
+
+# Try to import schema documentation
+try:
+    from backend.common.schema_documentation import SchemaDocumentationManager
+except ImportError as e:
+    logging.warning(f"Schema documentation not available: {e}")
+    SchemaDocumentationManager = None
+
 # Configure logging
 log_file_path = Path(__file__).resolve().parent / "silver_processing.log"
 logging.basicConfig(
@@ -57,16 +78,75 @@ for parent in current_file.parents:
 if project_root and str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-try:
-    from backend.common.schema_documentation import SchemaDocumentationManager
-except ImportError as e:
-    # If import fails, disable schema documentation
-    import warnings
-
-    warnings.warn(f"Schema documentation not available: {e}")
-    SchemaDocumentationManager = None
-
 logging.info("--- Script execution started ---")
+
+
+def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export_timestamp: str) -> None:
+    """
+    Extract and save CVR numbers discovered in the CHR pipeline silver data.
+
+    Args:
+        con: DuckDB connection
+        silver_dir: Silver data directory
+        export_timestamp: Pipeline timestamp for identification
+    """
+    try:
+        logging.info("📊 Starting CVR collection for CHR pipeline")
+
+        # Define CVR tables and their CVR columns
+        cvr_tables = {
+            "chr_property_owners": "owner_cvr",
+            "chr_property_users": "user_cvr",
+            "chr_herd_owners": "owner_cvr",
+            "chr_antibiotic_usage": "cvr_number",
+        }
+
+        all_cvr_numbers = []
+
+        # Extract CVR numbers from each table
+        for table_name, cvr_column in cvr_tables.items():
+            try:
+                # Check if table exists
+                tables_result = con.con.execute("SHOW TABLES").fetchall()
+                existing_tables = [table[0] for table in tables_result]
+
+                if table_name in existing_tables:
+                    cvr_numbers = extract_cvr_numbers_from_table(
+                        table_name=table_name, connection=con.con, cvr_column=cvr_column
+                    )
+
+                    if cvr_numbers:
+                        all_cvr_numbers.extend(cvr_numbers)
+                        logging.info(f"   • {table_name}: {len(cvr_numbers)} CVR numbers")
+                    else:
+                        logging.info(f"   • {table_name}: No CVR numbers found")
+                else:
+                    logging.warning(f"   • {table_name}: Table not found, skipping")
+
+            except Exception as e:
+                logging.warning(f"   • {table_name}: Error extracting CVR numbers - {e}")
+
+        # Remove duplicates and sort
+        unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+
+        if unique_cvr_numbers:
+            # Initialize GCS access and save CVR numbers
+            gcs_access = GCSDataAccess()
+
+            gcs_path = save_pipeline_cvr_numbers(
+                pipeline_name="chr_pipeline",
+                cvr_numbers=unique_cvr_numbers,
+                gcs_access=gcs_access,
+                bucket="landbrugsdata-raw-data",
+                timestamp=export_timestamp,
+            )
+
+            logging.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+        else:
+            logging.warning("⚠️ No CVR numbers found in CHR pipeline data")
+
+    except Exception as e:
+        logging.error(f"❌ Failed to save CVR numbers for CHR pipeline: {e}")
 
 
 # --- Main Processing Logic ---
@@ -728,6 +808,12 @@ def process_chr_data(
         logging.warning(f"Error during comprehensive cleanup: {e}")
 
     logging.info(f"Silver data processing finished. Output located in: {silver_dir}")
+
+    # --- 15. CVR Collection ---
+    if CVR_COLLECTION_AVAILABLE:
+        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
+    else:
+        logging.warning("CVR collection disabled due to import error")
 
 
 if __name__ == "__main__":

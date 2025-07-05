@@ -22,12 +22,102 @@ from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
 
+# Try to import CVR collection utilities
+try:
+    from unified_pipeline.util.cvr_collection import (
+        extract_cvr_numbers_from_table,
+        save_pipeline_cvr_numbers,
+    )
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    CVR_COLLECTION_AVAILABLE = True
+    print("✅ CVR collection utilities imported successfully")
+except ImportError as e:
+    print(f"⚠️ CVR collection utilities not available: {e}")
+    CVR_COLLECTION_AVAILABLE = False
+    extract_cvr_numbers_from_table = None
+    save_pipeline_cvr_numbers = None
+    GCSDataAccess = None
+
 # Load .env file directly - check current directory first, then parent
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 if not os.path.exists(env_path):
     # Try parent directory
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
+
+
+def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetime, logger) -> None:
+    """
+    Extract and save CVR numbers discovered in the drive data pipeline silver data.
+
+    Args:
+        silver_path: Path to silver data directory
+        pipeline_start_time: Pipeline start time for timestamp generation
+        logger: Logger instance
+    """
+    try:
+        logger.info("📊 Starting CVR collection for drive data pipeline")
+
+        # Find all parquet files in silver directory
+        parquet_files = list(silver_path.rglob("*.parquet"))
+
+        if not parquet_files:
+            logger.warning("⚠️ No parquet files found in silver directory")
+            return
+
+        import duckdb
+
+        conn = duckdb.connect()
+
+        all_cvr_numbers = []
+
+        # Process each parquet file
+        for i, file_path in enumerate(parquet_files):
+            try:
+                table_name = f"drive_table_{i + 1}"
+                conn.execute(
+                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                )
+
+                # Extract CVR numbers from this table
+                cvr_numbers = extract_cvr_numbers_from_table(
+                    table_name=table_name,
+                    connection=conn,
+                    cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                )
+
+                if cvr_numbers:
+                    all_cvr_numbers.extend(cvr_numbers)
+                    logger.info(f"   • {file_path.name}: {len(cvr_numbers)} CVR numbers")
+                else:
+                    logger.debug(f"   • {file_path.name}: No CVR numbers found")
+
+            except Exception as e:
+                logger.warning(f"   • {file_path.name}: Error extracting CVR numbers - {e}")
+
+        # Remove duplicates and sort
+        unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+
+        if unique_cvr_numbers:
+            # Initialize GCS access and save CVR numbers
+            gcs_access = GCSDataAccess()
+            timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+            gcs_path = save_pipeline_cvr_numbers(
+                pipeline_name="drive_data_pipeline",
+                cvr_numbers=unique_cvr_numbers,
+                gcs_access=gcs_access,
+                bucket="landbrugsdata-raw-data",
+                timestamp=timestamp,
+            )
+
+            logger.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+        else:
+            logger.warning("⚠️ No CVR numbers found in drive data pipeline")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to save CVR numbers for drive data pipeline: {e}")
 
 
 class ProgressTracker:
@@ -514,6 +604,14 @@ def main() -> int:
                     f"Failed to generate drive data schema documentation: {e}", exc_info=True
                 )
                 # Don't fail the pipeline if schema documentation fails
+
+        # Save CVR numbers after Silver processing is complete
+        if not args.bronze_only and CVR_COLLECTION_AVAILABLE:
+            _save_discovered_cvr_numbers(
+                silver_path=Path(settings.silver_path),
+                pipeline_start_time=pipeline_start_time,
+                logger=logger,
+            )
 
         logger.info("Google Drive Data Pipeline completed successfully")
         return 0

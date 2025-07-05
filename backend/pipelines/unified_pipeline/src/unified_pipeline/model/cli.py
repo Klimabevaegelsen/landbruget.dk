@@ -64,6 +64,7 @@ class Source(Enum):
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
+    cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
 
