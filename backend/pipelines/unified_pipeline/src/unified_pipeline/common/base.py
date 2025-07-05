@@ -9,6 +9,7 @@ enforces a consistent interface across different data sources and stages.
 import json
 import os
 import re
+import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Generic, Optional, TypeVar
@@ -183,11 +184,26 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("SET temp_directory = '/tmp/duckdb'")
             self.conn.execute("SET default_order = 'ASC'")
 
-            # ✅ MIGRATION: Install spatial extension once
-            self.conn.execute("INSTALL spatial")
-            self.conn.execute("LOAD spatial")
+            # ✅ MIGRATION: Install spatial extension once with proper error handling
+            try:
+                self.conn.execute("INSTALL spatial")
+                self.conn.execute("LOAD spatial")
 
-            self.log.info("✅ DuckDB configured with spatial extensions")
+                # Verify spatial extension is working
+                self.conn.execute("SELECT ST_Point(0, 0)")
+                self.log.info("✅ DuckDB configured with spatial extensions")
+            except Exception as spatial_e:
+                self.log.error(f"❌ Failed to load spatial extension: {spatial_e}")
+                # Try alternative approach
+                try:
+                    self.conn.execute("FORCE INSTALL spatial")
+                    self.conn.execute("LOAD spatial")
+                    self.conn.execute("SELECT ST_Point(0, 0)")
+                    self.log.info("✅ DuckDB spatial extension loaded on retry")
+                except Exception as retry_e:
+                    self.log.error(f"❌ Critical: Spatial extension failed to load: {retry_e}")
+                    # Don't raise here - let individual jobs handle spatial requirements
+
         except Exception as e:
             self.log.warning(f"DuckDB configuration warning: {e}")
 
@@ -485,20 +501,36 @@ class BaseSource(Generic[T], ABC):
                             self.conn.execute(f"INSERT INTO {table_name} VALUES (?)", [item])
                         return table_name
                     else:
-                        # List of dicts - use DuckDB JSON functions
-                        json_data = json.dumps(bronze_data)
-                        self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_json_auto('{json_data}')
-                        """)
+                        # List of dicts - use DuckDB JSON functions with temp file approach
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".json", delete=False
+                        ) as tmp_file:
+                            json.dump(bronze_data, tmp_file)
+                            tmp_file.flush()
+
+                            self.conn.execute(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """)
+
+                            # Clean up temp file
+                            os.unlink(tmp_file.name)
                         return table_name
                 elif isinstance(bronze_data, dict):
                     # Single dict - create table with one row
-                    json_data = json.dumps([bronze_data])
-                    self.conn.execute(f"""
-                        CREATE TABLE {table_name} AS 
-                        SELECT * FROM read_json_auto('{json_data}')
-                    """)
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False
+                    ) as tmp_file:
+                        json.dump([bronze_data], tmp_file)
+                        tmp_file.flush()
+
+                        self.conn.execute(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT * FROM read_json_auto('{tmp_file.name}')
+                        """)
+
+                        # Clean up temp file
+                        os.unlink(tmp_file.name)
                     return table_name
             else:
                 self.log.warning(f"Unsupported bronze_data type: {type(bronze_data)}")
@@ -563,20 +595,36 @@ class BaseSource(Generic[T], ABC):
                             data = json.load(f)
                         table_name = f"local_bronze_data_{dataset}"
                         if isinstance(data, list):
-                            # Create table from list using DuckDB
-                            json_str = json.dumps(data)
-                            self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
-                                SELECT * FROM read_json_auto('{json_str}')
-                            """)
+                            # Create table from list using DuckDB with temp file approach
+                            with tempfile.NamedTemporaryFile(
+                                mode="w", suffix=".json", delete=False
+                            ) as tmp_file:
+                                json.dump(data, tmp_file)
+                                tmp_file.flush()
+
+                                self.conn.execute(f"""
+                                    CREATE TABLE {table_name} AS 
+                                    SELECT * FROM read_json_auto('{tmp_file.name}')
+                                """)
+
+                                # Clean up temp file
+                                os.unlink(tmp_file.name)
                             return table_name
                         else:
-                            # Create table from single item using DuckDB
-                            json_str = json.dumps([data])
-                            self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
-                                SELECT * FROM read_json_auto('{json_str}')
-                            """)
+                            # Create table from single item using DuckDB with temp file approach
+                            with tempfile.NamedTemporaryFile(
+                                mode="w", suffix=".json", delete=False
+                            ) as tmp_file:
+                                json.dump([data], tmp_file)
+                                tmp_file.flush()
+
+                                self.conn.execute(f"""
+                                    CREATE TABLE {table_name} AS 
+                                    SELECT * FROM read_json_auto('{tmp_file.name}')
+                                """)
+
+                                # Clean up temp file
+                                os.unlink(tmp_file.name)
                             return table_name
 
             self.log.error(f"No data files found in {latest_dir_path}")
@@ -615,24 +663,40 @@ class BaseSource(Generic[T], ABC):
 
                     table_name = f"gcs_bronze_data_{dataset}"
                     if isinstance(data, list):
-                        # Create table from list using DuckDB
-                        json_str = json.dumps(data)
-                        self.conn.execute(
-                            f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_json_auto('{json_str}')
-                        """
-                        )
+                        # Create table from list using DuckDB with temp file approach
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".json", delete=False
+                        ) as tmp_file:
+                            json.dump(data, tmp_file)
+                            tmp_file.flush()
+
+                            self.conn.execute(
+                                f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """
+                            )
+
+                            # Clean up temp file
+                            os.unlink(tmp_file.name)
                         return table_name
                     else:
-                        # Create table from single item using DuckDB
-                        json_str = json.dumps([data])
-                        self.conn.execute(
-                            f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_json_auto('{json_str}')
-                        """
-                        )
+                        # Create table from single item using DuckDB with temp file approach
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".json", delete=False
+                        ) as tmp_file:
+                            json.dump([data], tmp_file)
+                            tmp_file.flush()
+
+                            self.conn.execute(
+                                f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """
+                            )
+
+                            # Clean up temp file
+                            os.unlink(tmp_file.name)
                         return table_name
                 else:
                     self.log.error(f"Unsupported file type: {latest_file_path}")
@@ -694,11 +758,19 @@ class BaseSource(Generic[T], ABC):
                 # Convert dict/list to table using DuckDB
                 if isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
-                        json_data = json.dumps(data)
-                        self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
-                            SELECT * FROM read_json_auto('{json_data}')
-                        """)
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".json", delete=False
+                        ) as tmp_file:
+                            json.dump(data, tmp_file)
+                            tmp_file.flush()
+
+                            self.conn.execute(f"""
+                                CREATE TABLE {temp_table_name} AS 
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """)
+
+                            # Clean up temp file
+                            os.unlink(tmp_file.name)
                     else:
                         # List of values
                         values_str = ", ".join([f"'{v}'" for v in data])
@@ -707,11 +779,19 @@ class BaseSource(Generic[T], ABC):
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
-                    json_data = json.dumps([data])
-                    self.conn.execute(f"""
-                        CREATE TABLE {temp_table_name} AS 
-                        SELECT * FROM read_json_auto('{json_data}')
-                    """)
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False
+                    ) as tmp_file:
+                        json.dump([data], tmp_file)
+                        tmp_file.flush()
+
+                        self.conn.execute(f"""
+                            CREATE TABLE {temp_table_name} AS 
+                            SELECT * FROM read_json_auto('{tmp_file.name}')
+                        """)
+
+                        # Clean up temp file
+                        os.unlink(tmp_file.name)
                 else:
                     self.log.warning(f"Cannot generate schema for data type: {type(data)}")
                     return None
