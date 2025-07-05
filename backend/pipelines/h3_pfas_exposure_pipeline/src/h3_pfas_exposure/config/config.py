@@ -104,8 +104,8 @@ class H3SpatialConfig:
 
     # Performance Monitoring
     enable_progress_tracking: bool = True
-    log_chunk_details: bool = False  # Reduced logging for performance
-    log_stage_timings: bool = True
+    log_chunk_details: bool = False  # Reduced logging for performance - only essential progress
+    log_stage_timings: bool = False  # Reduced logging for performance - only major stages
 
     # GCS Configuration
     available_years: list[int] = field(

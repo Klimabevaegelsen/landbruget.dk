@@ -7,6 +7,7 @@ from pathlib import Path
 
 import duckdb
 from loguru import logger
+from tqdm import tqdm
 
 from ..config import H3SpatialConfig
 from .area_validator import AreaValidator
@@ -411,6 +412,81 @@ class H3PFASProcessorRefactored:
         self.log.info(f"   📐 Total agricultural area: {stats[4]:,.2f} hectares")
         self.log.info(f"   📊 Average coverage ratio: {stats[5]:.3f}")
 
+    def _cleanup_temporary_files(self, year: int | None = None):
+        """Clean up temporary files to prevent disk space issues."""
+        try:
+            import tempfile
+            from pathlib import Path
+
+            temp_dir = Path(tempfile.gettempdir())
+            files_cleaned = 0
+
+            # H3 PFAS specific cleanup patterns - expanded for comprehensive cleanup
+            patterns = [
+                # Year-specific patterns
+                f"h3_pfas_{year}_*" if year else "h3_pfas_*",
+                f"kommune_pfas_{year}*" if year else "kommune_pfas_*",
+                f"*_{year}_tippecanoe*" if year else "*_tippecanoe*",
+                f"tippecanoe_*_{year}_*" if year else "tippecanoe_*",
+                # General H3 PFAS patterns
+                "*.geojson",
+                "*.pmtiles",
+                "duckdb_temp_*",
+                "h3_*.tmp",
+                "pfas_*.tmp",
+                "spatial_*.tmp",
+                # Resolution-specific patterns
+                f"*_res{self.config.h3_resolution}*"
+                if hasattr(self.config, "h3_resolution")
+                else "*_res*",
+                # General temporary file patterns
+                "temp_*",
+                "*.tmp",
+                # DuckDB specific patterns
+                "duckdb_*",
+                "*.db-wal",
+                "*.db-shm",
+                # Additional H3 PFAS patterns
+                "h3_spatial_*",
+                "pesticide_*",
+                "field_*",
+                "chunk_*",
+                "stage*_*",
+                # PMTiles and GeoJSON patterns
+                "*.mbtiles",
+                "*.geojsonl",
+                "*.jsonl",
+                # Processing artifacts
+                "processing_*",
+                "analysis_*",
+                "results_*",
+            ]
+
+            for pattern in patterns:
+                for file_path in temp_dir.glob(pattern):
+                    try:
+                        if file_path.exists() and file_path.is_file():
+                            # Check if file is older than 1 hour to avoid cleaning active files
+                            import time
+
+                            file_age = time.time() - file_path.stat().st_mtime
+                            if file_age > 3600:  # 1 hour
+                                file_path.unlink()
+                                files_cleaned += 1
+                            elif year and str(year) in file_path.name:
+                                # Always clean year-specific files
+                                file_path.unlink()
+                                files_cleaned += 1
+                    except Exception as e:
+                        self.log.debug(f"Could not remove {file_path}: {e}")
+
+            if files_cleaned > 0:
+                year_str = f"year {year}" if year else "all years"
+                self.log.info(f"🧹 Cleaned up {files_cleaned} temporary files for {year_str}")
+
+        except Exception as e:
+            self.log.debug(f"Temporary file cleanup warning: {e}")
+
     def _cleanup_year_tables(self, year: int):
         """Clean up intermediate tables for a specific year to free memory - AGGRESSIVE for GitHub Actions."""
         self.log.info(f"🧹 Cleaning up tables for year {year} (GitHub Actions mode)")
@@ -522,32 +598,61 @@ class H3PFASProcessorRefactored:
                 f"🎯 Single-year processing mode enabled for year {years[0]} (optimized for GitHub Actions)"
             )
 
-        # Process each year
+        # Process each year with progress bar
         successful_years = 0
         total_records = 0
 
-        for year in years:
-            try:
-                self.log.info(f"\n📊 Processing year {year}...")
-                self._monitor_resources(f"starting_year_{year}")
+        # Create progress bar for years
+        year_progress = tqdm(
+            years,
+            desc="Processing H3 analysis",
+            unit="year",
+            disable=not self.config.enable_progress_tracking,
+            position=0,
+            leave=True,
+        )
 
-                # Process single year
-                year_records = await self._process_single_year_from_gcs(
-                    year, bmd_table, data_loader, result_saver
-                )
+        try:
+            for year in year_progress:
+                try:
+                    year_progress.set_description(f"H3 analysis - year {year}")
+                    self.log.info(f"\n📊 Processing year {year}...")
+                    self._monitor_resources(f"starting_year_{year}")
 
-                if year_records > 0:
-                    successful_years += 1
-                    total_records += year_records
-                    self.log.info(f"✅ Year {year}: {year_records:,} H3 hexagons processed")
-                else:
-                    self.log.warning(f"⚠️ Year {year}: No data processed")
+                    # Process single year
+                    year_records = await self._process_single_year_from_gcs(
+                        year, bmd_table, data_loader, result_saver
+                    )
 
-                self._monitor_resources(f"completed_year_{year}")
+                    if year_records > 0:
+                        successful_years += 1
+                        total_records += year_records
+                        self.log.info(f"✅ Year {year}: {year_records:,} H3 hexagons processed")
+                        year_progress.set_postfix(
+                            {
+                                "completed": f"{successful_years}/{len(years)}",
+                                "records": f"{year_records:,}",
+                                "total": f"{total_records:,}",
+                            }
+                        )
+                    else:
+                        self.log.warning(f"⚠️ Year {year}: No data processed")
 
-            except Exception as e:
-                self.log.error(f"❌ Failed to process year {year}: {e}")
-                continue
+                    # Clean up temporary files and tables for this year
+                    self._cleanup_temporary_files(year)
+                    self._cleanup_year_tables(year)
+
+                    self._monitor_resources(f"completed_year_{year}")
+
+                except Exception as e:
+                    self.log.error(f"❌ Failed to process year {year}: {e}")
+                    # Clean up on error too
+                    self._cleanup_temporary_files(year)
+                    self._cleanup_year_tables(year)
+                    continue
+
+        finally:
+            year_progress.close()
 
         # Final summary
         self.log.info("\n🎉 Multi-year H3 PFAS analysis completed!")
@@ -599,32 +704,61 @@ class H3PFASProcessorRefactored:
                 f"🎯 Single-year kommune processing mode enabled for year {years[0]} (optimized for GitHub Actions)"
             )
 
-        # Process each year
+        # Process each year with progress bar
         successful_years = 0
         total_records = 0
 
-        for year in years:
-            try:
-                self.log.info(f"\n📊 Processing kommune analysis for year {year}...")
-                self._monitor_resources(f"starting_kommune_year_{year}")
+        # Create progress bar for years
+        year_progress = tqdm(
+            years,
+            desc="Processing kommune analysis",
+            unit="year",
+            disable=not self.config.enable_progress_tracking,
+            position=0,
+            leave=True,
+        )
 
-                # Process single year for kommune analysis
-                year_records = await self._process_single_year_kommune_from_gcs(
-                    year, bmd_table, kommune_table, data_loader, result_saver
-                )
+        try:
+            for year in year_progress:
+                try:
+                    year_progress.set_description(f"Kommune analysis - year {year}")
+                    self.log.info(f"\n📊 Processing kommune analysis for year {year}...")
+                    self._monitor_resources(f"starting_kommune_year_{year}")
 
-                if year_records > 0:
-                    successful_years += 1
-                    total_records += year_records
-                    self.log.info(f"✅ Year {year}: {year_records:,} kommuner processed")
-                else:
-                    self.log.warning(f"⚠️ Year {year}: No kommune data processed")
+                    # Process single year for kommune analysis
+                    year_records = await self._process_single_year_kommune_from_gcs(
+                        year, bmd_table, kommune_table, data_loader, result_saver
+                    )
 
-                self._monitor_resources(f"completed_kommune_year_{year}")
+                    if year_records > 0:
+                        successful_years += 1
+                        total_records += year_records
+                        self.log.info(f"✅ Year {year}: {year_records:,} kommuner processed")
+                        year_progress.set_postfix(
+                            {
+                                "completed": f"{successful_years}/{len(years)}",
+                                "kommuner": f"{year_records:,}",
+                                "total": f"{total_records:,}",
+                            }
+                        )
+                    else:
+                        self.log.warning(f"⚠️ Year {year}: No kommune data processed")
 
-            except Exception as e:
-                self.log.error(f"❌ Failed to process kommune analysis for year {year}: {e}")
-                continue
+                    # Clean up temporary files and tables for this year
+                    self._cleanup_temporary_files(year)
+                    self._cleanup_year_tables(year)
+
+                    self._monitor_resources(f"completed_kommune_year_{year}")
+
+                except Exception as e:
+                    self.log.error(f"❌ Failed to process kommune analysis for year {year}: {e}")
+                    # Clean up on error too
+                    self._cleanup_temporary_files(year)
+                    self._cleanup_year_tables(year)
+                    continue
+
+        finally:
+            year_progress.close()
 
         # Final summary
         self.log.info("\n🎉 Multi-year kommune PFAS analysis completed!")

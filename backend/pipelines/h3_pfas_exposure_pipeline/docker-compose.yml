@@ -34,8 +34,8 @@ services:
       # Logging Configuration
       - LOG_LEVEL=INFO
       - ENABLE_PROGRESS_TRACKING=true
-      - LOG_CHUNK_DETAILS=true
-      - LOG_STAGE_TIMINGS=true
+      - LOG_CHUNK_DETAILS=false
+      - LOG_STAGE_TIMINGS=false
       
     # Default command using new CLI interface
     command: ["python", "main.py", "--mode", "h3", "--verbose", "--memory-limit", "14GB", "--thread-count", "4", "--chunk-size", "10000"]

@@ -8,6 +8,7 @@ import time
 
 import duckdb
 from loguru import logger
+from tqdm import tqdm
 
 from ..config import H3SpatialConfig
 
@@ -41,44 +42,71 @@ class SpatialJoiner:
         result_table = f"h3_spatial_results_{year}"
         self.conn.execute(f"DROP TABLE IF EXISTS {result_table}")
 
-        # Process chunks
+        # Process chunks with progress bar
         start_time = time.time()
 
-        for chunk_idx in range(total_chunks):
-            chunk_start_time = time.time()
-            offset = chunk_idx * self.config.chunk_size
+        # Create progress bar
+        progress_bar = tqdm(
+            total=total_chunks,
+            desc=f"Processing H3 chunks (year {year})",
+            unit="chunk",
+            disable=not self.config.enable_progress_tracking,
+        )
 
-            self.log.info(f"📦 Processing chunk {chunk_idx + 1}/{total_chunks}")
+        try:
+            for chunk_idx in range(total_chunks):
+                chunk_start_time = time.time()
+                offset = chunk_idx * self.config.chunk_size
 
-            # Create chunk table
-            chunk_results = self._process_single_chunk(
-                h3_table, fields_table, pesticide_table, offset, chunk_idx, total_chunks, year
-            )
+                # Only log every 10th chunk to reduce noise, unless chunk details are enabled
+                if self.config.log_chunk_details or (chunk_idx + 1) % 10 == 0:
+                    self.log.info(f"📦 Processing chunk {chunk_idx + 1}/{total_chunks}")
 
-            # Append to results
-            if chunk_idx == 0:
-                self.conn.execute(f"CREATE TABLE {result_table} AS SELECT * FROM {chunk_results}")
-            else:
-                self.conn.execute(f"INSERT INTO {result_table} SELECT * FROM {chunk_results}")
-
-            # Clean up chunk table
-            self.conn.execute(f"DROP TABLE IF EXISTS {chunk_results}")
-
-            # Force garbage collection and checkpoint every few chunks
-            if chunk_idx % 5 == 0:
-                gc.collect()
-                try:
-                    self.conn.execute("CHECKPOINT")
-                except Exception:
-                    pass
-
-            chunk_time = time.time() - chunk_start_time
-            progress_pct = (chunk_idx + 1) / total_chunks * 100
-
-            if self.config.log_chunk_details:
-                self.log.info(
-                    f"   ✅ Chunk {chunk_idx + 1} completed in {chunk_time:.2f}s ({progress_pct:.1f}%)"
+                # Create chunk table
+                chunk_results = self._process_single_chunk(
+                    h3_table, fields_table, pesticide_table, offset, chunk_idx, total_chunks, year
                 )
+
+                # Append to results
+                if chunk_idx == 0:
+                    self.conn.execute(
+                        f"CREATE TABLE {result_table} AS SELECT * FROM {chunk_results}"
+                    )
+                else:
+                    self.conn.execute(f"INSERT INTO {result_table} SELECT * FROM {chunk_results}")
+
+                # Clean up chunk table
+                self.conn.execute(f"DROP TABLE IF EXISTS {chunk_results}")
+
+                # Force garbage collection and checkpoint every few chunks
+                if chunk_idx % 5 == 0:
+                    gc.collect()
+                    try:
+                        self.conn.execute("CHECKPOINT")
+                    except Exception:
+                        pass
+
+                chunk_time = time.time() - chunk_start_time
+                progress_pct = (chunk_idx + 1) / total_chunks * 100
+
+                # Update progress bar with detailed metrics
+                progress_bar.update(1)
+                progress_bar.set_postfix(
+                    {
+                        "chunk_time": f"{chunk_time:.2f}s",
+                        "progress": f"{progress_pct:.1f}%",
+                        "avg_time": f"{(time.time() - start_time) / (chunk_idx + 1):.2f}s",
+                    }
+                )
+
+                # Log every 10th chunk or if chunk details are enabled
+                if self.config.log_chunk_details or (chunk_idx + 1) % 10 == 0:
+                    self.log.info(
+                        f"   ✅ Chunk {chunk_idx + 1}/{total_chunks} completed in {chunk_time:.2f}s ({progress_pct:.1f}%)"
+                    )
+
+        finally:
+            progress_bar.close()
 
         total_time = time.time() - start_time
         self.log.info(f"🎉 Chunked spatial join completed in {total_time:.2f}s")
