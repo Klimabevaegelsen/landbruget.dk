@@ -96,17 +96,26 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
                 # Clean up intermediate tables (but keep standardized tables for schema)
                 self.drop_table(table_name)
-                self.drop_table(cleaned_table)
+                # Only drop cleaned_table if it's different from standardized_table
+                if cleaned_table != standardized_table:
+                    self.drop_table(cleaned_table)
 
             # Create schema dictionary from the last table (for compatibility)
             schema = {"columns": [], "data_types": []}
             if sheets_data and last_standardized_table:
-                # Get schema from last processed table before cleanup
-                table_info = self.get_table_info(last_standardized_table)
-                schema = {
-                    "columns": [col[0] for col in table_info],
-                    "data_types": [col[1] for col in table_info],
-                }
+                # Check if the table still exists before trying to get schema
+                try:
+                    table_info = self.get_table_info(last_standardized_table)
+                    schema = {
+                        "columns": [col[0] for col in table_info],
+                        "data_types": [col[1] for col in table_info],
+                    }
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to get schema from table {last_standardized_table}: {str(e)}"
+                    )
+                    # Use basic schema as fallback
+                    schema = {"columns": [], "data_types": []}
 
                 # Now clean up all standardized tables
                 for standardized_table in standardized_tables:
@@ -151,12 +160,43 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
             for sheet_name in excel_file.sheet_names:
                 try:
-                    # Read the sheet with pandas
-                    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+                    # Read the sheet with pandas with specific options to handle problematic data
+                    df = pd.read_excel(
+                        excel_file,
+                        sheet_name=sheet_name,
+                        dtype=str,  # Read all columns as strings to avoid type inference issues
+                        na_filter=False,  # Don't convert empty strings to NaN
+                    )
 
                     # Skip empty sheets
                     if df.empty:
                         logger.debug(f"Skipping empty sheet: {sheet_name}")
+                        continue
+
+                    # Clean column names to avoid issues with special characters
+                    original_columns = df.columns.tolist()
+                    clean_columns = []
+
+                    for i, col in enumerate(original_columns):
+                        # Convert column name to string and clean it
+                        col_str = str(col).strip()
+
+                        # Handle unnamed columns
+                        if col_str.startswith("Unnamed:") or col_str == "":
+                            col_str = f"column_{i}"
+
+                        # Replace problematic characters temporarily for DuckDB
+                        clean_col = col_str.replace('"', "'").replace("\n", " ").replace("\r", " ")
+                        clean_columns.append(clean_col)
+
+                    # Update DataFrame column names
+                    df.columns = clean_columns
+
+                    # Remove completely empty rows
+                    df = df.dropna(how="all")
+
+                    if df.empty:
+                        logger.debug(f"Skipping empty sheet after cleaning: {sheet_name}")
                         continue
 
                     # Clean sheet name for table name
@@ -169,9 +209,37 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     if not clean_sheet_name:
                         clean_sheet_name = f"sheet_{len(sheets_data) + 1}"
 
-                    # Register DataFrame as DuckDB table
+                    # Register DataFrame as DuckDB table with error handling
                     table_name = f"excel_{clean_sheet_name}_{int(time.time())}"
-                    self.register_table(df, table_name)
+
+                    try:
+                        self.register_table(df, table_name)
+                        logger.debug(f"Successfully registered table: {table_name}")
+                    except Exception as reg_error:
+                        logger.error(
+                            f"Failed to register DataFrame as table {table_name}: {str(reg_error)}"
+                        )
+                        # Try to create table manually with explicit column types
+                        try:
+                            # Create table manually using DuckDB's CREATE TABLE AS
+                            temp_table = f"temp_{table_name}"
+
+                            # Convert DataFrame to a format DuckDB can handle
+                            df_clean = df.copy()
+
+                            # Ensure all values are strings and handle nulls
+                            for col in df_clean.columns:
+                                df_clean[col] = df_clean[col].astype(str).replace("nan", "")
+
+                            # Register the cleaned DataFrame
+                            self.register_table(df_clean, table_name)
+                            logger.debug(f"Successfully registered cleaned table: {table_name}")
+
+                        except Exception as manual_error:
+                            logger.error(
+                                f"Failed to manually create table {table_name}: {str(manual_error)}"
+                            )
+                            continue
 
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
@@ -202,9 +270,15 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Get current column info
             columns_info = self.get_table_info(table_name)
 
+            if not columns_info:
+                logger.warning(f"No columns found in table {table_name}")
+                return table_name
+
             # Create column mapping for renaming
             column_mapping = []
-            for col_info in columns_info:
+            used_names = set()  # Track used standardized names to avoid duplicates
+
+            for i, col_info in enumerate(columns_info):
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
                 col_type = col_info[1]
@@ -217,19 +291,55 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     standardized_name = mapped_name
                 else:
                     # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    # Handle Danish characters properly
+                    standardized_name = str(col_name).lower()
+                    # Replace Danish characters
+                    standardized_name = standardized_name.replace("æ", "ae")
+                    standardized_name = standardized_name.replace("ø", "oe")
+                    standardized_name = standardized_name.replace("å", "aa")
+                    # Replace other special characters
+                    standardized_name = standardized_name.replace("é", "e")
+                    standardized_name = standardized_name.replace("è", "e")
+                    standardized_name = standardized_name.replace("ê", "e")
+                    standardized_name = standardized_name.replace("ë", "e")
+                    standardized_name = standardized_name.replace("á", "a")
+                    standardized_name = standardized_name.replace("à", "a")
+                    standardized_name = standardized_name.replace("â", "a")
+                    standardized_name = standardized_name.replace("ä", "a")
+                    standardized_name = standardized_name.replace("ó", "o")
+                    standardized_name = standardized_name.replace("ò", "o")
+                    standardized_name = standardized_name.replace("ô", "o")
+                    standardized_name = standardized_name.replace("ö", "o")
+                    # Replace spaces and special chars with underscores
                     standardized_name = "".join(
-                        c.lower() if c.isalnum() else "_" for c in str(col_name)
+                        c if c.isalnum() else "_" for c in standardized_name
                     ).strip("_")
+
+                    # Remove consecutive underscores
+                    while "__" in standardized_name:
+                        standardized_name = standardized_name.replace("__", "_")
 
                     # Ensure it doesn't start with a number
                     if standardized_name and standardized_name[0].isdigit():
                         standardized_name = f"col_{standardized_name}"
 
-                    # Handle empty names
-                    if not standardized_name:
-                        standardized_name = f"column_{len(column_mapping)}"
+                    # Handle empty names or very short names
+                    if not standardized_name or len(standardized_name) < 2:
+                        standardized_name = f"column_{i}"
 
-                column_mapping.append(f'"{col_name}" AS {standardized_name}')
+                # Ensure uniqueness
+                original_standardized = standardized_name
+                counter = 1
+                while standardized_name in used_names:
+                    standardized_name = f"{original_standardized}_{counter}"
+                    counter += 1
+
+                used_names.add(standardized_name)
+
+                # Properly quote both original and standardized column names
+                # Escape any quotes in the original column name
+                escaped_col_name = str(col_name).replace('"', '""')
+                column_mapping.append(f'"{escaped_col_name}" AS "{standardized_name}"')
 
             # Create new table with standardized column names
             result_table = f"{table_name}_clean_cols"
@@ -359,6 +469,10 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Get column information
             columns_info = self.get_table_info(table_name)
 
+            if not columns_info:
+                logger.warning(f"No columns found in table {table_name}")
+                return table_name
+
             # Build column transformations
             column_transformations = []
 
@@ -366,6 +480,10 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
                 col_type = col_info[1]
+
+                # Properly quote column name for DuckDB and escape quotes
+                escaped_col_name = str(col_name).replace('"', '""')
+                quoted_col_name = f'"{escaped_col_name}"'
 
                 # Apply explicit type casting for known columns
                 if col_name in [
@@ -375,26 +493,17 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     "reported_area_ha",
                     "dosage_quantity",
                 ]:
-                    # Force area and dosage columns to DOUBLE
-                    transformation = f"CAST({col_name} AS DOUBLE) AS {col_name}"
+                    # Force area and dosage columns to DOUBLE with safe casting
+                    transformation = (
+                        f'TRY_CAST({quoted_col_name} AS DOUBLE) AS "{escaped_col_name}"'
+                    )
                 elif col_name in ["cvr_number", "crop_code", "pesticide_registration_number"]:
                     # Force ID columns to VARCHAR
-                    transformation = f"CAST({col_name} AS VARCHAR) AS {col_name}"
-                elif col_type.upper() in ["VARCHAR", "TEXT"]:
-                    # For string columns, try to detect and convert dates/numbers
-                    # Cast all branches to VARCHAR to avoid type mixing in CASE
-                    transformation = f"""
-                        CASE 
-                            WHEN TRY_CAST({col_name} AS TIMESTAMP) IS NOT NULL 
-                            THEN CAST(TRY_CAST({col_name} AS TIMESTAMP) AS VARCHAR)
-                            WHEN TRY_CAST({col_name} AS DOUBLE) IS NOT NULL 
-                            THEN CAST(TRY_CAST({col_name} AS DOUBLE) AS VARCHAR)
-                            ELSE CAST({col_name} AS VARCHAR)
-                        END AS {col_name}
-                    """
+                    transformation = f'CAST({quoted_col_name} AS VARCHAR) AS "{escaped_col_name}"'
                 else:
-                    # Keep existing type but cast to VARCHAR for consistency
-                    transformation = f"CAST({col_name} AS VARCHAR) AS {col_name}"
+                    # For all other columns, cast to VARCHAR to ensure consistency
+                    # This avoids type inference issues and makes the data more predictable
+                    transformation = f'CAST({quoted_col_name} AS VARCHAR) AS "{escaped_col_name}"'
 
                 column_transformations.append(transformation)
 
@@ -402,19 +511,13 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             result_table = f"{table_name}_typed"
             transformations_sql = ",\n                ".join(column_transformations)
 
-            # Cast all columns to VARCHAR for the unnest operation to avoid type conflicts
-            varchar_columns = [f"CAST({col_info[0]} AS VARCHAR)" for col_info in columns_info]
-
+            # Simplified query without complex row filtering to avoid parsing issues
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
                 SELECT 
                     {transformations_sql}
                 FROM {table_name}
-                WHERE NOT (
-                    -- Remove completely empty rows
-                    SELECT bool_and(column_value IS NULL OR TRIM(column_value) = '') 
-                    FROM unnest([{", ".join(varchar_columns)}]) AS t(column_value)
-                )
+                WHERE 1=1
             """)
 
             logger.debug(f"Applied data type standardization to table {table_name}")
