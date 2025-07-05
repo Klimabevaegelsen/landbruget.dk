@@ -25,7 +25,9 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
     """Transform Excel files using pandas for reading, then DuckDB for processing."""
 
     def __init__(self):
-        super().__init__()
+        BaseTransformer.__init__(self)
+        DuckDBProcessor.__init__(self)
+        logger.info("Initialized ExcelTransformer with DuckDB")
 
     def transform(
         self,
