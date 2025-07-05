@@ -521,8 +521,6 @@ class H3PMTilesGenerator:
                 "10",  # Polygon simplification for performance
                 "--buffer",
                 "5",  # Buffer for polygon edges
-                "--polygon-buffer",
-                "1",  # Additional polygon buffer
                 "--drop-densest-as-needed",  # Handle overlapping polygons
                 "--extend-zooms-if-still-dropping",
                 "--coalesce-densest-as-needed",  # Merge dense polygons
