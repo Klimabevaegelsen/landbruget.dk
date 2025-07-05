@@ -184,6 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: bronze-foundation
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' }}
+    timeout-minutes: 360  # 6 hours timeout to prevent indefinite hanging
     
     permissions:
       contents: 'read'
