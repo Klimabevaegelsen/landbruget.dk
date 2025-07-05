@@ -55,23 +55,40 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
 
     # Configure timeouts to prevent hanging on slow/unresponsive herds
     # Connection timeout: 30 seconds to establish connection
-    # Read timeout: 600 seconds (10 minutes) for very large herds - increased from 300s
-    # This is especially important for cattle movement data which can be large
+    # Read timeout: Reduced to 180 seconds (3 minutes) for GitHub Actions compatibility
+    # This prevents individual herds from blocking the entire pipeline
     adapter = requests.adapters.HTTPAdapter()
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    # Set timeouts on the session instead - increased read timeout
-    session.timeout = (30, 600)  # (connect_timeout, read_timeout)
+    # Set aggressive timeouts for GitHub Actions environment
+    github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+    read_timeout = 180 if github_actions else 300  # 3 minutes in GH Actions, 5 minutes locally
+    session.timeout = (30, read_timeout)  # (connect_timeout, read_timeout)
 
     transport = Transport(session=session)
     try:
         client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / 600s read timeouts")
+        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / {read_timeout}s read timeouts")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
         raise
+
+
+# Global set to track problematic herds that consistently timeout
+PROBLEMATIC_HERDS = set()
+
+
+def add_problematic_herd(herd_number: int) -> None:
+    """Add a herd to the problematic herds list."""
+    PROBLEMATIC_HERDS.add(herd_number)
+    logger.warning(f"Added herd {herd_number} to problematic herds list (will be skipped in future)")
+
+
+def is_problematic_herd(herd_number: int) -> bool:
+    """Check if a herd is in the problematic herds list."""
+    return herd_number in PROBLEMATIC_HERDS
 
 
 # --- Base Request Structure ---
@@ -123,6 +140,16 @@ def load_animal_movements(
 
     date_suffix = f"_{start_date}_{end_date}" if start_date else "_all"
 
+    # Skip herds that have been identified as problematic
+    if is_problematic_herd(herd_number):
+        logger.warning(f"Skipping herd {herd_number} (marked as problematic)")
+        return {
+            "reporting_herd_number": herd_number,
+            "movements": [],
+            "skipped_reason": "problematic_herd",
+            "summary_stats": {"total_animals_processed": 0, "unique_movement_dates": 0, "counterparty_herds": 0},
+        }
+
     logger.info(
         f"Fetching animal movements for herd {herd_number}"
         + (f" from {start_date} to {end_date}" if start_date else " (all available data)")
@@ -167,14 +194,33 @@ def load_animal_movements(
                     continue
                 return None
 
-            # Log request timing for monitoring
-            if request_duration > 300:  # Log slow requests (>5 minutes)
+            # Log request timing for monitoring and mark extremely slow herds as problematic
+            if request_duration > 1800:  # 30 minutes - mark as problematic
+                logger.error(
+                    f"Extremely slow request for herd {herd_number}: {request_duration:.1f}s - marking as problematic"
+                )
+                add_problematic_herd(herd_number)
+                return {
+                    "reporting_herd_number": herd_number,
+                    "movements": [],
+                    "skipped_reason": "extremely_slow_processing",
+                    "summary_stats": {
+                        "total_animals_processed": 0,
+                        "unique_movement_dates": 0,
+                        "counterparty_herds": 0,
+                    },
+                }
+            elif request_duration > 300:  # Log slow requests (>5 minutes)
                 logger.warning(f"Slow request for herd {herd_number}: {request_duration:.1f}s")
             elif request_duration > 60:  # Log moderately slow requests (>1 minute)
                 logger.info(f"Moderate request for herd {herd_number}: {request_duration:.1f}s")
 
             # Process and aggregate the response instead of saving raw individual records
+            aggregation_start_time = time.time()
+            logger.info(f"Herd {herd_number}: Starting data aggregation...")
             movement_summaries = _aggregate_cattle_movements(response, herd_number)
+            aggregation_duration = time.time() - aggregation_start_time
+            logger.info(f"Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s")
 
             # Log memory savings - show what we would have saved vs what we actually save
             if hasattr(response, "Response") and response.Response:
@@ -237,6 +283,7 @@ def load_animal_movements(
                 continue
             else:
                 logger.error(f"Max retries exceeded for herd {herd_number} due to timeout")
+                add_problematic_herd(herd_number)  # Mark as problematic
                 return None
 
         except requests.exceptions.ConnectionError as e:
@@ -374,6 +421,10 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
     """
     from collections import defaultdict
 
+    # Add timeout for aggregation process
+    aggregation_start_time = time.time()
+    MAX_AGGREGATION_TIME = 600  # 10 minutes max for aggregation
+
     movement_summaries = {
         "reporting_herd_number": reporting_herd,
         "movements": [],
@@ -393,6 +444,25 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             logger.info(f"No animals found for herd {reporting_herd}")
             return movement_summaries
 
+        logger.info(f"Herd {reporting_herd}: Processing {len(animals)} individual animals...")
+
+        # Skip herds with extremely large datasets that might cause timeouts
+        if len(animals) > 100000:  # 100k animals threshold
+            logger.warning(
+                f"Herd {reporting_herd}: Dataset too large ({len(animals)} animals) - skipping to prevent timeout"
+            )
+            return {
+                "reporting_herd_number": reporting_herd,
+                "movements": [],
+                "skipped_reason": "dataset_too_large",
+                "summary_stats": {
+                    "total_animals_processed": 0,
+                    "unique_movement_dates": 0,
+                    "counterparty_herds": 0,
+                    "dataset_size": len(animals),
+                },
+            }
+
         # Group movements by date and counterparty
         # Key: (movement_date, counterparty_herd, movement_type)
         movement_groups = defaultdict(
@@ -406,8 +476,22 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             }
         )
 
-        for animal in animals:
+        for i, animal in enumerate(animals):
             try:
+                # Progress logging for large datasets and timeout check
+                if i > 0 and i % 10000 == 0:
+                    elapsed_time = time.time() - aggregation_start_time
+                    logger.info(
+                        f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
+                    )
+
+                    # Check if aggregation is taking too long
+                    if elapsed_time > MAX_AGGREGATION_TIME:
+                        logger.error(
+                            f"Herd {reporting_herd}: Aggregation timeout after {elapsed_time:.1f}s - stopping at animal {i}/{len(animals)}"
+                        )
+                        break
+
                 # Extract key movement information (using ACTUAL field names from CHR_dyr)
                 ckr_nr = getattr(animal, "CkrNr", None)
                 entry_date = getattr(animal, "DatoIndgaaet", None)
