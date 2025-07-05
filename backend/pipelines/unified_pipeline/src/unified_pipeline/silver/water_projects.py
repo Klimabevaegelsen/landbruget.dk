@@ -700,8 +700,10 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
+                        CAST(NULL AS VARCHAR) as project_id,
                         CAST(NULL AS GEOMETRY) as geometry,
-                        CAST(NULL AS INTEGER) as feature_count
+                        CAST(NULL AS INTEGER) as feature_count,
+                        CAST(NULL AS TIMESTAMP) as dissolved_at
                     WHERE FALSE
                 """)
                 return dissolved_table_name
@@ -712,7 +714,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
                 SELECT 
-                    ST_AsText(ST_Transform(ST_Union_Agg(geometry_spatial), 'EPSG:25832', 'EPSG:4326')) as geometry,
+                    'water_project_' || ROW_NUMBER() OVER (ORDER BY current_timestamp) as project_id,
+                    ST_Transform(ST_Union_Agg(geometry_spatial), 'EPSG:25832', 'EPSG:4326') as geometry,
                     COUNT(*) as feature_count,
                     current_timestamp as dissolved_at
                 FROM {input_table_name}
@@ -732,7 +735,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
-                        CAST(NULL AS VARCHAR) as geometry,
+                        CAST(NULL AS VARCHAR) as project_id,
+                        CAST(NULL AS GEOMETRY) as geometry,
                         CAST(0 AS INTEGER) as feature_count,
                         current_timestamp as dissolved_at
                     WHERE FALSE
@@ -743,12 +747,13 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name}_validated AS
                 SELECT 
-                    ST_AsText(ST_Buffer(ST_GeomFromText(geometry), 0)) as geometry,
+                    project_id,
+                    ST_Buffer(geometry, 0) as geometry,
                     feature_count,
                     dissolved_at
                 FROM {dissolved_table_name}
                 WHERE geometry IS NOT NULL
-                AND ST_IsValid(ST_GeomFromText(geometry))
+                AND ST_IsValid(geometry)
             """)
 
             # Replace original table with validated one
@@ -774,7 +779,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {empty_table_name} AS
                 SELECT 
-                    CAST(NULL AS VARCHAR) as geometry,
+                    CAST(NULL AS VARCHAR) as project_id,
+                    CAST(NULL AS GEOMETRY) as geometry,
                     CAST(0 AS INTEGER) as feature_count,
                     current_timestamp as dissolved_at
                 WHERE FALSE

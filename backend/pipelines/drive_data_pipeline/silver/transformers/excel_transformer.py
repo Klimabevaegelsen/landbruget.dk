@@ -76,8 +76,11 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 storage_manager=storage_manager,
                 base_path=output_dir,
             )
+            # Create run directory first to set the timestamp
+            run_dir = silver_storage.create_run_directory()
+
             file_output_dir = silver_storage.create_output_directory(
-                run_dir=output_dir,
+                run_dir=run_dir,
                 source_subfolder=metadata.original_subfolder,
                 content_type="Excel",
             )
@@ -329,9 +332,26 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             "nopesticides": "no_pesticides",
         }
 
+        # General CVR column mappings (for any document type)
+        cvr_mappings = {
+            "cvr": "cvr_number",
+            "cvrno": "cvr_number",
+            "cvrnr": "cvr_number",
+            "cvrnummer": "cvr_number",
+            "virksomhedsnummer": "cvr_number",
+            "companyid": "cvr_number",
+            "company_id": "cvr_number",
+            "firmaid": "cvr_number",
+            "firma_id": "cvr_number",
+        }
+
         # Check if this matches any pesticide column
         if normalized_name in pesticide_mappings:
             return pesticide_mappings[normalized_name]
+
+        # Check if this matches any CVR column variation
+        if normalized_name in cvr_mappings:
+            return cvr_mappings[normalized_name]
 
         # Add other domain-specific mappings here as needed
 

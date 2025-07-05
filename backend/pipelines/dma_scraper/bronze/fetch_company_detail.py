@@ -24,8 +24,7 @@ def fetch_text(soup, selector):
 
 
 class DMACompanyDetailScraper:
-    
-    def __init__(self, data, start_date = None, end_date = None):
+    def __init__(self, data, start_date=None, end_date=None):
         self.data = data
         self.start_date = start_date
         self.end_date = end_date
@@ -80,7 +79,7 @@ class DMACompanyDetailScraper:
                 pdf_url = "https://dma.mst.dk" + soup.select_one(pdf_url_selector).get("href")
             else:
                 pdf_url = None
-            return {"pdf_url": pdf_url, "cvr": cvr, "chr": chr}
+            return {"pdf_url": pdf_url, "cvr_number": cvr, "chr": chr}
         except Exception as e:
             logger.error(f"Error scraping PDF URL from {url}: {str(e)}")
             logger.error(traceback.format_exc())
