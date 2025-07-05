@@ -184,9 +184,24 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             if len(polygon_wkts) == 1:
                 final_wkt = polygon_wkts[0]
             else:
-                # Create MultiPolygon WKT
-                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
-                final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                # Create MultiPolygon WKT - properly extract coordinate parts
+                # Each polygon_wkt is like "POLYGON((x1 y1, x2 y2, ...))"
+                # We need to extract just the "((x1 y1, x2 y2, ...))" part
+                polygon_parts = []
+                for wkt in polygon_wkts:
+                    # Extract everything after "POLYGON" - this gives us "((x1 y1, x2 y2, ...))"
+                    if wkt.startswith("POLYGON"):
+                        coord_part = wkt[7:]  # Remove "POLYGON" prefix
+                        polygon_parts.append(coord_part)
+                    else:
+                        self.log.warning(f"Unexpected WKT format: {wkt}")
+                        continue
+
+                if polygon_parts:
+                    final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                else:
+                    self.log.error("No valid polygon parts found for MultiPolygon")
+                    return None
 
             # ✅ OPTIMIZED: Use DuckDB ST_Area for area calculation instead of shapely
             try:
