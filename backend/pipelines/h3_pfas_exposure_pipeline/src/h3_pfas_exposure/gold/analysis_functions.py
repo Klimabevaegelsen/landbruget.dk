@@ -32,7 +32,7 @@ async def run_multi_year_analysis(years: list[int] | None = None) -> bool:
     processor = H3PFASProcessorRefactored(config, local_data_dir=None)
 
     try:
-        success = await processor.run_multi_year_analysis(years)
+        success = await processor.run_analysis_multi_year(years)
         if success:
             logger.success("✅ Multi-year H3 PFAS analysis completed successfully")
         else:
@@ -65,11 +65,11 @@ async def run_multi_year_kommune_analysis(years: list[int] | None = None) -> boo
     processor = H3PFASProcessorRefactored(config, local_data_dir=None)
 
     try:
-        success = await processor.run_multi_year_kommune_analysis(years)
+        success = await processor.run_kommune_analysis_multi_year(years)
         if success:
-            logger.success("✅ Multi-year kommune analysis completed successfully")
+            logger.success("✅ Multi-year kommune PFAS analysis completed successfully")
         else:
-            logger.error("❌ Multi-year kommune analysis failed")
+            logger.error("❌ Multi-year kommune PFAS analysis failed")
         return success
     except Exception as e:
         logger.error(f"❌ Error in multi-year kommune analysis: {e}")
@@ -103,12 +103,14 @@ async def test_refactored_processor(test_data_dir: Path | str | None = None) -> 
     processor = H3PFASProcessorRefactored(config, local_data_dir=test_data_path)
 
     try:
-        success = await processor.test_with_local_data()
-        if success:
+        # Use the run_analysis method for local testing
+        results_table = await processor.run_analysis(year=2022)
+        if results_table:
             logger.success("✅ Refactored processor test completed successfully")
+            return True
         else:
             logger.error("❌ Refactored processor test failed")
-        return success
+            return False
     except Exception as e:
         logger.error(f"❌ Error in processor test: {e}")
         return False
