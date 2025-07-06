@@ -1,0 +1,21 @@
+{
+  "pages": {
+    "/page": [
+      "static/chunks/[root-of-the-server]__3610c898._.css",
+      "static/chunks/node_modules_next_dist_1a6ee436._.js",
+      "static/chunks/src_app_layout_tsx_ce748aeb._.js",
+      "static/chunks/src_3fd04489._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
+      "static/chunks/node_modules_84b35db3._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
+      "static/chunks/src_app_page_tsx_31ecc3d8._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57cd06f1._.js",
+      "static/chunks/node_modules_next_dist_compiled_2ce9398a._.js",
+      "static/chunks/node_modules_next_dist_client_8f19e6fb._.js",
+      "static/chunks/node_modules_next_dist_0eb1e458._.js",
+      "static/chunks/ed0b0_@swc_helpers_cjs_d9e50ee1._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_3cde29d5._.js"
+    ]
+  }
+}
