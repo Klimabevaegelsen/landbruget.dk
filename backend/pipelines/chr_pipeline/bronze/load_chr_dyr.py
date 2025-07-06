@@ -425,7 +425,11 @@ def load_animal_movements(
             if hasattr(response, "Response") and response.Response:
                 resp = response.Response[0] if isinstance(response.Response, list) else response.Response
                 animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-                individual_record_count = len(animals) if animals else 0
+                # Handle case where Enkeltdyrsoplysninger is an integer instead of a list
+                if isinstance(animals, int):
+                    individual_record_count = animals  # Use the integer value directly
+                else:
+                    individual_record_count = len(animals) if animals else 0
                 summary_record_count = len(movement_summaries.get("movements", []))
 
                 if individual_record_count > 0:
@@ -458,7 +462,11 @@ def load_animal_movements(
             if hasattr(response, "Response") and response.Response:
                 resp = response.Response[0] if isinstance(response.Response, list) else response.Response
                 animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-                animal_count = len(animals) if animals else 0
+                # Handle case where Enkeltdyrsoplysninger is an integer instead of a list
+                if isinstance(animals, int):
+                    animal_count = animals  # Use the integer value directly
+                else:
+                    animal_count = len(animals) if animals else 0
 
                 period_fra = getattr(resp, "PeriodeFra", None)
                 period_til = getattr(resp, "PeriodeTil", None)
@@ -468,7 +476,7 @@ def load_animal_movements(
                     + (f"(period: {period_fra} to {period_til})" if period_fra else "")
                 )
 
-                if animal_count > 0:
+                if animal_count > 0 and not isinstance(animals, int):
                     logger.debug(
                         f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}"
                     )
@@ -740,6 +748,30 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
     try:
         resp = response.Response[0] if isinstance(response.Response, list) else response.Response
         animals = getattr(resp, "Enkeltdyrsoplysninger", [])
+
+        # Fix the 'int' object is not iterable error
+        if isinstance(animals, int):
+            logger.warning(
+                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is an integer ({animals}) instead of a list - likely indicates count or error"
+            )
+            return {
+                "reporting_herd_number": reporting_herd,
+                "movements": [],
+                "skipped_reason": "enkeltdyrsoplysninger_is_integer",
+                "summary_stats": {
+                    "total_animals_processed": 0,
+                    "unique_movement_dates": 0,
+                    "counterparty_herds": 0,
+                    "enkeltdyrsoplysninger_value": animals,
+                },
+            }
+
+        # Ensure animals is iterable
+        if not hasattr(animals, "__iter__") or isinstance(animals, (str, bytes)):
+            logger.warning(
+                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is not iterable (type: {type(animals)}) - converting to empty list"
+            )
+            animals = []
 
         if not animals:
             logger.info(f"No animals found for herd {reporting_herd}")
@@ -1133,7 +1165,11 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
         if response and hasattr(response, "Response") and response.Response:
             resp = response.Response[0] if isinstance(response.Response, list) else response.Response
             animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-            sample_animal_count = len(animals) if animals else 0
+            # Handle case where Enkeltdyrsoplysninger is an integer instead of a list
+            if isinstance(animals, int):
+                sample_animal_count = animals  # Use the integer value directly
+            else:
+                sample_animal_count = len(animals) if animals else 0
 
             # Calculate estimates
             animals_per_day = sample_animal_count / sample_days
