@@ -79,15 +79,15 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.conn.execute("SET preserve_insertion_order=false")  # Allow reordering for efficiency
 
         # ✅ NEW: More aggressive memory management for spatial operations
-        self.conn.execute("SET checkpoint_threshold='1GB'")  # Checkpoint more frequently
-        self.conn.execute("SET force_checkpoint=true")  # Force checkpoints to free memory
+        # Note: checkpoint_threshold may not be available in all DuckDB versions
+        # self.conn.execute("SET checkpoint_threshold='1GB'")  # Checkpoint more frequently
+        # Note: force_checkpoint is not available in this DuckDB version
         self.conn.execute("SET enable_progress_bar=false")  # Disable progress bar to save memory
 
         # ✅ NEW: Optimize for spatial operations with limited disk space
-        self.conn.execute("SET max_expression_depth=1000")  # Limit expression complexity
-        self.conn.execute(
-            "SET enable_external_access=false"
-        )  # Disable external access to save memory
+        # Note: max_expression_depth and enable_external_access may not be available in all DuckDB versions
+        # self.conn.execute("SET max_expression_depth=1000")  # Limit expression complexity
+        # self.conn.execute("SET enable_external_access=false")  # Disable external access to save memory
 
         # Create temp directory if it doesn't exist
         temp_dir = "/tmp/duckdb_field_analysis"
@@ -1236,7 +1236,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """Force DuckDB to checkpoint and free memory."""
         try:
             self.conn.execute("CHECKPOINT")
-            self.conn.execute("PRAGMA force_checkpoint")
+            # Note: PRAGMA force_checkpoint may not be available in all DuckDB versions
+            # self.conn.execute("PRAGMA force_checkpoint")
             self.log.debug("✅ Forced DuckDB checkpoint")
         except Exception as e:
             self.log.debug(f"Could not force checkpoint: {e}")

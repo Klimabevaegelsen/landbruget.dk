@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 # Import the new refactored modules
 from h3_pfas_exposure.gold import (
     run_combined_analysis,
+    run_cumulative_analysis,
     run_multi_year_kommune_analysis,
 )
 
@@ -74,7 +75,7 @@ async def run_pipeline(
     Run the H3 PFAS exposure analysis pipeline.
 
     Args:
-        mode: Analysis mode ('h3' or 'kommune')
+        mode: Analysis mode ('h3', 'kommune', or 'cumulative')
         years: List of years to process (None for all available)
         h3_resolution: H3 resolution(s) for analysis (comma-separated for multiple)
         memory_limit: Memory limit for processing
@@ -91,7 +92,7 @@ async def run_pipeline(
     try:
         # Parse H3 resolutions
         h3_resolutions = []
-        if mode == "h3":
+        if mode in ["h3", "cumulative"]:
             resolutions_str = h3_resolution.split(",")
             for res_str in resolutions_str:
                 res = int(res_str.strip())
@@ -104,7 +105,7 @@ async def run_pipeline(
             h3_resolutions = [10]
 
         logger.info(f"📊 Configuration: {mode} mode")
-        if mode == "h3":
+        if mode in ["h3", "cumulative"]:
             logger.info(f"   🎯 H3 resolutions: {h3_resolutions}")
             if include_kommune:
                 logger.info("   🏛️ Including kommune analysis")
@@ -118,6 +119,15 @@ async def run_pipeline(
         if mode == "h3":
             # Use combined analysis for efficiency (shared data loading)
             success = await run_combined_analysis(
+                years=years,
+                h3_resolutions=h3_resolutions,
+                include_kommune=include_kommune,
+            )
+            all_success = success
+
+        elif mode == "cumulative":
+            # Run cumulative analysis that aggregates all years
+            success = await run_cumulative_analysis(
                 years=years,
                 h3_resolutions=h3_resolutions,
                 include_kommune=include_kommune,
@@ -155,6 +165,9 @@ Examples:
   # Run H3 analysis for all available years at resolution 10
   python main.py --mode h3
 
+  # Run cumulative analysis (sum across all years) for PMTiles frontend
+  python main.py --mode cumulative --h3-resolution 10
+
   # Run kommune analysis for specific years
   python main.py --mode kommune --years 2022 2023
 
@@ -168,7 +181,7 @@ Examples:
 
     parser.add_argument(
         "--mode",
-        choices=["h3", "kommune"],
+        choices=["h3", "kommune", "cumulative"],
         default="h3",
         help="Analysis mode (default: h3)",
     )

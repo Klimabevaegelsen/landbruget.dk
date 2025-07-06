@@ -13,6 +13,26 @@ const nextConfig: NextConfig = {
   
   // Webpack configuration for better bundling
   webpack: (config, { dev, isServer }) => {
+    // Handle Node.js modules that shouldn't be bundled for the client
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
+        child_process: false,
+      };
+    }
+
     // Optimize bundle size
     if (!dev && !isServer) {
       config.optimization.splitChunks = {
@@ -26,6 +46,7 @@ const nextConfig: NextConfig = {
         },
       };
     }
+    
     return config;
   },
   

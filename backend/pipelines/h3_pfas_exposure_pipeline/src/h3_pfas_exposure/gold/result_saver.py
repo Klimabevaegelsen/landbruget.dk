@@ -279,3 +279,191 @@ class H3ResultSaver:
             self.log.info(f"   📊 Original format: {original_size:.1f} MB")
             self.log.info(f"   🗺️  Kepler.gl compatible: {kepler_size:.1f} MB")
             self.log.info("   🎯 Use the *_kepler.parquet file for Kepler.gl visualization")
+
+    def save_cumulative_results(self, results_table: str, resolution: int, years: list[int]) -> int:
+        """Save cumulative H3 results to GCS with special 'total' year identifier."""
+        self.log.info(
+            f"💾 Saving cumulative H3 pesticide exposure results (resolution {resolution}) to GCS"
+        )
+        self.log.info(f"   📅 Years included: {years}")
+
+        # Create Kepler.gl compatible version
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE final_cumulative_results_kepler_res{resolution} AS
+            SELECT
+                -- Convert H3 cell to string format with correct column name for Kepler.gl H3 layer auto-detection
+                CAST(h3_cell AS VARCHAR) as h3_id,
+                CAST(center_lat AS DOUBLE) as center_lat,
+                CAST(center_lon AS DOUBLE) as center_lon,
+                CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
+                CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
+                CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
+
+                -- Convert BigInt counts to regular integers for Kepler.gl compatibility
+                CAST(unique_field_count AS INTEGER) as unique_field_count,
+                CAST(total_pesticide_applications AS INTEGER) as total_pesticide_applications,
+                CAST(pfas_containing_applications AS INTEGER) as pfas_containing_applications,
+                CAST(diquat_containing_applications AS INTEGER) as diquat_containing_applications,
+                CAST(glyphosate_containing_applications AS INTEGER) as glyphosate_containing_applications,
+                CAST(crop_diversity AS INTEGER) as crop_diversity,
+
+                -- Active ingredient exposure metrics as doubles
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                -- Pesticide load metrics as doubles
+                CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
+                CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
+                CAST(total_diquat_pesticide_belastning AS DOUBLE) as total_diquat_pesticide_belastning,
+                CAST(total_glyphosate_pesticide_belastning AS DOUBLE) as total_glyphosate_pesticide_belastning,
+                -- Intensity metrics (grams per hectare)
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+
+                -- String fields
+                crop_types,
+
+                -- Timestamp as string
+                CAST(created_at AS VARCHAR) as created_at
+            FROM {results_table}
+            ORDER BY h3_cell
+        """)
+
+        # Create output path for Kepler-compatible version with "total" as year identifier
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path_kepler = f"gs://{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}_kepler.parquet"
+
+        # Upload Kepler-compatible table
+        self.gcs_access.upload_from_duckdb_table(
+            f"final_cumulative_results_kepler_res{resolution}", output_path_kepler
+        )
+
+        # Also save the original version with BigInt columns
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE final_cumulative_results_res{resolution} AS
+            SELECT
+                *,
+                CURRENT_TIMESTAMP as created_at
+            FROM {results_table}
+            ORDER BY h3_cell
+        """)
+
+        output_path_original = f"gs://{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}.parquet"
+        self.gcs_access.upload_from_duckdb_table(
+            f"final_cumulative_results_res{resolution}", output_path_original
+        )
+
+        # Get count for return
+        count = self.conn.execute(
+            f"SELECT COUNT(*) FROM final_cumulative_results_res{resolution}"
+        ).fetchone()[0]
+
+        self.log.info(
+            f"✅ Saved {count:,} cumulative H3 pesticide exposure records (resolution {resolution})"
+        )
+        self.log.info(f"   📊 Original format: {output_path_original}")
+        self.log.info(f"   🗺️  Kepler.gl compatible: {output_path_kepler}")
+
+        # Generate PMTiles for frontend visualization with "total" as year identifier
+        self.log.info(f"🗺️ Generating cumulative PMTiles (resolution {resolution})...")
+        pmtiles_path = self.pmtiles_generator.generate_pmtiles_for_year(
+            f"final_cumulative_results_res{resolution}", "total"
+        )
+        if pmtiles_path:
+            self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
+        else:
+            self.log.warning("   ⚠️  PMTiles generation skipped for cumulative data")
+
+        return count
+
+    def save_cumulative_kommune_results(self, results_table: str, years: list[int]) -> int:
+        """Save cumulative kommune-level results to GCS with special 'total' year identifier."""
+        self.log.info("💾 Saving cumulative kommune-level pesticide exposure results to GCS")
+        self.log.info(f"   📅 Years included: {years}")
+
+        # Create final results table
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE final_cumulative_kommune_results AS
+            SELECT
+                kommune_code,
+                kommune_name,
+                region_code,
+                CAST(kommune_area_ha AS DOUBLE) as kommune_area_ha,
+                CAST(kommune_centroid_x AS DOUBLE) as kommune_centroid_x,
+                CAST(kommune_centroid_y AS DOUBLE) as kommune_centroid_y,
+                CAST(total_agricultural_area_ha AS DOUBLE) as total_agricultural_area_ha,
+                CAST(unique_field_count AS INTEGER) as unique_field_count,
+                CAST(unique_company_count AS INTEGER) as unique_company_count,
+                CAST(avg_field_coverage_ratio AS DOUBLE) as avg_field_coverage_ratio,
+                CAST(max_field_coverage_ratio AS DOUBLE) as max_field_coverage_ratio,
+                CAST(min_field_coverage_ratio AS DOUBLE) as min_field_coverage_ratio,
+                CAST(crop_diversity AS INTEGER) as crop_diversity,
+                crop_types,
+                -- Active ingredient totals
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                -- Pesticide load totals
+                CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
+                CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
+                CAST(total_diquat_pesticide_belastning AS DOUBLE) as total_diquat_pesticide_belastning,
+                CAST(total_glyphosate_pesticide_belastning AS DOUBLE) as total_glyphosate_pesticide_belastning,
+                -- Application counts
+                CAST(total_pesticide_applications AS INTEGER) as total_pesticide_applications,
+                CAST(pfas_containing_applications AS INTEGER) as pfas_containing_applications,
+                CAST(diquat_containing_applications AS INTEGER) as diquat_containing_applications,
+                CAST(glyphosate_containing_applications AS INTEGER) as glyphosate_containing_applications,
+                -- Unique product counts
+                CAST(unique_pfas_products AS INTEGER) as unique_pfas_products,
+                CAST(unique_diquat_products AS INTEGER) as unique_diquat_products,
+                CAST(unique_glyphosate_products AS INTEGER) as unique_glyphosate_products,
+                CAST(unique_pesticide_products AS INTEGER) as unique_pesticide_products,
+                -- Intensity metrics (grams per hectare)
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                -- Pesticide load intensity metrics
+                CAST(pesticide_belastning_per_ha AS DOUBLE) as pesticide_belastning_per_ha,
+                CAST(pfas_pesticide_belastning_per_ha AS DOUBLE) as pfas_pesticide_belastning_per_ha,
+                CAST(diquat_pesticide_belastning_per_ha AS DOUBLE) as diquat_pesticide_belastning_per_ha,
+                CAST(glyphosate_pesticide_belastning_per_ha AS DOUBLE) as glyphosate_pesticide_belastning_per_ha,
+                CAST(agricultural_coverage_pct AS DOUBLE) as agricultural_coverage_pct,
+                CAST(created_at AS VARCHAR) as created_at
+            FROM {results_table}
+            ORDER BY total_pfas_containing_active_ingredient_grams DESC
+        """)
+
+        # Create output paths with "total" as year identifier
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path_parquet = f"gs://{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.parquet"
+        output_path_csv = f"gs://{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.csv"
+
+        # Upload to GCS in both formats
+        self.gcs_access.upload_from_duckdb_table(
+            "final_cumulative_kommune_results", output_path_parquet
+        )
+        self.gcs_access.upload_from_duckdb_table(
+            "final_cumulative_kommune_results", output_path_csv
+        )
+
+        # Get count for return
+        count = self.conn.execute(
+            "SELECT COUNT(*) FROM final_cumulative_kommune_results"
+        ).fetchone()[0]
+
+        self.log.info(f"✅ Saved {count:,} cumulative kommune pesticide exposure records")
+        self.log.info(f"   📊 Parquet format: {output_path_parquet}")
+        self.log.info(f"   📄 CSV format: {output_path_csv}")
+
+        # Generate PMTiles for frontend visualization with "total" as year identifier
+        self.log.info("🗺️ Generating cumulative kommune PMTiles...")
+        pmtiles_path = self.pmtiles_generator.generate_kommune_pmtiles_for_year(
+            "final_cumulative_kommune_results", "total"
+        )
+        if pmtiles_path:
+            self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
+        else:
+            self.log.warning("   ⚠️  PMTiles generation skipped for cumulative kommune data")
+
+        return count
