@@ -25,7 +25,7 @@ class H3PMTilesGenerator:
         self.gcs_access = gcs_access
         self.log = logger.bind(component="H3PMTilesGenerator")
 
-    def generate_pmtiles_for_year(self, results_table: str, year: int) -> str | None:
+    def generate_pmtiles_for_year(self, results_table: str, year: int | str) -> str | None:
         """Generate PMTiles for a specific year and resolution."""
         self.log.info(
             f"🗺️ Generating PMTiles for year {year}, resolution {self.config.h3_resolution}"
@@ -88,7 +88,7 @@ class H3PMTilesGenerator:
             self._cleanup_temp_files_for_year(year)
             return None
 
-    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int) -> str | None:
+    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int | str) -> str | None:
         """Generate PMTiles for kommune (municipality) data."""
         self.log.info(f"🏛️ Generating kommune PMTiles for year {year}")
 
@@ -159,7 +159,7 @@ class H3PMTilesGenerator:
         except FileNotFoundError:
             return False
 
-    def _create_geojson(self, results_table: str, year: int) -> str | None:
+    def _create_geojson(self, results_table: str, year: int | str) -> str | None:
         """Create GeoJSON from H3 results table."""
         try:
             # Create temporary file for GeoJSON
@@ -335,7 +335,7 @@ class H3PMTilesGenerator:
                     return col
         return None
 
-    def _generate_pmtiles(self, geojson_path: str, year: int) -> str | None:
+    def _generate_pmtiles(self, geojson_path: str, year: int | str) -> str | None:
         """Generate PMTiles using tippecanoe."""
         try:
             temp_dir = Path(tempfile.gettempdir())
@@ -425,7 +425,7 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ PMTiles generation failed: {e}")
             return None
 
-    def _upload_pmtiles_to_gcs(self, pmtiles_path: str, year: int) -> str | None:
+    def _upload_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
         """Upload PMTiles to GCS."""
         try:
             import shutil
@@ -457,7 +457,7 @@ class H3PMTilesGenerator:
                     pass
             return None
 
-    def _create_kommune_geojson(self, results_table: str, year: int) -> str | None:
+    def _create_kommune_geojson(self, results_table: str, year: int | str) -> str | None:
         """Create GeoJSON from kommune results table."""
         try:
             # Create temporary file for GeoJSON
@@ -569,7 +569,7 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ Kommune GeoJSON creation failed: {e}")
             return None
 
-    def _generate_kommune_pmtiles(self, geojson_path: str, year: int) -> str | None:
+    def _generate_kommune_pmtiles(self, geojson_path: str, year: int | str) -> str | None:
         """Generate PMTiles for kommune data using tippecanoe."""
         try:
             temp_dir = Path(tempfile.gettempdir())
@@ -658,7 +658,7 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ Kommune PMTiles generation failed: {e}")
             return None
 
-    def _upload_kommune_pmtiles_to_gcs(self, pmtiles_path: str, year: int) -> str | None:
+    def _upload_kommune_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
         """Upload kommune PMTiles to GCS."""
         try:
             import shutil
@@ -709,7 +709,7 @@ class H3PMTilesGenerator:
         self.log.info(f"✅ Generated PMTiles for {len(results)}/{len(years_data)} years")
         return results
 
-    def _cleanup_temp_files_for_year(self, year: int) -> None:
+    def _cleanup_temp_files_for_year(self, year: int | str) -> None:
         """Clean up temporary files created during PMTiles generation for a specific year."""
         try:
             temp_dir = Path(tempfile.gettempdir())

@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   description: 'Interactive visualization of PFAS exposure data across Denmark using H3 hexagonal grids',
   keywords: ['PFAS', 'pesticide', 'Denmark', 'environmental', 'visualization', 'H3'],
   authors: [{ name: 'Landbrugsdata Team' }],
-  viewport: 'width=device-width, initial-scale=1',
   robots: 'index, follow',
   openGraph: {
     title: 'H3 PFAS Exposure Visualization',
@@ -30,6 +29,11 @@ export const metadata: Metadata = {
     title: 'H3 PFAS Exposure Visualization',
     description: 'Interactive visualization of PFAS exposure data across Denmark',
   },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({

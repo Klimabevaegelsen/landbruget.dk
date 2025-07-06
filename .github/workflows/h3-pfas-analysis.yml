@@ -297,9 +297,111 @@ jobs:
           # List recent outputs for this year across all aggregation levels
           gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pesticide|kommune_pesticide)" | grep "${{ matrix.year }}" | tail -10
 
+  # Cumulative analysis job - runs after all individual years are processed
+  cumulative-analysis:
+    needs: [prepare-matrix, h3-pfas-analysis]
+    runs-on: ubuntu-latest
+    if: needs.h3-pfas-analysis.result == 'success'
+    
+    name: Generate Cumulative Analysis (All Years Combined)
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgeos-dev \
+            libproj-dev \
+            libgdal-dev \
+            git \
+            libsqlite3-dev \
+            zlib1g-dev
+          
+          # Install tippecanoe for PMTiles generation
+          echo "🗺️ Installing tippecanoe for PMTiles generation..."
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j4
+          sudo make install
+          cd /
+          rm -rf /tmp/tippecanoe
+          
+          # Verify installation
+          if command -v tippecanoe &> /dev/null; then
+            echo "✅ Tippecanoe installed successfully: $(tippecanoe --version)"
+          else
+            echo "❌ Tippecanoe installation failed"
+            exit 1
+          fi
+      
+      - name: Install Python dependencies
+        working-directory: ${{ env.PIPELINE_DIR }}
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd ../unified_pipeline
+          uv pip install --system -e .
+          
+          # Install H3 PFAS pipeline dependencies
+          cd ../h3_pfas_exposure_pipeline
+          uv pip install --system -e ".[production]"
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run Cumulative Analysis
+        working-directory: ${{ env.PIPELINE_DIR }}
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
+          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
+          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
+          LOG_LEVEL: INFO
+          ENABLE_PROGRESS_TRACKING: true
+          PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
+        run: |
+          echo "🚀 Running Cumulative Analysis (All Years Combined)"
+          echo "   💾 Memory: ${{ github.event.inputs.memory_limit || '14GB' }}"
+          echo "   ⚙️ Threads: ${{ github.event.inputs.thread_count || '4' }}"
+          echo "   📦 Chunk size: ${{ github.event.inputs.chunk_size || '10000' }}"
+          echo "   📊 Analysis: Cumulative data across all available years"
+          echo ""
+          
+          # Run cumulative analysis
+          python main.py --verbose \
+            --analysis-mode cumulative \
+            --memory-limit ${{ github.event.inputs.memory_limit || '14GB' }} \
+            --thread-count ${{ github.event.inputs.thread_count || '4' }} \
+            --chunk-size ${{ github.event.inputs.chunk_size || '10000' }}
+          
+          echo "✅ Completed cumulative analysis"
+      
+      - name: Verify cumulative output
+        run: |
+          echo "Checking for cumulative output files in GCS..."
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
+
   # Summary job
   analysis-summary:
-    needs: [prepare-matrix, h3-pfas-analysis]
+    needs: [prepare-matrix, h3-pfas-analysis, cumulative-analysis]
     runs-on: ubuntu-latest
     if: always()
     
@@ -308,12 +410,19 @@ jobs:
         run: |
           echo "=== H3 PFAS Analysis Summary ==="
           echo "Matrix jobs: ${{ needs.prepare-matrix.outputs.matrix }}"
-          echo "Analysis results: ${{ needs.h3-pfas-analysis.result }}"
+          echo "Individual year analyses: ${{ needs.h3-pfas-analysis.result }}"
+          echo "Cumulative analysis: ${{ needs.cumulative-analysis.result }}"
           
-          if [[ "${{ needs.h3-pfas-analysis.result }}" == "success" ]]; then
-            echo "✅ All year-based analyses completed successfully!"
+          if [[ "${{ needs.h3-pfas-analysis.result }}" == "success" ]] && [[ "${{ needs.cumulative-analysis.result }}" == "success" ]]; then
+            echo "✅ All analyses completed successfully!"
           else
-            echo "❌ Some year-based analyses failed. Check the logs for details."
+            echo "❌ Some analyses failed. Check the logs for details."
+            if [[ "${{ needs.h3-pfas-analysis.result }}" != "success" ]]; then
+              echo "  - Individual year analyses: ${{ needs.h3-pfas-analysis.result }}"
+            fi
+            if [[ "${{ needs.cumulative-analysis.result }}" != "success" ]]; then
+              echo "  - Cumulative analysis: ${{ needs.cumulative-analysis.result }}"
+            fi
             exit 1
           fi
       
@@ -328,14 +437,17 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: List final outputs
-        if: needs.h3-pfas-analysis.result == 'success'
+        if: needs.h3-pfas-analysis.result == 'success' && needs.cumulative-analysis.result == 'success'
         run: |
-          echo "=== Final Output Files by Year ==="
-          echo "Recent H3 outputs:"
+          echo "=== Final Output Files ==="
+          echo "Recent H3 outputs (individual years):"
           gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_*/*/h3_pesticide_*.parquet | tail -10
           echo ""
-          echo "Recent kommune outputs:"
+          echo "Recent kommune outputs (individual years):"
           gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_*/*/kommune_pesticide_*.parquet | tail -10
+          echo ""
+          echo "Cumulative PMTiles files:"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/pmtiles/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
 
   # Notification job
   notify:
@@ -348,7 +460,8 @@ jobs:
         if: needs.analysis-summary.result == 'success'
         run: |
           echo "🎉 H3 PFAS Analysis completed successfully!"
-          echo "✅ All years processed with individual resource isolation"
+          echo "✅ All individual years processed with resource isolation"
+          echo "✅ Cumulative analysis generated for 'Total' year option"
           echo "Check the Actions tab for detailed logs and output locations."
       
       - name: Send failure notification

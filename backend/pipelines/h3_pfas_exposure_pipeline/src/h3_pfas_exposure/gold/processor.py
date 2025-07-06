@@ -799,12 +799,10 @@ class H3PFASProcessorRefactored:
 
         # Load kommune data from GCS using GCSDataAccess for proper authentication
         try:
-            # Use GCSDataAccess to find and download the latest DAGI kommune data
+            # Use existing GCSDataAccess instance with shared DuckDB connection
             import tempfile
 
-            from unified_pipeline.util.gcs_access import GCSDataAccess
-
-            gcs_access = GCSDataAccess()
+            gcs_access = self.gcs_access
 
             # Try silver layer first (processed data)
             silver_files = gcs_access.list_files(
@@ -818,11 +816,8 @@ class H3PFASProcessorRefactored:
 
                 # Load directly from parquet using GCSDataAccess
                 try:
-                    # Use GCSDataAccess to read the parquet file properly
-                    df = gcs_access.read_parquet_to_df(latest_file)
-
-                    # Register the dataframe in DuckDB
-                    self.conn.register("silver_kommuner_df", df)
+                    # Use GCSDataAccess to create table directly from GCS
+                    gcs_access.create_table_from_gcs("silver_kommuner_raw", latest_file)
 
                     # Create the kommune_boundaries table from silver data
                     self.conn.execute(f"""
@@ -835,7 +830,7 @@ class H3PFASProcessorRefactored:
                             geometry,
                             area_m2 / 10000.0 as kommune_area_ha,
                             ST_Centroid(geometry) as centroid
-                        FROM silver_kommuner_df
+                        FROM silver_kommuner_raw
                         WHERE geometry IS NOT NULL
                     """)
 
@@ -876,8 +871,11 @@ class H3PFASProcessorRefactored:
 
             # Download the JSON file using GCSDataAccess
             with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as temp_file:
-                # Download the file content
-                json_content = gcs_access.download_as_text(kommune_path)
+                # Download the file content using existing download_json method
+                json_data = gcs_access.download_json(kommune_path)
+                import json
+
+                json_content = json.dumps(json_data)
                 temp_file.write(json_content)
                 temp_file.flush()
 
