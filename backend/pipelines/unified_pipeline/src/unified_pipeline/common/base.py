@@ -289,7 +289,9 @@ class BaseSource(Generic[T], ABC):
 
                 # Force DuckDB cleanup
                 try:
-                    self.conn.execute("PRAGMA force_checkpoint")
+                    self.conn.execute("CHECKPOINT")
+                    # Note: PRAGMA force_checkpoint may not be available in all DuckDB versions
+                    # self.conn.execute("PRAGMA force_checkpoint")
                     self.conn.execute("PRAGMA wal_autocheckpoint = 1")
                 except:
                     pass

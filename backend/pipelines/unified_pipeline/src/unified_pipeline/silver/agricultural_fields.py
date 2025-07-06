@@ -381,6 +381,10 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 columns_info = processing_conn.execute("DESCRIBE features_raw").fetchall()
                 available_columns = [row[0] for row in columns_info]
 
+                # DEBUG: Log available columns to understand the data structure
+                self.log.info(f"Available columns in features_raw: {available_columns}")
+                self.log.info(f"Column mapping configuration: {self.config.column_mapping}")
+
                 # Apply column mapping and create spatial geometries using DuckDB-spatial
                 select_columns = []
 
@@ -412,11 +416,39 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         )
                         select_columns.append(f'"{col}" as {clean_col}')
 
-                select_clause = ", ".join(select_columns) if select_columns else "*"
+                # DEBUG: Log what columns will be selected
+                self.log.info(f"Select columns built: {select_columns}")
+
+                # Ensure we have at least some columns to select, fallback to all columns except special ones
+                if not select_columns:
+                    self.log.warning(
+                        "No columns mapped, using all available columns except geometry_json and payload_id"
+                    )
+                    for col in available_columns:
+                        if col not in ["geometry_json", "payload_id"]:
+                            clean_col = (
+                                col.replace(".", "_")
+                                .replace("()", "_")
+                                .replace("(", "_")
+                                .replace(")", "_")
+                            )
+                            select_columns.append(f'"{col}" as {clean_col}')
+
+                select_clause = ", ".join(select_columns) if select_columns else "payload_id"
+
+                # DEBUG: Log the final select clause
+                self.log.info(f"Final select clause: {select_clause}")
 
                 # Create the final processed table with spatial geometries
                 final_table_name = f"processed_features_{dataset}_{year}"
-                processing_conn.execute(f"""
+
+                # DEBUG: Show sample data to understand structure
+                sample_data = processing_conn.execute(
+                    "SELECT * FROM features_raw LIMIT 1"
+                ).fetchall()
+                self.log.info(f"Sample data from features_raw: {sample_data}")
+
+                sql_query = f"""
                     CREATE OR REPLACE TABLE {final_table_name} AS
                     SELECT 
                         {select_clause},
@@ -425,7 +457,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         ST_IsValid(ST_GeomFromGeoJSON(geometry_json)) as is_valid_geometry
                     FROM features_raw
                     WHERE geometry_json IS NOT NULL
-                """)
+                """
+
+                # DEBUG: Log the SQL query being executed
+                self.log.info(f"Executing SQL query: {sql_query}")
+
+                processing_conn.execute(sql_query)
 
                 # Transform geometries from EPSG:25832 to EPSG:4326 for consistency
                 processing_conn.execute(f"""

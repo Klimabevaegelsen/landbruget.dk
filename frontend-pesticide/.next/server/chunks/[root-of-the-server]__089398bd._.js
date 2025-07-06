@@ -68,180 +68,62 @@ const PMTILES_BASE_PATH = 'gold/pmtiles';
 const GCS_BASE_URL = `https://storage.googleapis.com/${BUCKET_NAME}/${PMTILES_BASE_PATH}`;
 // Cache for 1 hour in development, 24 hours in production
 const CACHE_DURATION = ("TURBOPACK compile-time falsy", 0) ? ("TURBOPACK unreachable", undefined) : 3600;
-// Known timestamps for each year/resolution combination (latest first)
-const KNOWN_TIMESTAMPS = {
-    '2015_7': [
-        '20250705_202051',
-        '20250705_195029'
-    ],
-    '2015_8': [
-        '20250705_202226',
-        '20250705_195201'
-    ],
-    '2015_9': [
-        '20250705_202609',
-        '20250705_195538'
-    ],
-    '2015_10': [
-        '20250705_204039',
-        '20250705_200939',
-        '20250705_184924',
-        '20250705_183222',
-        '20250705_181521'
-    ],
-    '2016_7': [
-        '20250705_201958',
-        '20250705_194953'
-    ],
-    '2016_8': [
-        '20250705_202137',
-        '20250705_195131'
-    ],
-    '2016_9': [
-        '20250705_202527',
-        '20250705_195518'
-    ],
-    '2016_10': [
-        '20250705_204032',
-        '20250705_201004',
-        '20250705_185205',
-        '20250705_183413',
-        '20250705_181620'
-    ],
-    '2017_7': [
-        '20250705_202003',
-        '20250705_195202'
-    ],
-    '2017_8': [
-        '20250705_202137',
-        '20250705_195339'
-    ],
-    '2017_9': [
-        '20250705_202515',
-        '20250705_195727'
-    ],
-    '2017_10': [
-        '20250705_203930',
-        '20250705_201213',
-        '20250705_184720',
-        '20250705_183104',
-        '20250705_181448'
-    ],
-    '2018_7': [
-        '20250705_202052',
-        '20250705_195038'
-    ],
-    '2018_8': [
-        '20250705_202233',
-        '20250705_195216'
-    ],
-    '2018_9': [
-        '20250705_202627',
-        '20250705_195606'
-    ],
-    '2018_10': [
-        '20250705_204131',
-        '20250705_201103',
-        '20250705_185053',
-        '20250705_183328',
-        '20250705_181607'
-    ],
-    '2019_7': [
-        '20250705_202058',
-        '20250705_195120'
-    ],
-    '2019_8': [
-        '20250705_202243',
-        '20250705_195306'
-    ],
-    '2019_9': [
-        '20250705_202642',
-        '20250705_195708'
-    ],
-    '2019_10': [
-        '20250705_204158',
-        '20250705_201224',
-        '20250705_183625',
-        '20250705_181740'
-    ],
-    '2020_7': [
-        '20250705_201935',
-        '20250705_195125'
-    ],
-    '2020_8': [
-        '20250705_202121',
-        '20250705_195314'
-    ],
-    '2020_9': [
-        '20250705_202524',
-        '20250705_195723'
-    ],
-    '2020_10': [
-        '20250705_204100',
-        '20250705_201321',
-        '20250705_185339',
-        '20250705_183516',
-        '20250705_181657'
-    ],
-    '2021_7': [
-        '20250705_202027',
-        '20250705_195049'
-    ],
-    '2021_8': [
-        '20250705_202215',
-        '20250705_195236'
-    ],
-    '2021_9': [
-        '20250705_202617',
-        '20250705_195639'
-    ],
-    '2021_10': [
-        '20250705_204140',
-        '20250705_201213',
-        '20250705_183859',
-        '20250705_181843'
-    ],
-    '2022_7': [
-        '20250705_202116',
-        '20250705_195111'
-    ],
-    '2022_8': [
-        '20250705_202300',
-        '20250705_195256'
-    ],
-    '2022_9': [
-        '20250705_202656',
-        '20250705_195655'
-    ],
-    '2022_10': [
-        '20250705_204152',
-        '20250705_201201',
-        '20250705_185258',
-        '20250705_183453',
-        '20250705_181643'
-    ],
-    '2023_7': [
-        '20250705_201945',
-        '20250705_195008'
-    ],
-    '2023_8': [
-        '20250705_202130',
-        '20250705_195148'
-    ],
-    '2023_9': [
-        '20250705_202529',
-        '20250705_195536'
-    ],
-    '2023_10': [
-        '20250705_204031',
-        '20250705_200955',
-        '20250705_185039',
-        '20250705_183258',
-        '20250705_181525'
-    ]
-};
-// Known timestamps for kommune PMTiles (all years use the same timestamp)
-const KOMMUNE_TIMESTAMP = '20250705_204103';
+// Function to get the latest timestamp for a given H3 PMTiles path
+async function getLatestH3Timestamp(year, resolution) {
+    try {
+        // Use the public GCS XML API to list directories without authentication
+        const listUrl = `https://storage.googleapis.com/${BUCKET_NAME}?prefix=${PMTILES_BASE_PATH}/h3_pfas_${year}_res${resolution}/`;
+        const response = await fetch(listUrl);
+        if (!response.ok) {
+            console.error(`Failed to list H3 timestamps for ${year}_${resolution}: ${response.status}`);
+            return null;
+        }
+        const xmlText = await response.text();
+        // Parse the XML to extract directory names (timestamps)
+        const timestampMatches = xmlText.match(/<Key>[^<]*\/([0-9]{8}_[0-9]{6})\/[^<]*<\/Key>/g);
+        if (!timestampMatches) {
+            console.error(`No timestamps found in XML for ${year}_${resolution}`);
+            return null;
+        }
+        // Extract timestamps and find the latest
+        const timestamps = timestampMatches.map((match)=>{
+            const timestampMatch = match.match(/([0-9]{8}_[0-9]{6})/);
+            return timestampMatch ? timestampMatch[1] : null;
+        }).filter((timestamp)=>timestamp !== null).sort().reverse();
+        return timestamps[0] || null;
+    } catch (error) {
+        console.error(`Error fetching H3 timestamps for ${year}_${resolution}:`, error);
+        return null;
+    }
+}
+// Function to get the latest timestamp for kommune PMTiles
+async function getLatestKommuneTimestamp(year) {
+    try {
+        // Use the public GCS XML API to list directories without authentication
+        const listUrl = `https://storage.googleapis.com/${BUCKET_NAME}?prefix=${PMTILES_BASE_PATH}/kommune_pfas_${year}/`;
+        const response = await fetch(listUrl);
+        if (!response.ok) {
+            console.error(`Failed to list kommune timestamps for ${year}: ${response.status}`);
+            return null;
+        }
+        const xmlText = await response.text();
+        // Parse the XML to extract directory names (timestamps)
+        const timestampMatches = xmlText.match(/<Key>[^<]*\/([0-9]{8}_[0-9]{6})\/[^<]*<\/Key>/g);
+        if (!timestampMatches) {
+            console.error(`No timestamps found in XML for kommune ${year}`);
+            return null;
+        }
+        // Extract timestamps and find the latest
+        const timestamps = timestampMatches.map((match)=>{
+            const timestampMatch = match.match(/([0-9]{8}_[0-9]{6})/);
+            return timestampMatch ? timestampMatch[1] : null;
+        }).filter((timestamp)=>timestamp !== null).sort().reverse();
+        return timestamps[0] || null;
+    } catch (error) {
+        console.error(`Error fetching kommune timestamps for ${year}:`, error);
+        return null;
+    }
+}
 async function GET(request, { params }) {
     try {
         const resolvedParams = await params;
@@ -251,17 +133,15 @@ async function GET(request, { params }) {
         const h3Match = path.match(/h3_pfas_(\d{4})_res(\d+)\.pmtiles/);
         if (h3Match) {
             const [, year, resolution] = h3Match;
-            const key = `${year}_${resolution}`;
             // Get the latest timestamp for this year/resolution combination
-            const timestamps = KNOWN_TIMESTAMPS[key];
-            if (!timestamps || timestamps.length === 0) {
+            const latestTimestamp = await getLatestH3Timestamp(year, resolution);
+            if (!latestTimestamp) {
                 return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
                     error: `H3 PMTiles not found for year ${year} resolution ${resolution}`
                 }, {
                     status: 404
                 });
             }
-            const latestTimestamp = timestamps[0];
             gcsUrl = `${GCS_BASE_URL}/h3_pfas_${year}_res${resolution}/${latestTimestamp}/h3_pfas_${year}_res${resolution}.pmtiles`;
         } else {
             const kommuneMatch = path.match(/kommune_pfas_(\d{4})\.pmtiles/);
@@ -292,7 +172,16 @@ async function GET(request, { params }) {
                     status: 404
                 });
             }
-            gcsUrl = `${GCS_BASE_URL}/kommune_pfas_${year}/${KOMMUNE_TIMESTAMP}/kommune_pfas_${year}.pmtiles`;
+            // Get the latest timestamp for this year
+            const latestTimestamp = await getLatestKommuneTimestamp(year);
+            if (!latestTimestamp) {
+                return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
+                    error: `Kommune PMTiles not found for year ${year}`
+                }, {
+                    status: 404
+                });
+            }
+            gcsUrl = `${GCS_BASE_URL}/kommune_pfas_${year}/${latestTimestamp}/kommune_pfas_${year}.pmtiles`;
         }
         // Handle range requests for PMTiles
         const range = request.headers.get('range');
