@@ -292,7 +292,7 @@ class H3PMTilesGenerator:
                             'glyphosate_applications', {glyphosate_applications_value},
                             'field_count', {field_count_value},
                             'coverage', ROUND({coverage_value}, 3),
-                            'area_ha', ROUND(h3_cell_area_ha, 3),
+                            'area_ha', ROUND(h3_area_ha, 3),
                             'agricultural_area_ha', ROUND(COALESCE(total_intersection_area_ha, 0), 3),
                             
                             -- Use pre-calculated intensity fields (grams per hectare)

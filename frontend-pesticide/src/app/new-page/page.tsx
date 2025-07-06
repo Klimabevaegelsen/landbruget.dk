@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react'
 import { NewPMTilesMap } from '@/components/map/NewPMTilesMap'
 import { DataModeSelector } from '@/components/controls/DataModeSelector'
 import { StepSlider } from '@/components/controls/StepSlider'
-import { LayerToggle } from '@/components/controls/LayerToggle'
-import { Legend } from '@/components/controls/Legend'
 import { LoadingIndicator } from '@/components/ui/LoadingIndicator'
 import { useMapStore } from '@/stores/map-store'
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery'
@@ -138,15 +136,7 @@ export default function NewMapPage() {
         <StepSlider />
       </div>
       
-      {/* Layer Controls - Top Right */}
-      <div className="absolute top-4 right-4 z-10 space-y-4 max-w-xs">
-        <LayerToggle />
-      </div>
-      
-      {/* Legend - Bottom Left */}
-      <div className="absolute bottom-4 left-4 z-10 max-w-xs">
-        <Legend />
-      </div>
+
       
       {/* Info Panel - Bottom Right */}
       <div className="absolute bottom-4 right-4 z-10">

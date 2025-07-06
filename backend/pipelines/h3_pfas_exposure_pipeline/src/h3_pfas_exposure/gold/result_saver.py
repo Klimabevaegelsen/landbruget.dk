@@ -37,7 +37,7 @@ class H3ResultSaver:
                 CAST(h3_cell AS VARCHAR) as h3_id,
                 CAST(center_lat AS DOUBLE) as center_lat,
                 CAST(center_lon AS DOUBLE) as center_lon,
-                CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
+                CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
                 
@@ -228,7 +228,7 @@ class H3ResultSaver:
                 CAST(h3_cell AS VARCHAR) as h3_id,
                 CAST(center_lat AS DOUBLE) as center_lat,
                 CAST(center_lon AS DOUBLE) as center_lon,
-                CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
+                CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
                 
@@ -300,7 +300,7 @@ class H3ResultSaver:
                 CAST(h3_cell AS VARCHAR) as h3_id,
                 CAST(center_lat AS DOUBLE) as center_lat,
                 CAST(center_lon AS DOUBLE) as center_lon,
-                CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
+                CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
                 
