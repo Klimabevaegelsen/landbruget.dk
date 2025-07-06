@@ -104,6 +104,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scientific monospace font stack for data displays */
+.font-mono {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
 /* Full-screen map container */
 .map-container {
   height: 100vh;

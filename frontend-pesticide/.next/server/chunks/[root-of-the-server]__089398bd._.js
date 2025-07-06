@@ -59,7 +59,8 @@ module.exports = mod;
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "GET": (()=>GET)
+    "GET": (()=>GET),
+    "HEAD": (()=>HEAD)
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/server.js [app-route] (ecmascript)");
 ;
@@ -124,7 +125,8 @@ async function getLatestKommuneTimestamp(year) {
         return null;
     }
 }
-async function GET(request, { params }) {
+// Shared function to handle both GET and HEAD requests
+async function handlePMTilesRequest(request, params, isHeadRequest = false) {
     try {
         const resolvedParams = await params;
         const path = resolvedParams.path.join('/');
@@ -143,11 +145,14 @@ async function GET(request, { params }) {
                 });
             }
             gcsUrl = `${GCS_BASE_URL}/h3_pfas_${year}_res${resolution}/${latestTimestamp}/h3_pfas_${year}_res${resolution}.pmtiles`;
+        } else if (path === 'bnbo_areas.pmtiles') {
+            // BNBO PMTiles are stored directly in the pmtiles directory
+            gcsUrl = `https://storage.googleapis.com/${BUCKET_NAME}/pmtiles/bnbo_areas.pmtiles`;
         } else {
             const kommuneMatch = path.match(/kommune_pfas_(\d{4})\.pmtiles/);
             if (!kommuneMatch) {
                 return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
-                    error: 'Invalid PMTiles path format. Expected h3_pfas_YYYY_resN.pmtiles or kommune_pfas_YYYY.pmtiles'
+                    error: 'Invalid PMTiles path format. Expected h3_pfas_YYYY_resN.pmtiles, kommune_pfas_YYYY.pmtiles, or bnbo_areas.pmtiles'
                 }, {
                     status: 400
                 });
@@ -192,8 +197,9 @@ async function GET(request, { params }) {
         if (range) {
             headers['Range'] = range;
         }
-        // Fetch from GCS
+        // Use HEAD method for HEAD requests, GET for GET requests
         const response = await fetch(gcsUrl, {
+            method: isHeadRequest ? 'HEAD' : 'GET',
             headers
         });
         if (!response.ok) {
@@ -203,12 +209,9 @@ async function GET(request, { params }) {
                 status: response.status
             });
         }
-        // Get the response body
-        const buffer = await response.arrayBuffer();
         // Copy response headers
         const responseHeaders = {
             'Content-Type': 'application/octet-stream',
-            'Content-Length': buffer.byteLength.toString(),
             'Accept-Ranges': 'bytes',
             'Cache-Control': `public, max-age=${CACHE_DURATION}`
         };
@@ -222,6 +225,19 @@ async function GET(request, { params }) {
         if (response.headers.get('last-modified')) {
             responseHeaders['Last-Modified'] = response.headers.get('last-modified');
         }
+        if (response.headers.get('content-length')) {
+            responseHeaders['Content-Length'] = response.headers.get('content-length');
+        }
+        // For HEAD requests, return empty body with headers
+        if (isHeadRequest) {
+            return new __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"](null, {
+                status: response.status,
+                headers: responseHeaders
+            });
+        }
+        // For GET requests, return the actual file content
+        const buffer = await response.arrayBuffer();
+        responseHeaders['Content-Length'] = buffer.byteLength.toString();
         return new __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"](buffer, {
             status: response.status,
             headers: responseHeaders
@@ -235,6 +251,12 @@ async function GET(request, { params }) {
             status: 500
         });
     }
+}
+async function GET(request, { params }) {
+    return handlePMTilesRequest(request, params, false);
+}
+async function HEAD(request, { params }) {
+    return handlePMTilesRequest(request, params, true);
 }
 }}),
 

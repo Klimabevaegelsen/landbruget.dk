@@ -89,9 +89,9 @@ const DEFAULT_ZOOM = 7;
 const DEFAULT_YEAR: YearSelection = 2023;
 const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
 
-// Zoom thresholds for layer switching
-const KOMMUNE_MAX_ZOOM = 8;
-const H3_MIN_ZOOM = 9;
+// Zoom thresholds for layer switching - minimal overlap to prevent gaps
+const KOMMUNE_MAX_ZOOM = 8.2;
+const H3_MIN_ZOOM = 8.1;
 
 // H3 resolution based on zoom level
 const getH3ResolutionForZoom = (zoom: number): number => {

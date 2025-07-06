@@ -21,9 +21,9 @@ class AreaValidator:
 
         area_stats = self.conn.execute(f"""
             SELECT
-                MIN(h3_cell_area_ha) as min_area,
-                MAX(h3_cell_area_ha) as max_area,
-                AVG(h3_cell_area_ha) as avg_area,
+                MIN(h3_area_ha) as min_area,
+                MAX(h3_area_ha) as max_area,
+                AVG(h3_area_ha) as avg_area,
                 COUNT(*) as total_cells
             FROM {results_table}
         """).fetchone()
@@ -57,10 +57,10 @@ class AreaValidator:
         validation_stats = self.conn.execute(f"""
             SELECT
                 COUNT(*) as total_cells,
-                COUNT(CASE WHEN total_intersection_area_ha > h3_cell_area_ha THEN 1 END) as impossible_intersections,
+                COUNT(CASE WHEN total_intersection_area_ha > h3_area_ha THEN 1 END) as impossible_intersections,
                 COUNT(CASE WHEN actual_coverage_ratio < 0 OR actual_coverage_ratio > 1 THEN 1 END) as invalid_coverage,
                 MAX(total_intersection_area_ha) as max_intersection,
-                MAX(h3_cell_area_ha) as max_h3_area
+                MAX(h3_area_ha) as max_h3_area
             FROM {results_table}
         """).fetchone()
 
