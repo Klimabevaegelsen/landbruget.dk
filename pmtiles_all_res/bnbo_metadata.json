@@ -1,0 +1,47 @@
+{
+  "type": "bnbo_areas",
+  "description": "BNBO (Natura 2000) protected areas with status information",
+  "files": [
+    {
+      "filename": "bnbo_areas.pmtiles",
+      "size_bytes": 4685085,
+      "size_mb": 4.47,
+      "url": "/api/pmtiles/bnbo_areas.pmtiles"
+    }
+  ],
+  "status_codes": [
+    "Action Required",
+    "Completed",
+    "Unknown"
+  ],
+  "status_colors": {
+    "Action Required": "#ff6b6b",
+    "Completed": "#51cf66",
+    "Unknown": "#868e96"
+  },
+  "status_descriptions": {
+    "Action Required": "Areas requiring environmental protection measures",
+    "Completed": "Areas with completed protection measures",
+    "Unknown": "Areas with unknown protection status"
+  },
+  "zoom_levels": {
+    "4-5": "Large areas only (>50 ha)",
+    "6": "Medium-large areas (>20 ha)",
+    "7": "Medium areas (>10 ha)",
+    "8": "Small-medium areas (>5 ha)",
+    "9": "Small areas (>2 ha)",
+    "10": "Very small areas (>1 ha)",
+    "11": "Tiny areas (>0.5 ha)",
+    "12": "All areas"
+  },
+  "area_statistics": {
+    "total_areas": 5458,
+    "min_area_ha": 0.01,
+    "max_area_ha": 547.16,
+    "avg_area_ha": 4.46,
+    "large_areas_50ha": "~5%",
+    "medium_areas_10_50ha": "~15%",
+    "small_areas_under_10ha": "~80%"
+  },
+  "generated_at": "2025-07-05T23:27:15.124227"
+}

@@ -22,7 +22,7 @@ export interface ViewportBounds {
 
 export interface ViewportInfo {
   viewport: ViewState;
-  bounds: ViewportBounds;
+  bounds: ViewportBounds | null;
   zoomLevel: number;
   isTransitioning: boolean;
   center: [number, number];
