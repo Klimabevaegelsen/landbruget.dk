@@ -6,7 +6,7 @@ import os
 import time
 import uuid
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import certifi
 import requests
@@ -80,6 +80,10 @@ def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
 PROBLEMATIC_HERDS = set()
 PROBLEMATIC_HERDS_LOADED = False
 
+# Global dict to track herds that need special handling (smaller date ranges)
+HIGH_VOLUME_HERDS = {}  # herd_id -> {"max_days": int, "last_updated": datetime, "volume_estimate": int}
+HIGH_VOLUME_HERDS_LOADED = False
+
 
 def _load_problematic_herds() -> None:
     """Load problematic herds from persistent storage (GCS)."""
@@ -95,9 +99,10 @@ def _load_problematic_herds() -> None:
         gcs = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
         problematic_herds_path = "bronze/chr/problematic_herds.json"
+        gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 
         try:
-            data = gcs.download_json(bucket_name, problematic_herds_path)
+            data = gcs.download_json(gcs_path)
             if data and "problematic_herds" in data:
                 PROBLEMATIC_HERDS.update(data["problematic_herds"])
                 logger.info(f"Loaded {len(PROBLEMATIC_HERDS)} problematic herds from GCS")
@@ -113,6 +118,37 @@ def _load_problematic_herds() -> None:
     PROBLEMATIC_HERDS_LOADED = True
 
 
+def _load_high_volume_herds() -> None:
+    """Load high-volume herds configuration from persistent storage (GCS)."""
+    global HIGH_VOLUME_HERDS, HIGH_VOLUME_HERDS_LOADED
+
+    if HIGH_VOLUME_HERDS_LOADED:
+        return
+
+    try:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        gcs = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        high_volume_herds_path = "bronze/chr/high_volume_herds.json"
+        gcs_path = f"gs://{bucket_name}/{high_volume_herds_path}"
+
+        try:
+            data = gcs.download_json(gcs_path)
+            if data and "high_volume_herds" in data:
+                HIGH_VOLUME_HERDS.update(data["high_volume_herds"])
+                logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herd configurations from GCS")
+            else:
+                logger.info("No high-volume herd configurations found in GCS - starting with empty dict")
+        except Exception as e:
+            logger.debug(f"Could not load high-volume herds from GCS: {e}")
+
+    except ImportError:
+        logger.debug("GCS access not available - high-volume herds will not persist across runs")
+
+    HIGH_VOLUME_HERDS_LOADED = True
+
+
 def _save_problematic_herds() -> None:
     """Save problematic herds to persistent storage (GCS)."""
     global PROBLEMATIC_HERDS
@@ -126,6 +162,7 @@ def _save_problematic_herds() -> None:
         gcs = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
         problematic_herds_path = "bronze/chr/problematic_herds.json"
+        gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 
         data = {
             "problematic_herds": list(PROBLEMATIC_HERDS),
@@ -133,11 +170,39 @@ def _save_problematic_herds() -> None:
             "total_count": len(PROBLEMATIC_HERDS),
         }
 
-        gcs.upload_json(bucket_name, problematic_herds_path, data)
+        gcs.upload_json(data, gcs_path)
         logger.info(f"Saved {len(PROBLEMATIC_HERDS)} problematic herds to GCS")
 
     except Exception as e:
         logger.warning(f"Could not save problematic herds to GCS: {e}")
+
+
+def _save_high_volume_herds() -> None:
+    """Save high-volume herds configuration to persistent storage (GCS)."""
+    global HIGH_VOLUME_HERDS
+
+    if not HIGH_VOLUME_HERDS:
+        return
+
+    try:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        gcs = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        high_volume_herds_path = "bronze/chr/high_volume_herds.json"
+        gcs_path = f"gs://{bucket_name}/{high_volume_herds_path}"
+
+        data = {
+            "high_volume_herds": HIGH_VOLUME_HERDS,
+            "last_updated": datetime.now().isoformat(),
+            "total_count": len(HIGH_VOLUME_HERDS),
+        }
+
+        gcs.upload_json(data, gcs_path)
+        logger.info(f"Saved {len(HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
+
+    except Exception as e:
+        logger.warning(f"Could not save high-volume herds to GCS: {e}")
 
 
 def add_problematic_herd(herd_number: int) -> None:
@@ -151,10 +216,61 @@ def add_problematic_herd(herd_number: int) -> None:
     _save_problematic_herds()
 
 
+def add_high_volume_herd(herd_number: int, max_days: int, volume_estimate: int = None) -> None:
+    """Add a herd to the high-volume herds list with specific processing constraints."""
+    _load_high_volume_herds()
+
+    HIGH_VOLUME_HERDS[str(herd_number)] = {
+        "max_days": max_days,
+        "last_updated": datetime.now().isoformat(),
+        "volume_estimate": volume_estimate,
+        "reason": "high_volume_detected",
+    }
+
+    logger.warning(f"Added herd {herd_number} to high-volume herds (max {max_days} days per request)")
+    _save_high_volume_herds()
+
+
+def get_optimal_date_range(herd_number: int, requested_start: date, requested_end: date) -> List[tuple]:
+    """
+    Get optimal date ranges for a herd, splitting into smaller chunks if it's high-volume.
+
+    Returns:
+        List of (start_date, end_date) tuples
+    """
+    _load_high_volume_herds()
+
+    herd_str = str(herd_number)
+    if herd_str in HIGH_VOLUME_HERDS:
+        max_days = HIGH_VOLUME_HERDS[herd_str]["max_days"]
+        logger.info(f"Herd {herd_number} is high-volume, splitting into {max_days}-day chunks")
+
+        # Split the requested range into smaller chunks
+        chunks = []
+        current_start = requested_start
+
+        while current_start <= requested_end:
+            current_end = min(current_start + timedelta(days=max_days - 1), requested_end)
+            chunks.append((current_start, current_end))
+            current_start = current_end + timedelta(days=1)
+
+        logger.info(f"Split herd {herd_number} date range into {len(chunks)} chunks of max {max_days} days")
+        return chunks
+    else:
+        # Normal processing - single range
+        return [(requested_start, requested_end)]
+
+
 def is_problematic_herd(herd_number: int) -> bool:
     """Check if a herd is in the problematic herds list."""
     _load_problematic_herds()  # Ensure we have the latest data
     return herd_number in PROBLEMATIC_HERDS
+
+
+def is_high_volume_herd(herd_number: int) -> bool:
+    """Check if a herd is in the high-volume herds list."""
+    _load_high_volume_herds()
+    return str(herd_number) in HIGH_VOLUME_HERDS
 
 
 # --- Base Request Structure ---
@@ -430,6 +546,9 @@ def load_cattle_movement_summaries(
     aggregates them into movement summaries similar to pig movements, avoiding
     the storage of massive individual animal datasets.
 
+    For high-volume herds, automatically splits the date range into smaller chunks
+    to prevent timeouts while still collecting all the data.
+
     Args:
         chr_dyr_client: The CHR_dyr SOAP client
         username: Username for authentication
@@ -450,38 +569,137 @@ def load_cattle_movement_summaries(
 
     logger.info(f"Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
 
+    # Proactive volume detection for unknown herds
+    if not is_high_volume_herd(herd_number) and not is_problematic_herd(herd_number):
+        # For large date ranges (>90 days), do volume detection first
+        total_days = (end_date - start_date).days + 1
+        if total_days > 90:  # Only for requests >3 months
+            logger.info(
+                f"Large date range ({total_days} days) detected for unknown herd {herd_number} - performing volume detection"
+            )
+
+            try:
+                volume_result = detect_herd_volume(chr_dyr_client, username, herd_number)
+
+                if volume_result.get("risk_level") in ["high", "extreme"]:
+                    logger.warning(f"High-volume herd {herd_number} detected during volume check - will use chunking")
+                elif volume_result.get("risk_level") == "moderate":
+                    logger.info(f"Moderate-volume herd {herd_number} detected - will use chunking")
+                else:
+                    logger.info(f"Normal-volume herd {herd_number} detected - proceeding with standard processing")
+
+            except Exception as e:
+                logger.warning(f"Volume detection failed for herd {herd_number}: {e} - proceeding with caution")
+
+    # Check if this is a high-volume herd and get optimal date ranges
+    date_ranges = get_optimal_date_range(herd_number, start_date, end_date)
+
+    if len(date_ranges) > 1:
+        logger.info(f"Processing herd {herd_number} in {len(date_ranges)} chunks due to high volume")
+
+    # Aggregate results from all date ranges
+    combined_movements = []
+    total_animals_processed = 0
+    all_movement_dates = set()
+    all_counterparty_herds = set()
+    successful_chunks = 0
+    failed_chunks = 0
+
     try:
-        # Get aggregated movement summaries directly from load_animal_movements
-        # Note: load_animal_movements now returns aggregated summaries, not raw SOAP responses
-        movement_summaries = load_animal_movements(chr_dyr_client, username, herd_number, start_date, end_date)
+        for chunk_idx, (chunk_start, chunk_end) in enumerate(date_ranges):
+            logger.info(
+                f"Processing herd {herd_number} chunk {chunk_idx + 1}/{len(date_ranges)}: {chunk_start} to {chunk_end}"
+            )
 
-        if not movement_summaries:
-            logger.warning(f"No movement summaries returned for herd {herd_number}")
+            try:
+                # Process this chunk
+                chunk_summaries = load_animal_movements(chr_dyr_client, username, herd_number, chunk_start, chunk_end)
+
+                if chunk_summaries and chunk_summaries.get("movements"):
+                    # Aggregate this chunk's data
+                    combined_movements.extend(chunk_summaries["movements"])
+
+                    # Update statistics
+                    chunk_stats = chunk_summaries.get("summary_stats", {})
+                    total_animals_processed += chunk_stats.get("total_animals_processed", 0)
+
+                    # Add movement dates and counterparty herds from this chunk
+                    if "unique_movement_dates" in chunk_stats:
+                        all_movement_dates.update(chunk_stats["unique_movement_dates"])
+                    if "counterparty_herds" in chunk_stats:
+                        all_counterparty_herds.update(chunk_stats["counterparty_herds"])
+
+                    successful_chunks += 1
+                    logger.info(
+                        f"Chunk {chunk_idx + 1} completed: {len(chunk_summaries['movements'])} movements, {chunk_stats.get('total_animals_processed', 0)} animals"
+                    )
+
+                elif chunk_summaries and chunk_summaries.get("skipped_reason"):
+                    # Chunk was skipped for a reason (e.g., problematic herd, too large)
+                    logger.warning(f"Chunk {chunk_idx + 1} skipped: {chunk_summaries.get('skipped_reason')}")
+                    # Don't count as failed if it was intentionally skipped
+
+                else:
+                    logger.warning(f"Chunk {chunk_idx + 1} returned no data")
+                    failed_chunks += 1
+
+            except Exception as chunk_error:
+                logger.error(f"Error processing chunk {chunk_idx + 1} for herd {herd_number}: {chunk_error}")
+                failed_chunks += 1
+
+                # If this chunk failed due to volume, try to detect and adapt
+                if "timeout" in str(chunk_error).lower() or "aggregation" in str(chunk_error).lower():
+                    current_days = (chunk_end - chunk_start).days + 1
+                    if current_days > 7:  # If chunk was larger than a week, suggest smaller chunks
+                        suggested_days = max(7, current_days // 4)  # Quarter the size, but at least 7 days
+                        logger.warning(
+                            f"Chunk timeout suggests herd {herd_number} needs smaller chunks (suggest {suggested_days} days)"
+                        )
+
+                        # Auto-adapt: add this herd to high-volume list with smaller chunks
+                        if not is_high_volume_herd(herd_number):
+                            add_high_volume_herd(herd_number, suggested_days, volume_estimate=None)
+                            logger.info(
+                                f"Auto-added herd {herd_number} to high-volume list with {suggested_days}-day chunks"
+                            )
+
+        # Create combined summary
+        if combined_movements or successful_chunks > 0:
+            combined_summary = {
+                "reporting_herd_number": herd_number,
+                "movement_count": len(combined_movements),
+                "processed_successfully": True,
+                "processing_stats": {
+                    "total_chunks": len(date_ranges),
+                    "successful_chunks": successful_chunks,
+                    "failed_chunks": failed_chunks,
+                    "chunk_success_rate": successful_chunks / len(date_ranges) * 100 if date_ranges else 0,
+                },
+                "summary_stats": {
+                    "total_animals_processed": total_animals_processed,
+                    "unique_movement_dates": len(all_movement_dates),
+                    "counterparty_herds": len(all_counterparty_herds),
+                    "date_range_processed": f"{start_date} to {end_date}",
+                },
+            }
+
+            logger.info(
+                f"Herd {herd_number}: Combined {len(combined_movements)} movements from {successful_chunks}/{len(date_ranges)} successful chunks"
+            )
+            return combined_summary
+
+        else:
+            logger.warning(f"No movement summaries collected for herd {herd_number} from any chunks")
             return None
-
-        # The movement_summaries are already processed and saved by load_animal_movements
-        # Return only lightweight summary for memory efficiency (full data is already in storage)
-        movement_count = len(movement_summaries.get("movements", []))
-        logger.info(f"Herd {herd_number}: Returned {movement_count} movement summaries")
-
-        # Return lightweight summary instead of full data to reduce memory usage
-        lightweight_summary = {
-            "reporting_herd_number": movement_summaries.get("reporting_herd_number"),
-            "movement_count": movement_count,
-            "processed_successfully": True,
-            "summary_stats": {
-                "total_animals_processed": movement_summaries.get("summary_stats", {}).get(
-                    "total_animals_processed", 0
-                ),
-                "unique_movement_dates": movement_summaries.get("summary_stats", {}).get("unique_movement_dates", 0),
-                "counterparty_herds": movement_summaries.get("summary_stats", {}).get("counterparty_herds", 0),
-            },
-        }
-
-        return lightweight_summary
 
     except Exception as e:
         logger.error(f"Error processing cattle movement summaries for herd {herd_number}: {e}")
+
+        # If the error suggests volume issues, try to auto-adapt
+        if "timeout" in str(e).lower() and not is_high_volume_herd(herd_number):
+            logger.warning(f"Adding herd {herd_number} to high-volume list due to timeout")
+            add_high_volume_herd(herd_number, max_days=30, volume_estimate=None)  # Start with 30-day chunks
+
         return None
 
 
@@ -545,6 +763,40 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     "dataset_size": len(animals),
                 },
             }
+
+        # Detect high-volume herds and suggest chunking instead of processing
+        if len(animals) > 20000:  # 20k animals threshold for chunking suggestion
+            # Calculate suggested chunk size based on volume
+            if len(animals) > 50000:
+                suggested_days = 7  # Very high volume: weekly chunks
+            elif len(animals) > 30000:
+                suggested_days = 14  # High volume: bi-weekly chunks
+            else:
+                suggested_days = 30  # Moderate high volume: monthly chunks
+
+            logger.warning(
+                f"Herd {reporting_herd}: Large dataset ({len(animals)} animals) detected - suggesting {suggested_days}-day chunks for future processing"
+            )
+
+            # Auto-add to high-volume list if not already there
+            if not is_high_volume_herd(reporting_herd):
+                add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=len(animals))
+                logger.info(f"Auto-added herd {reporting_herd} to high-volume list with {suggested_days}-day chunks")
+
+            # For very large datasets, still skip this current processing to avoid timeout
+            if len(animals) > 50000:
+                return {
+                    "reporting_herd_number": reporting_herd,
+                    "movements": [],
+                    "skipped_reason": "auto_chunking_required",
+                    "suggested_chunk_days": suggested_days,
+                    "summary_stats": {
+                        "total_animals_processed": 0,
+                        "unique_movement_dates": 0,
+                        "counterparty_herds": 0,
+                        "dataset_size": len(animals),
+                    },
+                }
 
         # Log dataset size for monitoring
         logger.info(f"Herd {reporting_herd}: Processing {len(animals)} animals for aggregation")
@@ -836,3 +1088,114 @@ def _save_to_streaming_buffer(data_type: str, identifier: str, data: Any) -> boo
     Save data using streaming approach to prevent memory buildup.
     """
     return _append_to_streaming_json(data_type, data)
+
+
+def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, sample_days: int = 7) -> Dict[str, Any]:
+    """
+    Proactively detect if a herd is high-volume by testing a small sample period.
+
+    This prevents timeouts by estimating volume before attempting large requests.
+
+    Args:
+        chr_dyr_client: The CHR_dyr SOAP client
+        username: Username for authentication
+        herd_number: The herd number to test
+        sample_days: Number of recent days to sample (default 7)
+
+    Returns:
+        Dict with volume estimation and recommended chunk size
+    """
+    try:
+        # Test a small recent sample (last week)
+        end_date = date.today()
+        start_date = end_date - timedelta(days=sample_days - 1)
+
+        logger.info(f"Volume detection for herd {herd_number}: testing {sample_days} days ({start_date} to {end_date})")
+
+        # Set a short timeout for this test request
+        start_time = time.time()
+
+        # Create request structure
+        GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
+
+        CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+        request_params = CHR_dyrChrBesListeRequestTypeFactory(
+            **{"BesaetningsNummer": herd_number, "PeriodeFra": start_date, "PeriodeTil": end_date}
+        )
+
+        payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
+
+        # Make the test request with timeout
+        response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
+        request_duration = time.time() - start_time
+
+        if response and hasattr(response, "Response") and response.Response:
+            resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+            animals = getattr(resp, "Enkeltdyrsoplysninger", [])
+            sample_animal_count = len(animals) if animals else 0
+
+            # Calculate estimates
+            animals_per_day = sample_animal_count / sample_days
+            estimated_yearly = animals_per_day * 365
+            estimated_5_year = estimated_yearly * 5
+
+            # Determine volume category and recommended chunk size
+            if estimated_5_year > 200000:  # Very high volume (like slaughterhouses)
+                volume_category = "very_high"
+                recommended_chunk_days = 7
+                risk_level = "extreme"
+            elif estimated_5_year > 100000:  # High volume
+                volume_category = "high"
+                recommended_chunk_days = 14
+                risk_level = "high"
+            elif estimated_5_year > 50000:  # Moderate high volume
+                volume_category = "moderate_high"
+                recommended_chunk_days = 30
+                risk_level = "moderate"
+            else:  # Normal volume
+                volume_category = "normal"
+                recommended_chunk_days = None  # No chunking needed
+                risk_level = "low"
+
+            result = {
+                "herd_number": herd_number,
+                "volume_category": volume_category,
+                "risk_level": risk_level,
+                "sample_stats": {
+                    "sample_days": sample_days,
+                    "sample_animals": sample_animal_count,
+                    "animals_per_day": round(animals_per_day, 1),
+                    "request_duration": round(request_duration, 1),
+                },
+                "estimates": {"yearly_animals": round(estimated_yearly), "five_year_animals": round(estimated_5_year)},
+                "recommendation": {
+                    "chunk_days": recommended_chunk_days,
+                    "auto_configure": risk_level in ["high", "extreme"],
+                },
+            }
+
+            logger.info(
+                f"Herd {herd_number} volume detection: {volume_category} ({estimated_5_year:,.0f} estimated 5-year animals)"
+            )
+
+            # Auto-configure high-risk herds
+            if result["recommendation"]["auto_configure"]:
+                logger.warning(
+                    f"Auto-configuring herd {herd_number} as high-volume ({recommended_chunk_days}-day chunks)"
+                )
+                add_high_volume_herd(herd_number, recommended_chunk_days, round(estimated_5_year))
+
+            return result
+
+        else:
+            return {
+                "herd_number": herd_number,
+                "volume_category": "unknown",
+                "risk_level": "unknown",
+                "error": "no_response_data",
+            }
+
+    except Exception as e:
+        logger.warning(f"Volume detection failed for herd {herd_number}: {e}")
+        return {"herd_number": herd_number, "volume_category": "unknown", "risk_level": "unknown", "error": str(e)}
