@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { PMTilesMap } from '@/components/map/PMTilesMap';
 import { DataModeSelector } from '@/components/controls/DataModeSelector';
-import { YearSelector } from '@/components/controls/YearSelector';
+import { StepSlider } from '@/components/controls/StepSlider';
 import { useMapStore, useDataState, useLayerVisibility, useLoadingState, type YearSelection } from '@/stores/map-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
 import { Settings, Eye, EyeOff } from 'lucide-react';
@@ -105,7 +105,7 @@ export default function Home() {
           
           {/* Center: Year Selection */}
           <div className="flex items-center">
-            <YearSelector />
+            <StepSlider />
           </div>
           
           {/* Right: Controls Toggle */}
