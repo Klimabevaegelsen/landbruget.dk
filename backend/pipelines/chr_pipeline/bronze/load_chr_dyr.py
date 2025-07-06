@@ -476,7 +476,7 @@ def load_animal_movements(
                     + (f"(period: {period_fra} to {period_til})" if period_fra else "")
                 )
 
-                if animal_count > 0 and not isinstance(animals, int):
+                if animal_count > 0 and not isinstance(animals, int) and animals:
                     logger.debug(
                         f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}"
                     )
