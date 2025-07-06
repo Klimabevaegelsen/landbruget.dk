@@ -4,24 +4,34 @@ import { useEffect, useState } from 'react';
 import { PMTilesMap } from '@/components/map/PMTilesMap';
 import { DataModeSelector } from '@/components/controls/DataModeSelector';
 import { StepSlider } from '@/components/controls/StepSlider';
-import { useMapStore, useDataState, useLayerVisibility, useLoadingState, type YearSelection } from '@/stores/map-store';
+import { DataSidebar } from '@/components/overlays/DataSidebar';
+import { useMapStore, useDataState, useLayerVisibility, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
 import { Settings, Eye, EyeOff } from 'lucide-react';
+import { BasemapToggle } from '@/components/controls/BasemapToggle';
+
+// Define HoverInfo interface to match the sidebar component
+interface HoverInfo {
+  layer: 'h3' | 'bnbo' | 'bbr';
+  data: any;
+  coordinate: [number, number];
+  pixel: [number, number];
+}
 
 export default function Home() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(false); // Start with controls hidden like London Underground
+  const [showSidebar, setShowSidebar] = useState(false);
   
   // Store state
   const { selectedYear, selectedDataMode, availableYearOptions } = useDataState();
-  const { showBNBOLayer } = useLayerVisibility();
   const { error } = useLoadingState();
+  const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
   
   // Store actions
   const { 
     setAvailableYearOptions, 
-    toggleBNBOLayer,
     setError: mapSetError,
     clearError: mapClearError
   } = useMapStore();
@@ -55,6 +65,44 @@ export default function Home() {
 
     initialize();
   }, [setAvailableYearOptions, mapSetError, mapClearError]);
+
+  // Convert tooltip data to HoverInfo format for sidebar
+  const convertToHoverInfo = (tooltipData: any, position: { x: number; y: number }): HoverInfo | null => {
+    if (!tooltipData) return null;
+    
+    // Determine layer type based on data
+    let layer: 'h3' | 'bnbo' | 'bbr';
+    if (tooltipData.bnbo_id || tooltipData.status) {
+      layer = 'bnbo';
+    } else if (tooltipData.kommune_code || tooltipData.kommune_name) {
+      layer = 'h3'; // Kommune data is shown as h3 for now
+    } else {
+      layer = 'h3';
+    }
+    
+    return {
+      layer,
+      data: tooltipData,
+      coordinate: [0, 0], // We don't have coordinate from tooltip
+      pixel: [position.x, position.y]
+    };
+  };
+
+  // Handle tooltip changes to show/hide sidebar
+  useEffect(() => {
+    if (showTooltip && tooltipData) {
+      setShowSidebar(true);
+    } else {
+      setShowSidebar(false);
+    }
+  }, [showTooltip, tooltipData]);
+
+  const handleCloseSidebar = () => {
+    setShowSidebar(false);
+  };
+
+  // Get current hover info for sidebar
+  const hoverInfo = convertToHoverInfo(tooltipData, tooltipPosition);
 
   // Loading state
   if (isInitializing || !isInitialized) {
@@ -94,39 +142,35 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Top Header */}
-      <div className="bg-gray-800/95 backdrop-blur-sm border-b border-gray-700 px-6 py-4 z-50">
+      {/* Top Header - Inspired by London Underground Live */}
+      <div className="bg-gray-800/95 backdrop-blur-sm border-b border-gray-700 px-6 py-3 z-50">
         <div className="flex items-center justify-between">
           {/* Left: Title */}
-          <div>
-            <h1 className="text-xl font-bold text-white">Danish Agricultural Pesticide Analysis</h1>
-            <p className="text-sm text-gray-400">PMTiles visualization • {yearCount} years of data + cumulative</p>
+          <div className="flex items-center space-x-4">
+            <div>
+              <h1 className="text-lg font-bold text-white">Danish Agricultural Pesticide Analysis</h1>
+              <p className="text-xs text-gray-400">PMTiles visualization • {yearCount} years of data + cumulative</p>
+            </div>
           </div>
           
-          {/* Center: Year Selection */}
-          <div className="flex items-center">
+          {/* Center: Data Mode Selector */}
+          <div className="flex items-center space-x-6">
+            <DataModeSelector variant="topbar" />
+            <div className="h-6 w-px bg-gray-600"></div>
             <StepSlider />
           </div>
           
           {/* Right: Controls Toggle */}
           <div className="flex items-center space-x-4">
             <button
-              onClick={toggleBNBOLayer}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all ${
-                showBNBOLayer 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-gray-700 hover:bg-gray-600'
+              onClick={() => setShowControls(!showControls)}
+              className={`p-2 rounded-lg transition-all ${
+                showControls 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
               }`}
             >
-              {showBNBOLayer ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              <span className="text-sm">BNBO</span>
-            </button>
-            
-            <button
-              onClick={() => setShowControls(!showControls)}
-              className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition-all"
-            >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -134,42 +178,25 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex-1 flex relative">
-        {/* Left Sidebar - Controls */}
+        {/* Left Sidebar - Advanced Controls (hidden by default) */}
         {showControls && (
           <div className="w-80 bg-gray-800/95 backdrop-blur-sm border-r border-gray-700 overflow-y-auto">
-            <DataModeSelector className="m-4" />
-            
-            {/* Additional Info Panel */}
-            <div className="m-4 p-4 bg-gray-700/50 rounded-lg">
-              <h3 className="text-sm font-semibold text-white mb-3">Current View</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Year:</span>
-                  <span className="font-medium text-white">
-                    {selectedYear === 'total' ? 'Cumulative (All Years)' : selectedYear}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Data Mode:</span>
-                  <span className="font-medium text-white capitalize">{selectedDataMode.replace('_', ' ')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">BNBO Layer:</span>
-                  <span className={`font-medium ${showBNBOLayer ? 'text-green-400' : 'text-gray-400'}`}>
-                    {showBNBOLayer ? 'Visible' : 'Hidden'}
-                  </span>
-                </div>
+            <div className="p-4 space-y-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Advanced Controls</h3>
+              
+              {/* Data Mode Selector */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Data Mode</h4>
+                <DataModeSelector variant="sidebar" />
               </div>
               
-              <div className="mt-4 pt-3 border-t border-gray-600">
-                <h4 className="text-xs font-semibold text-gray-300 mb-2">Usage Tips</h4>
-                <ul className="text-xs text-gray-400 space-y-1">
-                  <li>• Zoom out: Municipality-level data</li>
-                  <li>• Zoom in: H3 cell-level detail</li>
-                  <li>• Hover for detailed information</li>
-                  <li>• Click for expanded data view</li>
-                  <li>• Use "Total" for cumulative analysis</li>
-                </ul>
+              {/* Layer Visibility Controls */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-3">Layer Visibility</h4>
+                <div className="space-y-3">
+                  {/* Basemap Toggle */}
+                  <BasemapToggle />
+                </div>
               </div>
             </div>
           </div>
@@ -178,42 +205,14 @@ export default function Home() {
         {/* Map Container */}
         <div className="flex-1 relative">
           <PMTilesMap className="w-full h-full" />
-          
-          {/* Map Controls Overlay */}
-          <div className="absolute top-4 right-4 z-40">
-            <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
-              <div className="text-xs text-gray-600 text-center">
-                <div className="font-medium">Zoom Level</div>
-                <div className="text-gray-500">Auto-switching layers</div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Legend Overlay */}
-          <div className="absolute bottom-4 left-4 z-40">
-            <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg max-w-xs">
-              <div className="text-xs text-gray-800">
-                <div className="font-medium mb-1">Layer Switching</div>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                    <span>Kommune (zoom 4-8)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded"></div>
-                    <span>H3 Cells (zoom 9+)</span>
-                  </div>
-                  {showBNBOLayer && (
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-500 rounded"></div>
-                      <span>BNBO Protected Areas</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+
+        {/* Right Sidebar - Data Details */}
+        <DataSidebar 
+          hoverInfo={hoverInfo}
+          onClose={handleCloseSidebar}
+          isVisible={showSidebar}
+        />
       </div>
     </div>
   );

@@ -404,7 +404,7 @@ class SpatialJoiner:
                     )
                 ) / 10000.0 as actual_intersection_area_ha,
                 -- Calculate H3 cell area for validation
-                ST_Area_Spheroid(ST_FlipCoordinates(r.h3_geometry)) / 10000.0 as h3_cell_area_ha
+                ST_Area_Spheroid(ST_FlipCoordinates(r.h3_geometry)) / 10000.0 as h3_area_ha
             FROM {raw_intersections_table} r
             WHERE r.h3_cell IS NOT NULL
             GROUP BY r.h3_cell, r.center_lat, r.center_lon, r.h3_geometry
@@ -434,11 +434,11 @@ class SpatialJoiner:
             g.h3_cell,
             g.center_lat,
             g.center_lon,
-            g.h3_cell_area_ha,
+            g.h3_area_ha,
             g.actual_intersection_area_ha as total_intersection_area_ha,
             CASE
-                WHEN g.h3_cell_area_ha > 0 THEN
-                    LEAST(1.0, g.actual_intersection_area_ha / g.h3_cell_area_ha)
+                WHEN g.h3_area_ha > 0 THEN
+                    LEAST(1.0, g.actual_intersection_area_ha / g.h3_area_ha)
                 ELSE 0.0
             END as actual_coverage_ratio,
             COALESCE(f.unique_field_count, 0) as unique_field_count,

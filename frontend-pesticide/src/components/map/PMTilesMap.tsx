@@ -50,10 +50,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const showBasemap = useMapStore((state) => state.showBasemap)
   const { isLoading, error } = useLoadingState()
   
-  // Compute layer visibility based on zoom (stable)
-  const shouldShowKommune = zoom <= 8
-  const shouldShowH3 = zoom >= 9
-  const currentH3Resolution = zoom >= 14 ? 10 : zoom >= 12 ? 9 : zoom >= 10 ? 8 : 7
+  // Compute layer visibility based on zoom (stable) - use centralized function
+  const layerVisibility = getComputedLayerVisibility(zoom)
+  const shouldShowKommune = layerVisibility.shouldShowKommune
+  const shouldShowH3 = layerVisibility.shouldShowH3
+  const currentH3Resolution = layerVisibility.currentH3Resolution
   
   // Get property name based on data mode - using actual property names from tooltip
   const getPropertyName = (mode: string) => {
@@ -284,27 +285,144 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           type: 'vector',
           url: `pmtiles://${pmtilesUrls.bnbo}`,
         }
-        console.log('✅ Added bnbo source')
+        console.log('✅ Added bnbo source:', pmtilesUrls.bnbo)
+      } else {
+        console.log('❌ No BNBO URL found in pmtilesUrls:', pmtilesUrls)
       }
       
       console.log('🗺️ Final sources configuration:', sources)
       
       // Create layers array with only layers for available sources
+      // Layer order matters: layers added later appear on top
+      // Order: basemap (bottom) -> kommune -> h3 -> bnbo (top)
       const layers: any[] = []
       
-      // Always add basemap layer if available
+      // Always add basemap layer if available (bottom layer)
       if (sources.basemap) {
-        layers.push({
-          id: 'basemap-fill',
-          type: 'fill',
-          source: 'basemap',
-          'source-layer': 'earth',
-          paint: {
-            'fill-color': '#000000',
-            'fill-opacity': 1
+        layers.push(
+          {
+            id: 'basemap-fill',
+            type: 'fill',
+            source: 'basemap',
+            'source-layer': 'earth',
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': '#1a1a1a',
+              'fill-opacity': 1
+            }
+          },
+          {
+            id: 'basemap-water',
+            type: 'fill',
+            source: 'basemap',
+            'source-layer': 'water',
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': '#0f172a',
+              'fill-opacity': 1
+            }
+          },
+          {
+            id: 'basemap-landuse',
+            type: 'fill',
+            source: 'basemap',
+            'source-layer': 'landuse',
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': [
+                'match',
+                ['get', 'kind'],
+                'park', '#1e3a2e',
+                'forest', '#1a2f1a',
+                'residential', '#2a2a2a',
+                'commercial', '#2d2d2d',
+                'industrial', '#262626',
+                'farmland', '#1e2a1e',
+                '#222222'
+              ],
+              'fill-opacity': 0.6
+            }
+          },
+          {
+            id: 'basemap-buildings',
+            type: 'fill',
+            source: 'basemap',
+            'source-layer': 'buildings',
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': '#404040',
+              'fill-opacity': 0.8
+            }
+          },
+          {
+            id: 'basemap-buildings-stroke',
+            type: 'line',
+            source: 'basemap',
+            'source-layer': 'buildings',
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#505050',
+              'line-width': 0.5,
+              'line-opacity': 0.5
+            }
+          },
+          {
+            id: 'basemap-roads-minor',
+            type: 'line',
+            source: 'basemap',
+            'source-layer': 'roads',
+            filter: ['in', ['get', 'kind'], ['literal', ['minor_road', 'path']]],
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#3a3a3a',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                8, 0.5,
+                12, 1,
+                16, 2
+              ],
+              'line-opacity': 0.6
+            }
+          },
+          {
+            id: 'basemap-roads-major',
+            type: 'line',
+            source: 'basemap',
+            'source-layer': 'roads',
+            filter: ['in', ['get', 'kind'], ['literal', ['highway', 'major_road']]],
+            layout: {
+              visibility: showBasemap ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#4a4a4a',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                6, 1,
+                10, 2,
+                14, 4,
+                16, 6
+              ],
+              'line-opacity': 0.8
+            }
           }
-        })
-        console.log('✅ Added basemap layer')
+        )
+        console.log('✅ Added basemap layers with buildings and roads')
       }
       
       // Add kommune layers if available
@@ -399,36 +517,48 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         console.log('✅ Added H3 layers')
       }
       
-      // Add BNBO layers if available
+      // Add BNBO layers if available - ALWAYS VISIBLE and ON TOP
       if (sources.bnbo) {
         layers.push(
           {
             id: 'bnbo-fill',
             type: 'fill',
             source: 'bnbo',
-            'source-layer': 'bnbo_areas',
+            'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
             layout: {
-              visibility: showBNBOLayer ? 'visible' : 'none'
+              visibility: 'visible' // Always visible
             },
             paint: {
               'fill-color': [
-                'match',
-                ['get', 'status'],
-                'Action Required', '#ff6b6b',
-                'Completed', '#51cf66',
-                'Unknown', '#868e96',
-                '#cccccc'
+                'case',
+                ['has', 'status_category'], [
+                  'match',
+                  ['get', 'status_category'],
+                  'Action Required', '#ff6b6b',
+                  'Completed', '#51cf66',
+                  'Unknown', '#868e96',
+                  '#cccccc'
+                ],
+                ['has', 'status'], [
+                  'match',
+                  ['get', 'status'],
+                  'Action Required', '#ff6b6b',
+                  'Completed', '#51cf66',
+                  'Unknown', '#868e96',
+                  '#cccccc'
+                ],
+                '#ff00ff' // Bright magenta fallback to make any BNBO areas visible
               ],
-              'fill-opacity': 0.6
+              'fill-opacity': 0.8 // Increased opacity to make them more visible
             }
           },
           {
             id: 'bnbo-stroke',
             type: 'line',
             source: 'bnbo',
-            'source-layer': 'bnbo_areas',
+            'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
             layout: {
-              visibility: showBNBOLayer ? 'visible' : 'none'
+              visibility: 'visible' // Always visible
             },
             paint: {
               'line-color': '#ffffff',
@@ -437,7 +567,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             }
           }
         )
-        console.log('✅ Added BNBO layers')
+        console.log('✅ Added BNBO layers (always visible and on top)')
+        console.log('🔍 BNBO source configuration:', sources.bnbo)
+      } else {
+        console.log('❌ No BNBO source available for layers')
       }
       
       console.log('🗺️ Final layers configuration:', layers.map(l => ({ id: l.id, source: l.source })))
@@ -524,6 +657,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
                 return acc
               }, {})
               console.log(`📊 Rendered features by source:layer:`, sourceLayerCounts)
+              
+              // Check specifically for BNBO features
+              const bnboFeatures = allRenderedFeatures.filter((f: any) => f.source === 'bnbo')
+              if (bnboFeatures.length > 0) {
+                console.log(`🛡️ Found ${bnboFeatures.length} BNBO features:`, bnboFeatures.slice(0, 3))
+              } else {
+                console.log(`🛡️ No BNBO features found in rendered features`)
+              }
             }
           } catch (e) {
             console.log(`📊 Could not query rendered features:`, e)
@@ -599,8 +740,16 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           stack: e.stack
         })
         
-        // Log the full error object to see what properties are available
-        console.error('❌ Full error object:', JSON.stringify(e, null, 2))
+        // Safely log error properties without circular references
+        const safeErrorProps = {
+          type: e.type,
+          message: e.message,
+          sourceId: e.sourceId,
+          errorMessage: e.error?.message,
+          errorStack: e.error?.stack,
+          url: e.url
+        }
+        console.error('❌ Safe error object:', safeErrorProps)
         
         // Try to get more specific error information
         let errorMessage = 'Unknown map error'
@@ -690,6 +839,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
         if (map.current && map.current.getLayer(layerId)) {
           map.current.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+          console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
+        } else {
+          console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
         }
       }
       
@@ -701,13 +853,50 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       updateLayerVisibility('h3-fill', layerVisibility.shouldShowH3)
       updateLayerVisibility('h3-stroke', layerVisibility.shouldShowH3)
       
-      // Update BNBO layer visibility
-      updateLayerVisibility('bnbo-fill', showBNBOLayer)
-      updateLayerVisibility('bnbo-stroke', showBNBOLayer)
+      // BNBO layers are always visible - no need to update visibility
+      // updateLayerVisibility('bnbo-fill', true) // Always visible
+      // updateLayerVisibility('bnbo-stroke', true) // Always visible
     } catch (error) {
       console.warn('Error updating layer visibility:', error)
     }
-  }, [zoom, showBNBOLayer, mapLoaded])
+  }, [zoom, mapLoaded])
+
+  // Update basemap visibility when showBasemap changes
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return
+
+    try {
+      console.log('🗺️ Updating basemap visibility:', showBasemap)
+      
+      // Helper function to safely update layer visibility
+      const updateLayerVisibility = (layerId: string, visible: boolean) => {
+        if (map.current && map.current.getLayer(layerId)) {
+          map.current.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+          console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
+        } else {
+          console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
+        }
+      }
+      
+      // Update all basemap layers
+      const basemapLayers = [
+        'basemap-fill',
+        'basemap-water', 
+        'basemap-landuse',
+        'basemap-buildings',
+        'basemap-buildings-stroke',
+        'basemap-roads-minor',
+        'basemap-roads-major'
+      ]
+      
+      basemapLayers.forEach(layerId => {
+        updateLayerVisibility(layerId, showBasemap)
+      })
+      
+    } catch (error) {
+      console.warn('Error updating basemap visibility:', error)
+    }
+  }, [showBasemap, mapLoaded])
 
   // Update paint expressions when data mode changes
   useEffect(() => {
@@ -733,6 +922,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         ]
         map.current.setPaintProperty('kommune-fill', 'fill-color', newPaint)
         console.log('✅ Updated kommune-fill paint property')
+      } else {
+        console.log('⚠️ kommune-fill layer not found, skipping paint update')
       }
       
       // Update H3 layer paint
@@ -752,6 +943,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         ]
         map.current.setPaintProperty('h3-fill', 'fill-color', newPaint)
         console.log('✅ Updated h3-fill paint property')
+      } else {
+        console.log('⚠️ h3-fill layer not found, skipping paint update')
       }
       
       // Debug: Try to get some feature data to see what properties are available
@@ -785,99 +978,109 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       layersToUpdate.forEach(layerId => {
         if (map.current && map.current.getLayer(layerId)) {
           map.current.removeLayer(layerId)
+          console.log(`🗑️ Removed layer: ${layerId}`)
         }
       })
       
-      // Re-add Kommune layers with correct source-layer name
-      const kommuneSourceLayer = `kommune_pfas_${selectedYear}`
-      map.current.addLayer({
-        id: 'kommune-fill',
-        type: 'fill',
-        source: 'kommune',
-        'source-layer': kommuneSourceLayer,
-        layout: {
-          visibility: shouldShowKommune ? 'visible' : 'none'
-        },
-        paint: {
-          'fill-color': [
-            'interpolate',
-            ['linear'],
-            ['get', currentPropertyName],
-            0, 'transparent',
-            0.1, '#fee5d9',
-            1, '#fcbba1',
-            5, '#fc9272',
-            10, '#fb6a4a',
-            20, '#ef3b2c',
-            50, '#cb181d',
-            100, '#99000d'
-          ],
-          'fill-opacity': 0.8
-        }
-      })
+      // Re-add Kommune layers with correct source-layer name (only if source exists)
+      // Add before BNBO layers to ensure BNBO stays on top
+      if (map.current.getSource('kommune')) {
+        const kommuneSourceLayer = `kommune_pfas_${selectedYear}`
+        map.current.addLayer({
+          id: 'kommune-fill',
+          type: 'fill',
+          source: 'kommune',
+          'source-layer': kommuneSourceLayer,
+          layout: {
+            visibility: shouldShowKommune ? 'visible' : 'none'
+          },
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['get', currentPropertyName],
+              0, 'transparent',
+              0.1, '#fee5d9',
+              1, '#fcbba1',
+              5, '#fc9272',
+              10, '#fb6a4a',
+              20, '#ef3b2c',
+              50, '#cb181d',
+              100, '#99000d'
+            ],
+            'fill-opacity': 0.8
+          }
+        }, 'bnbo-fill') // Add before BNBO fill layer
+        
+        map.current.addLayer({
+          id: 'kommune-stroke',
+          type: 'line',
+          source: 'kommune',
+          'source-layer': kommuneSourceLayer,
+          layout: {
+            visibility: shouldShowKommune ? 'visible' : 'none'
+          },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': 0.5,
+            'line-opacity': 0.5
+          }
+        }, 'bnbo-fill') // Add before BNBO fill layer
+        
+        console.log('✅ Re-added kommune layers with source-layer:', kommuneSourceLayer)
+      } else {
+        console.log('⚠️ Kommune source not found, skipping layer re-addition')
+      }
       
-      map.current.addLayer({
-        id: 'kommune-stroke',
-        type: 'line',
-        source: 'kommune',
-        'source-layer': kommuneSourceLayer,
-        layout: {
-          visibility: shouldShowKommune ? 'visible' : 'none'
-        },
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 0.5,
-          'line-opacity': 0.5
-        }
-      })
-      
-      // Re-add H3 layers with correct source-layer name
-      const h3SourceLayer = `h3_pfas_${selectedYear}_res${currentH3Resolution}`
-      map.current.addLayer({
-        id: 'h3-fill',
-        type: 'fill',
-        source: 'h3',
-        'source-layer': h3SourceLayer,
-        layout: {
-          visibility: shouldShowH3 ? 'visible' : 'none'
-        },
-        paint: {
-          'fill-color': [
-            'interpolate',
-            ['linear'],
-            ['get', currentPropertyName],
-            0, 'transparent',
-            0.1, '#fee5d9',
-            1, '#fcbba1',
-            5, '#fc9272',
-            10, '#fb6a4a',
-            20, '#ef3b2c',
-            50, '#cb181d',
-            100, '#99000d'
-          ],
-          'fill-opacity': 0.7
-        }
-      })
-      
-      map.current.addLayer({
-        id: 'h3-stroke',
-        type: 'line',
-        source: 'h3',
-        'source-layer': h3SourceLayer,
-        layout: {
-          visibility: shouldShowH3 ? 'visible' : 'none'
-        },
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 0.2,
-          'line-opacity': 0.3
-        }
-      })
-      
-      console.log('✅ Updated source-layer names:', {
-        kommune: kommuneSourceLayer,
-        h3: h3SourceLayer
-      })
+      // Re-add H3 layers with correct source-layer name (only if source exists)
+      // Add before BNBO layers to ensure BNBO stays on top
+      if (map.current.getSource('h3')) {
+        const h3SourceLayer = `h3_pfas_${selectedYear}_res${currentH3Resolution}`
+        map.current.addLayer({
+          id: 'h3-fill',
+          type: 'fill',
+          source: 'h3',
+          'source-layer': h3SourceLayer,
+          layout: {
+            visibility: shouldShowH3 ? 'visible' : 'none'
+          },
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['get', currentPropertyName],
+              0, 'transparent',
+              0.1, '#fee5d9',
+              1, '#fcbba1',
+              5, '#fc9272',
+              10, '#fb6a4a',
+              20, '#ef3b2c',
+              50, '#cb181d',
+              100, '#99000d'
+            ],
+            'fill-opacity': 0.7
+          }
+        }, 'bnbo-fill') // Add before BNBO fill layer
+        
+        map.current.addLayer({
+          id: 'h3-stroke',
+          type: 'line',
+          source: 'h3',
+          'source-layer': h3SourceLayer,
+          layout: {
+            visibility: shouldShowH3 ? 'visible' : 'none'
+          },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': 0.2,
+            'line-opacity': 0.3
+          }
+        }, 'bnbo-fill') // Add before BNBO fill layer
+        
+        console.log('✅ Re-added H3 layers with source-layer:', h3SourceLayer)
+      } else {
+        console.log('⚠️ H3 source not found, skipping layer re-addition')
+      }
       
     } catch (error) {
       console.warn('Error updating source-layer names:', error)
@@ -931,23 +1134,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         </div>
       )}
       
-      {/* Map info overlay */}
-      <div className="absolute top-4 left-4 bg-black/80 text-white px-3 py-2 rounded text-sm max-w-xs">
-        <div>Year: {selectedYear}</div>
-        <div>Mode: {selectedDataMode}</div>
-        <div>Zoom: {Math.round(zoom * 10) / 10}</div>
-        <div>Layers: {shouldShowKommune ? 'Kommune' : shouldShowH3 ? `H3 (${currentH3Resolution})` : 'None'}</div>
-        <div className="mt-2 text-xs opacity-75">
-          <div>Sources:</div>
-          <div>• Basemap: {pmtilesUrls.basemap ? '✅' : '❌'}</div>
-          <div>• Kommune: {pmtilesUrls.kommune ? '✅' : '❌'}</div>
-          <div>• H3: {pmtilesUrls.h3 ? '✅' : '❌'}</div>
-          <div>• BNBO: {pmtilesUrls.bnbo ? '✅' : '❌'}</div>
-        </div>
-      </div>
+
       
-      {/* Tooltip */}
-      <MapTooltip />
+      {/* Tooltip - Disabled in favor of sidebar */}
+      {/* <MapTooltip /> */}
     </div>
   )
 }

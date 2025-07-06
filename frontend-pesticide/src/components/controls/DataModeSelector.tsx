@@ -5,6 +5,7 @@ import { useMapStore, useDataState, DataMode, DATA_MODE_CONFIG } from '@/stores/
 
 interface DataModeSelectorProps {
   className?: string;
+  variant?: 'sidebar' | 'topbar';
 }
 
 const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
@@ -53,37 +54,66 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   );
 };
 
-export const DataModeSelector: React.FC<DataModeSelectorProps> = ({ className = '' }) => {
+export const DataModeSelector: React.FC<DataModeSelectorProps> = ({ 
+  className = '', 
+  variant = 'sidebar' 
+}) => {
   const { selectedDataMode } = useDataState();
   const { setSelectedDataMode } = useMapStore();
 
-  const modes: { key: DataMode; label: string; description: string; color: string }[] = [
+  const modes: { key: DataMode; label: string; shortLabel: string; description: string; color: string }[] = [
     {
       key: 'pesticide_total',
       label: 'Total Pesticide',
+      shortLabel: 'Total',
       description: 'All pesticide applications combined',
       color: 'text-gray-700',
     },
     {
       key: 'pfas',
       label: 'PFAS',
+      shortLabel: 'PFAS',
       description: 'PFAS-containing pesticides only',
       color: 'text-red-600',
     },
     {
       key: 'diquat',
       label: 'Diquat',
+      shortLabel: 'Diquat',
       description: 'Diquat-containing pesticides only',
       color: 'text-blue-600',
     },
     {
       key: 'glyphosate',
       label: 'Glyphosate',
+      shortLabel: 'Glyphosate',
       description: 'Glyphosate-containing pesticides only',
       color: 'text-green-600',
     },
   ];
 
+  // Minimal top bar version inspired by London Underground Live
+  if (variant === 'topbar') {
+    return (
+      <div className={`flex items-center space-x-1 ${className}`}>
+        {modes.map((mode) => (
+          <button
+            key={mode.key}
+            onClick={() => setSelectedDataMode(mode.key)}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+              selectedDataMode === mode.key
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            {mode.shortLabel}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // Original sidebar version
   return (
     <div className={`bg-white rounded-lg shadow-lg border border-gray-200 p-4 ${className}`}>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Mode</h3>
