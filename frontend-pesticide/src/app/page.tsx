@@ -7,7 +7,7 @@ import { StepSlider } from '@/components/controls/StepSlider';
 import { DataSidebar } from '@/components/overlays/DataSidebar';
 import { useMapStore, useDataState, useLayerVisibility, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
-import { Settings, Eye, EyeOff } from 'lucide-react';
+import { Settings, Eye, EyeOff, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { BasemapToggle } from '@/components/controls/BasemapToggle';
 
 // Define HoverInfo interface to match the sidebar component
@@ -22,7 +22,7 @@ export default function Home() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [showControls, setShowControls] = useState(false); // Start with controls hidden like London Underground
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
   
   // Store state
   const { selectedYear, selectedDataMode, availableYearOptions } = useDataState();
@@ -88,21 +88,16 @@ export default function Home() {
     };
   };
 
-  // Handle tooltip changes to show/hide sidebar
-  useEffect(() => {
-    if (showTooltip && tooltipData) {
-      setShowSidebar(true);
-    } else {
-      setShowSidebar(false);
-    }
-  }, [showTooltip, tooltipData]);
+  // Get current hover info for sidebar - only when there's tooltip data
+  const hoverInfo = showTooltip && tooltipData ? convertToHoverInfo(tooltipData, tooltipPosition) : null;
+
+  const handleToggleSidebar = () => {
+    setShowSidebar(!showSidebar);
+  };
 
   const handleCloseSidebar = () => {
     setShowSidebar(false);
   };
-
-  // Get current hover info for sidebar
-  const hoverInfo = convertToHoverInfo(tooltipData, tooltipPosition);
 
   // Loading state
   if (isInitializing || !isInitialized) {
@@ -122,61 +117,63 @@ export default function Home() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-400 text-6xl mb-4">⚠️</div>
-          <h2 className="text-white text-xl font-semibold mb-2">Something went wrong</h2>
-          <p className="text-gray-400 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-          >
-            Reload Application
-          </button>
+        <div className="text-center">
+          <div className="text-red-400 text-4xl mb-4">⚠️</div>
+          <p className="text-white text-lg font-medium">Error Loading Map</p>
+          <p className="text-gray-400 text-sm mt-2">{error}</p>
         </div>
       </div>
     );
   }
 
-  // Get year count for display
-  const yearCount = availableYearOptions.filter(year => typeof year === 'number').length;
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Top Header - Inspired by London Underground Live */}
-      <div className="bg-gray-800/95 backdrop-blur-sm border-b border-gray-700 px-6 py-3 z-50">
-        <div className="flex items-center justify-between">
-          {/* Left: Title */}
-          <div className="flex items-center space-x-4">
-            <div>
-              <h1 className="text-lg font-bold text-white">Danish Agricultural Pesticide Analysis</h1>
-              <p className="text-xs text-gray-400">PMTiles visualization • {yearCount} years of data + cumulative</p>
+    <div className="min-h-screen bg-gray-900 flex flex-col">
+      {/* Top Bar */}
+      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-3">
+            <h1 className="text-xl font-bold text-white">PFAS Exposure Analysis</h1>
+            <div className="text-sm text-gray-400">
+              {selectedYear === 'total' ? 'All Years' : `Year ${selectedYear}`}
             </div>
           </div>
           
-          {/* Center: Data Mode Selector */}
-          <div className="flex items-center space-x-6">
-            <DataModeSelector variant="topbar" />
-            <div className="h-6 w-px bg-gray-600"></div>
-            <StepSlider />
-          </div>
+          {/* Data Mode Selector - Top Bar Version */}
+          <DataModeSelector variant="topbar" />
           
-          {/* Right: Controls Toggle */}
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setShowControls(!showControls)}
-              className={`p-2 rounded-lg transition-all ${
-                showControls 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Step Slider for Year Selection */}
+          <StepSlider />
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {/* Sidebar Toggle Button */}
+          <button
+            onClick={handleToggleSidebar}
+            className={`p-2 rounded-lg transition-colors ${
+              showSidebar 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+            title={showSidebar ? 'Hide Details Panel' : 'Show Details Panel'}
+          >
+            {showSidebar ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+          </button>
+          
+          {/* Advanced Controls Toggle */}
+          <button
+            onClick={() => setShowControls(!showControls)}
+            className={`p-2 rounded-lg transition-colors ${
+              showControls 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+            title={showControls ? 'Hide Advanced Controls' : 'Show Advanced Controls'}
+          >
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex relative">
         {/* Left Sidebar - Advanced Controls (hidden by default) */}
         {showControls && (
