@@ -510,14 +510,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             paint: {
               'line-color': '#ffffff',
               'line-width': 0.2,
-              'line-opacity': 0.3
+              'line-opacity': 0
             }
           }
         )
         console.log('✅ Added H3 layers')
       }
       
-      // Add BNBO layers if available - ALWAYS VISIBLE and ON TOP
+      // Add BNBO layers if available - ALWAYS VISIBLE
       if (sources.bnbo) {
         layers.push(
           {
@@ -526,7 +526,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             source: 'bnbo',
             'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
             layout: {
-              visibility: 'visible' // Always visible
+              visibility: 'visible'
             },
             paint: {
               'fill-color': [
@@ -558,12 +558,12 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             source: 'bnbo',
             'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
             layout: {
-              visibility: 'visible' // Always visible
+              visibility: 'visible'
             },
             paint: {
               'line-color': '#ffffff',
               'line-width': 1,
-              'line-opacity': 0.8
+              'line-opacity': 0
             }
           }
         )
@@ -1073,7 +1073,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           paint: {
             'line-color': '#ffffff',
             'line-width': 0.2,
-            'line-opacity': 0.3
+            'line-opacity': 0
           }
         }, 'bnbo-fill') // Add before BNBO fill layer
         

@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}";
+self.__REACT_LOADABLE_MANIFEST='{"components/map/PMTilesMap.tsx -> maplibre-gl":{"id":9101,"files":["static/css/d0edc2fb1ed48765.css","static/chunks/vendors-220eaede4c971d27.js"]},"components/map/PMTilesMap.tsx -> pmtiles":{"id":8639,"files":["static/css/d0edc2fb1ed48765.css","static/chunks/vendors-220eaede4c971d27.js"]}}';
