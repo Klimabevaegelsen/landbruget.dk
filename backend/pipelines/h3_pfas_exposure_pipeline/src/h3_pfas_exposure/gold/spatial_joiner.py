@@ -475,6 +475,12 @@ class SpatialJoiner:
                     COALESCE(f.total_glyphosate_containing_active_ingredient_grams, 0) / g.actual_intersection_area_ha
                 ELSE 0
             END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+            -- Total pesticide load intensity (grams per hectare)
+            CASE
+                WHEN g.actual_intersection_area_ha > 0 THEN
+                    COALESCE(f.total_pesticide_belastning, 0) / g.actual_intersection_area_ha
+                ELSE 0
+            END as pesticide_belastning_per_ha,
             CURRENT_TIMESTAMP as created_at
         FROM geometric_union g
         LEFT JOIN field_stats f ON g.h3_cell = f.h3_cell

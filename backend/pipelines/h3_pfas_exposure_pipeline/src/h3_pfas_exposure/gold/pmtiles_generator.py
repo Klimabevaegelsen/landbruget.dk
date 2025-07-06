@@ -184,8 +184,43 @@ class H3PMTilesGenerator:
             pesticide_col = self._find_column(
                 column_names, ["total_pesticide_belastning", "pesticide_load"]
             )
+            diquat_col = self._find_column(
+                column_names, ["total_diquat_containing_active_ingredient_grams", "diquat_grams"]
+            )
+            glyphosate_col = self._find_column(
+                column_names,
+                ["total_glyphosate_containing_active_ingredient_grams", "glyphosate_grams"],
+            )
+            # Look for intensity fields
+            pfas_intensity_col = self._find_column(
+                column_names,
+                ["pfas_containing_active_ingredient_intensity_grams_per_ha", "pfas_intensity"],
+            )
+            pesticide_intensity_col = self._find_column(
+                column_names, ["pesticide_belastning_per_ha", "pesticide_intensity"]
+            )
+            diquat_intensity_col = self._find_column(
+                column_names,
+                ["diquat_containing_active_ingredient_intensity_grams_per_ha", "diquat_intensity"],
+            )
+            glyphosate_intensity_col = self._find_column(
+                column_names,
+                [
+                    "glyphosate_containing_active_ingredient_intensity_grams_per_ha",
+                    "glyphosate_intensity",
+                ],
+            )
             applications_col = self._find_column(
                 column_names, ["total_pesticide_applications", "applications"]
+            )
+            pfas_applications_col = self._find_column(
+                column_names, ["pfas_containing_applications", "pfas_applications"]
+            )
+            diquat_applications_col = self._find_column(
+                column_names, ["diquat_containing_applications", "diquat_applications"]
+            )
+            glyphosate_applications_col = self._find_column(
+                column_names, ["glyphosate_containing_applications", "glyphosate_applications"]
             )
             field_count_col = self._find_column(column_names, ["unique_field_count", "field_count"])
             coverage_col = self._find_column(
@@ -196,14 +231,46 @@ class H3PMTilesGenerator:
                 self.log.error("❌ No H3 cell column found in results table")
                 return None
 
-            self.log.info(f"Using columns: H3={h3_col}, PFAS={pfas_col}, Pesticide={pesticide_col}")
+            self.log.info(
+                f"Using columns: H3={h3_col}, PFAS={pfas_col}, Pesticide={pesticide_col}, Diquat={diquat_col}, Glyphosate={glyphosate_col}"
+            )
+            self.log.info(
+                f"Intensity columns: PFAS={pfas_intensity_col}, Pesticide={pesticide_intensity_col}, Diquat={diquat_intensity_col}, Glyphosate={glyphosate_intensity_col}"
+            )
 
             # Build values with null safety
             pfas_value = f"COALESCE({pfas_col}, 0)" if pfas_col else "0"
             pesticide_value = f"COALESCE({pesticide_col}, 0)" if pesticide_col else "0"
+            diquat_value = f"COALESCE({diquat_col}, 0)" if diquat_col else "0"
+            glyphosate_value = f"COALESCE({glyphosate_col}, 0)" if glyphosate_col else "0"
             applications_value = f"COALESCE({applications_col}, 0)" if applications_col else "0"
+            pfas_applications_value = (
+                f"COALESCE({pfas_applications_col}, 0)" if pfas_applications_col else "0"
+            )
+            diquat_applications_value = (
+                f"COALESCE({diquat_applications_col}, 0)" if diquat_applications_col else "0"
+            )
+            glyphosate_applications_value = (
+                f"COALESCE({glyphosate_applications_col}, 0)"
+                if glyphosate_applications_col
+                else "0"
+            )
             field_count_value = f"COALESCE({field_count_col}, 0)" if field_count_col else "0"
             coverage_value = f"COALESCE({coverage_col}, 0)" if coverage_col else "0"
+
+            # Build intensity values with null safety
+            pfas_intensity_value = (
+                f"COALESCE({pfas_intensity_col}, 0)" if pfas_intensity_col else "0"
+            )
+            pesticide_intensity_value = (
+                f"COALESCE({pesticide_intensity_col}, 0)" if pesticide_intensity_col else "0"
+            )
+            diquat_intensity_value = (
+                f"COALESCE({diquat_intensity_col}, 0)" if diquat_intensity_col else "0"
+            )
+            glyphosate_intensity_value = (
+                f"COALESCE({glyphosate_intensity_col}, 0)" if glyphosate_intensity_col else "0"
+            )
 
             # Generate GeoJSON with H3 geometries
             self.conn.execute(f"""
@@ -217,41 +284,34 @@ class H3PMTilesGenerator:
                             'resolution', {self.config.h3_resolution},
                             'pfas_grams', ROUND({pfas_value}, 3),
                             'pesticide_load', ROUND({pesticide_value}, 3),
+                            'diquat_grams', ROUND({diquat_value}, 3),
+                            'glyphosate_grams', ROUND({glyphosate_value}, 3),
                             'applications', {applications_value},
+                            'pfas_applications', {pfas_applications_value},
+                            'diquat_applications', {diquat_applications_value},
+                            'glyphosate_applications', {glyphosate_applications_value},
                             'field_count', {field_count_value},
                             'coverage', ROUND({coverage_value}, 3),
+                            'area_ha', ROUND(h3_cell_area_ha, 3),
                             
-                            -- Calculate intensity per hectare
-                            'pfas_intensity', CASE 
-                                WHEN h3_cell_area_ha > 0 THEN ROUND({pfas_value} / h3_cell_area_ha, 3)
-                                ELSE 0 
-                            END,
-                            'pesticide_intensity', CASE 
-                                WHEN h3_cell_area_ha > 0 THEN ROUND({pesticide_value} / h3_cell_area_ha, 3)
-                                ELSE 0 
-                            END,
+                            -- Use pre-calculated intensity fields (grams per hectare)
+                            'pfas_intensity', ROUND({pfas_intensity_value}, 6),
+                            'pesticide_intensity', ROUND({pesticide_intensity_value}, 6),
+                            'diquat_intensity', ROUND({diquat_intensity_value}, 6),
+                            'glyphosate_intensity', ROUND({glyphosate_intensity_value}, 6),
                             
-                            -- Zoom classification for level-of-detail rendering
+                            -- Zoom classification for level-of-detail rendering (based on total pesticide load)
                             'zoom_class', CASE 
-                                WHEN {pfas_value} > 100 THEN 'high'
-                                WHEN {pfas_value} > 10 THEN 'medium'
-                                WHEN {pfas_value} > 0 THEN 'low'
+                                WHEN {pesticide_value} > 1000 THEN 'very_high'
+                                WHEN {pesticide_value} > 100 THEN 'high'
+                                WHEN {pesticide_value} > 10 THEN 'medium'
+                                WHEN {pesticide_value} > 0 THEN 'low'
                                 ELSE 'none'
-                            END,
-                            
-                            -- Color coding for visualization
-                            'pfas_color', CASE 
-                                WHEN {pfas_value} > 100 THEN '#d73027'
-                                WHEN {pfas_value} > 50 THEN '#f46d43'
-                                WHEN {pfas_value} > 10 THEN '#fdae61'
-                                WHEN {pfas_value} > 1 THEN '#fee08b'
-                                WHEN {pfas_value} > 0 THEN '#e6f598'
-                                ELSE '#abdda4'
                             END
                         ) as properties
                     FROM {results_table}
-                    WHERE {pfas_value} > 0  -- Only include cells with PFAS data
-                    ORDER BY {pfas_value} DESC
+                    WHERE {pesticide_value} > 0 OR {pfas_value} > 0 OR {diquat_value} > 0 OR {glyphosate_value} > 0  -- Include cells with any pesticide data
+                    ORDER BY {pesticide_value} DESC
                 ) TO '{geojson_path}' (FORMAT JSON, ARRAY true)
             """)
 
@@ -313,15 +373,31 @@ class H3PMTilesGenerator:
                 "--attribute-type",
                 "pesticide_load:float",
                 "--attribute-type",
+                "diquat_grams:float",
+                "--attribute-type",
+                "glyphosate_grams:float",
+                "--attribute-type",
                 "pfas_intensity:float",
                 "--attribute-type",
                 "pesticide_intensity:float",
                 "--attribute-type",
+                "diquat_intensity:float",
+                "--attribute-type",
+                "glyphosate_intensity:float",
+                "--attribute-type",
                 "applications:int",
+                "--attribute-type",
+                "pfas_applications:int",
+                "--attribute-type",
+                "diquat_applications:int",
+                "--attribute-type",
+                "glyphosate_applications:int",
                 "--attribute-type",
                 "field_count:int",
                 "--attribute-type",
                 "coverage:float",
+                "--attribute-type",
+                "area_ha:float",
                 "--attribute-type",
                 "year:int",
                 "--attribute-type",
@@ -394,17 +470,29 @@ class H3PMTilesGenerator:
 
             self.log.info(f"📄 Creating kommune GeoJSON: {geojson_path}")
 
-            # Check if we have geometry data in the results table
-            schema = self.conn.execute(f"DESCRIBE {results_table}").fetchall()
-            column_names = [row[0] for row in schema]
+            # Always try to use actual kommune polygon geometries from kommune_boundaries table
+            # The results table only contains aggregated data and centroids, not polygon geometries
+            self.log.info(
+                "✅ Using actual kommune polygon geometries from kommune_boundaries table"
+            )
 
-            has_geometry = any(col.lower() in ["geometry", "geom", "wkt"] for col in column_names)
+            # Check if kommune_boundaries table exists
+            try:
+                self.conn.execute("SELECT COUNT(*) FROM kommune_boundaries").fetchone()
+                has_kommune_boundaries = True
+            except Exception:
+                has_kommune_boundaries = False
+                self.log.warning("⚠️ kommune_boundaries table not found, falling back to centroids")
 
-            if not has_geometry:
-                self.log.warning(
-                    "⚠️ No geometry column found in results table, using centroids as fallback"
-                )
-                # Use centroids as fallback
+            if has_kommune_boundaries:
+                # Use actual kommune geometries from the boundaries table
+                geometry_select = """
+                    ST_AsGeoJSON(kb.geometry)::JSON
+                """
+                geometry_condition = "kb.geometry IS NOT NULL"
+                join_clause = "LEFT JOIN kommune_boundaries kb ON r.kommune_code = kb.kommune_code"
+            else:
+                # Fallback to centroids as points if boundaries table is not available
                 geometry_select = """
                     json_object(
                         'type', 'Point',
@@ -414,13 +502,7 @@ class H3PMTilesGenerator:
                 geometry_condition = (
                     "kommune_centroid_x IS NOT NULL AND kommune_centroid_y IS NOT NULL"
                 )
-            else:
-                # Use actual kommune geometries - need to join with kommune_boundaries table
-                self.log.info("✅ Using actual kommune polygon geometries")
-                geometry_select = """
-                    json_extract(ST_AsGeoJSON(kb.geometry), '$.geometry')
-                """
-                geometry_condition = "kb.geometry IS NOT NULL"
+                join_clause = ""
 
             # Create GeoJSON with proper kommune geometries
             query = f"""
@@ -467,7 +549,7 @@ class H3PMTilesGenerator:
                             END
                         ) as properties
                     FROM {results_table} r
-                    {"LEFT JOIN kommune_boundaries kb ON r.kommune_code = kb.kommune_code" if has_geometry else ""}
+                    {join_clause}
                     WHERE {geometry_condition}
                     ORDER BY COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) DESC
                 ) TO '{geojson_path}' (FORMAT JSON, ARRAY true)
