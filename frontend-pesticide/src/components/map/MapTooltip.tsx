@@ -4,14 +4,33 @@ import React from 'react';
 import { useTooltipState, DATA_MODE_CONFIG, BNBO_STATUS_CONFIG } from '@/stores/map-store';
 
 interface TooltipData {
-  // H3 data fields
+  // H3 data fields - both old and new field names
+  h3_id?: string;
   h3_cell?: string;
+  h3_resolution?: number;
   center_lat?: number;
   center_lon?: number;
   h3_cell_area_ha?: number;
   total_intersection_area_ha?: number;
   actual_coverage_ratio?: number;
   unique_field_count?: number;
+  field_count?: number;
+  
+  // Pesticide data - both old and new field names
+  pfas_grams?: number;
+  pesticide_load?: number;
+  diquat_grams?: number;
+  glyphosate_grams?: number;
+  applications?: number;
+  pfas_applications?: number;
+  diquat_applications?: number;
+  glyphosate_applications?: number;
+  pfas_intensity?: number;
+  pesticide_intensity?: number;
+  diquat_intensity?: number;
+  glyphosate_intensity?: number;
+  
+  // Original field names for backward compatibility
   total_pfas_containing_active_ingredient_grams?: number;
   total_diquat_containing_active_ingredient_grams?: number;
   total_glyphosate_containing_active_ingredient_grams?: number;
@@ -29,6 +48,7 @@ interface TooltipData {
   diquat_containing_active_ingredient_intensity_grams_per_ha?: number;
   glyphosate_containing_active_ingredient_intensity_grams_per_ha?: number;
   pesticide_belastning_per_ha?: number;
+  avg_field_coverage?: number;
 
   // Kommune data fields
   kommune_code?: number;
@@ -38,7 +58,9 @@ interface TooltipData {
   kommune_centroid_x?: number;
   kommune_centroid_y?: number;
   total_agricultural_area_ha?: number;
+  agricultural_area_ha?: number;
   unique_company_count?: number;
+  company_count?: number;
   avg_field_coverage_ratio?: number;
   max_field_coverage_ratio?: number;
   min_field_coverage_ratio?: number;
@@ -76,233 +98,356 @@ const formatNumber = (value: number | undefined, decimals: number = 2): string =
   });
 };
 
+const formatScientific = (value: number | undefined, unit: string): string => {
+  if (value === undefined || value === null) return 'N/A';
+  if (value === 0) return `0 ${unit}`;
+  
+  if (value < 0.01 && value > 0) {
+    return `${value.toExponential(2)} ${unit}`;
+  }
+  
+  return `${value.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} ${unit}`;
+};
+
 const formatPercentage = (value: number | undefined): string => {
   if (value === undefined || value === null) return 'N/A';
   return `${formatNumber(value * 100, 1)}%`;
 };
 
-const getTooltipType = (data: TooltipData): 'h3' | 'kommune' | 'bnbo' | 'unknown' => {
-  if (data.h3_cell) return 'h3';
-  if (data.kommune_code || data.kommune_name) return 'kommune';
+function getTooltipType(data: TooltipData): 'h3' | 'kommune' | 'bnbo' {
   if (data.bnbo_id || data.status) return 'bnbo';
-  return 'unknown';
+  if (data.kommune_code || data.kommune_name) return 'kommune';
+  return 'h3';
+}
+
+const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
+  const h3Id = data.h3_id || data.h3_cell;
+  const year = data.year || 2023;
+  const resolution = data.resolution || data.h3_resolution || 7;
+  
+  const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
+  const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
+  const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
+  const glyphosateGrams = data.glyphosate_grams || data.total_glyphosate_containing_active_ingredient_grams || 0;
+  const applications = data.applications || data.total_pesticide_applications || 0;
+  const fieldCount = data.unique_field_count || data.field_count || 0;
+  const area = data.h3_cell_area_ha || data.agricultural_area_ha || 0;
+  const coverage = data.actual_coverage_ratio || data.avg_field_coverage || 0;
+
+  // Calculate intensities
+  const pfasIntensity = data.pfas_intensity || data.pfas_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? pfasGrams / area : 0);
+  const pesticideIntensity = data.pesticide_intensity || data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
+  const diquatIntensity = data.diquat_intensity || data.diquat_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? diquatGrams / area : 0);
+  const glyphosateIntensity = data.glyphosate_intensity || data.glyphosate_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? glyphosateGrams / area : 0);
+
+  return (
+    <div className="space-y-3">
+      {/* Header - Scientific and serious */}
+      <div className="relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white">
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"></div>
+        <div className="relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-mono text-sm font-semibold tracking-wide">AGRICULTURAL ANALYSIS CELL</h3>
+              <p className="font-mono text-xs text-gray-300">
+                H3 RES-{resolution} • YEAR {year} • SECTOR {h3Id ? h3Id.substring(0, 8).toUpperCase() : 'UNKNOWN'}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-xs text-gray-400">AREA</div>
+              <div className="font-mono text-sm font-bold text-white">
+                {area > 0 ? `${formatNumber(area, 1)} ha` : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Critical Chemical Data - Serious red warning styling */}
+      <div className="space-y-2">
+        <div className="border border-red-300 bg-red-50 rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+              <span className="font-mono text-xs font-semibold text-red-800 tracking-wide">PFAS CONTAMINATION</span>
+            </div>
+            <div className="text-red-600 font-mono text-xs">⚠ PERSISTENT</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <div className="font-mono text-red-900 font-bold text-lg">{formatNumber(pfasGrams, 2)}</div>
+              <div className="font-mono text-red-600">g total mass</div>
+            </div>
+            <div>
+              <div className="font-mono text-red-900 font-bold text-lg">{formatNumber(pfasIntensity, 2)}</div>
+              <div className="font-mono text-red-600">g/ha intensity</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border border-orange-300 bg-orange-50 rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
+              <span className="font-mono text-xs font-semibold text-orange-800 tracking-wide">PESTICIDE LOAD</span>
+            </div>
+            <div className="text-orange-600 font-mono text-xs">⚠ ACTIVE</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <div className="font-mono text-orange-900 font-bold text-lg">{formatNumber(pesticideLoad, 2)}</div>
+              <div className="font-mono text-orange-600">kg total load</div>
+            </div>
+            <div>
+              <div className="font-mono text-orange-900 font-bold text-lg">{formatNumber(pesticideIntensity, 2)}</div>
+              <div className="font-mono text-orange-600">kg/ha intensity</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Specific Chemical Analysis */}
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
+        <h4 className="font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide">CHEMICAL COMPOSITION ANALYSIS</h4>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="border-l-2 border-green-500 pl-2">
+            <div className="font-mono text-gray-600">GLYPHOSATE</div>
+            <div className="font-mono font-bold text-gray-900">{formatScientific(glyphosateGrams, 'g')}</div>
+            <div className="font-mono text-gray-500">{formatScientific(glyphosateIntensity, 'g/ha')}</div>
+          </div>
+          <div className="border-l-2 border-yellow-500 pl-2">
+            <div className="font-mono text-gray-600">DIQUAT</div>
+            <div className="font-mono font-bold text-gray-900">{formatScientific(diquatGrams, 'g')}</div>
+            <div className="font-mono text-gray-500">{formatScientific(diquatIntensity, 'g/ha')}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Agricultural Activity Data */}
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
+        <h4 className="font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide">AGRICULTURAL ACTIVITY</h4>
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{applications}</div>
+            <div className="font-mono text-gray-600">APPLICATIONS</div>
+          </div>
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{fieldCount}</div>
+            <div className="font-mono text-gray-600">FIELD COUNT</div>
+          </div>
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{formatPercentage(coverage)}</div>
+            <div className="font-mono text-gray-600">COVERAGE</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Technical Metadata */}
+      <div className="border-t border-gray-300 pt-2">
+        <div className="font-mono text-xs text-gray-500">
+          <span className="font-semibold">CELL ID:</span>
+          <span className="ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono">
+            {h3Id ? h3Id.substring(0, 16) + '...' : 'UNKNOWN'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => (
-  <div className="space-y-3">
-    <div className="border-b border-gray-200 pb-2">
-      <h3 className="font-semibold text-gray-900">H3 Cell</h3>
-      <p className="text-sm text-gray-600 font-mono">{data.h3_cell}</p>
-    </div>
+const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
+  const year = data.year || 2023;
+  
+  const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
+  const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
+  const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
+  const glyphosateGrams = data.glyphosate_grams || data.total_glyphosate_containing_active_ingredient_grams || 0;
+  const applications = data.applications || data.total_pesticide_applications || 0;
+  const fieldCount = data.field_count || data.unique_field_count || 0;
+  const area = data.agricultural_area_ha || data.total_agricultural_area_ha || 0;
+  const coverage = data.agricultural_coverage_pct ? data.agricultural_coverage_pct / 100 : 0;
 
-    <div className="grid grid-cols-2 gap-3 text-sm">
-      <div>
-        <span className="text-gray-600">Area:</span>
-        <div className="font-medium">{formatNumber(data.h3_cell_area_ha)} ha</div>
-      </div>
-      <div>
-        <span className="text-gray-600">Fields:</span>
-        <div className="font-medium">{formatNumber(data.unique_field_count, 0)}</div>
-      </div>
-      <div>
-        <span className="text-gray-600">Coverage:</span>
-        <div className="font-medium">{formatPercentage(data.actual_coverage_ratio)}</div>
-      </div>
-      <div>
-        <span className="text-gray-600">Crop Types:</span>
-        <div className="font-medium">{formatNumber(data.crop_diversity, 0)}</div>
-      </div>
-    </div>
+  // Calculate intensities
+  const pfasIntensity = data.pfas_pesticide_belastning_per_ha || (area > 0 ? pfasGrams / area : 0);
+  const pesticideIntensity = data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
+  const diquatIntensity = data.diquat_pesticide_belastning_per_ha || (area > 0 ? diquatGrams / area : 0);
+  const glyphosateIntensity = data.glyphosate_pesticide_belastning_per_ha || (area > 0 ? glyphosateGrams / area : 0);
 
-    <div className="border-t border-gray-200 pt-2">
-      <h4 className="font-medium text-gray-900 mb-2">Pesticide Intensity (per ha)</h4>
-      <div className="space-y-1 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-600">Total:</span>
-          <span className="font-medium">{formatNumber(data.pesticide_belastning_per_ha)} kg/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-red-600">PFAS:</span>
-          <span className="font-medium">{formatNumber(data.pfas_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-blue-600">Diquat:</span>
-          <span className="font-medium">{formatNumber(data.diquat_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-green-600">Glyphosate:</span>
-          <span className="font-medium">{formatNumber(data.glyphosate_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
+  return (
+    <div className="space-y-3">
+      {/* Header - Municipal Analysis */}
+      <div className="relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white">
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"></div>
+        <div className="relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-mono text-sm font-semibold tracking-wide">MUNICIPAL ANALYSIS ZONE</h3>
+              <p className="font-mono text-xs text-gray-300">
+                {data.kommune_name ? data.kommune_name.toUpperCase() : 'KOMMUNE'} • CODE {data.kommune_code || 'N/A'} • YEAR {year}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-xs text-gray-400">AGRI AREA</div>
+              <div className="font-mono text-sm font-bold text-white">
+                {area > 0 ? `${formatNumber(area, 1)} ha` : 'N/A'}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div className="border-t border-gray-200 pt-2">
-      <h4 className="font-medium text-gray-900 mb-2">Total Applications</h4>
-      <div className="space-y-1 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-600">All:</span>
-          <span className="font-medium">{formatNumber(data.total_pesticide_applications, 0)}</span>
+      {/* Critical Chemical Data */}
+      <div className="space-y-2">
+        <div className="border border-red-300 bg-red-50 rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+              <span className="font-mono text-xs font-semibold text-red-800 tracking-wide">PFAS CONTAMINATION</span>
+            </div>
+            <div className="text-red-600 font-mono text-xs">⚠ PERSISTENT</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <div className="font-mono text-red-900 font-bold text-lg">{formatNumber(pfasGrams, 2)}</div>
+              <div className="font-mono text-red-600">g total mass</div>
+            </div>
+            <div>
+              <div className="font-mono text-red-900 font-bold text-lg">{formatNumber(pfasIntensity, 2)}</div>
+              <div className="font-mono text-red-600">g/ha intensity</div>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between">
-          <span className="text-red-600">PFAS:</span>
-          <span className="font-medium">{formatNumber(data.pfas_containing_applications, 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-blue-600">Diquat:</span>
-          <span className="font-medium">{formatNumber(data.diquat_containing_applications, 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-green-600">Glyphosate:</span>
-          <span className="font-medium">{formatNumber(data.glyphosate_containing_applications, 0)}</span>
-        </div>
-      </div>
-    </div>
 
-    {data.crop_types && (
-      <div className="border-t border-gray-200 pt-2">
-        <h4 className="font-medium text-gray-900 mb-1">Crop Types</h4>
-        <p className="text-xs text-gray-600 max-w-xs break-words">{data.crop_types}</p>
+        <div className="border border-orange-300 bg-orange-50 rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
+              <span className="font-mono text-xs font-semibold text-orange-800 tracking-wide">PESTICIDE LOAD</span>
+            </div>
+            <div className="text-orange-600 font-mono text-xs">⚠ ACTIVE</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <div className="font-mono text-orange-900 font-bold text-lg">{formatNumber(pesticideLoad, 2)}</div>
+              <div className="font-mono text-orange-600">kg total load</div>
+            </div>
+            <div>
+              <div className="font-mono text-orange-900 font-bold text-lg">{formatNumber(pesticideIntensity, 2)}</div>
+              <div className="font-mono text-orange-600">kg/ha intensity</div>
+            </div>
+          </div>
+        </div>
       </div>
-    )}
-  </div>
-);
 
-const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => (
-  <div className="space-y-3">
-    <div className="border-b border-gray-200 pb-2">
-      <h3 className="font-semibold text-gray-900">{data.kommune_name}</h3>
-      <p className="text-sm text-gray-600">Kommune Code: {data.kommune_code}</p>
-    </div>
+      {/* Specific Chemical Analysis */}
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
+        <h4 className="font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide">CHEMICAL COMPOSITION ANALYSIS</h4>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="border-l-2 border-green-500 pl-2">
+            <div className="font-mono text-gray-600">GLYPHOSATE</div>
+            <div className="font-mono font-bold text-gray-900">{formatScientific(glyphosateGrams, 'g')}</div>
+            <div className="font-mono text-gray-500">{formatScientific(glyphosateIntensity, 'g/ha')}</div>
+          </div>
+          <div className="border-l-2 border-yellow-500 pl-2">
+            <div className="font-mono text-gray-600">DIQUAT</div>
+            <div className="font-mono font-bold text-gray-900">{formatScientific(diquatGrams, 'g')}</div>
+            <div className="font-mono text-gray-500">{formatScientific(diquatIntensity, 'g/ha')}</div>
+          </div>
+        </div>
+      </div>
 
-    <div className="grid grid-cols-2 gap-3 text-sm">
-      <div>
-        <span className="text-gray-600">Total Area:</span>
-        <div className="font-medium">{formatNumber(data.kommune_area_ha)} ha</div>
+      {/* Agricultural Activity Data */}
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
+        <h4 className="font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide">AGRICULTURAL ACTIVITY</h4>
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{applications}</div>
+            <div className="font-mono text-gray-600">APPLICATIONS</div>
+          </div>
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{fieldCount}</div>
+            <div className="font-mono text-gray-600">FIELD COUNT</div>
+          </div>
+          <div className="text-center">
+            <div className="font-mono font-bold text-gray-900 text-lg">{formatPercentage(coverage)}</div>
+            <div className="font-mono text-gray-600">COVERAGE</div>
+          </div>
+        </div>
       </div>
-      <div>
-        <span className="text-gray-600">Agricultural:</span>
-        <div className="font-medium">{formatNumber(data.total_agricultural_area_ha)} ha</div>
-      </div>
-      <div>
-        <span className="text-gray-600">Fields:</span>
-        <div className="font-medium">{formatNumber(data.unique_field_count, 0)}</div>
-      </div>
-      <div>
-        <span className="text-gray-600">Companies:</span>
-        <div className="font-medium">{formatNumber(data.unique_company_count, 0)}</div>
-      </div>
-    </div>
 
-    <div className="border-t border-gray-200 pt-2">
-      <h4 className="font-medium text-gray-900 mb-2">Coverage Statistics</h4>
-      <div className="space-y-1 text-sm">
-                 <div className="flex justify-between">
-           <span className="text-gray-600">Agricultural %:</span>
-           <span className="font-medium">{formatPercentage((data.agricultural_coverage_pct || 0) / 100)}</span>
-         </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">Avg Coverage:</span>
-          <span className="font-medium">{formatPercentage(data.avg_field_coverage_ratio)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">Max Coverage:</span>
-          <span className="font-medium">{formatPercentage(data.max_field_coverage_ratio)}</span>
-        </div>
-      </div>
-    </div>
-
-    <div className="border-t border-gray-200 pt-2">
-      <h4 className="font-medium text-gray-900 mb-2">Pesticide Intensity (per ha)</h4>
-      <div className="space-y-1 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-600">Total:</span>
-          <span className="font-medium">{formatNumber(data.pesticide_belastning_per_ha)} kg/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-red-600">PFAS:</span>
-          <span className="font-medium">{formatNumber(data.pfas_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-blue-600">Diquat:</span>
-          <span className="font-medium">{formatNumber(data.diquat_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-green-600">Glyphosate:</span>
-          <span className="font-medium">{formatNumber(data.glyphosate_containing_active_ingredient_intensity_grams_per_ha)} g/ha</span>
+      {/* Technical Metadata */}
+      <div className="border-t border-gray-300 pt-2">
+        <div className="font-mono text-xs text-gray-500">
+          <span className="font-semibold">KOMMUNE CODE:</span>
+          <span className="ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono">
+            {data.kommune_code || 'UNKNOWN'}
+          </span>
         </div>
       </div>
     </div>
-
-    <div className="border-t border-gray-200 pt-2">
-      <h4 className="font-medium text-gray-900 mb-2">Product Diversity</h4>
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-gray-600">Total:</span>
-          <span className="font-medium">{formatNumber(data.unique_pesticide_products, 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-red-600">PFAS:</span>
-          <span className="font-medium">{formatNumber(data.unique_pfas_products, 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-blue-600">Diquat:</span>
-          <span className="font-medium">{formatNumber(data.unique_diquat_products, 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-green-600">Glyphosate:</span>
-          <span className="font-medium">{formatNumber(data.unique_glyphosate_products, 0)}</span>
-        </div>
-      </div>
-    </div>
-
-    {data.crop_types && (
-      <div className="border-t border-gray-200 pt-2">
-        <h4 className="font-medium text-gray-900 mb-1">Crop Types</h4>
-        <p className="text-xs text-gray-600 max-w-xs break-words">{data.crop_types}</p>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
   const statusConfig = data.status ? BNBO_STATUS_CONFIG[data.status as keyof typeof BNBO_STATUS_CONFIG] : null;
 
   return (
     <div className="space-y-3">
-      <div className="border-b border-gray-200 pb-2">
-        <h3 className="font-semibold text-gray-900">BNBO Area</h3>
-        {data.bnbo_id && (
-          <p className="text-sm text-gray-600 font-mono">{data.bnbo_id}</p>
-        )}
+      {/* Header - Environmental Protection */}
+      <div className="relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white">
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"></div>
+        <div className="relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-mono text-sm font-semibold tracking-wide">ENVIRONMENTAL PROTECTION ZONE</h3>
+              <p className="font-mono text-xs text-gray-300">
+                BNBO SECTOR {data.bnbo_id ? data.bnbo_id.substring(0, 8).toUpperCase() : 'UNKNOWN'}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-xs text-gray-400">AREA</div>
+              <div className="font-mono text-sm font-bold text-white">
+                {data.area_ha ? `${formatNumber(data.area_ha, 1)} ha` : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-2">
+      {/* Protection Status */}
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
         {statusConfig && (
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3 mb-3">
             <div 
-              className="w-3 h-3 rounded-full" 
+              className="w-4 h-4 rounded border border-gray-400" 
               style={{ backgroundColor: statusConfig.color }}
             />
             <div>
-              <div className="font-medium text-sm">{statusConfig.label}</div>
-              <div className="text-xs text-gray-600">{statusConfig.description}</div>
+              <div className="font-mono text-sm font-semibold text-gray-900">{statusConfig.label}</div>
+              <div className="font-mono text-xs text-gray-600">{statusConfig.description}</div>
             </div>
           </div>
         )}
 
-        {data.area_ha && (
-          <div className="text-sm">
-            <span className="text-gray-600">Area:</span>
-            <span className="font-medium ml-2">{formatNumber(data.area_ha)} ha</span>
-          </div>
-        )}
-
         {data.description && (
-          <div className="text-sm">
-            <span className="text-gray-600">Description:</span>
-            <p className="text-xs text-gray-600 mt-1 max-w-xs break-words">{data.description}</p>
+          <div className="mt-3">
+            <div className="font-mono text-xs font-semibold text-gray-900 mb-1">DESCRIPTION:</div>
+            <p className="font-mono text-xs text-gray-600 break-words">{data.description}</p>
           </div>
         )}
+      </div>
+
+      {/* Technical Metadata */}
+      <div className="border-t border-gray-300 pt-2">
+        <div className="font-mono text-xs text-gray-500">
+          <span className="font-semibold">BNBO ID:</span>
+          <span className="ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono">
+            {data.bnbo_id || 'UNKNOWN'}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -335,24 +480,30 @@ export const MapTooltip: React.FC = () => {
 
   return (
     <div
-      className="absolute z-50 pointer-events-none"
+      className="fixed z-50 pointer-events-none"
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
       }}
     >
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-w-sm">
-        {tooltipType === 'h3' && <H3Tooltip data={tooltipData} />}
-        {tooltipType === 'kommune' && <KommuneTooltip data={tooltipData} />}
-        {tooltipType === 'bnbo' && <BNBOTooltip data={tooltipData} />}
-        {tooltipType === 'unknown' && (
-          <div className="text-sm text-gray-600">
-            <p>Unknown data type</p>
-            <pre className="text-xs mt-2 overflow-hidden">
-              {JSON.stringify(tooltipData, null, 2).slice(0, 200)}...
-            </pre>
-          </div>
-        )}
+      <div className="bg-white border border-gray-400 rounded-lg shadow-xl max-w-sm">
+        <div className="p-4">
+          {tooltipType === 'h3' && <H3Tooltip data={tooltipData} />}
+          {tooltipType === 'kommune' && <KommuneTooltip data={tooltipData} />}
+          {tooltipType === 'bnbo' && <BNBOTooltip data={tooltipData} />}
+
+          {/* Raw data debug section - more scientific */}
+          {process.env.NODE_ENV === 'development' && (
+            <details className="mt-3">
+              <summary className="font-mono text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                RAW DATA DEBUG
+              </summary>
+              <pre className="font-mono text-xs mt-2 p-2 bg-gray-100 rounded overflow-auto max-h-32 text-gray-700">
+                {JSON.stringify(tooltipData, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
       </div>
     </div>
   );

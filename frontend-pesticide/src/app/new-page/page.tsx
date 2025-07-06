@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { NewPMTilesMap } from '@/components/map/NewPMTilesMap'
 import { DataModeSelector } from '@/components/controls/DataModeSelector'
-import { YearSelector } from '@/components/controls/YearSelector'
+import { StepSlider } from '@/components/controls/StepSlider'
 import { LayerToggle } from '@/components/controls/LayerToggle'
 import { Legend } from '@/components/controls/Legend'
 import { LoadingIndicator } from '@/components/ui/LoadingIndicator'
@@ -135,7 +135,7 @@ export default function NewMapPage() {
       {/* Controls - Top Left */}
       <div className="absolute top-4 left-4 z-10 space-y-4 max-w-xs">
         <DataModeSelector />
-        <YearSelector />
+        <StepSlider />
       </div>
       
       {/* Layer Controls - Top Right */}

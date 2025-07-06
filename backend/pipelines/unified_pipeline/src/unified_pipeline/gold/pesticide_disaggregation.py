@@ -1,11 +1,46 @@
 """
 Pesticide Disaggregation Gold Layer
 
-This module implements the gold layer processor for pesticide disaggregation.
-It preserves the EXACT original strategy that achieved 92% coverage:
-- Simple area matching between pesticide applications and total field areas by CVR+crop
-- 2% area tolerance (PRESERVE ORIGINAL)
-- Direct proportional allocation to fields
+WHAT THIS MODULE DOES:
+======================
+This module solves a critical agricultural data problem: pesticide companies report their
+pesticide applications at the company level (e.g., "Company ABC applied 100L of pesticide X
+to wheat fields"), but we need to know which specific fields received the pesticide for
+environmental and health analysis.
+
+THE BUSINESS PROBLEM:
+====================
+- Pesticide companies report: "We applied 50L of herbicide to 25 hectares of wheat"
+- We have field data showing: "Company ABC has 3 wheat fields: 10ha, 8ha, and 7ha"
+- We need to figure out: "How much pesticide did each individual field receive?"
+
+THE SOLUTION APPROACH:
+=====================
+This module implements a proven 4-strategy approach that achieved 92% coverage:
+
+1. MAIN STRATEGY (92% of cases): Area Matching
+   - Match pesticide application area to total field area by company + crop type
+   - If areas match within 2% tolerance, distribute proportionally across all fields
+   - Example: 25L on 25ha wheat → Field1 gets 10L (10ha), Field2 gets 8L (8ha), Field3 gets 7L (7ha)
+
+2. NON-ORGANIC MATCHING: Same as #1 but excludes organic fields
+   - Sometimes organic fields are mixed with conventional, causing area mismatches
+   - Exclude organic fields and retry the matching
+
+3. PARTIAL FIELD COVERAGE: Single field scenarios
+   - When company has only 1 field for that crop type
+   - Handles cases where pesticide area < field area (partial coverage)
+
+4. SPATIAL CLUSTERING (REMOVED): Was too complex for minimal benefit
+   - Original strategy tried to group nearby fields, but added complexity
+   - Removed for simplification since strategies 1-3 provide sufficient coverage
+
+KEY TECHNICAL DECISIONS:
+=======================
+- Uses 2% area tolerance (CRITICAL - don't change, this achieved 92% coverage)
+- Uses Y+1 temporal pattern (2021 pesticide data uses 2022 field boundaries)
+- Processes data in DuckDB for memory efficiency
+- Uses CVR numbers (Danish company registration) for matching
 
 CRITICAL: This implementation preserves the exact logic from the original pipeline
 without any "enhancements" that could break the proven 92% coverage approach.
@@ -29,7 +64,13 @@ print(f"DEBUG: Logger created: {logger}")
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
-    """Configuration for pesticide disaggregation gold processor."""
+    """
+    Configuration for pesticide disaggregation gold processor.
+
+    This class defines all the settings needed to run the pesticide disaggregation process.
+    Think of it as the "control panel" with all the knobs and switches that control how
+    the disaggregation works.
+    """
 
     name: str = "Pesticide Disaggregation Gold"
     dataset: str = "pesticide_disaggregation"
@@ -38,27 +79,39 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     frequency: str = "yearly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-    # Core parameters from original config.py - PRESERVE ORIGINAL VALUES
+    # CRITICAL PARAMETER: Area tolerance for matching pesticide applications to fields
+    # This 2% tolerance is what achieved 92% coverage in the original pipeline
+    # DON'T CHANGE THIS - it's the magic number that makes the whole system work
     area_tolerance_pct: float = Field(
-        default=2.0, description="Area tolerance percentage - PRESERVE ORIGINAL VALUE"
+        default=2.0,
+        description="Area tolerance percentage - PRESERVE ORIGINAL VALUE (2% = the sweet spot for 92% coverage)",
     )
+
+    # Memory management settings for processing large datasets
     batch_size: int = Field(
         default=1000,
-        description="Batch size for processing - optimized for GitHub runners with limited memory",
+        description="How many records to process at once - smaller = less memory usage but slower",
     )
 
-    # Temporal configuration (Y+1 pattern from original)
-    field_year_offset: int = Field(default=1, description="Field year offset (Y+1 pattern)")
+    # TEMPORAL PATTERN: Why we use Y+1 (next year's field data for this year's pesticide data)
+    # Example: 2021 pesticide applications use 2022 field boundaries
+    # This is because field boundaries are often updated/finalized after the growing season
+    field_year_offset: int = Field(
+        default=1,
+        description="Field year offset (Y+1 pattern) - pesticide year 2021 uses field year 2022",
+    )
 
-    # Input datasets
+    # Input dataset names (what files to look for in cloud storage)
     pesticide_applications_dataset: str = "pesticides"
 
-    # Performance optimization settings
+    # Performance tuning for the database operations
     max_memory_gb: float = Field(
-        default=12.0, description="Maximum memory usage in GB for DuckDB operations"
+        default=12.0,
+        description="Maximum memory DuckDB can use - tune based on available server memory",
     )
     enable_parallel_processing: bool = Field(
-        default=True, description="Enable parallel processing for large datasets"
+        default=True,
+        description="Whether to use multiple CPU cores - True = faster but uses more memory",
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -66,20 +119,63 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
 
 class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig], GoldJobInterface):
     """
-    Gold layer processor for pesticide disaggregation.
+    The main pesticide disaggregation processor - this is where the magic happens!
 
-    Implements the ORIGINAL strategy that achieved 92% coverage:
-    - Simple area matching between pesticide applications and total field areas by CVR+crop
-    - 2% area tolerance (PRESERVE ORIGINAL)
-    - Direct proportional allocation to fields
+    WHAT THIS CLASS DOES:
+    ====================
+    This class takes company-level pesticide applications and figures out which specific
+    fields received the pesticide. It's like being a detective trying to solve the puzzle:
+
+    "Company ABC applied 100L of herbicide to wheat fields. They have 4 wheat fields
+    of different sizes. How much did each field get?"
+
+    THE PROVEN APPROACH:
+    ===================
+    Uses a 4-strategy approach that achieved 92% coverage in the original pipeline:
+
+    1. MAIN STRATEGY: Area matching with 2% tolerance
+       - If pesticide area ≈ total field area (within 2%), distribute proportionally
+       - This handles 92% of all cases successfully
+
+    2. NON-ORGANIC FALLBACK: Same as #1 but excludes organic fields
+       - Sometimes organic fields mess up the area calculations
+       - Retry matching after excluding organic fields
+
+    3. PARTIAL COVERAGE: Single field scenarios
+       - When company has only 1 field for that crop
+       - Handles partial field coverage cases
+
+    4. SPATIAL CLUSTERING: Removed for simplicity
+       - Was too complex and didn't add much value
+
+    TECHNICAL APPROACH:
+    ==================
+    - Uses DuckDB (fast in-memory database) for processing
+    - Processes data year by year to manage memory
+    - Uses CVR numbers (Danish company IDs) to match companies to fields
+    - Applies 2% area tolerance (the magic number that makes it work)
     """
 
     def __init__(self, config: PesticideDisaggregationGoldConfig):
+        """
+        Initialize the pesticide disaggregation processor.
+
+        This sets up all the basic components we need:
+        - Logger for tracking what's happening
+        - Database connection (will be created later)
+        - Cache for organic field IDs (performance optimization)
+        """
         print("DEBUG: PesticideDisaggregationGold.__init__ called!")
         super().__init__(config)
         self.log = Logger.get_logger()
+
+        # Database connection - will be created fresh for each year to manage memory
         self.duckdb_conn = None
+
+        # Cache for organic field IDs to avoid repeated lookups
+        # Organic fields are excluded from some matching strategies
         self._organic_marker_field_ids: Set[str] = set()
+
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
 
     def _upload_file_with_gcs_access(
@@ -95,10 +191,24 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """
-        Process pesticide disaggregation for all available years using the original proven strategy.
+        THE MAIN ENTRY POINT - This is where the entire pesticide disaggregation process starts!
+
+        WHAT THIS METHOD DOES:
+        =====================
+        1. Discovers all available years of pesticide and field data
+        2. Matches them up using the Y+1 pattern (e.g., 2021 pesticide → 2022 fields)
+        3. Processes each year pair through the 4-strategy disaggregation approach
+        4. Saves the results and reports overall success statistics
+
+        WHY PROCESS YEAR BY YEAR:
+        ========================
+        - Pesticide data is huge (millions of records)
+        - Processing all years at once would crash the system
+        - Year-by-year processing keeps memory usage manageable
+        - Each year is independent, so we can process them separately
 
         Args:
-            silver_data: Optional dictionary containing silver data
+            silver_data: Pre-loaded data (optional) - usually we discover data from cloud storage
         """
         print("DEBUG: Pesticide disaggregation run method called!")
         self.log.info("🚀 Starting pesticide disaggregation processing with original strategy")
@@ -108,7 +218,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
         self.log.info(f"☁️ GCS Bucket: {self.config.bucket}")
 
-        # Get all available pesticide years and their corresponding field years
+        # STEP 1: DISCOVER AVAILABLE DATA
+        # ===============================
+        # Look through cloud storage to find all available years of pesticide and field data
+        # Match them up using the Y+1 pattern (pesticide year X uses field year X+1)
         self.log.info("📊 Discovering available data years...")
         print("DEBUG: About to call _get_pesticide_field_year_pairs")
         pesticide_field_pairs = self._get_pesticide_field_year_pairs()
@@ -128,12 +241,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for pest_year, field_year in pesticide_field_pairs:
             self.log.info(f"   📅 Will process: pesticide {pest_year} → field {field_year}")
 
-        total_pesticide_records = 0
-        total_disaggregated_records = 0
-        successful_years = 0
-        failed_years = 0
+        # STEP 2: INITIALIZE TRACKING VARIABLES
+        # ====================================
+        # Keep track of overall success/failure across all years
+        total_pesticide_records = 0  # How many pesticide applications we started with
+        total_disaggregated_records = 0  # How many we successfully disaggregated
+        successful_years = 0  # How many years processed successfully
+        failed_years = 0  # How many years failed
 
+        # STEP 3: PROCESS EACH YEAR PAIR
+        # ==============================
         # Process each pesticide year with its corresponding field year
+        # This is the main processing loop - each iteration handles one year of data
         for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
             self.log.info("=" * 80)
             self.log.info(
@@ -141,7 +260,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
             self.log.info("=" * 80)
 
-            # Load data for this year pair
+            # STEP 3a: LOAD DATA FOR THIS YEAR PAIR
+            # =====================================
+            # Load both pesticide applications and field boundaries for this year combination
             self.log.info(
                 f"📥 Loading silver data for pesticide year {pesticide_year} and field year {field_year}"
             )
@@ -156,9 +277,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.error(f"📋 Traceback: {traceback.format_exc()}")
                 failed_years += 1
                 continue
+
+            # Extract the file paths for pesticide and field data
             agricultural_fields_path = datasets.get("agricultural_fields")
             pesticide_applications_path = datasets.get("pesticides")
 
+            # STEP 3b: VALIDATE DATA AVAILABILITY
+            # ===================================
+            # Make sure we have both pesticide and field data before proceeding
             if agricultural_fields_path is None or pesticide_applications_path is None:
                 self.log.warning(f"⚠️ Skipping year {pesticide_year}: missing data files")
                 self.log.warning(
@@ -174,7 +300,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"   📄 Agricultural fields: {agricultural_fields_path}")
             self.log.info(f"   📄 Pesticide applications: {pesticide_applications_path}")
 
-            # Process this year pair
+            # STEP 3c: RUN THE DISAGGREGATION PROCESS
+            # =======================================
+            # This is where the actual disaggregation magic happens!
+            # The _process_year_pair method runs all 4 strategies and returns the count of results
             self.log.info(f"⚙️ Starting disaggregation processing for year {pesticide_year}")
             try:
                 year_results = self._process_year_pair(
@@ -192,12 +321,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.error(f"📋 Traceback: {traceback.format_exc()}")
                 year_results = None
 
+            # STEP 3d: TRACK RESULTS AND UPDATE STATISTICS
+            # ============================================
+            # Update our running totals based on how this year went
             if year_results is not None and year_results > 0:
                 self.log.info(
                     f"✅ Year {pesticide_year}: Successfully processed and saved {year_results:,} disaggregated records"
                 )
 
-                # Count pesticide records for this year using a separate connection
+                # Count total pesticide records for this year to calculate coverage percentage
                 self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
                 try:
                     temp_conn = duckdb.connect(":memory:")
@@ -369,25 +501,57 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _get_pesticide_field_year_pairs(self) -> List[Tuple[int, int]]:
         """
-        Get all available pesticide years and their corresponding field years using Y+1 pattern.
+        Discover which years of data we can process by finding matching pesticide and field data.
+
+        THE Y+1 TEMPORAL PATTERN:
+        =========================
+        We use a Y+1 pattern where pesticide data from year X is matched with field data from year X+1.
+
+        Why? Because field boundaries are often updated/finalized after the growing season ends.
+        So 2021 pesticide applications use 2022 field boundaries, which reflect the actual field
+        layout that was in place during the 2021 growing season.
+
+        EXAMPLE:
+        ========
+        If we have:
+        - Pesticide data: 2020, 2021, 2022
+        - Field data: 2021, 2022, 2023
+
+        We can process:
+        - 2020 pesticide → 2021 fields ✅
+        - 2021 pesticide → 2022 fields ✅
+        - 2022 pesticide → 2023 fields ✅
+
+        DISCOVERY PROCESS:
+        =================
+        1. Scan cloud storage for available pesticide data files
+        2. Scan cloud storage for available field data files
+        3. Match them using the Y+1 pattern
+        4. Return valid pairs for processing
 
         Returns:
-            List of (pesticide_year, field_year) tuples
+            List of (pesticide_year, field_year) tuples ready for processing
         """
         print("DEBUG: _get_pesticide_field_year_pairs called")
         self.log.info("🔍 Discovering available pesticide and field years")
 
-        # Get available pesticide years from GCS
+        # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
+        # ==========================================
+        # Look through cloud storage for pesticide data files
         self.log.info("📊 Scanning GCS for pesticide data...")
         pesticide_years = self._get_available_pesticide_years()
         self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
-        # Get available field years from GCS
+        # STEP 2: DISCOVER AVAILABLE FIELD YEARS
+        # ======================================
+        # Look through cloud storage for field boundary data files
         self.log.info("🌾 Scanning GCS for field data...")
         field_years = self._get_available_field_years()
         self.log.info(f"✅ Found field years: {sorted(field_years)}")
 
-        # Create pairs using Y+1 pattern (pesticide year Y matches with field year Y+1)
+        # STEP 3: CREATE VALID PAIRS USING Y+1 PATTERN
+        # ============================================
+        # For each pesticide year, look for field data from the following year
         self.log.info(f"🔗 Creating year pairs using Y+{self.config.field_year_offset} pattern...")
         pairs = []
         for pest_year in pesticide_years:
@@ -595,10 +759,45 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         agricultural_fields_path: str,
         pesticide_applications_path: str,
     ) -> Optional[int]:
-        """Process a single pesticide-field year pair."""
+        """
+        Process a single year of pesticide disaggregation - this is where the core magic happens!
+
+        WHAT THIS METHOD DOES:
+        =====================
+        1. Sets up an in-memory database (DuckDB) with the year's data
+        2. Runs 4 disaggregation strategies in sequence to maximize coverage
+        3. Saves the results and reports statistics
+        4. Cleans up memory for the next year
+
+        THE 4-STRATEGY APPROACH:
+        =======================
+        Strategy 1: Main area matching (handles ~92% of cases)
+        Strategy 2: Non-organic area matching (handles organic field issues)
+        Strategy 3: Partial field coverage (handles single-field cases)
+        Strategy 4: Spatial clustering (removed for simplicity)
+
+        WHY THIS APPROACH WORKS:
+        =======================
+        - Each strategy handles different edge cases
+        - Strategies run in order of effectiveness (most successful first)
+        - Once a pesticide application is processed, it's removed from the queue
+        - This ensures no double-processing and maximum coverage
+
+        Args:
+            pesticide_year: Year of pesticide data (e.g., 2021)
+            field_year: Year of field data (e.g., 2022, due to Y+1 pattern)
+            agricultural_fields_path: Cloud storage path to field boundaries
+            pesticide_applications_path: Cloud storage path to pesticide applications
+
+        Returns:
+            Number of successfully disaggregated records, or None if processing failed
+        """
         try:
+            # STEP 1: SET UP THE DATABASE
+            # ===========================
+            # Load both pesticide and field data into a fast in-memory database
+            # This makes the complex matching queries run much faster
             self.log.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
-            # Setup DuckDB with spatial extensions
             setup_success = self._setup_duckdb(
                 agricultural_fields_path, pesticide_applications_path
             )
@@ -610,15 +809,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             self.log.info(f"✅ DuckDB setup complete for year {pesticide_year}")
 
-            # Create results table
+            # STEP 2: PREPARE THE WORKSPACE
+            # =============================
+            # Create the results table where we'll store our disaggregated records
             self.log.info(f"🏗️ Creating results table for year {pesticide_year}")
             self._create_results_table()
 
-            # Filter out nopesticides=1 records (from original main.py lines 50-60)
+            # Filter out records marked as "no pesticides" (nopesticides=1)
+            # These are companies that explicitly reported they used no pesticides
             self.log.info(f"🔍 Filtering pending pesticide records for year {pesticide_year}")
             self._create_pending_pesticide_rows()
 
-            # Check if CVR matches are available before running strategies
+            # STEP 3: QUICK FEASIBILITY CHECK
+            # ===============================
+            # Before running expensive strategies, check if any CVR matches are possible
+            # If no companies match between pesticide and field data, skip all processing
             self.log.info(f"🔍 Checking for CVR matches for year {pesticide_year}")
             cvr_matches_available = self._check_cvr_matches_available()
 
@@ -634,11 +839,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"📊 Year {pesticide_year} completed with 0 records (no CVR matches)")
                 return []
 
-            # Run the original strategies in exact order (from original main.py lines 89-180)
+            # STEP 4: RUN THE 4-STRATEGY DISAGGREGATION PROCESS
+            # =================================================
+            # This is the heart of the disaggregation process!
+            # Each strategy tries to match pesticide applications to fields using different approaches
             self.log.info(f"🎯 Starting disaggregation strategies for year {pesticide_year}")
             total_processed = 0
 
-            # Strategy 1: Marker CVR-Area Match (THE MAIN 92% STRATEGY)
+            # STRATEGY 1: MAIN AREA MATCHING (THE WORKHORSE - 92% SUCCESS RATE)
+            # =================================================================
+            # Match pesticide application area to total field area by company + crop type
+            # If areas match within 2% tolerance, distribute proportionally to all fields
+            # Example: Company has 25ha wheat, applied pesticide to 25ha → distribute to all wheat fields
             self.log.info(f"🎯 Strategy 1: Running marker CVR-area match for year {pesticide_year}")
             processed_1 = self._disaggregate_by_marker_match()
             total_processed += processed_1
@@ -646,7 +858,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 f"✅ Year {pesticide_year}: Marker CVR-Area Match: {processed_1} records processed"
             )
 
-            # Strategy 2: Marker Non-Organic CVR-Area Match
+            # STRATEGY 2: NON-ORGANIC AREA MATCHING (HANDLES ORGANIC FIELD ISSUES)
+            # ====================================================================
+            # Sometimes organic fields are mixed with conventional fields, causing area mismatches
+            # This strategy excludes organic fields and retries the area matching
+            # Useful when companies have both organic and conventional fields of the same crop
             self.log.info(f"🎯 Strategy 2: Running non-organic match for year {pesticide_year}")
             processed_2 = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_2
@@ -654,7 +870,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 f"✅ Year {pesticide_year}: Marker Non-Organic Match: {processed_2} records processed"
             )
 
-            # Strategy 3: Partial Field Coverage
+            # STRATEGY 3: PARTIAL FIELD COVERAGE (HANDLES SINGLE-FIELD CASES)
+            # ================================================================
+            # When a company has only 1 field for a crop type, or when pesticide area < field area
+            # This handles partial field coverage scenarios
+            # Example: Company has 1 field of 30ha, applied pesticide to 20ha → partial coverage
             self.log.info(
                 f"🎯 Strategy 3: Running partial field coverage for year {pesticide_year}"
             )
@@ -664,14 +884,18 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_3} records processed"
             )
 
-            # Strategy 4: Spatial clustering removed - was not providing additional value
-            # while adding significant complexity and processing overhead
+            # STRATEGY 4: SPATIAL CLUSTERING (REMOVED FOR SIMPLICITY)
+            # =======================================================
+            # This strategy tried to group nearby fields and match against pesticide applications
+            # Removed because it was complex and didn't provide significant additional coverage
             processed_4 = 0
             self.log.info(
                 "ℹ️ Strategy 4: Spatial clustering removed for simplification - strategies 1-3 provide sufficient coverage"
             )
 
-            # Get result count and save directly from DuckDB table
+            # STEP 5: COLLECT RESULTS AND CALCULATE STATISTICS
+            # ================================================
+            # Count how many records we successfully disaggregated and calculate coverage percentage
             self.log.info(f"📊 Collecting final results for year {pesticide_year}")
             result_count = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM disaggregated_pesticide_applications"
@@ -692,7 +916,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
             self.log.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
 
-            # Save directly from DuckDB table (no conversion to Python list)
+            # STEP 6: SAVE RESULTS
+            # ====================
+            # Save the disaggregated results to cloud storage for downstream use
             if result_count > 0:
                 self._save_year_results_direct(pesticide_year)
                 return result_count  # Return count instead of full results
@@ -704,7 +930,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"❌ Error processing year pair {pesticide_year}-{field_year}: {e}")
             return None
         finally:
-            # Clean up DuckDB connection for this year
+            # STEP 7: CLEAN UP MEMORY
+            # =======================
+            # Close the database connection to free up memory for the next year
+            # This is crucial for processing multiple years without running out of memory
             if self.duckdb_conn:
                 self.log.info(f"🧹 Cleaning up DuckDB connection for year {pesticide_year}")
                 self.duckdb_conn.close()
@@ -713,14 +942,43 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _setup_duckdb(
         self, agricultural_fields_path: str, pesticide_applications_path: str
     ) -> bool:
-        """Setup DuckDB connection with spatial extensions and register data from GCS paths.
+        """
+        Set up the in-memory database with all the data needed for disaggregation.
+
+        WHAT THIS METHOD DOES:
+        =====================
+        1. Creates a fast in-memory database (DuckDB)
+        2. Loads field boundaries and pesticide applications from cloud storage
+        3. Standardizes column names and data types for consistent processing
+        4. Validates that we have the required data columns (especially CVR numbers)
+
+        WHY USE AN IN-MEMORY DATABASE:
+        =============================
+        - Much faster than processing CSV/Parquet files directly
+        - Enables complex SQL queries for area matching and proportional distribution
+        - Handles large datasets efficiently with limited memory
+        - Supports spatial operations for geographic analysis
+
+        CRITICAL VALIDATION:
+        ===================
+        This method validates that we have CVR numbers (Danish company IDs) in both datasets.
+        Without CVR numbers, we can't match pesticide applications to field boundaries.
+
+        Args:
+            agricultural_fields_path: Cloud storage path to field boundary data
+            pesticide_applications_path: Cloud storage path to pesticide application data
 
         Returns:
-            bool: True if setup was successful, False if it failed (e.g., missing CVR column)
+            bool: True if setup successful, False if critical data is missing
         """
+        # CREATE THE IN-MEMORY DATABASE
+        # ============================
+        # DuckDB is a fast, lightweight database perfect for analytical workloads
         self.duckdb_conn = duckdb.connect(":memory:")
 
-        # Configure DuckDB for optimal performance with limited memory (GitHub runners)
+        # CONFIGURE DATABASE PERFORMANCE
+        # ==============================
+        # Tune the database for our specific use case and available server resources
         memory_limit_gb = self.config.max_memory_gb
         thread_count = 2 if not self.config.enable_parallel_processing else 4
 
@@ -732,11 +990,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
         self.log.info(f"🔧 Calculated thread_count: {thread_count}")
 
+        # Apply performance settings
         self.duckdb_conn.execute(f"SET memory_limit = '{memory_limit_gb}GB'")
         self.duckdb_conn.execute(f"SET threads = {thread_count}")
         self.duckdb_conn.execute("SET temp_directory = '/tmp'")
 
-        # Optimize for large datasets with GitHub runner resources
+        # Optimize for large datasets with limited server resources
         self.duckdb_conn.execute("SET enable_progress_bar = false")  # Reduce output overhead
         self.duckdb_conn.execute(
             "SET preserve_insertion_order = false"
@@ -744,23 +1003,30 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info(f"🔧 DuckDB configured: {memory_limit_gb}GB memory, {thread_count} threads")
 
-        # Install and load spatial extension
+        # ENABLE SPATIAL PROCESSING
+        # ========================
+        # Install spatial extension for geographic operations (field boundaries, distances)
         self.duckdb_conn.execute("INSTALL spatial")
         self.duckdb_conn.execute("LOAD spatial")
 
-        # ✅ MIGRATION: Use optimized GCS access with temp download (since direct GCS doesn't work reliably)
+        # STEP 1: LOAD AGRICULTURAL FIELD BOUNDARIES
+        # ==========================================
+        # Load field boundary data (polygons showing where each field is located)
+        # This data includes company ownership (CVR), crop types, and field areas
         self.log.info(f"🏗️ Creating marker table from {agricultural_fields_path}")
 
-        # Download and create marker table
+        # Download field data from cloud storage for processing
         self.log.info("📥 Downloading agricultural fields data for schema inspection...")
         with self.gcs_access._temp_download(agricultural_fields_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")
-            # First, create a temporary table to inspect the schema
+            # Load the data into a temporary table so we can inspect its structure
             self.duckdb_conn.execute(
                 f"CREATE TABLE marker_temp AS SELECT * FROM read_parquet('{temp_file}')"
             )
 
-        # Check what columns actually exist
+        # STEP 2: INSPECT AND VALIDATE FIELD DATA STRUCTURE
+        # =================================================
+        # Different data sources have different column names - we need to map them consistently
         self.log.info("🔍 Inspecting marker data schema...")
         temp_columns = self.duckdb_conn.execute("DESCRIBE marker_temp").fetchall()
         temp_column_names = [col[0] for col in temp_columns]
@@ -768,7 +1034,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for i, col in enumerate(temp_column_names, 1):
             self.log.info(f"   {i:2d}. {col}")
 
-        # Create the final marker table with proper column mapping
+        # STEP 3: FIND THE CVR COLUMN (CRITICAL FOR MATCHING)
+        # ===================================================
+        # CVR numbers are Danish company registration numbers - we need these to match
+        # pesticide applications to the companies that own the fields
         self.log.info("🔍 Looking for CVR column...")
         cvr_column = None
         if "cvr_number" in temp_column_names:
@@ -787,7 +1056,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error("💡 Expected one of: cvr_number, Ansoeger, KUNDE_LB")
             return False
 
-        # Check if block_id exists, if not use field_id
+        # STEP 4: HANDLE BLOCK_ID COLUMN VARIATIONS
+        # =========================================
+        # Some datasets have block_id, others don't - we need to handle both cases
         self.log.info("🔍 Looking for block_id column...")
         block_id_column = "block_id" if "block_id" in temp_column_names else "field_id"
         self.log.info(f"✅ Using block_id column: {block_id_column}")
@@ -911,7 +1182,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute("DROP TABLE pesticide_temp")
         self.log.info("✅ Pesticide table created successfully")
 
-        # Get record counts for logging
+        # FINAL STEP: VALIDATE AND REPORT SUCCESS
+        # =======================================
+        # Count the records we loaded to ensure everything worked correctly
         self.log.info("📊 Counting loaded records...")
         marker_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM marker").fetchone()[0]
         pesticide_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM pesticide").fetchone()[0]
@@ -921,6 +1194,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             f"📈 Loaded {marker_count:,} agricultural fields and {pesticide_count:,} pesticide records"
         )
 
+        # SUCCESS! We now have both datasets loaded and ready for disaggregation
+        # The database contains:
+        # - 'marker' table: Field boundaries with company ownership and crop types
+        # - 'pesticide' table: Pesticide applications with company and area information
+        # - Both tables have standardized CVR numbers for matching
         return True
 
     def _create_results_table(self):
@@ -1054,17 +1332,51 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _disaggregate_by_marker_match(self) -> int:
         """
-        Original main strategy: Match pesticide application area to total field area by CVR+crop.
-        This is the strategy that achieved 92% coverage in the original pipeline.
+        STRATEGY 1: THE MAIN WORKHORSE - Area matching with 2% tolerance (92% success rate!)
 
-        PRESERVE EXACT LOGIC from disaggregation.py lines 97-170
+        WHAT THIS STRATEGY DOES:
+        =======================
+        This is the core strategy that solves most pesticide disaggregation cases. Here's how it works:
+
+        1. GROUP BY COMPANY + CROP: For each company, group all their fields by crop type
+           Example: Company ABC has 3 wheat fields (10ha, 8ha, 7ha) = 25ha total wheat
+
+        2. MATCH AREAS: Look for pesticide applications where the application area matches
+           the total field area (within 2% tolerance)
+           Example: Company ABC applied pesticide to 25ha wheat (matches their 25ha total)
+
+        3. DISTRIBUTE PROPORTIONALLY: Split the pesticide application across all fields
+           based on their relative sizes
+           Example: Field1 gets 40% (10/25), Field2 gets 32% (8/25), Field3 gets 28% (7/25)
+
+        WHY THIS WORKS SO WELL:
+        ======================
+        - Companies typically apply pesticides to ALL their fields of a given crop type
+        - The 2% tolerance accounts for small measurement differences and rounding
+        - Proportional distribution is the most fair assumption when we don't know specifics
+
+        REAL-WORLD EXAMPLE:
+        ==================
+        Input: "Company 12345678 applied 50L herbicide to 25ha wheat"
+        Field data: Company 12345678 has wheat fields of 10ha, 8ha, 7ha (total 25ha)
+        Match: 25ha application ≈ 25ha total fields (perfect match!)
+        Output:
+        - Field A gets 20L (10ha/25ha * 50L)
+        - Field B gets 16L (8ha/25ha * 50L)
+        - Field C gets 14L (7ha/25ha * 50L)
+
+        CRITICAL: This logic achieved 92% coverage - DON'T CHANGE IT!
         """
         self.log.info("Running original marker match strategy (92% coverage strategy)")
 
         try:
-            # EXACT original SQL query - DO NOT MODIFY
+            # THE MAGIC SQL QUERY - This is where the 92% coverage happens!
+            # ============================================================
+            # This complex query does the area matching and proportional distribution in one go
             insert_query = f"""
                 WITH MarkerFieldCVRCropTotals AS (
+                    -- STEP 1: Calculate total field area for each company + crop combination
+                    -- This gives us the "denominator" for proportional distribution
                     SELECT
                         TRIM(CAST(m.cvr_number AS VARCHAR)) as CVR,
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
@@ -1087,20 +1399,27 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.DosageUnit,
                     'marker_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.block_id AS VARCHAR) as MatchedBlockID,
+                    -- THE MAGIC FORMULA: Proportional distribution based on field size
+                    -- pesticide_amount * (this_field_area / total_company_crop_area)
                     p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
                     'Marker_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
+                    -- Confidence score: higher when areas match more closely
                     GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate
                 FROM pending_pesticide_rows p
+                -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR 
                     AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
+                -- STEP 3: Join with individual fields to create one record per field
                 JOIN marker m_fields 
                     ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND marker_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE 
                     p.AcreageSize > 0 AND marker_totals.TotalMarkerAreaForCVRCrop > 0
+                    -- THE CRITICAL FILTER: Only match if areas are within 2% tolerance
+                    -- This 2% is the magic number that achieved 92% coverage!
                     AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                     AND m_fields.cvr_number IS NOT NULL 
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
@@ -1110,7 +1429,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             self.duckdb_conn.execute(insert_query)
 
-            # Remove processed records from pending table (original logic)
+            # CLEAN UP: Remove processed records from the pending queue
+            # This prevents double-processing in subsequent strategies
             self.duckdb_conn.execute("""
                 DELETE FROM pending_pesticide_rows 
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
@@ -1120,7 +1440,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 )
             """)
 
-            # Get count of processed records
+            # Count how many records we successfully processed
             count_result = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()

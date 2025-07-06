@@ -113,7 +113,7 @@ export const useMapStore = create<MapState & MapActions>()(
       selectedYear: DEFAULT_YEAR,
       selectedDataMode: DEFAULT_DATA_MODE,
       
-      showBNBOLayer: false,
+      showBNBOLayer: true,
       showBasemap: true,
       
       isLoading: false,
@@ -197,7 +197,7 @@ export const useMapStore = create<MapState & MapActions>()(
           pitch: 0,
           selectedYear: DEFAULT_YEAR,
           selectedDataMode: DEFAULT_DATA_MODE,
-          showBNBOLayer: false,
+          showBNBOLayer: true,
           showBasemap: true,
           isLoading: false,
           isLoadingYear: false,
