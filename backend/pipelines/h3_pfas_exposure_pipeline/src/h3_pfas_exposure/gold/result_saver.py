@@ -40,6 +40,9 @@ class H3ResultSaver:
                 CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
+                
+                -- Map field area for database compatibility (this is the key fix!)
+                CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 
                 -- Convert BigInt counts to regular integers (32-bit max: 2.1 billion)
                 CAST(unique_field_count AS INTEGER) as unique_field_count,
@@ -228,6 +231,9 @@ class H3ResultSaver:
                 CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
+                
+                -- Map field area for database compatibility
+                CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 
                 -- Convert BigInt counts to regular integers for Kepler.gl compatibility
                 CAST(unique_field_count AS INTEGER) as unique_field_count,
@@ -257,7 +263,6 @@ class H3ResultSaver:
                 -- Timestamp as string
                 CAST(created_at AS VARCHAR) as created_at
             FROM {results_table}
-            ORDER BY h3_cell
         """)
 
         self.log.info(f"💾 Saving Kepler.gl-compatible results to {output_path_kepler}")
@@ -298,6 +303,9 @@ class H3ResultSaver:
                 CAST(h3_cell_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
+                
+                -- Map field area for database compatibility
+                CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 
                 -- Convert BigInt counts to regular integers for Kepler.gl compatibility
                 CAST(unique_field_count AS INTEGER) as unique_field_count,
@@ -327,7 +335,6 @@ class H3ResultSaver:
                 -- Timestamp as string
                 CAST(created_at AS VARCHAR) as created_at
             FROM {results_table}
-            ORDER BY h3_cell
         """)
 
         # Create output path for Kepler-compatible version with "total" as year identifier

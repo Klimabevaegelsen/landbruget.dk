@@ -122,11 +122,15 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       try {
         setIsLoading(true)
         
+        console.log('🔍 Starting PMTiles URL discovery for:', { selectedYear, currentH3Resolution })
+        
         // Discover and validate URLs
         const [validatedUrls, years] = await Promise.all([
           pmtilesDiscovery.discoverAndValidateUrls(selectedYear, currentH3Resolution),
           pmtilesDiscovery.getAvailableYears()
         ])
+        
+        console.log('🔍 PMTiles URL discovery results:', validatedUrls)
         
         if (mounted) {
           // Only set URLs that are valid
@@ -156,14 +160,43 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             bnbo: validatedUrls.bnbo
           })
           
+          // Test URL accessibility
+          if (validatedUrls.basemap) {
+            console.log('🔗 Testing basemap URL accessibility...')
+            pmtilesDiscovery.testUrl(validatedUrls.basemap).then(isAccessible => {
+              console.log('🔗 Basemap URL accessible:', isAccessible)
+            }).catch(err => {
+              console.error('🔗 Basemap URL test failed:', err)
+            })
+          }
+          
+          if (validatedUrls.h3) {
+            console.log('🔗 Testing H3 URL accessibility...')
+            pmtilesDiscovery.testUrl(validatedUrls.h3).then(isAccessible => {
+              console.log('🔗 H3 URL accessible:', isAccessible)
+            }).catch(err => {
+              console.error('🔗 H3 URL test failed:', err)
+            })
+          }
+          
+          if (validatedUrls.kommune) {
+            console.log('🔗 Testing Kommune URL accessibility...')
+            pmtilesDiscovery.testUrl(validatedUrls.kommune).then(isAccessible => {
+              console.log('🔗 Kommune URL accessible:', isAccessible)
+            }).catch(err => {
+              console.error('🔗 Kommune URL test failed:', err)
+            })
+          }
+          
           if (!validatedUrls.basemap) {
+            console.error('❌ No basemap URL available')
             setError('Basemap not available')
           } else {
             clearError()
           }
         }
       } catch (error) {
-        console.error('Error loading PMTiles URLs:', error)
+        console.error('❌ Error loading PMTiles URLs:', error)
         if (mounted) {
           setError('Failed to load data sources')
         }
@@ -190,164 +223,231 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       pmtilesUrls: pmtilesUrls
     })
     
-    if (!mapLibre || !mapContainer.current || !pmtilesUrls.basemap) return
+    if (!mapLibre || !mapContainer.current || !pmtilesUrls.basemap) {
+      console.log('⏳ Map initialization skipped - missing dependencies:', {
+        mapLibre: !!mapLibre,
+        mapContainer: !!mapContainer.current,
+        basemapUrl: !!pmtilesUrls.basemap,
+        allUrls: Object.keys(pmtilesUrls)
+      })
+      return
+    }
 
     try {
       console.log('🚀 Creating map with URLs:', pmtilesUrls)
+      
+      // Validate URLs before creating map
+      const requiredSources = ['basemap']
+      const optionalSources = ['kommune', 'h3', 'bnbo']
+      
+      console.log('🔍 Validating required sources:', requiredSources.map(src => ({
+        source: src,
+        hasUrl: !!pmtilesUrls[src as keyof typeof pmtilesUrls],
+        url: pmtilesUrls[src as keyof typeof pmtilesUrls]
+      })))
+      
+      console.log('🔍 Validating optional sources:', optionalSources.map(src => ({
+        source: src,
+        hasUrl: !!pmtilesUrls[src as keyof typeof pmtilesUrls],
+        url: pmtilesUrls[src as keyof typeof pmtilesUrls]
+      })))
+      
+      // Create sources object with only available URLs
+      const sources: any = {}
+      
+      if (pmtilesUrls.basemap) {
+        sources.basemap = {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.basemap}`,
+        }
+        console.log('✅ Added basemap source')
+      }
+      
+      if (pmtilesUrls.kommune) {
+        sources.kommune = {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.kommune}`,
+        }
+        console.log('✅ Added kommune source')
+      }
+      
+      if (pmtilesUrls.h3) {
+        sources.h3 = {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.h3}`,
+        }
+        console.log('✅ Added h3 source')
+      }
+      
+      if (pmtilesUrls.bnbo) {
+        sources.bnbo = {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.bnbo}`,
+        }
+        console.log('✅ Added bnbo source')
+      }
+      
+      console.log('🗺️ Final sources configuration:', sources)
+      
+      // Create layers array with only layers for available sources
+      const layers: any[] = []
+      
+      // Always add basemap layer if available
+      if (sources.basemap) {
+        layers.push({
+          id: 'basemap-fill',
+          type: 'fill',
+          source: 'basemap',
+          'source-layer': 'earth',
+          paint: {
+            'fill-color': '#000000',
+            'fill-opacity': 1
+          }
+        })
+        console.log('✅ Added basemap layer')
+      }
+      
+      // Add kommune layers if available
+      if (sources.kommune) {
+        layers.push(
+          {
+            id: 'kommune-fill',
+            type: 'fill',
+            source: 'kommune',
+            'source-layer': `kommune_pfas_${selectedYear}`,
+            layout: {
+              visibility: shouldShowKommune ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['get', currentPropertyName],
+                0, 'transparent',
+                0.1, '#fee5d9',
+                1, '#fcbba1',
+                5, '#fc9272',
+                10, '#fb6a4a',
+                20, '#ef3b2c',
+                50, '#cb181d',
+                100, '#99000d'
+              ],
+              'fill-opacity': 0.8
+            }
+          },
+          {
+            id: 'kommune-stroke',
+            type: 'line',
+            source: 'kommune',
+            'source-layer': `kommune_pfas_${selectedYear}`,
+            layout: {
+              visibility: shouldShowKommune ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 0.5,
+              'line-opacity': 0.5
+            }
+          }
+        )
+        console.log('✅ Added kommune layers')
+      }
+      
+      // Add H3 layers if available
+      if (sources.h3) {
+        layers.push(
+          {
+            id: 'h3-fill',
+            type: 'fill',
+            source: 'h3',
+            'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
+            layout: {
+              visibility: shouldShowH3 ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['get', currentPropertyName],
+                0, 'transparent',
+                0.1, '#fee5d9',
+                1, '#fcbba1',
+                5, '#fc9272',
+                10, '#fb6a4a',
+                20, '#ef3b2c',
+                50, '#cb181d',
+                100, '#99000d'
+              ],
+              'fill-opacity': 0.7
+            }
+          },
+          {
+            id: 'h3-stroke',
+            type: 'line',
+            source: 'h3',
+            'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
+            layout: {
+              visibility: shouldShowH3 ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 0.2,
+              'line-opacity': 0.3
+            }
+          }
+        )
+        console.log('✅ Added H3 layers')
+      }
+      
+      // Add BNBO layers if available
+      if (sources.bnbo) {
+        layers.push(
+          {
+            id: 'bnbo-fill',
+            type: 'fill',
+            source: 'bnbo',
+            'source-layer': 'bnbo_areas',
+            layout: {
+              visibility: showBNBOLayer ? 'visible' : 'none'
+            },
+            paint: {
+              'fill-color': [
+                'match',
+                ['get', 'status'],
+                'Action Required', '#ff6b6b',
+                'Completed', '#51cf66',
+                'Unknown', '#868e96',
+                '#cccccc'
+              ],
+              'fill-opacity': 0.6
+            }
+          },
+          {
+            id: 'bnbo-stroke',
+            type: 'line',
+            source: 'bnbo',
+            'source-layer': 'bnbo_areas',
+            layout: {
+              visibility: showBNBOLayer ? 'visible' : 'none'
+            },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 1,
+              'line-opacity': 0.8
+            }
+          }
+        )
+        console.log('✅ Added BNBO layers')
+      }
+      
+      console.log('🗺️ Final layers configuration:', layers.map(l => ({ id: l.id, source: l.source })))
       
       map.current = new mapLibre.Map({
         container: mapContainer.current,
         style: {
           version: 8,
-          sources: {
-            'basemap': {
-              type: 'vector',
-              url: `pmtiles://${pmtilesUrls.basemap}`,
-            },
-            'kommune': {
-              type: 'vector',
-              url: `pmtiles://${pmtilesUrls.kommune}`,
-            },
-            'h3': {
-              type: 'vector',
-              url: `pmtiles://${pmtilesUrls.h3}`,
-            },
-            'bnbo': {
-              type: 'vector',
-              url: `pmtiles://${pmtilesUrls.bnbo}`,
-            }
-          },
-          layers: [
-            // Black basemap - use landuse layer for Denmark land areas
-            {
-              id: 'basemap-fill',
-              type: 'fill',
-              source: 'basemap',
-              'source-layer': 'landuse', // Protomaps landuse layer for land areas
-              paint: {
-                'fill-color': '#000000',
-                'fill-opacity': 1
-              }
-            },
-            // Kommune layer (visible at low zoom) - use actual source-layer name
-            {
-              id: 'kommune-fill',
-              type: 'fill',
-              source: 'kommune',
-              'source-layer': `kommune_pfas_${selectedYear}`, // Actual source-layer name from pipeline
-              layout: {
-                visibility: shouldShowKommune ? 'visible' : 'none'
-              },
-              paint: {
-                'fill-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['get', currentPropertyName], // Use dynamic property name
-                  0, 'transparent',
-                  0.1, '#fee5d9',
-                  1, '#fcbba1',
-                  5, '#fc9272',
-                  10, '#fb6a4a',
-                  20, '#ef3b2c',
-                  50, '#cb181d',
-                  100, '#99000d'
-                ],
-                'fill-opacity': 0.8
-              }
-            },
-            // Kommune borders
-            {
-              id: 'kommune-stroke',
-              type: 'line',
-              source: 'kommune',
-              'source-layer': `kommune_pfas_${selectedYear}`, // Actual source-layer name from pipeline
-              layout: {
-                visibility: shouldShowKommune ? 'visible' : 'none'
-              },
-              paint: {
-                'line-color': '#ffffff',
-                'line-width': 0.5,
-                'line-opacity': 0.5
-              }
-            },
-            // H3 layer (visible at high zoom)
-            {
-              id: 'h3-fill',
-              type: 'fill',
-              source: 'h3',
-              'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`, // Actual source-layer name from pipeline
-              layout: {
-                visibility: shouldShowH3 ? 'visible' : 'none'
-              },
-              paint: {
-                'fill-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['get', currentPropertyName], // Use dynamic property name
-                  0, 'transparent',
-                  0.1, '#fee5d9',
-                  1, '#fcbba1',
-                  5, '#fc9272',
-                  10, '#fb6a4a',
-                  20, '#ef3b2c',
-                  50, '#cb181d',
-                  100, '#99000d'
-                ],
-                'fill-opacity': 0.7
-              }
-            },
-            // H3 borders
-            {
-              id: 'h3-stroke',
-              type: 'line',
-              source: 'h3',
-              'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`, // Actual source-layer name from our pipeline
-              layout: {
-                visibility: shouldShowH3 ? 'visible' : 'none'
-              },
-              paint: {
-                'line-color': '#ffffff',
-                'line-width': 0.2,
-                'line-opacity': 0.3
-              }
-            },
-            // BNBO layer (overlay)
-            {
-              id: 'bnbo-fill',
-              type: 'fill',
-              source: 'bnbo',
-              'source-layer': 'bnbo_areas', // BNBO static layer name
-              layout: {
-                visibility: showBNBOLayer ? 'visible' : 'none'
-              },
-              paint: {
-                'fill-color': [
-                  'match',
-                  ['get', 'status'],
-                  'Action Required', '#ff6b6b',
-                  'Completed', '#51cf66',
-                  'Unknown', '#868e96',
-                  '#cccccc' // fallback
-                ],
-                'fill-opacity': 0.6
-              }
-            },
-            // BNBO borders
-            {
-              id: 'bnbo-stroke',
-              type: 'line',
-              source: 'bnbo',
-              'source-layer': 'bnbo_areas', // BNBO static layer name
-              layout: {
-                visibility: showBNBOLayer ? 'visible' : 'none'
-              },
-              paint: {
-                'line-color': '#ffffff',
-                'line-width': 1,
-                'line-opacity': 0.8
-              }
-            }
-          ],
+          sources: sources,
+          layers: layers,
         },
         center: center,
         zoom: zoom,
@@ -492,19 +592,78 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           type: e.type,
           error: e.error,
           sourceId: e.sourceId,
-          tile: e.tile
+          tile: e.tile,
+          target: e.target,
+          originalTarget: e.originalTarget,
+          message: e.message,
+          stack: e.stack
         })
-        setError(`Map loading error: ${e.error?.message || 'Unknown error'}`)
+        
+        // Log the full error object to see what properties are available
+        console.error('❌ Full error object:', JSON.stringify(e, null, 2))
+        
+        // Try to get more specific error information
+        let errorMessage = 'Unknown map error'
+        if (e.error && e.error.message) {
+          errorMessage = e.error.message
+        } else if (e.message) {
+          errorMessage = e.message
+        } else if (e.sourceId) {
+          errorMessage = `Source error: ${e.sourceId}`
+        }
+        
+        setError(`Map loading error: ${errorMessage}`)
+      })
+      
+      // Add more specific error handlers
+      map.current.on('sourceerror', (e: any) => {
+        console.error('❌ Source error:', e)
+        console.error('❌ Source error details:', {
+          sourceId: e.sourceId,
+          error: e.error,
+          url: e.url,
+          message: e.message
+        })
+        setError(`Source loading error: ${e.sourceId}`)
+      })
+      
+      map.current.on('styleerror', (e: any) => {
+        console.error('❌ Style error:', e)
+        console.error('❌ Style error details:', {
+          error: e.error,
+          message: e.message
+        })
+        setError(`Style error: ${e.error?.message || 'Unknown style error'}`)
       })
       
       map.current.on('sourcedata', (e: any) => {
         if (e.isSourceLoaded) {
           console.log(`📊 Source loaded: ${e.sourceId}`, e)
+        } else if (e.dataType === 'source') {
+          console.log(`📊 Source data loading: ${e.sourceId}`, e)
         }
       })
       
       map.current.on('sourcedataloading', (e: any) => {
         console.log(`📊 Source loading: ${e.sourceId}`, e)
+      })
+      
+      // Add data event handler to track tile loading
+      map.current.on('data', (e: any) => {
+        if (e.dataType === 'source') {
+          console.log(`📊 Data event for source: ${e.sourceId}`, {
+            dataType: e.dataType,
+            isSourceLoaded: e.isSourceLoaded,
+            sourceDataType: e.sourceDataType
+          })
+        }
+      })
+      
+      // Add tile events to track individual tile loading
+      map.current.on('dataloading', (e: any) => {
+        if (e.dataType === 'source') {
+          console.log(`📊 Data loading for source: ${e.sourceId}`)
+        }
       })
 
     } catch (err) {

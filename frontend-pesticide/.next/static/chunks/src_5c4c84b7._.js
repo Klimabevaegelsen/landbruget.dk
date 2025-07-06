@@ -616,6 +616,7 @@ __turbopack_context__.s({
     "MapTooltip": (()=>MapTooltip),
     "default": (()=>__TURBOPACK__default__export__)
 });
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/build/polyfills/process.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/stores/map-store.ts [app-client] (ecmascript)");
 ;
@@ -633,16 +634,26 @@ const formatNumber = (value, decimals = 2)=>{
         maximumFractionDigits: decimals
     });
 };
+const formatScientific = (value, unit)=>{
+    if (value === undefined || value === null) return 'N/A';
+    if (value === 0) return `0 ${unit}`;
+    if (value < 0.01 && value > 0) {
+        return `${value.toExponential(2)} ${unit}`;
+    }
+    return `${value.toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    })} ${unit}`;
+};
 const formatPercentage = (value)=>{
     if (value === undefined || value === null) return 'N/A';
     return `${formatNumber(value * 100, 1)}%`;
 };
-const getTooltipType = (data)=>{
-    if (data.h3_id || data.h3_cell) return 'h3';
-    if (data.kommune_code || data.kommune_name) return 'kommune';
+function getTooltipType(data) {
     if (data.bnbo_id || data.status) return 'bnbo';
-    return 'unknown';
-};
+    if (data.kommune_code || data.kommune_name) return 'kommune';
+    return 'h3';
+}
 const H3Tooltip = ({ data })=>{
     const h3Id = data.h3_id || data.h3_cell;
     const year = data.year || 2023;
@@ -655,17 +666,22 @@ const H3Tooltip = ({ data })=>{
     const fieldCount = data.unique_field_count || data.field_count || 0;
     const area = data.h3_cell_area_ha || data.agricultural_area_ha || 0;
     const coverage = data.actual_coverage_ratio || data.avg_field_coverage || 0;
+    // Calculate intensities
+    const pfasIntensity = data.pfas_intensity || data.pfas_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? pfasGrams / area : 0);
+    const pesticideIntensity = data.pesticide_intensity || data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
+    const diquatIntensity = data.diquat_intensity || data.diquat_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? diquatGrams / area : 0);
+    const glyphosateIntensity = data.glyphosate_intensity || data.glyphosate_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? glyphosateGrams / area : 0);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "space-y-4",
+        className: "space-y-3",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "relative overflow-hidden rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-3 text-white",
+                className: "relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "absolute inset-0 bg-black/10"
+                        className: "absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 130,
+                        lineNumber: 150,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -676,233 +692,112 @@ const H3Tooltip = ({ data })=>{
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                                            className: "font-bold text-lg",
-                                            children: "Agricultural Cell"
+                                            className: "font-mono text-sm font-semibold tracking-wide",
+                                            children: "AGRICULTURAL ANALYSIS CELL"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 134,
+                                            lineNumber: 154,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                            className: "text-blue-100 text-sm",
+                                            className: "font-mono text-xs text-gray-300",
                                             children: [
-                                                "H3 Resolution ",
+                                                "H3 RES-",
                                                 resolution,
-                                                " • ",
-                                                year
+                                                " • YEAR ",
+                                                year,
+                                                " • SECTOR ",
+                                                h3Id ? h3Id.substring(0, 8).toUpperCase() : 'UNKNOWN'
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 135,
+                                            lineNumber: 155,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                    lineNumber: 133,
+                                    lineNumber: 153,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "flex items-center space-x-2",
+                                    className: "text-right",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "w-3 h-3 bg-white/80 rounded-full animate-pulse"
+                                            className: "font-mono text-xs text-gray-400",
+                                            children: "AREA"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 138,
+                                            lineNumber: 160,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "text-xs bg-white/20 px-2 py-1 rounded-full",
-                                            children: area > 0 ? `${formatNumber(area)} ha` : 'Area data'
+                                            className: "font-mono text-sm font-bold text-white",
+                                            children: area > 0 ? `${formatNumber(area, 1)} ha` : 'N/A'
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 139,
+                                            lineNumber: 161,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                    lineNumber: 137,
+                                    lineNumber: 159,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 132,
+                            lineNumber: 152,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 131,
+                        lineNumber: 151,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 129,
+                lineNumber: 149,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "grid grid-cols-2 gap-3",
+                className: "space-y-2",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "bg-red-50 border border-red-200 rounded-lg p-3",
+                        className: "border border-red-300 bg-red-50 rounded p-3",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center space-x-2",
+                                className: "flex items-center justify-between mb-2",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-3 h-3 bg-red-500 rounded-full"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 150,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-red-700 font-medium text-sm",
-                                        children: "PFAS"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 151,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 149,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "mt-1",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-red-900 font-bold text-lg",
-                                        children: formatNumber(pfasGrams)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 154,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-red-600 text-xs",
-                                        children: "grams total"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 155,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 153,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 148,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "bg-blue-50 border border-blue-200 rounded-lg p-3",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center space-x-2",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-3 h-3 bg-blue-500 rounded-full"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 161,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-blue-700 font-medium text-sm",
-                                        children: "Pesticide Load"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 162,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 160,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "mt-1",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-blue-900 font-bold text-lg",
-                                        children: formatNumber(pesticideLoad)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 165,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-blue-600 text-xs",
-                                        children: "kg total"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 166,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 164,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 159,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "bg-green-50 border border-green-200 rounded-lg p-3",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center space-x-2",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-3 h-3 bg-green-500 rounded-full"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 172,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-green-700 font-medium text-sm",
-                                        children: "Glyphosate"
-                                    }, void 0, false, {
+                                        className: "flex items-center space-x-2",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "w-2 h-2 bg-red-600 rounded-full"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 174,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "font-mono text-xs font-semibold text-red-800 tracking-wide",
+                                                children: "PFAS CONTAMINATION"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 175,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
                                         lineNumber: 173,
                                         columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 171,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "mt-1",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-green-900 font-bold text-lg",
-                                        children: formatNumber(glyphosateGrams)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 176,
-                                        columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-green-600 text-xs",
-                                        children: "grams total"
+                                        className: "text-red-600 font-mono text-xs",
+                                        children: "⚠ PERSISTENT"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
                                         lineNumber: 177,
@@ -911,32 +806,56 @@ const H3Tooltip = ({ data })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 175,
+                                lineNumber: 172,
                                 columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 170,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "bg-orange-50 border border-orange-200 rounded-lg p-3",
-                        children: [
+                            }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center space-x-2",
+                                className: "grid grid-cols-2 gap-3 text-xs",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-3 h-3 bg-orange-500 rounded-full"
-                                    }, void 0, false, {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-900 font-bold text-lg",
+                                                children: formatNumber(pfasGrams, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 181,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-600",
+                                                children: "g total mass"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 182,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 183,
+                                        lineNumber: 180,
                                         columnNumber: 13
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-orange-700 font-medium text-sm",
-                                        children: "Diquat"
-                                    }, void 0, false, {
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-900 font-bold text-lg",
+                                                children: formatNumber(pfasIntensity, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 185,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-600",
+                                                children: "g/ha intensity"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 186,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
                                         lineNumber: 184,
                                         columnNumber: 13
@@ -944,86 +863,108 @@ const H3Tooltip = ({ data })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 182,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "mt-1",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-orange-900 font-bold text-lg",
-                                        children: formatNumber(diquatGrams)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 187,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-orange-600 text-xs",
-                                        children: "grams total"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 188,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 186,
+                                lineNumber: 179,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 181,
-                        columnNumber: 9
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 147,
-                columnNumber: 7
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "bg-gray-50 border border-gray-200 rounded-lg p-3",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
-                        className: "font-semibold text-gray-900 mb-2 flex items-center",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "w-2 h-2 bg-gray-500 rounded-full mr-2"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 195,
-                                columnNumber: 11
-                            }, this),
-                            "Agricultural Activity"
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 194,
+                        lineNumber: 171,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "grid grid-cols-3 gap-3 text-sm",
+                        className: "border border-orange-300 bg-orange-50 rounded p-3",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "text-center",
+                                className: "flex items-center justify-between mb-2",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "font-bold text-gray-900",
-                                        children: applications
+                                        className: "flex items-center space-x-2",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "w-2 h-2 bg-orange-600 rounded-full"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 194,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "font-mono text-xs font-semibold text-orange-800 tracking-wide",
+                                                children: "PESTICIDE LOAD"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 195,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 193,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "text-orange-600 font-mono text-xs",
+                                        children: "⚠ ACTIVE"
                                     }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 197,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 192,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "grid grid-cols-2 gap-3 text-xs",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-900 font-bold text-lg",
+                                                children: formatNumber(pesticideLoad, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 201,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-600",
+                                                children: "kg total load"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 202,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
                                         lineNumber: 200,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-gray-600 text-xs",
-                                        children: "Applications"
-                                    }, void 0, false, {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-900 font-bold text-lg",
+                                                children: formatNumber(pesticideIntensity, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 205,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-600",
+                                                children: "kg/ha intensity"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 206,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 201,
+                                        lineNumber: 204,
                                         columnNumber: 13
                                     }, this)
                                 ]
@@ -1031,499 +972,812 @@ const H3Tooltip = ({ data })=>{
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
                                 lineNumber: 199,
                                 columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "text-center",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "font-bold text-gray-900",
-                                        children: fieldCount
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 204,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-gray-600 text-xs",
-                                        children: "Fields"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 205,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 203,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "text-center",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "font-bold text-gray-900",
-                                        children: formatPercentage(coverage)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 208,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-gray-600 text-xs",
-                                        children: "Coverage"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 209,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 207,
-                                columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 198,
+                        lineNumber: 191,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 193,
+                lineNumber: 170,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-t border-gray-200 pt-2",
+                className: "border border-gray-300 bg-gray-50 rounded p-3",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                        className: "font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide",
+                        children: "CHEMICAL COMPOSITION ANALYSIS"
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 214,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "grid grid-cols-2 gap-3 text-xs",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "border-l-2 border-green-500 pl-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "GLYPHOSATE"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 217,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900",
+                                        children: formatScientific(glyphosateGrams, 'g')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 218,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-500",
+                                        children: formatScientific(glyphosateIntensity, 'g/ha')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 219,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 216,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "border-l-2 border-yellow-500 pl-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "DIQUAT"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 222,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900",
+                                        children: formatScientific(diquatGrams, 'g')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 223,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-500",
+                                        children: formatScientific(diquatIntensity, 'g/ha')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 224,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 221,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 215,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 213,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border border-gray-300 bg-gray-50 rounded p-3",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                        className: "font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide",
+                        children: "AGRICULTURAL ACTIVITY"
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 231,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "grid grid-cols-3 gap-3 text-xs",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: applications
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 234,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "APPLICATIONS"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 235,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 233,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: fieldCount
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 238,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "FIELD COUNT"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 239,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 237,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: formatPercentage(coverage)
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 242,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "COVERAGE"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 243,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 241,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 232,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 230,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border-t border-gray-300 pt-2",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "text-xs text-gray-500",
+                    className: "font-mono text-xs text-gray-500",
                     children: [
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                            className: "font-medium",
-                            children: "Cell ID:"
+                            className: "font-semibold",
+                            children: "CELL ID:"
                         }, void 0, false, {
                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 216,
+                            lineNumber: 251,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                            className: "font-mono ml-1 bg-gray-100 px-1 py-0.5 rounded",
-                            children: h3Id ? h3Id.substring(0, 12) + '...' : 'Unknown'
+                            className: "ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono",
+                            children: h3Id ? h3Id.substring(0, 16) + '...' : 'UNKNOWN'
                         }, void 0, false, {
                             fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 217,
+                            lineNumber: 252,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/components/map/MapTooltip.tsx",
-                    lineNumber: 215,
+                    lineNumber: 250,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 214,
+                lineNumber: 249,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/map/MapTooltip.tsx",
-        lineNumber: 128,
+        lineNumber: 147,
         columnNumber: 5
     }, this);
 };
 _c = H3Tooltip;
-const KommuneTooltip = ({ data })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "max-h-80 overflow-y-auto space-y-2",
+const KommuneTooltip = ({ data })=>{
+    const year = data.year || 2023;
+    const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
+    const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
+    const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
+    const glyphosateGrams = data.glyphosate_grams || data.total_glyphosate_containing_active_ingredient_grams || 0;
+    const applications = data.applications || data.total_pesticide_applications || 0;
+    const fieldCount = data.field_count || data.unique_field_count || 0;
+    const area = data.agricultural_area_ha || data.total_agricultural_area_ha || 0;
+    const coverage = data.agricultural_coverage_pct ? data.agricultural_coverage_pct / 100 : 0;
+    // Calculate intensities
+    const pfasIntensity = data.pfas_pesticide_belastning_per_ha || (area > 0 ? pfasGrams / area : 0);
+    const pesticideIntensity = data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
+    const diquatIntensity = data.diquat_pesticide_belastning_per_ha || (area > 0 ? diquatGrams / area : 0);
+    const glyphosateIntensity = data.glyphosate_pesticide_belastning_per_ha || (area > 0 ? glyphosateGrams / area : 0);
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "space-y-3",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-b border-gray-200 pb-2",
+                className: "relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white",
                 children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                        className: "font-semibold text-gray-900 text-sm",
-                        children: data.kommune_name
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 229,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                        className: "text-xs text-gray-600",
-                        children: [
-                            "Code: ",
-                            data.kommune_code
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 230,
-                        columnNumber: 7
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 228,
-                columnNumber: 5
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "grid grid-cols-2 gap-2 text-xs",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Total Area:"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 235,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "font-medium",
-                                children: [
-                                    formatNumber(data.kommune_area_ha),
-                                    " ha"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 236,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 234,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Agricultural:"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 239,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "font-medium",
-                                children: [
-                                    formatNumber(data.agricultural_area_ha),
-                                    " ha"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 240,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 238,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Fields:"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 243,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "font-medium",
-                                children: formatNumber(data.field_count, 0)
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 244,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 242,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Companies:"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 247,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "font-medium",
-                                children: formatNumber(data.company_count, 0)
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 248,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 246,
-                        columnNumber: 7
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 233,
-                columnNumber: 5
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-t border-gray-200 pt-2",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
-                        className: "font-medium text-gray-900 mb-1 text-xs",
-                        children: "PFAS Exposure"
-                    }, void 0, false, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 253,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "space-y-1 text-xs",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-red-600",
-                                        children: "Total PFAS:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 256,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium text-red-600",
-                                        children: [
-                                            formatNumber(data.pfas_grams),
-                                            " g"
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 257,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 255,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-red-600",
-                                        children: "PFAS/ha:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 260,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium text-red-600",
-                                        children: [
-                                            formatNumber(data.pfas_intensity),
-                                            " g/ha"
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 261,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 259,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-red-600",
-                                        children: "PFAS Apps:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 264,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium text-red-600",
-                                        children: formatNumber(data.pfas_applications, 0)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 265,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 263,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 254,
-                        columnNumber: 7
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 252,
-                columnNumber: 5
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-t border-gray-200 pt-2",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
-                        className: "font-medium text-gray-900 mb-1 text-xs",
-                        children: "Pesticide Total"
-                    }, void 0, false, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 271,
-                        columnNumber: 7
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "space-y-1 text-xs",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-gray-600",
-                                        children: "Load:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 274,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium",
-                                        children: [
-                                            formatNumber(data.pesticide_load),
-                                            " kg"
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 275,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 273,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-gray-600",
-                                        children: "Load/ha:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 278,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium",
-                                        children: [
-                                            formatNumber(data.pesticide_intensity),
-                                            " kg/ha"
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 279,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 277,
-                                columnNumber: 9
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-gray-600",
-                                        children: "Apps:"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 282,
-                                        columnNumber: 11
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-medium",
-                                        children: formatNumber(data.applications, 0)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 283,
-                                        columnNumber: 11
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 281,
-                                columnNumber: 9
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 272,
-                        columnNumber: 7
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 270,
-                columnNumber: 5
-            }, this),
-            data.crop_types && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-t border-gray-200 pt-2",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
-                        className: "font-medium text-gray-900 mb-1 text-xs",
-                        children: "Crops"
-                    }, void 0, false, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 290,
+                        lineNumber: 283,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "text-xs text-gray-600 max-h-12 overflow-y-auto",
-                        children: [
-                            data.crop_types.split(';').slice(0, 3).join(', '),
-                            data.crop_types.split(';').length > 3 && '...'
-                        ]
-                    }, void 0, true, {
+                        className: "relative",
+                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "flex items-center justify-between",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                            className: "font-mono text-sm font-semibold tracking-wide",
+                                            children: "MUNICIPAL ANALYSIS ZONE"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 287,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                            className: "font-mono text-xs text-gray-300",
+                                            children: [
+                                                data.kommune_name ? data.kommune_name.toUpperCase() : 'KOMMUNE',
+                                                " • CODE ",
+                                                data.kommune_code || 'N/A',
+                                                " • YEAR ",
+                                                year
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 288,
+                                            columnNumber: 15
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                    lineNumber: 286,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "text-right",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "font-mono text-xs text-gray-400",
+                                            children: "AGRI AREA"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 293,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "font-mono text-sm font-bold text-white",
+                                            children: area > 0 ? `${formatNumber(area, 1)} ha` : 'N/A'
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 294,
+                                            columnNumber: 15
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                    lineNumber: 292,
+                                    columnNumber: 13
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 285,
+                            columnNumber: 11
+                        }, this)
+                    }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 291,
+                        lineNumber: 284,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 289,
+                lineNumber: 282,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "space-y-2",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "border border-red-300 bg-red-50 rounded p-3",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center justify-between mb-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "flex items-center space-x-2",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "w-2 h-2 bg-red-600 rounded-full"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 307,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "font-mono text-xs font-semibold text-red-800 tracking-wide",
+                                                children: "PFAS CONTAMINATION"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 308,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 306,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "text-red-600 font-mono text-xs",
+                                        children: "⚠ PERSISTENT"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 310,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 305,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "grid grid-cols-2 gap-3 text-xs",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-900 font-bold text-lg",
+                                                children: formatNumber(pfasGrams, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 314,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-600",
+                                                children: "g total mass"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 315,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 313,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-900 font-bold text-lg",
+                                                children: formatNumber(pfasIntensity, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 318,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-red-600",
+                                                children: "g/ha intensity"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 319,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 317,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 312,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 304,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "border border-orange-300 bg-orange-50 rounded p-3",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center justify-between mb-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "flex items-center space-x-2",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "w-2 h-2 bg-orange-600 rounded-full"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 327,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "font-mono text-xs font-semibold text-orange-800 tracking-wide",
+                                                children: "PESTICIDE LOAD"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 328,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 326,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "text-orange-600 font-mono text-xs",
+                                        children: "⚠ ACTIVE"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 330,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 325,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "grid grid-cols-2 gap-3 text-xs",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-900 font-bold text-lg",
+                                                children: formatNumber(pesticideLoad, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 334,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-600",
+                                                children: "kg total load"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 335,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 333,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-900 font-bold text-lg",
+                                                children: formatNumber(pesticideIntensity, 2)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 338,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "font-mono text-orange-600",
+                                                children: "kg/ha intensity"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                                lineNumber: 339,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 337,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 332,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 324,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 303,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border border-gray-300 bg-gray-50 rounded p-3",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                        className: "font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide",
+                        children: "CHEMICAL COMPOSITION ANALYSIS"
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 347,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "grid grid-cols-2 gap-3 text-xs",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "border-l-2 border-green-500 pl-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "GLYPHOSATE"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 350,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900",
+                                        children: formatScientific(glyphosateGrams, 'g')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 351,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-500",
+                                        children: formatScientific(glyphosateIntensity, 'g/ha')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 352,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 349,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "border-l-2 border-yellow-500 pl-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "DIQUAT"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 355,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900",
+                                        children: formatScientific(diquatGrams, 'g')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 356,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-500",
+                                        children: formatScientific(diquatIntensity, 'g/ha')
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 357,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 354,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 348,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 346,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border border-gray-300 bg-gray-50 rounded p-3",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                        className: "font-mono text-xs font-semibold text-gray-900 mb-3 tracking-wide",
+                        children: "AGRICULTURAL ACTIVITY"
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 364,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "grid grid-cols-3 gap-3 text-xs",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: applications
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 367,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "APPLICATIONS"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 368,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 366,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: fieldCount
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 371,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "FIELD COUNT"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 372,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 370,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "text-center",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono font-bold text-gray-900 text-lg",
+                                        children: formatPercentage(coverage)
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 375,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "font-mono text-gray-600",
+                                        children: "COVERAGE"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                        lineNumber: 376,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 374,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 365,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 363,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border-t border-gray-300 pt-2",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "font-mono text-xs text-gray-500",
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            className: "font-semibold",
+                            children: "KOMMUNE CODE:"
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 384,
+                            columnNumber: 11
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            className: "ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono",
+                            children: data.kommune_code || 'UNKNOWN'
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 385,
+                            columnNumber: 11
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                    lineNumber: 383,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 382,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/map/MapTooltip.tsx",
-        lineNumber: 227,
-        columnNumber: 3
+        lineNumber: 280,
+        columnNumber: 5
     }, this);
+};
 _c1 = KommuneTooltip;
 const BNBOTooltip = ({ data })=>{
     const statusConfig = data.status ? __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["BNBO_STATUS_CONFIG"][data.status] : null;
@@ -1531,139 +1785,202 @@ const BNBOTooltip = ({ data })=>{
         className: "space-y-3",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "border-b border-gray-200 pb-2",
+                className: "relative overflow-hidden rounded border border-gray-300 bg-gray-900 px-4 py-3 text-white",
                 children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                        className: "font-semibold text-gray-900",
-                        children: "BNBO Area"
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 306,
+                        lineNumber: 401,
                         columnNumber: 9
                     }, this),
-                    data.bnbo_id && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                        className: "text-sm text-gray-600 font-mono",
-                        children: data.bnbo_id
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "relative",
+                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "flex items-center justify-between",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                            className: "font-mono text-sm font-semibold tracking-wide",
+                                            children: "ENVIRONMENTAL PROTECTION ZONE"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 405,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                            className: "font-mono text-xs text-gray-300",
+                                            children: [
+                                                "BNBO SECTOR ",
+                                                data.bnbo_id ? data.bnbo_id.substring(0, 8).toUpperCase() : 'UNKNOWN'
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 406,
+                                            columnNumber: 15
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                    lineNumber: 404,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "text-right",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "font-mono text-xs text-gray-400",
+                                            children: "AREA"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 411,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "font-mono text-sm font-bold text-white",
+                                            children: data.area_ha ? `${formatNumber(data.area_ha, 1)} ha` : 'N/A'
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                            lineNumber: 412,
+                                            columnNumber: 15
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                    lineNumber: 410,
+                                    columnNumber: 13
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 403,
+                            columnNumber: 11
+                        }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 308,
-                        columnNumber: 11
+                        lineNumber: 402,
+                        columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 305,
+                lineNumber: 400,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "space-y-2",
+                className: "border border-gray-300 bg-gray-50 rounded p-3",
                 children: [
                     statusConfig && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex items-center space-x-2",
+                        className: "flex items-center space-x-3 mb-3",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "w-3 h-3 rounded-full",
+                                className: "w-4 h-4 rounded border border-gray-400",
                                 style: {
                                     backgroundColor: statusConfig.color
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 315,
+                                lineNumber: 424,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "font-medium text-sm",
+                                        className: "font-mono text-sm font-semibold text-gray-900",
                                         children: statusConfig.label
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 320,
+                                        lineNumber: 429,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "text-xs text-gray-600",
+                                        className: "font-mono text-xs text-gray-600",
                                         children: statusConfig.description
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 321,
+                                        lineNumber: 430,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 319,
+                                lineNumber: 428,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 314,
-                        columnNumber: 11
-                    }, this),
-                    data.area_ha && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "text-sm",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Area:"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 328,
-                                columnNumber: 13
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "font-medium ml-2",
-                                children: [
-                                    formatNumber(data.area_ha),
-                                    " ha"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 329,
-                                columnNumber: 13
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 327,
+                        lineNumber: 423,
                         columnNumber: 11
                     }, this),
                     data.description && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "text-sm",
+                        className: "mt-3",
                         children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-gray-600",
-                                children: "Description:"
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "font-mono text-xs font-semibold text-gray-900 mb-1",
+                                children: "DESCRIPTION:"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 335,
+                                lineNumber: 437,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "text-xs text-gray-600 mt-1 max-w-xs break-words",
+                                className: "font-mono text-xs text-gray-600 break-words",
                                 children: data.description
                             }, void 0, false, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 336,
+                                lineNumber: 438,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/MapTooltip.tsx",
-                        lineNumber: 334,
+                        lineNumber: 436,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                lineNumber: 312,
+                lineNumber: 421,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "border-t border-gray-300 pt-2",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "font-mono text-xs text-gray-500",
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            className: "font-semibold",
+                            children: "BNBO ID:"
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 446,
+                            columnNumber: 11
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            className: "ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono",
+                            children: data.bnbo_id || 'UNKNOWN'
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/map/MapTooltip.tsx",
+                            lineNumber: 447,
+                            columnNumber: 11
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/src/components/map/MapTooltip.tsx",
+                    lineNumber: 445,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 444,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/map/MapTooltip.tsx",
-        lineNumber: 304,
+        lineNumber: 398,
         columnNumber: 5
     }, this);
 };
@@ -1677,184 +1994,88 @@ const MapTooltip = ()=>{
     const tooltipType = getTooltipType(tooltipData);
     // Position tooltip to avoid going off screen
     const adjustedPosition = {
-        left: Math.min(tooltipPosition.x + 10, window.innerWidth - 280),
-        top: Math.min(tooltipPosition.y + 10, window.innerHeight - 300)
+        left: Math.min(tooltipPosition.x + 10, window.innerWidth - 320),
+        top: Math.min(tooltipPosition.y + 10, window.innerHeight - 400)
     };
     // If tooltip would go off the right edge, position it to the left of cursor
-    if (tooltipPosition.x + 280 > window.innerWidth) {
-        adjustedPosition.left = tooltipPosition.x - 280 - 10;
+    if (tooltipPosition.x + 320 > window.innerWidth) {
+        adjustedPosition.left = tooltipPosition.x - 320 - 10;
     }
     // If tooltip would go off the bottom edge, position it above cursor
-    if (tooltipPosition.y + 300 > window.innerHeight) {
-        adjustedPosition.top = tooltipPosition.y - 300 - 10;
+    if (tooltipPosition.y + 400 > window.innerHeight) {
+        adjustedPosition.top = tooltipPosition.y - 400 - 10;
     }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "absolute z-50 pointer-events-none",
+        className: "fixed z-50 pointer-events-none",
         style: {
             left: adjustedPosition.left,
             top: adjustedPosition.top
         },
         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: "bg-white rounded-lg shadow-lg border border-gray-200 p-4 max-w-sm",
-            children: [
-                tooltipType === 'h3' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(H3Tooltip, {
-                    data: tooltipData
-                }, void 0, false, {
-                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                    lineNumber: 378,
-                    columnNumber: 34
-                }, this),
-                tooltipType === 'kommune' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(KommuneTooltip, {
-                    data: tooltipData
-                }, void 0, false, {
-                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                    lineNumber: 379,
-                    columnNumber: 39
-                }, this),
-                tooltipType === 'bnbo' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(BNBOTooltip, {
-                    data: tooltipData
-                }, void 0, false, {
-                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                    lineNumber: 380,
-                    columnNumber: 36
-                }, this),
-                tooltipType === 'unknown' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "space-y-3",
-                    children: [
-                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                            className: "bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-3 rounded-lg text-white",
-                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center space-x-2",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-5 h-5 bg-white/20 rounded-full flex items-center justify-center",
-                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            className: "text-xs",
-                                            children: "?"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 386,
-                                            columnNumber: 19
-                                        }, this)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 385,
-                                        columnNumber: 17
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                                                className: "font-bold",
-                                                children: "Data Point"
-                                            }, void 0, false, {
-                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                                lineNumber: 389,
-                                                columnNumber: 19
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                className: "text-amber-100 text-sm",
-                                                children: "Hover data available"
-                                            }, void 0, false, {
-                                                fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                                lineNumber: 390,
-                                                columnNumber: 19
-                                            }, this)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                        lineNumber: 388,
-                                        columnNumber: 17
-                                    }, this)
-                                ]
-                            }, void 0, true, {
+            className: "bg-white border border-gray-400 rounded-lg shadow-xl max-w-sm",
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "p-4",
+                children: [
+                    tooltipType === 'h3' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(H3Tooltip, {
+                        data: tooltipData
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 491,
+                        columnNumber: 36
+                    }, this),
+                    tooltipType === 'kommune' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(KommuneTooltip, {
+                        data: tooltipData
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 492,
+                        columnNumber: 41
+                    }, this),
+                    tooltipType === 'bnbo' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(BNBOTooltip, {
+                        data: tooltipData
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 493,
+                        columnNumber: 38
+                    }, this),
+                    ("TURBOPACK compile-time value", "development") === 'development' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("details", {
+                        className: "mt-3",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("summary", {
+                                className: "font-mono text-xs text-gray-500 cursor-pointer hover:text-gray-700",
+                                children: "RAW DATA DEBUG"
+                            }, void 0, false, {
                                 fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                lineNumber: 384,
+                                lineNumber: 498,
+                                columnNumber: 15
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("pre", {
+                                className: "font-mono text-xs mt-2 p-2 bg-gray-100 rounded overflow-auto max-h-32 text-gray-700",
+                                children: JSON.stringify(tooltipData, null, 2)
+                            }, void 0, false, {
+                                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                                lineNumber: 501,
                                 columnNumber: 15
                             }, this)
-                        }, void 0, false, {
-                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 383,
-                            columnNumber: 13
-                        }, this),
-                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                            className: "space-y-2",
-                            children: Object.entries(tooltipData).map(([key, value])=>{
-                                if (value === null || value === undefined) return null;
-                                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, (l)=>l.toUpperCase());
-                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "flex justify-between items-center py-1 border-b border-gray-100 last:border-b-0",
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            className: "text-gray-600 text-sm font-medium",
-                                            children: [
-                                                formattedKey,
-                                                ":"
-                                            ]
-                                        }, void 0, true, {
-                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 405,
-                                            columnNumber: 21
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            className: "text-gray-900 font-semibold text-sm",
-                                            children: typeof value === 'number' ? formatNumber(value) : String(value)
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                            lineNumber: 406,
-                                            columnNumber: 21
-                                        }, this)
-                                    ]
-                                }, key, true, {
-                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                    lineNumber: 404,
-                                    columnNumber: 19
-                                }, this);
-                            })
-                        }, void 0, false, {
-                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 395,
-                            columnNumber: 13
-                        }, this),
-                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("details", {
-                            className: "mt-3",
-                            children: [
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("summary", {
-                                    className: "text-xs text-gray-500 cursor-pointer hover:text-gray-700",
-                                    children: "View raw data"
-                                }, void 0, false, {
-                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                    lineNumber: 415,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("pre", {
-                                    className: "text-xs mt-2 p-2 bg-gray-100 rounded overflow-auto max-h-32 text-gray-700",
-                                    children: JSON.stringify(tooltipData, null, 2)
-                                }, void 0, false, {
-                                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                                    lineNumber: 418,
-                                    columnNumber: 15
-                                }, this)
-                            ]
-                        }, void 0, true, {
-                            fileName: "[project]/src/components/map/MapTooltip.tsx",
-                            lineNumber: 414,
-                            columnNumber: 13
-                        }, this)
-                    ]
-                }, void 0, true, {
-                    fileName: "[project]/src/components/map/MapTooltip.tsx",
-                    lineNumber: 382,
-                    columnNumber: 11
-                }, this)
-            ]
-        }, void 0, true, {
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/map/MapTooltip.tsx",
+                        lineNumber: 497,
+                        columnNumber: 13
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/map/MapTooltip.tsx",
+                lineNumber: 490,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
             fileName: "[project]/src/components/map/MapTooltip.tsx",
-            lineNumber: 377,
+            lineNumber: 489,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/components/map/MapTooltip.tsx",
-        lineNumber: 370,
+        lineNumber: 482,
         columnNumber: 5
     }, this);
 };
@@ -2226,11 +2447,16 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                 "PMTilesMapInner.useEffect.loadPMTilesUrls": async ()=>{
                     try {
                         setIsLoading(true);
+                        console.log('🔍 Starting PMTiles URL discovery for:', {
+                            selectedYear,
+                            currentH3Resolution
+                        });
                         // Discover and validate URLs
                         const [validatedUrls, years] = await Promise.all([
                             __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["pmtilesDiscovery"].discoverAndValidateUrls(selectedYear, currentH3Resolution),
                             __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["pmtilesDiscovery"].getAvailableYears()
                         ]);
+                        console.log('🔍 PMTiles URL discovery results:', validatedUrls);
                         if (mounted) {
                             // Only set URLs that are valid
                             const urls = {};
@@ -2255,14 +2481,52 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 h3: validatedUrls.h3,
                                 bnbo: validatedUrls.bnbo
                             });
+                            // Test URL accessibility
+                            if (validatedUrls.basemap) {
+                                console.log('🔗 Testing basemap URL accessibility...');
+                                __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["pmtilesDiscovery"].testUrl(validatedUrls.basemap).then({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (isAccessible)=>{
+                                        console.log('🔗 Basemap URL accessible:', isAccessible);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]).catch({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (err)=>{
+                                        console.error('🔗 Basemap URL test failed:', err);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]);
+                            }
+                            if (validatedUrls.h3) {
+                                console.log('🔗 Testing H3 URL accessibility...');
+                                __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["pmtilesDiscovery"].testUrl(validatedUrls.h3).then({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (isAccessible)=>{
+                                        console.log('🔗 H3 URL accessible:', isAccessible);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]).catch({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (err)=>{
+                                        console.error('🔗 H3 URL test failed:', err);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]);
+                            }
+                            if (validatedUrls.kommune) {
+                                console.log('🔗 Testing Kommune URL accessibility...');
+                                __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["pmtilesDiscovery"].testUrl(validatedUrls.kommune).then({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (isAccessible)=>{
+                                        console.log('🔗 Kommune URL accessible:', isAccessible);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]).catch({
+                                    "PMTilesMapInner.useEffect.loadPMTilesUrls": (err)=>{
+                                        console.error('🔗 Kommune URL test failed:', err);
+                                    }
+                                }["PMTilesMapInner.useEffect.loadPMTilesUrls"]);
+                            }
                             if (!validatedUrls.basemap) {
+                                console.error('❌ No basemap URL available');
                                 setError('Basemap not available');
                             } else {
                                 clearError();
                             }
                         }
                     } catch (error) {
-                        console.error('Error loading PMTiles URLs:', error);
+                        console.error('❌ Error loading PMTiles URLs:', error);
                         if (mounted) {
                             setError('Failed to load data sources');
                         }
@@ -2293,194 +2557,252 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                 basemapUrl: pmtilesUrls.basemap,
                 pmtilesUrls: pmtilesUrls
             });
-            if (!mapLibre || !mapContainer.current || !pmtilesUrls.basemap) return;
+            if (!mapLibre || !mapContainer.current || !pmtilesUrls.basemap) {
+                console.log('⏳ Map initialization skipped - missing dependencies:', {
+                    mapLibre: !!mapLibre,
+                    mapContainer: !!mapContainer.current,
+                    basemapUrl: !!pmtilesUrls.basemap,
+                    allUrls: Object.keys(pmtilesUrls)
+                });
+                return;
+            }
             try {
                 console.log('🚀 Creating map with URLs:', pmtilesUrls);
+                // Validate URLs before creating map
+                const requiredSources = [
+                    'basemap'
+                ];
+                const optionalSources = [
+                    'kommune',
+                    'h3',
+                    'bnbo'
+                ];
+                console.log('🔍 Validating required sources:', requiredSources.map({
+                    "PMTilesMapInner.useEffect": (src)=>({
+                            source: src,
+                            hasUrl: !!pmtilesUrls[src],
+                            url: pmtilesUrls[src]
+                        })
+                }["PMTilesMapInner.useEffect"]));
+                console.log('🔍 Validating optional sources:', optionalSources.map({
+                    "PMTilesMapInner.useEffect": (src)=>({
+                            source: src,
+                            hasUrl: !!pmtilesUrls[src],
+                            url: pmtilesUrls[src]
+                        })
+                }["PMTilesMapInner.useEffect"]));
+                // Create sources object with only available URLs
+                const sources = {};
+                if (pmtilesUrls.basemap) {
+                    sources.basemap = {
+                        type: 'vector',
+                        url: `pmtiles://${pmtilesUrls.basemap}`
+                    };
+                    console.log('✅ Added basemap source');
+                }
+                if (pmtilesUrls.kommune) {
+                    sources.kommune = {
+                        type: 'vector',
+                        url: `pmtiles://${pmtilesUrls.kommune}`
+                    };
+                    console.log('✅ Added kommune source');
+                }
+                if (pmtilesUrls.h3) {
+                    sources.h3 = {
+                        type: 'vector',
+                        url: `pmtiles://${pmtilesUrls.h3}`
+                    };
+                    console.log('✅ Added h3 source');
+                }
+                if (pmtilesUrls.bnbo) {
+                    sources.bnbo = {
+                        type: 'vector',
+                        url: `pmtiles://${pmtilesUrls.bnbo}`
+                    };
+                    console.log('✅ Added bnbo source');
+                }
+                console.log('🗺️ Final sources configuration:', sources);
+                // Create layers array with only layers for available sources
+                const layers = [];
+                // Always add basemap layer if available
+                if (sources.basemap) {
+                    layers.push({
+                        id: 'basemap-fill',
+                        type: 'fill',
+                        source: 'basemap',
+                        'source-layer': 'earth',
+                        paint: {
+                            'fill-color': '#000000',
+                            'fill-opacity': 1
+                        }
+                    });
+                    console.log('✅ Added basemap layer');
+                }
+                // Add kommune layers if available
+                if (sources.kommune) {
+                    layers.push({
+                        id: 'kommune-fill',
+                        type: 'fill',
+                        source: 'kommune',
+                        'source-layer': `kommune_pfas_${selectedYear}`,
+                        layout: {
+                            visibility: shouldShowKommune ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'fill-color': [
+                                'interpolate',
+                                [
+                                    'linear'
+                                ],
+                                [
+                                    'get',
+                                    currentPropertyName
+                                ],
+                                0,
+                                'transparent',
+                                0.1,
+                                '#fee5d9',
+                                1,
+                                '#fcbba1',
+                                5,
+                                '#fc9272',
+                                10,
+                                '#fb6a4a',
+                                20,
+                                '#ef3b2c',
+                                50,
+                                '#cb181d',
+                                100,
+                                '#99000d'
+                            ],
+                            'fill-opacity': 0.8
+                        }
+                    }, {
+                        id: 'kommune-stroke',
+                        type: 'line',
+                        source: 'kommune',
+                        'source-layer': `kommune_pfas_${selectedYear}`,
+                        layout: {
+                            visibility: shouldShowKommune ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'line-color': '#ffffff',
+                            'line-width': 0.5,
+                            'line-opacity': 0.5
+                        }
+                    });
+                    console.log('✅ Added kommune layers');
+                }
+                // Add H3 layers if available
+                if (sources.h3) {
+                    layers.push({
+                        id: 'h3-fill',
+                        type: 'fill',
+                        source: 'h3',
+                        'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
+                        layout: {
+                            visibility: shouldShowH3 ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'fill-color': [
+                                'interpolate',
+                                [
+                                    'linear'
+                                ],
+                                [
+                                    'get',
+                                    currentPropertyName
+                                ],
+                                0,
+                                'transparent',
+                                0.1,
+                                '#fee5d9',
+                                1,
+                                '#fcbba1',
+                                5,
+                                '#fc9272',
+                                10,
+                                '#fb6a4a',
+                                20,
+                                '#ef3b2c',
+                                50,
+                                '#cb181d',
+                                100,
+                                '#99000d'
+                            ],
+                            'fill-opacity': 0.7
+                        }
+                    }, {
+                        id: 'h3-stroke',
+                        type: 'line',
+                        source: 'h3',
+                        'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
+                        layout: {
+                            visibility: shouldShowH3 ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'line-color': '#ffffff',
+                            'line-width': 0.2,
+                            'line-opacity': 0.3
+                        }
+                    });
+                    console.log('✅ Added H3 layers');
+                }
+                // Add BNBO layers if available
+                if (sources.bnbo) {
+                    layers.push({
+                        id: 'bnbo-fill',
+                        type: 'fill',
+                        source: 'bnbo',
+                        'source-layer': 'bnbo_areas',
+                        layout: {
+                            visibility: showBNBOLayer ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'fill-color': [
+                                'match',
+                                [
+                                    'get',
+                                    'status'
+                                ],
+                                'Action Required',
+                                '#ff6b6b',
+                                'Completed',
+                                '#51cf66',
+                                'Unknown',
+                                '#868e96',
+                                '#cccccc'
+                            ],
+                            'fill-opacity': 0.6
+                        }
+                    }, {
+                        id: 'bnbo-stroke',
+                        type: 'line',
+                        source: 'bnbo',
+                        'source-layer': 'bnbo_areas',
+                        layout: {
+                            visibility: showBNBOLayer ? 'visible' : 'none'
+                        },
+                        paint: {
+                            'line-color': '#ffffff',
+                            'line-width': 1,
+                            'line-opacity': 0.8
+                        }
+                    });
+                    console.log('✅ Added BNBO layers');
+                }
+                console.log('🗺️ Final layers configuration:', layers.map({
+                    "PMTilesMapInner.useEffect": (l)=>({
+                            id: l.id,
+                            source: l.source
+                        })
+                }["PMTilesMapInner.useEffect"]));
                 map.current = new mapLibre.Map({
                     container: mapContainer.current,
                     style: {
                         version: 8,
-                        sources: {
-                            'basemap': {
-                                type: 'vector',
-                                url: `pmtiles://${pmtilesUrls.basemap}`
-                            },
-                            'kommune': {
-                                type: 'vector',
-                                url: `pmtiles://${pmtilesUrls.kommune}`
-                            },
-                            'h3': {
-                                type: 'vector',
-                                url: `pmtiles://${pmtilesUrls.h3}`
-                            },
-                            'bnbo': {
-                                type: 'vector',
-                                url: `pmtiles://${pmtilesUrls.bnbo}`
-                            }
-                        },
-                        layers: [
-                            // Black basemap - using earth layer for land areas
-                            {
-                                id: 'basemap-fill',
-                                type: 'fill',
-                                source: 'basemap',
-                                'source-layer': 'earth',
-                                paint: {
-                                    'fill-color': '#000000',
-                                    'fill-opacity': 1
-                                }
-                            },
-                            // Kommune layer (visible at low zoom) - use actual source-layer name
-                            {
-                                id: 'kommune-fill',
-                                type: 'fill',
-                                source: 'kommune',
-                                'source-layer': `kommune_pfas_${selectedYear}`,
-                                layout: {
-                                    visibility: shouldShowKommune ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'fill-color': [
-                                        'interpolate',
-                                        [
-                                            'linear'
-                                        ],
-                                        [
-                                            'get',
-                                            currentPropertyName
-                                        ],
-                                        0,
-                                        'transparent',
-                                        0.1,
-                                        '#fee5d9',
-                                        1,
-                                        '#fcbba1',
-                                        5,
-                                        '#fc9272',
-                                        10,
-                                        '#fb6a4a',
-                                        20,
-                                        '#ef3b2c',
-                                        50,
-                                        '#cb181d',
-                                        100,
-                                        '#99000d'
-                                    ],
-                                    'fill-opacity': 0.8
-                                }
-                            },
-                            // Kommune borders
-                            {
-                                id: 'kommune-stroke',
-                                type: 'line',
-                                source: 'kommune',
-                                'source-layer': `kommune_pfas_${selectedYear}`,
-                                layout: {
-                                    visibility: shouldShowKommune ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'line-color': '#ffffff',
-                                    'line-width': 0.5,
-                                    'line-opacity': 0.5
-                                }
-                            },
-                            // H3 layer (visible at high zoom)
-                            {
-                                id: 'h3-fill',
-                                type: 'fill',
-                                source: 'h3',
-                                'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
-                                layout: {
-                                    visibility: shouldShowH3 ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'fill-color': [
-                                        'interpolate',
-                                        [
-                                            'linear'
-                                        ],
-                                        [
-                                            'get',
-                                            currentPropertyName
-                                        ],
-                                        0,
-                                        'transparent',
-                                        0.1,
-                                        '#fee5d9',
-                                        1,
-                                        '#fcbba1',
-                                        5,
-                                        '#fc9272',
-                                        10,
-                                        '#fb6a4a',
-                                        20,
-                                        '#ef3b2c',
-                                        50,
-                                        '#cb181d',
-                                        100,
-                                        '#99000d'
-                                    ],
-                                    'fill-opacity': 0.7
-                                }
-                            },
-                            // H3 borders
-                            {
-                                id: 'h3-stroke',
-                                type: 'line',
-                                source: 'h3',
-                                'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
-                                layout: {
-                                    visibility: shouldShowH3 ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'line-color': '#ffffff',
-                                    'line-width': 0.2,
-                                    'line-opacity': 0.3
-                                }
-                            },
-                            // BNBO layer (overlay)
-                            {
-                                id: 'bnbo-fill',
-                                type: 'fill',
-                                source: 'bnbo',
-                                'source-layer': 'bnbo_areas',
-                                layout: {
-                                    visibility: showBNBOLayer ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'fill-color': [
-                                        'match',
-                                        [
-                                            'get',
-                                            'status'
-                                        ],
-                                        'Action Required',
-                                        '#ff6b6b',
-                                        'Completed',
-                                        '#51cf66',
-                                        'Unknown',
-                                        '#868e96',
-                                        '#cccccc' // fallback
-                                    ],
-                                    'fill-opacity': 0.6
-                                }
-                            },
-                            // BNBO borders
-                            {
-                                id: 'bnbo-stroke',
-                                type: 'line',
-                                source: 'bnbo',
-                                'source-layer': 'bnbo_areas',
-                                layout: {
-                                    visibility: showBNBOLayer ? 'visible' : 'none'
-                                },
-                                paint: {
-                                    'line-color': '#ffffff',
-                                    'line-width': 1,
-                                    'line-opacity': 0.8
-                                }
-                            }
-                        ]
+                        sources: sources,
+                        layers: layers
                     },
                     center: center,
                     zoom: zoom,
@@ -2659,21 +2981,81 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                             type: e.type,
                             error: e.error,
                             sourceId: e.sourceId,
-                            tile: e.tile
+                            tile: e.tile,
+                            target: e.target,
+                            originalTarget: e.originalTarget,
+                            message: e.message,
+                            stack: e.stack
                         });
-                        setError(`Map loading error: ${e.error?.message || 'Unknown error'}`);
+                        // Log the full error object to see what properties are available
+                        console.error('❌ Full error object:', JSON.stringify(e, null, 2));
+                        // Try to get more specific error information
+                        let errorMessage = 'Unknown map error';
+                        if (e.error && e.error.message) {
+                            errorMessage = e.error.message;
+                        } else if (e.message) {
+                            errorMessage = e.message;
+                        } else if (e.sourceId) {
+                            errorMessage = `Source error: ${e.sourceId}`;
+                        }
+                        setError(`Map loading error: ${errorMessage}`);
+                    }
+                }["PMTilesMapInner.useEffect"]);
+                // Add more specific error handlers
+                map.current.on('sourceerror', {
+                    "PMTilesMapInner.useEffect": (e)=>{
+                        console.error('❌ Source error:', e);
+                        console.error('❌ Source error details:', {
+                            sourceId: e.sourceId,
+                            error: e.error,
+                            url: e.url,
+                            message: e.message
+                        });
+                        setError(`Source loading error: ${e.sourceId}`);
+                    }
+                }["PMTilesMapInner.useEffect"]);
+                map.current.on('styleerror', {
+                    "PMTilesMapInner.useEffect": (e)=>{
+                        console.error('❌ Style error:', e);
+                        console.error('❌ Style error details:', {
+                            error: e.error,
+                            message: e.message
+                        });
+                        setError(`Style error: ${e.error?.message || 'Unknown style error'}`);
                     }
                 }["PMTilesMapInner.useEffect"]);
                 map.current.on('sourcedata', {
                     "PMTilesMapInner.useEffect": (e)=>{
                         if (e.isSourceLoaded) {
                             console.log(`📊 Source loaded: ${e.sourceId}`, e);
+                        } else if (e.dataType === 'source') {
+                            console.log(`📊 Source data loading: ${e.sourceId}`, e);
                         }
                     }
                 }["PMTilesMapInner.useEffect"]);
                 map.current.on('sourcedataloading', {
                     "PMTilesMapInner.useEffect": (e)=>{
                         console.log(`📊 Source loading: ${e.sourceId}`, e);
+                    }
+                }["PMTilesMapInner.useEffect"]);
+                // Add data event handler to track tile loading
+                map.current.on('data', {
+                    "PMTilesMapInner.useEffect": (e)=>{
+                        if (e.dataType === 'source') {
+                            console.log(`📊 Data event for source: ${e.sourceId}`, {
+                                dataType: e.dataType,
+                                isSourceLoaded: e.isSourceLoaded,
+                                sourceDataType: e.sourceDataType
+                            });
+                        }
+                    }
+                }["PMTilesMapInner.useEffect"]);
+                // Add tile events to track individual tile loading
+                map.current.on('dataloading', {
+                    "PMTilesMapInner.useEffect": (e)=>{
+                        if (e.dataType === 'source') {
+                            console.log(`📊 Data loading for source: ${e.sourceId}`);
+                        }
                     }
                 }["PMTilesMapInner.useEffect"]);
             } catch (err) {
@@ -2972,7 +3354,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         className: "w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 735,
+                        lineNumber: 894,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2980,18 +3362,18 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         children: "Loading map..."
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 736,
+                        lineNumber: 895,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 734,
+                lineNumber: 893,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-            lineNumber: 733,
+            lineNumber: 892,
             columnNumber: 7
         }, this);
     }
@@ -3007,7 +3389,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         children: "⚠️"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 747,
+                        lineNumber: 906,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3015,7 +3397,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         children: "Map Error"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 748,
+                        lineNumber: 907,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3023,7 +3405,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         children: error
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 749,
+                        lineNumber: 908,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3032,18 +3414,18 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         children: "Retry"
                     }, void 0, false, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 750,
+                        lineNumber: 909,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 746,
+                lineNumber: 905,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-            lineNumber: 745,
+            lineNumber: 904,
             columnNumber: 7
         }, this);
     }
@@ -3055,7 +3437,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                 className: "w-full h-full"
             }, void 0, false, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 763,
+                lineNumber: 922,
                 columnNumber: 7
             }, this),
             !mapLoaded && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3067,7 +3449,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                             className: "w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"
                         }, void 0, false, {
                             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                            lineNumber: 769,
+                            lineNumber: 928,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3075,18 +3457,18 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                             children: "Initializing map..."
                         }, void 0, false, {
                             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                            lineNumber: 770,
+                            lineNumber: 929,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                    lineNumber: 768,
+                    lineNumber: 927,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 767,
+                lineNumber: 926,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3099,7 +3481,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 777,
+                        lineNumber: 936,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3109,7 +3491,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 778,
+                        lineNumber: 937,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3119,7 +3501,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 779,
+                        lineNumber: 938,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3129,7 +3511,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 780,
+                        lineNumber: 939,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3139,7 +3521,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 children: "Sources:"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                                lineNumber: 782,
+                                lineNumber: 941,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3149,7 +3531,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                                lineNumber: 783,
+                                lineNumber: 942,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3159,7 +3541,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                                lineNumber: 784,
+                                lineNumber: 943,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3169,7 +3551,7 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                                lineNumber: 785,
+                                lineNumber: 944,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3179,30 +3561,30 @@ const PMTilesMapInner = ({ className = 'w-full h-full' })=>{
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                                lineNumber: 786,
+                                lineNumber: 945,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                        lineNumber: 781,
+                        lineNumber: 940,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 776,
+                lineNumber: 935,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$map$2f$MapTooltip$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["MapTooltip"], {}, void 0, false, {
                 fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                lineNumber: 791,
+                lineNumber: 950,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-        lineNumber: 762,
+        lineNumber: 921,
         columnNumber: 5
     }, this);
 };
@@ -3228,7 +3610,7 @@ const MapErrorFallback = ({ error, resetErrorBoundary })=>/*#__PURE__*/ (0, __TU
                     children: "⚠️"
                 }, void 0, false, {
                     fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                    lineNumber: 803,
+                    lineNumber: 962,
                     columnNumber: 7
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -3236,7 +3618,7 @@ const MapErrorFallback = ({ error, resetErrorBoundary })=>/*#__PURE__*/ (0, __TU
                     children: "Map Error"
                 }, void 0, false, {
                     fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                    lineNumber: 804,
+                    lineNumber: 963,
                     columnNumber: 7
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3244,7 +3626,7 @@ const MapErrorFallback = ({ error, resetErrorBoundary })=>/*#__PURE__*/ (0, __TU
                     children: error.message
                 }, void 0, false, {
                     fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                    lineNumber: 805,
+                    lineNumber: 964,
                     columnNumber: 7
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3253,18 +3635,18 @@ const MapErrorFallback = ({ error, resetErrorBoundary })=>/*#__PURE__*/ (0, __TU
                     children: "Reload Map"
                 }, void 0, false, {
                     fileName: "[project]/src/components/map/PMTilesMap.tsx",
-                    lineNumber: 806,
+                    lineNumber: 965,
                     columnNumber: 7
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-            lineNumber: 802,
+            lineNumber: 961,
             columnNumber: 5
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-        lineNumber: 801,
+        lineNumber: 960,
         columnNumber: 3
     }, this);
 _c1 = MapErrorFallback;
@@ -3275,12 +3657,12 @@ const PMTilesMap = (props)=>{
             ...props
         }, void 0, false, {
             fileName: "[project]/src/components/map/PMTilesMap.tsx",
-            lineNumber: 820,
+            lineNumber: 979,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/components/map/PMTilesMap.tsx",
-        lineNumber: 819,
+        lineNumber: 978,
         columnNumber: 5
     }, this);
 };
@@ -3611,6 +3993,214 @@ if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelper
     __turbopack_context__.k.registerExports(module, globalThis.$RefreshHelpers$);
 }
 }}),
+"[project]/src/components/controls/StepSlider.tsx [app-client] (ecmascript)": ((__turbopack_context__) => {
+"use strict";
+
+var { g: global, __dirname, k: __turbopack_refresh__, m: module } = __turbopack_context__;
+{
+__turbopack_context__.s({
+    "StepSlider": (()=>StepSlider)
+});
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/stores/map-store.ts [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$left$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronLeft$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/chevron-left.js [app-client] (ecmascript) <export default as ChevronLeft>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$right$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronRight$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/chevron-right.js [app-client] (ecmascript) <export default as ChevronRight>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$play$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Play$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/play.js [app-client] (ecmascript) <export default as Play>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$pause$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Pause$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/pause.js [app-client] (ecmascript) <export default as Pause>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
+;
+var _s = __turbopack_context__.k.signature();
+'use client';
+;
+;
+;
+function StepSlider({ className = '' }) {
+    _s();
+    const selectedYear = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useSelectedYear"])();
+    const availableYearOptions = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useAvailableYearOptions"])();
+    const { setSelectedYear } = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMapStore"])();
+    const [isAnimating, setIsAnimating] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [animationInterval, setAnimationInterval] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    // Get numeric years for animation and display
+    const numericYears = availableYearOptions.filter((year)=>typeof year === 'number').sort((a, b)=>a - b);
+    const hasTotal = availableYearOptions.includes('total');
+    // All options in order: years + total
+    const allOptions = [
+        ...numericYears,
+        ...hasTotal ? [
+            'total'
+        ] : []
+    ];
+    const currentIndex = allOptions.indexOf(selectedYear);
+    const startAnimation = ()=>{
+        if (numericYears.length <= 1) return;
+        setIsAnimating(true);
+        const interval = setInterval(()=>{
+            const currentIndex = numericYears.indexOf(selectedYear);
+            const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % numericYears.length : 0;
+            setSelectedYear(numericYears[nextIndex]);
+        }, 1500);
+        setAnimationInterval(interval);
+    };
+    const stopAnimation = ()=>{
+        setIsAnimating(false);
+        if (animationInterval) {
+            clearInterval(animationInterval);
+            setAnimationInterval(null);
+        }
+    };
+    const goToNext = ()=>{
+        const currentIdx = allOptions.indexOf(selectedYear);
+        if (currentIdx < allOptions.length - 1) {
+            setSelectedYear(allOptions[currentIdx + 1]);
+        }
+    };
+    const goToPrevious = ()=>{
+        const currentIdx = allOptions.indexOf(selectedYear);
+        if (currentIdx > 0) {
+            setSelectedYear(allOptions[currentIdx - 1]);
+        }
+    };
+    const canGoNext = currentIndex < allOptions.length - 1;
+    const canGoPrevious = currentIndex > 0;
+    // Cleanup animation on unmount
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "StepSlider.useEffect": ()=>{
+            return ({
+                "StepSlider.useEffect": ()=>{
+                    if (animationInterval) {
+                        clearInterval(animationInterval);
+                    }
+                }
+            })["StepSlider.useEffect"];
+        }
+    }["StepSlider.useEffect"], [
+        animationInterval
+    ]);
+    if (availableYearOptions.length === 0) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+            className: `${className} flex items-center justify-center`,
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "text-gray-400 text-sm",
+                children: "Loading..."
+            }, void 0, false, {
+                fileName: "[project]/src/components/controls/StepSlider.tsx",
+                lineNumber: 78,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/src/components/controls/StepSlider.tsx",
+            lineNumber: 77,
+            columnNumber: 7
+        }, this);
+    }
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: `${className} flex items-center space-x-4`,
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                onClick: goToPrevious,
+                disabled: !canGoPrevious || isAnimating,
+                className: "p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$left$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronLeft$3e$__["ChevronLeft"], {
+                    className: "w-4 h-4"
+                }, void 0, false, {
+                    fileName: "[project]/src/components/controls/StepSlider.tsx",
+                    lineNumber: 91,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/controls/StepSlider.tsx",
+                lineNumber: 86,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                onClick: isAnimating ? stopAnimation : startAnimation,
+                disabled: numericYears.length <= 1,
+                className: "p-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all",
+                children: isAnimating ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$pause$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Pause$3e$__["Pause"], {
+                    className: "w-4 h-4"
+                }, void 0, false, {
+                    fileName: "[project]/src/components/controls/StepSlider.tsx",
+                    lineNumber: 100,
+                    columnNumber: 24
+                }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$play$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Play$3e$__["Play"], {
+                    className: "w-4 h-4"
+                }, void 0, false, {
+                    fileName: "[project]/src/components/controls/StepSlider.tsx",
+                    lineNumber: 100,
+                    columnNumber: 56
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/controls/StepSlider.tsx",
+                lineNumber: 95,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "flex items-center space-x-2",
+                children: [
+                    numericYears.map((year)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                            onClick: ()=>setSelectedYear(year),
+                            disabled: isAnimating,
+                            className: `px-3 py-1.5 rounded-lg text-sm font-medium transition-all min-w-[60px] ${selectedYear === year ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`,
+                            children: year
+                        }, year, false, {
+                            fileName: "[project]/src/components/controls/StepSlider.tsx",
+                            lineNumber: 107,
+                            columnNumber: 11
+                        }, this)),
+                    hasTotal && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                        onClick: ()=>setSelectedYear('total'),
+                        disabled: isAnimating,
+                        className: `px-4 py-1.5 rounded-lg text-sm font-medium transition-all min-w-[80px] ${selectedYear === 'total' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg scale-105' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`,
+                        children: "Total"
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/controls/StepSlider.tsx",
+                        lineNumber: 123,
+                        columnNumber: 11
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/components/controls/StepSlider.tsx",
+                lineNumber: 104,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                onClick: goToNext,
+                disabled: !canGoNext || isAnimating,
+                className: "p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$right$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronRight$3e$__["ChevronRight"], {
+                    className: "w-4 h-4"
+                }, void 0, false, {
+                    fileName: "[project]/src/components/controls/StepSlider.tsx",
+                    lineNumber: 143,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/controls/StepSlider.tsx",
+                lineNumber: 138,
+                columnNumber: 7
+            }, this)
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/components/controls/StepSlider.tsx",
+        lineNumber: 84,
+        columnNumber: 5
+    }, this);
+}
+_s(StepSlider, "KoqN8grNZZizvbNbUkRAW21O+NE=", false, function() {
+    return [
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useSelectedYear"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useAvailableYearOptions"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMapStore"]
+    ];
+});
+_c = StepSlider;
+var _c;
+__turbopack_context__.k.register(_c, "StepSlider");
+if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
+    __turbopack_context__.k.registerExports(module, globalThis.$RefreshHelpers$);
+}
+}}),
 "[project]/src/app/page.tsx [app-client] (ecmascript)": ((__turbopack_context__) => {
 "use strict";
 
@@ -3623,6 +4213,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$map$2f$PMTilesMap$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/map/PMTilesMap.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$controls$2f$DataModeSelector$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/controls/DataModeSelector.tsx [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$controls$2f$StepSlider$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/controls/StepSlider.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$stores$2f$map$2d$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/stores/map-store.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$services$2f$pmtiles$2d$discovery$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/services/pmtiles-discovery.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$settings$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Settings$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/settings.js [app-client] (ecmascript) <export default as Settings>");
@@ -3631,6 +4222,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 ;
 var _s = __turbopack_context__.k.signature();
 'use client';
+;
 ;
 ;
 ;
@@ -3819,7 +4411,7 @@ function Home() {
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "flex items-center",
-                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(YearSelector, {}, void 0, false, {
+                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$controls$2f$StepSlider$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["StepSlider"], {}, void 0, false, {
                                 fileName: "[project]/src/app/page.tsx",
                                 lineNumber: 108,
                                 columnNumber: 13
@@ -4270,4 +4862,4 @@ if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelper
 }}),
 }]);
 
-//# sourceMappingURL=src_abc51ad3._.js.map
+//# sourceMappingURL=src_5c4c84b7._.js.map
