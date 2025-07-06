@@ -792,35 +792,74 @@ class H3PFASProcessorRefactored:
         return successful_years > 0
 
     def _load_kommune_boundaries(self) -> str:
-        """Load Danish kommune boundaries from GCS."""
+        """Load Danish kommune boundaries from GCS using proper authentication."""
         self.log.info("🗺️ Loading Danish kommune boundaries from GCS")
 
         kommune_table = "kommune_boundaries"
 
-        # Load kommune data from GCS (bronze layer, latest available)
+        # Load kommune data from GCS using GCSDataAccess for proper authentication
         try:
-            # Use GCSDataAccess to find the latest DAGI kommune data
+            # Use GCSDataAccess to find and download the latest DAGI kommune data
+            import tempfile
+
             from unified_pipeline.util.gcs_access import GCSDataAccess
 
             gcs_access = GCSDataAccess()
 
-            # List all files in the dagi_kommuner directory
-            kommune_files = gcs_access.list_files(
+            # Try silver layer first (processed data)
+            silver_files = gcs_access.list_files(
+                f"gs://{self.config.bucket}/silver/dagi_kommuner/*/data.parquet"
+            )
+
+            if silver_files:
+                # Use silver layer parquet data (preferred)
+                latest_file = sorted(silver_files)[-1]
+                self.log.info(f"Using silver layer DAGI kommune data: {latest_file}")
+
+                # Load directly from parquet using GCSDataAccess
+                try:
+                    # Use GCSDataAccess to read the parquet file properly
+                    df = gcs_access.read_parquet_to_df(latest_file)
+
+                    # Register the dataframe in DuckDB
+                    self.conn.register("silver_kommuner_df", df)
+
+                    # Create the kommune_boundaries table from silver data
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {kommune_table} AS
+                        SELECT
+                            CAST(code AS INTEGER) as kommune_code,
+                            name as kommune_name,
+                            CAST(region_code AS INTEGER) as region_code,
+                            'Unknown Region' as region_name,  -- Silver data might not have region name
+                            geometry,
+                            area_m2 / 10000.0 as kommune_area_ha,
+                            ST_Centroid(geometry) as centroid
+                        FROM silver_kommuner_df
+                        WHERE geometry IS NOT NULL
+                    """)
+
+                    count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_table}").fetchone()[0]
+                    self.log.info(f"✅ Loaded {count:,} kommune boundaries from silver layer")
+
+                    return kommune_table
+
+                except Exception as e:
+                    self.log.warning(
+                        f"Failed to load from silver layer: {e}, trying bronze layer..."
+                    )
+
+            # Fallback to bronze layer JSON data
+            bronze_files = gcs_access.list_files(
                 f"gs://{self.config.bucket}/bronze/dagi_kommuner/*/*.json"
             )
 
-            if not kommune_files:
-                # Try parquet files as well
-                kommune_files = gcs_access.list_files(
-                    f"gs://{self.config.bucket}/bronze/dagi_kommuner/*/*.parquet"
-                )
-
-            if not kommune_files:
+            if not bronze_files:
                 raise ValueError("No DAGI kommune data found in GCS")
 
             # Extract timestamps and find the latest
             timestamps = []
-            for file_path in kommune_files:
+            for file_path in bronze_files:
                 # Extract timestamp from path like "gs://bucket/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
                 parts = file_path.split("/")
                 if len(parts) >= 6:  # gs, , bucket, bronze, dagi_kommuner, timestamp, filename
@@ -833,58 +872,50 @@ class H3PFASProcessorRefactored:
 
             # Sort by timestamp and get the latest
             latest_timestamp, kommune_path = sorted(timestamps, key=lambda x: x[0])[-1]
+            self.log.info(f"Using bronze layer DAGI kommune data: {latest_timestamp}")
 
-            self.log.info(f"Using latest DAGI kommune data: {latest_timestamp}")
+            # Download the JSON file using GCSDataAccess
+            with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as temp_file:
+                # Download the file content
+                json_content = gcs_access.download_as_text(kommune_path)
+                temp_file.write(json_content)
+                temp_file.flush()
 
-        except Exception as e:
-            self.log.warning(f"Could not find latest DAGI kommune data: {e}")
-            # Fallback to a reasonable default
-            kommune_path = (
-                f"gs://{self.config.bucket}/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
-            )
+                # Now load from the local temp file
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {kommune_table} AS
+                    WITH geojson_data AS (
+                        SELECT json_extract_string(payload, '$.features[*].properties.navn') as kommune_name,
+                               json_extract_string(payload, '$.features[*].properties.kode') as kommune_code,
+                               json_extract_string(payload, '$.features[*].properties.regionskode') as region_code,
+                               json_extract_string(payload, '$.features[*].properties.regionsnavn') as region_name,
+                               json_extract_string(payload, '$.features[*].geometry') as geometry_json
+                        FROM read_json_auto('{temp_file.name}')
+                    )
+                    SELECT
+                        CAST(kommune_code AS INTEGER) as kommune_code,
+                        kommune_name,
+                        CAST(region_code AS INTEGER) as region_code,
+                        COALESCE(region_name, 'Unknown Region') as region_name,
+                        ST_GeomFromGeoJSON(geometry_json) as geometry,
+                        ST_Area_Spheroid(ST_GeomFromGeoJSON(geometry_json)) / 10000.0 as kommune_area_ha,
+                        ST_Centroid(ST_GeomFromGeoJSON(geometry_json)) as centroid
+                    FROM geojson_data
+                    WHERE geometry_json IS NOT NULL
+                """)
 
-        try:
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {kommune_table} AS
-                WITH geojson_data AS (
-                    SELECT json_extract_string(payload, '$.features[*].properties.KOMNAVN') as kommune_name,
-                           json_extract_string(payload, '$.features[*].properties.KOMKODE') as kommune_code,
-                           json_extract_string(payload, '$.features[*].properties.REGIONKODE') as region_code,
-                           json_extract_string(payload, '$.features[*].properties.REGIONNAVN') as region_name,
-                           json_extract_string(payload, '$.features[*].geometry') as geometry_json
-                    FROM read_json_auto('{kommune_path}')
-                )
-                SELECT
-                    CAST(kommune_code AS INTEGER) as kommune_code,
-                    kommune_name,
-                    CAST(region_code AS INTEGER) as region_code,
-                    region_name,
-                    ST_GeomFromGeoJSON(geometry_json) as geometry,
-                    ST_Area_Spheroid(ST_GeomFromGeoJSON(geometry_json)) / 10000.0 as kommune_area_ha,
-                    ST_Centroid(ST_GeomFromGeoJSON(geometry_json)) as centroid
-                FROM geojson_data
-                WHERE geometry_json IS NOT NULL
-            """)
+                # Clean up temp file
+                import os
+
+                os.unlink(temp_file.name)
 
             count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_table}").fetchone()[0]
-            self.log.info(f"✅ Loaded {count:,} kommune boundaries")
+            self.log.info(f"✅ Loaded {count:,} kommune boundaries from bronze layer")
 
         except Exception as e:
-            self.log.warning(f"⚠️ Could not load kommune boundaries from GCS: {e}")
-            # Create a fallback with basic kommune codes
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {kommune_table} AS
-                SELECT
-                    CAST(101 + row_number() OVER () AS INTEGER) as kommune_code,
-                    'Kommune_' || CAST(101 + row_number() OVER () AS VARCHAR) as kommune_name,
-                    CAST(1 AS INTEGER) as region_code,
-                    'Unknown Region' as region_name,
-                    ST_Buffer(ST_Point(12.0, 56.0), 0.1) as geometry,
-                    1000.0 as kommune_area_ha,
-                    ST_Point(12.0, 56.0) as centroid
-                FROM range(98) -- 98 kommuner in Denmark
-            """)
-            self.log.info("📝 Created fallback kommune table with basic structure")
+            self.log.error(f"❌ Could not load kommune boundaries from GCS: {e}")
+            self.log.error("Kommune boundaries are required for proper PMTiles generation")
+            raise ValueError(f"Failed to load kommune boundaries: {e}")
 
         return kommune_table
 
