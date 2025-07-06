@@ -427,7 +427,7 @@ class H3PMTilesGenerator:
             return None
 
     def _upload_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload PMTiles to GCS."""
+        """Upload PMTiles to GCS with public read access."""
         try:
             import shutil
             from datetime import datetime
@@ -441,6 +441,9 @@ class H3PMTilesGenerator:
             with open(pmtiles_path, "rb") as src:
                 with self.gcs_access.fs.open(gcs_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
+
+            # Set public read ACL on the uploaded file
+            self._set_public_read_acl(gcs_path)
 
             # Clean up local file after successful upload
             if os.path.exists(pmtiles_path):
@@ -457,6 +460,46 @@ class H3PMTilesGenerator:
                 except Exception:
                     pass
             return None
+
+    def _set_public_read_acl(self, gcs_path: str) -> None:
+        """Set public read ACL on a GCS file."""
+        try:
+            # Extract bucket and blob name from gs:// path
+            path_parts = gcs_path.replace("gs://", "").split("/", 1)
+            bucket_name = path_parts[0]
+            blob_name = path_parts[1]
+
+            # Try to use Google Cloud Storage client to set ACL
+            try:
+                from google.cloud import storage
+
+                client = storage.Client()
+                bucket = client.bucket(bucket_name)
+                blob = bucket.blob(blob_name)
+
+                # Set public read access
+                blob.acl.all().grant_read()
+                blob.acl.save()
+
+                self.log.info(f"✅ Set public read ACL on {gcs_path}")
+
+            except ImportError:
+                # Fallback to gsutil command if google-cloud-storage is not available
+                import subprocess
+
+                result = subprocess.run(
+                    ["gsutil", "acl", "ch", "-u", "AllUsers:R", gcs_path],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+
+                self.log.info(f"✅ Set public read ACL on {gcs_path} (via gsutil)")
+
+        except Exception as e:
+            # Log warning but don't fail the upload
+            self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
+            self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
 
     def _create_kommune_geojson(self, results_table: str, year: int | str) -> str | None:
         """Create GeoJSON from kommune results table."""
@@ -678,7 +721,7 @@ class H3PMTilesGenerator:
             return None
 
     def _upload_kommune_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload kommune PMTiles to GCS."""
+        """Upload kommune PMTiles to GCS with public read access."""
         try:
             import shutil
             from datetime import datetime
@@ -692,6 +735,9 @@ class H3PMTilesGenerator:
             with open(pmtiles_path, "rb") as src:
                 with self.gcs_access.fs.open(gcs_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
+
+            # Set public read ACL on the uploaded file
+            self._set_public_read_acl(gcs_path)
 
             # Clean up local file after successful upload
             if os.path.exists(pmtiles_path):
