@@ -203,7 +203,9 @@ export default function Home() {
         )}
         
         {/* Map Container */}
-        <div className="flex-1 relative">
+        <div className={`flex-1 relative transition-all duration-300 ease-in-out ${
+          showSidebar ? 'mr-96' : 'mr-0'
+        }`}>
           <PMTilesMap className="w-full h-full" />
         </div>
 
