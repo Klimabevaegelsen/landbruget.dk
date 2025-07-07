@@ -24,6 +24,7 @@ from typing import Any, Optional
 # from shapely import MultiPolygon, Polygon, unary_union, wkt  # MIGRATED: Replaced with DuckDB ST_* functions
 # from shapely.validation import explain_validity  # MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -736,27 +737,34 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 return dissolved_table_name
 
             # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
-            # Transform geometries to EPSG:4326 first, then dissolve
-            # ✅ COORDINATE FIX: Apply ST_FlipCoordinates to fix swapped lat/lon coordinates
+            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
                 SELECT 
-                    ST_FlipCoordinates(ST_Transform(geometry_spatial, 'EPSG:25832', 'EPSG:4326')) as geometry_4326
+                    geometry_spatial as geometry_for_transform
                 FROM {input_table_name}
                 WHERE geometry_spatial IS NOT NULL
                 AND ST_IsValid(geometry_spatial)
             """)
+
+            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+            validate_and_transform_geometries_duckdb(
+                self.conn,
+                f"{dissolved_table_name}_temp",
+                "water_projects",
+                geometry_column="geometry_for_transform",
+            )
 
             # Now dissolve the transformed geometries
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
                 SELECT 
                     'water_project_dissolved' as project_id,
-                    ST_Union_Agg(geometry_4326) as geometry,
+                    ST_Union_Agg(geometry_for_transform) as geometry,
                     COUNT(*) as feature_count,
                     current_timestamp as dissolved_at
                 FROM {dissolved_table_name}_temp
-                WHERE geometry_4326 IS NOT NULL
+                WHERE geometry_for_transform IS NOT NULL
             """)
 
             # Clean up temp table
