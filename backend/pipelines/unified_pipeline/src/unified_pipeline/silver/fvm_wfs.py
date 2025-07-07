@@ -143,6 +143,61 @@ class FVMWFSSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI filtering for matrix job processing.
+
+        This method modifies the year lists based on CLI parameters to enable
+        processing of specific layer types and years for parallel matrix jobs.
+
+        Args:
+            cli_config: CLI configuration containing fvm_layer_type and fvm_year filters
+        """
+        # Import here to avoid circular imports
+        from unified_pipeline.model.cli import FVMLayerType
+
+        if cli_config.source.value != "fvm_wfs":
+            return  # Only apply filters for FVM WFS source
+
+        if cli_config.fvm_layer_type or cli_config.fvm_year:
+            # Clear all years initially for filtered processing
+            object.__setattr__(self, "markblokke_years", [])
+            object.__setattr__(self, "marker_years", [])
+            object.__setattr__(self, "smaabiotoper_years", [])
+            object.__setattr__(self, "organic_areas_years", [])
+
+            # Apply layer type filter
+            if cli_config.fvm_layer_type:
+                layer_type = cli_config.fvm_layer_type
+
+                if layer_type == FVMLayerType.markblokke:
+                    years = list(range(2005, 2027))  # 2005-2026
+                elif layer_type == FVMLayerType.marker:
+                    years = list(range(2008, 2026))  # 2008-2025
+                elif layer_type == FVMLayerType.smaabiotoper:
+                    years = [2023, 2024, 2025]
+                elif layer_type == FVMLayerType.organic_areas:
+                    years = list(range(2012, 2025))  # 2012-2024
+                else:
+                    years = []
+
+                # Apply year filter if specified
+                if cli_config.fvm_year:
+                    if cli_config.fvm_year in years:
+                        years = [cli_config.fvm_year]
+                    else:
+                        years = []  # Invalid year for this layer type
+
+                # Set the appropriate year list
+                if layer_type == FVMLayerType.markblokke:
+                    object.__setattr__(self, "markblokke_years", years)
+                elif layer_type == FVMLayerType.marker:
+                    object.__setattr__(self, "marker_years", years)
+                elif layer_type == FVMLayerType.smaabiotoper:
+                    object.__setattr__(self, "smaabiotoper_years", years)
+                elif layer_type == FVMLayerType.organic_areas:
+                    object.__setattr__(self, "organic_areas_years", years)
+
 
 class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     """
@@ -736,25 +791,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 FROM combined_temp
             """
 
-            # ✅ MIGRATION: Create table instead of  conversion
-            self.conn.execute(f"CREATE OR REPLACE TABLE final_processed AS {final_query}")
+            # ✅ MIGRATION: Create table with unique name per year and layer type to prevent overwrites
+            final_table_name = f"final_processed_{layer_type.lower()}_{year}"
+            self.conn.execute(f"CREATE OR REPLACE TABLE {final_table_name} AS {final_query}")
 
             # Clean up temporary table to avoid registration conflicts
             self.conn.execute("DROP TABLE IF EXISTS combined_temp")
 
             # Check if we have data
-            row_count = self.conn.execute("SELECT COUNT(*) FROM final_processed").fetchone()[0]
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {final_table_name}").fetchone()[0]
 
             # For Marker data: Add block IDs via spatial join if not present
             if layer_type == "Marker" and row_count > 0:
                 # Check if block_id field exists and has data
-                columns_info = self.conn.execute("DESCRIBE final_processed").fetchall()
+                columns_info = self.conn.execute(f"DESCRIBE {final_table_name}").fetchall()
                 column_names = [col[0] for col in columns_info]
 
                 has_block_id = "block_id" in column_names
                 if has_block_id:
                     block_id_count = self.conn.execute(
-                        "SELECT COUNT(*) FROM final_processed WHERE block_id IS NOT NULL"
+                        f"SELECT COUNT(*) FROM {final_table_name} WHERE block_id IS NOT NULL"
                     ).fetchone()[0]
                     has_block_data = block_id_count > 0
                 else:
@@ -768,22 +824,22 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # temp_df = self.conn.execute("SELECT * FROM final_processed")
                     # ✅ MIGRATION: Pass table name instead of
                     result_table = await self._add_block_ids_via_spatial_join(
-                        "final_processed", year
+                        final_table_name, year
                     )
 
                     # If result is a table name, use it; otherwise register the result
                     if isinstance(result_table, str):
                         self.conn.execute(
-                            f"CREATE OR REPLACE TABLE final_processed AS SELECT * FROM {result_table}"
+                            f"CREATE OR REPLACE TABLE {final_table_name} AS SELECT * FROM {result_table}"
                         )
                     else:
-                        self.conn.register("final_processed", result_table)
+                        self.conn.register(final_table_name, result_table)
 
             # Clean up any remaining temporary tables to prevent accumulation
             for table in valid_relations:
                 self.conn.execute(f"DROP TABLE IF EXISTS {table}")
 
-            return "final_processed"
+            return final_table_name
 
     async def _process_layer_type(
         self,

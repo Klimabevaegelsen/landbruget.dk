@@ -121,24 +121,16 @@ async def execute_pipeline_jobs(
                 else:
                     log.error(f"Bronze job {job_cls.__name__} failed - no data returned")
 
-                # 🧹 CLEANUP: For GitHub runners, clear large bronze data after processing
-                # Only keep data in memory if save_local is True (development mode)
-                if hasattr(config_instance, "save_local") and not config_instance.save_local:
-                    # Check if bronze_data is large (indicating it might cause memory issues)
-                    if bronze_data and isinstance(bronze_data, dict):
-                        total_size = (
-                            sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                # 🧹 CLEANUP: Bronze data will be cleared AFTER silver processing to allow in-memory passing
+                # Log the size for monitoring purposes
+                if bronze_data and isinstance(bronze_data, dict):
+                    total_size = (
+                        sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                    )
+                    if total_size > 10_000_000:  # More than 10MB of string data
+                        log.info(
+                            f"📊 Bronze data size: {total_size:,} chars (will be cleared after silver processing)"
                         )
-                        if total_size > 10_000_000:  # More than 10MB of string data
-                            log.info(
-                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
-                            )
-                            bronze_data = {"status": "saved_to_gcs", "job": job_cls.__name__}
-
-                            # Force garbage collection
-                            import gc
-
-                            gc.collect()
 
             elif issubclass(job_cls, SilverJobInterface):
                 # Silver stage - pass in-memory data if available and collect results
@@ -156,7 +148,16 @@ async def execute_pipeline_jobs(
 
                 # 🧹 CLEANUP: Clear bronze data after silver processing to free memory
                 if bronze_data:
-                    log.info("🧹 Clearing bronze data after silver processing")
+                    # Check if bronze_data is large (indicating it might cause memory issues)
+                    if isinstance(bronze_data, dict):
+                        total_size = (
+                            sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                        )
+                        if total_size > 10_000_000:  # More than 10MB of string data
+                            log.info(
+                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                            )
+
                     bronze_data = None
                     import gc
 
@@ -178,35 +179,16 @@ async def execute_pipeline_jobs(
                     gc.collect()
 
             else:
-                # Legacy support - jobs that don't implement the new interfaces
-                await instance.run()
-                # Legacy jobs don't return data, so we consider them successful if they don't raise an exception
-                job_successful = True
-                log.info(f"Legacy job {job_cls.__name__} completed")
+                log.error(f"Unknown job interface for {job_cls.__name__}")
+
+            if job_successful:
+                successful_jobs += 1
 
         except Exception as e:
-            log.error(f"Job {job_cls.__name__} failed with exception: {e}")
-            job_successful = False
+            log.error(f"Error executing {job_cls.__name__}: {e}")
+            import traceback
 
-        if job_successful:
-            successful_jobs += 1
-            log.info(f"✅ {job_cls.__name__} completed successfully")
-        else:
-            log.error(f"❌ {job_cls.__name__} failed")
-
-        # 🧹 CLEANUP: Force cleanup of job instance to free DuckDB connections and memory
-        if hasattr(instance, "conn") and instance.conn:
-            try:
-                instance.conn.close()
-                log.debug(f"🧹 Closed DuckDB connection for {job_cls.__name__}")
-            except:
-                pass
-
-        # Additional cleanup for large job instances
-        del instance
-        import gc
-
-        gc.collect()
+            log.error(f"Traceback: {traceback.format_exc()}")
 
     return successful_jobs, total_jobs
 

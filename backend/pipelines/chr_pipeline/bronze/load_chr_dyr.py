@@ -785,7 +785,7 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
         resp = response.Response[0] if isinstance(response.Response, list) else response.Response
         animals = getattr(resp, "Enkeltdyrsoplysninger", [])
 
-        # Fix the 'int' object is not iterable error
+        # Fix the 'int' object is not iterable error - COMPREHENSIVE CHECK
         if isinstance(animals, int):
             logger.warning(
                 f"Herd {reporting_herd}: Enkeltdyrsoplysninger is an integer ({animals}) instead of a list - likely indicates count or error"
@@ -802,8 +802,21 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 },
             }
 
-        # Ensure animals is iterable - MORE ROBUST CHECK
-        if not hasattr(animals, "__iter__") or isinstance(animals, (str, bytes)):
+        # COMPREHENSIVE SAFETY CHECK: Handle all non-iterable types
+        if animals is None:
+            logger.info(f"Herd {reporting_herd}: Enkeltdyrsoplysninger is None - no animals found")
+            animals = []
+        elif isinstance(animals, (int, float, bool)):
+            logger.warning(
+                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is a primitive type ({type(animals).__name__}: {animals}) - converting to empty list"
+            )
+            animals = []
+        elif isinstance(animals, (str, bytes)):
+            logger.warning(
+                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is a string/bytes (type: {type(animals)}) - converting to empty list"
+            )
+            animals = []
+        elif not hasattr(animals, "__iter__"):
             logger.warning(
                 f"Herd {reporting_herd}: Enkeltdyrsoplysninger is not iterable (type: {type(animals)}) - converting to empty list"
             )
@@ -896,7 +909,25 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
         try:
             # Convert to list if it's not already to ensure we can iterate safely
             if not isinstance(animals, (list, tuple)):
-                animals = list(animals) if hasattr(animals, "__iter__") else []
+                # Double-check that animals is still iterable (catch any edge cases)
+                if hasattr(animals, "__iter__") and not isinstance(animals, (str, bytes, int, float, bool)):
+                    try:
+                        animals = list(animals)
+                    except (TypeError, ValueError) as e:
+                        logger.error(f"Herd {reporting_herd}: Failed to convert animals to list: {e}")
+                        animals = []
+                else:
+                    logger.warning(
+                        f"Herd {reporting_herd}: Animals is not iterable at final check (type: {type(animals)}) - using empty list"
+                    )
+                    animals = []
+
+            # ULTIMATE SAFETY CHECK: Verify we can actually iterate
+            if not isinstance(animals, (list, tuple)):
+                logger.error(
+                    f"Herd {reporting_herd}: Animals is still not a list/tuple after all checks (type: {type(animals)}) - using empty list"
+                )
+                animals = []
 
             for i, animal in enumerate(animals):
                 try:
