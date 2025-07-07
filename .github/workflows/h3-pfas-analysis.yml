@@ -291,11 +291,58 @@ jobs:
             /tmp/*.log
           retention-days: 7
       
-      - name: Verify output upload
+      - name: Collect output paths and save as artifacts
         run: |
-          echo "Checking for output files in GCS for year ${{ matrix.year }}..."
-          # List recent outputs for this year across all aggregation levels
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pesticide|kommune_pesticide)" | grep "${{ matrix.year }}" | tail -10
+          echo "Collecting GCS output paths for year ${{ matrix.year }}..."
+          
+          # Create artifacts directory
+          mkdir -p artifacts
+          
+          # Find H3 outputs for this year
+          echo "🔍 Finding H3 outputs..."
+          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_${{ matrix.year }}_res*/*/h3_pesticide_${{ matrix.year }}_res*.parquet > artifacts/h3_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No H3 outputs found"
+          
+          # Find kommune outputs for this year  
+          echo "🔍 Finding kommune outputs..."
+          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_${{ matrix.year }}/*/kommune_pesticide_${{ matrix.year }}.parquet > artifacts/kommune_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No kommune outputs found"
+          
+          # Show what we found
+          echo "📊 Found outputs for year ${{ matrix.year }}:"
+          if [[ -s artifacts/h3_paths_${{ matrix.year }}.txt ]]; then
+            echo "H3 outputs:"
+            cat artifacts/h3_paths_${{ matrix.year }}.txt
+          fi
+          if [[ -s artifacts/kommune_paths_${{ matrix.year }}.txt ]]; then
+            echo "Kommune outputs:"
+            cat artifacts/kommune_paths_${{ matrix.year }}.txt
+          fi
+          
+          # Create a summary file with metadata
+          echo "{" > artifacts/summary_${{ matrix.year }}.json
+          echo "  \"year\": ${{ matrix.year }}," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"aggregation_levels\": \"${{ matrix.aggregation_levels }}\"," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"h3_files\": [" >> artifacts/summary_${{ matrix.year }}.json
+          if [[ -s artifacts/h3_paths_${{ matrix.year }}.txt ]]; then
+            sed 's/.*/"&"/' artifacts/h3_paths_${{ matrix.year }}.txt | paste -sd, >> artifacts/summary_${{ matrix.year }}.json
+          fi
+          echo "  ]," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"kommune_files\": [" >> artifacts/summary_${{ matrix.year }}.json
+          if [[ -s artifacts/kommune_paths_${{ matrix.year }}.txt ]]; then
+            sed 's/.*/"&"/' artifacts/kommune_paths_${{ matrix.year }}.txt | paste -sd, >> artifacts/summary_${{ matrix.year }}.json
+          fi
+          echo "  ]" >> artifacts/summary_${{ matrix.year }}.json
+          echo "}" >> artifacts/summary_${{ matrix.year }}.json
+          
+          echo "📄 Summary file for year ${{ matrix.year }}:"
+          cat artifacts/summary_${{ matrix.year }}.json
+
+      - name: Upload output paths as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-paths-year${{ matrix.year }}
+          path: artifacts/
+          retention-days: 1  # Only need these for the cumulative job
 
   # Cumulative analysis job - runs after all individual years are processed
   cumulative-analysis:
@@ -366,6 +413,27 @@ jobs:
       
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Download output path artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: output-paths-year*
+          path: downloaded-artifacts/
+          merge-multiple: true
+      
+      - name: List available artifacts
+        run: |
+          echo "📦 Downloaded artifacts:"
+          find downloaded-artifacts/ -type f -name "*.json" | sort
+          echo ""
+          echo "📄 Artifact contents:"
+          for file in downloaded-artifacts/summary_*.json; do
+            if [[ -f "$file" ]]; then
+              echo "=== $(basename $file) ==="
+              cat "$file"
+              echo ""
+            fi
+          done
       
       - name: Run Cumulative Analysis
         working-directory: ${{ env.PIPELINE_DIR }}

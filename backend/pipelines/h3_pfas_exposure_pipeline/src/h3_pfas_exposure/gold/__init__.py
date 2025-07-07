@@ -3,6 +3,9 @@
 from .analysis_functions import (
     run_combined_analysis,
     run_cumulative_analysis,
+    run_cumulative_analysis_from_artifacts,
+    run_cumulative_analysis_github_actions_optimized,
+    run_cumulative_analysis_optimized,
     run_multi_year_analysis,
     run_multi_year_kommune_analysis,
     test_refactored_processor,
@@ -27,5 +30,8 @@ __all__ = [
     "run_multi_year_kommune_analysis",
     "run_combined_analysis",
     "run_cumulative_analysis",
+    "run_cumulative_analysis_optimized",
+    "run_cumulative_analysis_from_artifacts",
+    "run_cumulative_analysis_github_actions_optimized",
     "test_refactored_processor",
 ]

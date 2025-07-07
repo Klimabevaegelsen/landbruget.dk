@@ -642,6 +642,33 @@ class GCSDataAccess:
         files = self.fs.glob(pattern_without_gs)
         return [f"gs://{f}" for f in files]
 
+    def list_files_with_timestamps(self, gcs_pattern: str) -> List[tuple]:
+        """
+        List files matching pattern with their timestamps.
+
+        Returns list of tuples: (file_path, timestamp)
+        Useful for finding the most recent files in GitHub Actions workflows.
+        """
+        import datetime
+
+        pattern_without_gs = gcs_pattern.replace("gs://", "")
+        files = self.fs.glob(pattern_without_gs)
+
+        files_with_timestamps = []
+        for file_path in files:
+            try:
+                # Get file info including timestamp
+                file_info = self.fs.info(file_path)
+                # Convert timestamp to datetime object
+                timestamp = datetime.datetime.fromtimestamp(file_info.get("mtime", 0))
+                files_with_timestamps.append((f"gs://{file_path}", timestamp))
+            except Exception as e:
+                self.log.warning(f"Could not get timestamp for {file_path}: {e}")
+                # Fall back to current time if timestamp unavailable
+                files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
+
+        return files_with_timestamps
+
     def file_exists(self, gcs_path: str) -> bool:
         """Check if file exists."""
         path_without_gs = gcs_path.replace("gs://", "")
