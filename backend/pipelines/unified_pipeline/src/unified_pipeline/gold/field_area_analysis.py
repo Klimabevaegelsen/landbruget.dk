@@ -873,8 +873,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             raise
 
         finally:
-            if hasattr(self, "conn"):
-                self.conn.close()
+            self._safe_close_connection()
 
     def _process_all_fields_spatial_optimized(self):
         """
@@ -1215,14 +1214,24 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         temp_dir = "/tmp/duckdb_field_analysis"
         try:
             if os.path.exists(temp_dir):
-                # Remove all files in the temp directory
+                # ✅ FIXED: Only clean up files that are safe to remove
+                # Don't remove active DuckDB temp files (they start with 'duckdb_temp_storage_')
                 for file_path in glob.glob(os.path.join(temp_dir, "*")):
                     try:
+                        file_name = os.path.basename(file_path)
+                        # Skip active DuckDB temporary files to avoid race conditions
+                        if file_name.startswith("duckdb_temp_storage_"):
+                            self.log.debug(f"Skipping active DuckDB temp file: {file_name}")
+                            continue
+
                         if os.path.isfile(file_path):
                             os.remove(file_path)
+                            self.log.debug(f"Removed temp file: {file_name}")
                         elif os.path.isdir(file_path):
                             shutil.rmtree(file_path)
+                            self.log.debug(f"Removed temp directory: {file_name}")
                     except Exception as e:
+                        # Don't fail on individual file cleanup errors
                         self.log.debug(f"Could not remove temp file {file_path}: {e}")
 
                 self.log.info(f"🧹 Cleaned up temporary files in {temp_dir}")
@@ -1273,7 +1282,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             except Exception as e:
                 self.log.debug(f"Could not drop table {table}: {e}")
 
-        # ✅ NEW: Force checkpoint and cleanup temp files after each year
+        # ✅ FIXED: Force checkpoint first, then careful cleanup
         self._force_duckdb_checkpoint()
         self._cleanup_temp_files()
 
@@ -1312,3 +1321,29 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         except Exception as e:
             self.log.error(f"Error finding available FVM marker years: {e}")
             return []
+
+    def _safe_close_connection(self):
+        """Safely close the DuckDB connection with proper cleanup."""
+        try:
+            if hasattr(self, "conn") and self.conn:
+                # ✅ FIXED: Force final checkpoint before closing
+                self.log.debug("🔄 Final checkpoint before closing connection...")
+                self.conn.execute("CHECKPOINT")
+
+                # Close the connection
+                self.log.debug("🔒 Closing DuckDB connection...")
+                self.conn.close()
+
+                # ✅ FIXED: Clean up temp files after connection is closed
+                # This avoids race conditions with DuckDB's own cleanup
+                self.log.debug("🧹 Final cleanup of temp files...")
+                self._final_cleanup_temp_files()
+
+        except Exception as e:
+            self.log.debug(f"Error during connection cleanup: {e}")
+            # Try to close connection even if checkpoint failed
+            try:
+                if hasattr(self, "conn") and self.conn:
+                    self.conn.close()
+            except Exception as close_error:
+                self.log.debug(f"Error closing connection: {close_error}")

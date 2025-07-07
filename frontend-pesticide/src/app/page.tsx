@@ -3,14 +3,12 @@
 import { useEffect, useState } from 'react';
 import { PMTilesMap } from '@/components/map/PMTilesMap';
 import { DataModeSelector } from '@/components/controls/DataModeSelector';
-import { StepSlider } from '@/components/controls/StepSlider';
-import { SearchBar } from '@/components/controls/SearchBar';
+import { TopBar } from '@/components/layout/TopBar';
 import { DataSidebar } from '@/components/overlays/DataSidebar';
 import { MobileBottomPanel } from '@/components/overlays/MobileBottomPanel';
 import { useMapStore, useDataState, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
 import { useUIStore } from '@/stores/ui-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
-import { Settings, PanelRightOpen, PanelRightClose } from 'lucide-react';
 
 // Define HoverInfo interface to match the sidebar component
 interface HoverInfo {
@@ -114,14 +112,6 @@ export default function Home() {
   // Get current hover info for sidebar/mobile panel - only when there's tooltip data
   const hoverInfo = showTooltip && tooltipData ? convertToHoverInfo(tooltipData, tooltipPosition) : null;
 
-  const handleToggleSidebar = () => {
-    if (isMobile) {
-      setShowMobilePanel(!showMobilePanel);
-    } else {
-      setShowSidebar(!showSidebar);
-    }
-  };
-
   const handleCloseSidebar = () => {
     if (isMobile) {
       setShowMobilePanel(false);
@@ -174,63 +164,15 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black flex flex-col">
       {/* Top Bar - London Underground Style */}
-      <div className="bg-black/90 backdrop-blur-md border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-6">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-xl font-bold text-white">PFAS Exposure Analysis</h1>
-            <div className="text-sm text-gray-400">
-              {selectedYear === 'total' ? 'All Years' : `Year ${selectedYear}`}
-            </div>
-          </div>
-          
-          {/* Search Bar - London Underground Style */}
-          <div className="flex-1 max-w-md">
-            <SearchBar 
-              onLocationSelect={handleLocationSelect}
-              placeholder="Search Danish addresses..."
-              className="w-full"
-            />
-          </div>
-          
-          {/* Data Mode Selector - Top Bar Version */}
-          <DataModeSelector variant="topbar" />
-          
-          {/* Step Slider for Year Selection */}
-          <StepSlider />
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          {/* Sidebar Toggle Button */}
-          <button
-            onClick={handleToggleSidebar}
-            className={`p-2 rounded-lg transition-colors ${
-              (isMobile ? showMobilePanel : showSidebar)
-                ? 'bg-white/20 text-white border border-white/30' 
-                : 'bg-black/20 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
-            }`}
-            title={
-              isMobile 
-                ? (showMobilePanel ? 'Hide Details Panel' : 'Show Details Panel')
-                : (showSidebar ? 'Hide Details Panel' : 'Show Details Panel')
-            }
-          >
-            {(isMobile ? showMobilePanel : showSidebar) ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
-          </button>
-          
-          {/* Advanced Controls Toggle */}
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className={`p-2 rounded-lg transition-colors ${
-              showControls 
-                ? 'bg-white/20 text-white border border-white/30' 
-                : 'bg-black/20 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
-            }`}
-            title={showControls ? 'Hide Advanced Controls' : 'Show Advanced Controls'}
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+      <TopBar
+        showControls={showControls}
+        setShowControls={setShowControls}
+        showSidebar={showSidebar}
+        setShowSidebar={setShowSidebar}
+        showMobilePanel={showMobilePanel}
+        setShowMobilePanel={setShowMobilePanel}
+        onLocationSelect={handleLocationSelect}
+      />
 
       <div className="flex-1 flex relative">
         {/* Left Sidebar - Advanced Controls (hidden by default) */}
