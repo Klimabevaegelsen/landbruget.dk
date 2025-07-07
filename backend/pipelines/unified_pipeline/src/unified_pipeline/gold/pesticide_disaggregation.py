@@ -570,15 +570,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _get_available_pesticide_years(self) -> Set[int]:
         """Extract available pesticide years from GCS storage."""
         try:
-            # List all files in the pesticides silver directory
-            files = self.gcs_access.list_files_with_metadata(
-                self.config.bucket, "silver/pesticides/"
-            )
+            # Use list_files with recursive pattern to find all parquet files
+            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
             years = set()
 
-            for file_blob in files:
+            for file_path in files:
                 # Extract years from filenames like "pesticiddata_2015_2016.parquet"
-                match = re.search(r"pesticiddata_(\d{4})_(\d{4})\.parquet", file_blob.name)
+                filename = file_path.split("/")[-1]
+                match = re.search(r"pesticiddata_(\d{4})_(\d{4})\.parquet", filename)
                 if match:
                     start_year = int(match.group(1))
                     years.add(start_year)
@@ -595,17 +595,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _get_available_fvm_marker_years(self) -> List[int]:
         """Override base method to look for the correct FVM marker file pattern."""
         try:
-            # List all files in silver layer to find fvm_marker directories with actual data
-            files = self.gcs_access.list_files_with_metadata(
-                self.config.bucket, "silver/fvm_marker_"
-            )
+            # Use list_files with recursive pattern to find all parquet files
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
             years = set()
 
-            for file_blob in files:
+            for file_path in files:
                 # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
-                match = re.search(
-                    r"silver/fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_blob.name
-                )
+                match = re.search(r"fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_path)
                 if match:
                     year1 = int(match.group(1))
                     year2 = int(match.group(2))
@@ -681,29 +678,26 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Based on actual codebase: filename pattern is pesticiddata_YYYY_YYYY.parquet in timestamped subdirs
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
-            # Look for the file in timestamped subdirectories
-            files = self.gcs_access.list_files_with_metadata(
-                self.config.bucket, "silver/pesticides/"
-            )
+            # Use list_files with recursive pattern to find all parquet files
+            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
 
             # Find the file that matches our year in the latest timestamped directory
             target_file = None
             latest_timestamp = None
-            for file_blob in files:
-                if filename in file_blob.name:
-                    # Extract timestamp from path like "silver/pesticides/20250629_102742/pesticiddata_2021_2022.parquet"
-                    path_parts = file_blob.name.split("/")
-                    if len(path_parts) >= 3:
-                        timestamp_dir = path_parts[2]  # "20250629_102742"
+            for file_path in files:
+                if filename in file_path:
+                    # Extract timestamp from path like "gs://bucket/silver/pesticides/20250629_102742/pesticiddata_2021_2022.parquet"
+                    path_parts = file_path.split("/")
+                    if len(path_parts) >= 6:  # gs://bucket/silver/pesticides/timestamp/filename
+                        timestamp_dir = path_parts[5]  # "20250629_102742"
                         if latest_timestamp is None or timestamp_dir > latest_timestamp:
                             latest_timestamp = timestamp_dir
-                            target_file = file_blob.name
+                            target_file = file_path
 
             if target_file:
-                # ✅ MIGRATION: Return GCS path directly instead of downloading
-                gcs_path = f"gs://{self.config.bucket}/{target_file}"
-                self.log.info(f"Found pesticide data at {gcs_path}")
-                return gcs_path
+                self.log.info(f"Found pesticide data at {target_file}")
+                return target_file
             else:
                 self.log.warning(
                     f"No pesticide file found for year {year} (looking for {filename})"
@@ -720,30 +714,29 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Look for FVM marker data for this year
             self.log.info(f"Reading FVM marker data for year {year}")
 
-            # Based on actual codebase: find latest timestamped directory in fvm_marker_YYYY/
-            files = self.gcs_access.list_files_with_metadata(
-                self.config.bucket, f"silver/fvm_marker_{year}/"
-            )
+            # Use list_files with recursive pattern to find all parquet files
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/*.parquet"
+            files = self.gcs_access.list_files(pattern)
 
             # Find the parquet file in timestamped subdirectories
             target_file = None
             latest_timestamp = None
-            for file_blob in files:
+            for file_path in files:
                 # Look for files like "fvm_marker_2021.parquet" instead of "data.parquet"
-                if file_blob.name.endswith(f"fvm_marker_{year}.parquet"):
-                    # Extract timestamp from path like "silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
-                    path_parts = file_blob.name.split("/")
-                    if len(path_parts) >= 3:
-                        timestamp_dir = path_parts[2]  # "20241201_123456"
+                if file_path.endswith(f"fvm_marker_{year}.parquet"):
+                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
+                    path_parts = file_path.split("/")
+                    if (
+                        len(path_parts) >= 7
+                    ):  # gs://bucket/silver/fvm_marker_year/timestamp/filename
+                        timestamp_dir = path_parts[6]  # "20241201_123456"
                         if latest_timestamp is None or timestamp_dir > latest_timestamp:
                             latest_timestamp = timestamp_dir
-                            target_file = file_blob.name
+                            target_file = file_path
 
             if target_file:
-                # ✅ MIGRATION: Return GCS path directly instead of downloading
-                gcs_path = f"gs://{self.config.bucket}/{target_file}"
-                self.log.info(f"Found FVM marker data at {gcs_path}")
-                return gcs_path
+                self.log.info(f"Found FVM marker data at {target_file}")
+                return target_file
             else:
                 self.log.warning(f"No FVM marker file found for year {year}")
                 return None
