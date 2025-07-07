@@ -147,13 +147,31 @@ export const useMapStore = create<MapState & MapActions>()(
       setMapInstance: (mapInstance) => set({ mapInstance }),
       flyToLocation: (location) => {
         const { mapInstance } = get();
-        if (mapInstance && typeof mapInstance === 'object' && mapInstance !== null && 'flyTo' in mapInstance) {
-                     (mapInstance as { flyTo: (options: Record<string, unknown>) => void }).flyTo({
-            center: [location.lng, location.lat],
-            zoom: location.zoom || 12,
-            essential: true,
-            duration: 2000
-          });
+        console.log('🗺️ flyToLocation called with:', location);
+        console.log('🗺️ mapInstance:', mapInstance);
+        
+        if (!mapInstance) {
+          console.warn('🗺️ No map instance available for flyToLocation');
+          return;
+        }
+        
+        try {
+          // Cast to any to access MapLibre methods
+          const map = mapInstance as any;
+          
+          if (typeof map.flyTo === 'function') {
+            console.log('🗺️ Flying to location:', location);
+            map.flyTo({
+              center: [location.lng, location.lat],
+              zoom: location.zoom || 12,
+              essential: true,
+              duration: 2000
+            });
+          } else {
+            console.warn('🗺️ Map instance does not have flyTo method');
+          }
+        } catch (error) {
+          console.error('🗺️ Error in flyToLocation:', error);
         }
       },
       
