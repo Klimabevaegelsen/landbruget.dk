@@ -11,6 +11,7 @@ Migrated from the standalone field_area_analysis_pipeline to the unified pipelin
 import os
 from typing import Any, Dict, List, Optional
 
+import psutil
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -37,8 +38,8 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
 
     # Processing configuration
     batch_size: int = 2500  # Increased batch size for better performance with 16GB RAM
-    memory_limit: str = "8GB"  # Conservative: Use ~60% of available 14GB space
-    thread_count: int = 4  # Use all available CPU cores
+    memory_limit: str = "6GB"  # Very conservative: Use ~43% of available 14GB space
+    thread_count: int = 2  # Reduced threads for memory-intensive spatial operations
 
     # Quality thresholds
     min_area_threshold: float = 0.01  # Minimum area share to include (1%)
@@ -70,12 +71,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
         self.conn.execute(
-            "SET max_temp_directory_size='10GB'"
-        )  # Conservative: Use ~70% of available 14GB space
+            "SET max_temp_directory_size='8GB'"
+        )  # Very conservative: Use ~57% of available 14GB space
         self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
 
         # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
-        self.conn.execute("SET threads=2")  # Reduce from 4 to 2 for memory-intensive spatial ops
+        self.conn.execute("SET threads=1")  # Single thread for memory-intensive spatial ops
         self.conn.execute("SET preserve_insertion_order=false")  # Allow reordering for efficiency
 
         # ✅ NEW: More aggressive memory management for spatial operations
@@ -100,7 +101,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Spatial extension is already loaded in base class
         self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer")
         self.log.info(
-            f"   Memory: {self.config.memory_limit}, Threads: 2 (optimized), Batch size: {self.config.batch_size:,}"
+            f"   Memory: {self.config.memory_limit}, Threads: 1 (optimized), Batch size: {self.config.batch_size:,}"
         )
 
     def _load_agricultural_fields_for_years_optimized(
@@ -797,6 +798,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             dataset_paths = self._load_silver_data_streaming(silver_data)
             self._load_reference_data_into_duckdb_streaming(dataset_paths)
 
+            # ✅ NEW: Check memory usage after loading reference data
+            self._check_memory_usage()
+
             # ✅ OPTIMIZATION: Process each year separately to avoid memory overflow
             available_years = self._get_available_fvm_marker_years()
             if not available_years:
@@ -807,49 +811,45 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.log.info("🚀 Processing each year separately to avoid memory overflow")
 
             total_fields_processed = 0
-
             for year in available_years:
-                self.log.info(f"🚀 Processing year {year}...")
+                self.log.info(f"Processing year {year}...")
 
-                # ✅ NEW: Check disk space before processing each year
+                # ✅ NEW: Check memory and disk usage before processing each year
+                self._check_memory_usage()
                 self._check_disk_space()
 
-                # ✅ OPTIMIZATION: Load fields for this year only
+                # Load fields for this year
                 fields_table_name = self._load_agricultural_fields_for_years_optimized(
                     [year], silver_data
                 )
-                if fields_table_name is None:
-                    self.log.warning(f"No agricultural fields data available for year {year}")
+                if not fields_table_name:
+                    self.log.warning(f"No fields found for year {year}")
                     continue
 
-                # Get count for this year
-                fields_count = self.conn.execute(
-                    f"SELECT COUNT(*) FROM {fields_table_name}"
-                ).fetchone()[0]
-                self.log.info(f"Processing {fields_count:,} fields for year {year}")
-
-                if fields_count == 0:
-                    self.log.warning(f"No fields to process for year {year}")
-                    continue
-
-                # ✅ OPTIMIZATION: Prepare fields table for spatial analysis
+                # Prepare fields table for analysis
                 self._prepare_fields_table_for_analysis(fields_table_name, year)
 
-                # ✅ NEW: Check disk space before spatial analysis
-                self._check_disk_space()
+                # ✅ NEW: Check memory usage after loading fields
+                self._check_memory_usage()
 
-                # ✅ OPTIMIZATION: Run spatial analysis for this year
+                # Process all fields with spatial analysis
                 self._process_all_fields_spatial_optimized()
 
-                # ✅ NEW: Check disk space after spatial analysis
-                self._check_disk_space()
+                # ✅ NEW: Check memory usage after spatial analysis
+                self._check_memory_usage()
 
-                # ✅ OPTIMIZATION: Create final results table for this year
-                year_results_table = f"final_field_analysis_{year}"
+                # Create year results table
+                year_results_table = f"field_area_analysis_results_{year}"
                 self._create_year_results_table(year_results_table, year)
 
-                # ✅ OPTIMIZATION: Save this year's results immediately
-                self.log.info(f"💾 Saving results for year {year}...")
+                # Get field count for this year
+                fields_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {year_results_table}"
+                ).fetchone()[0]
+
+                self.log.info(f"✅ Year {year} completed: {fields_count:,} fields processed")
+
+                # Save results for this year
                 self.save_data_direct(
                     year_results_table, f"{self.config.dataset}_{year}", self.config.bucket, "gold"
                 )
@@ -860,7 +860,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 self._cleanup_year_processing(fields_table_name, year)
                 self.log.info(f"✅ Completed and cleaned up year {year}")
 
-                # ✅ NEW: Final disk space check after cleanup
+                # ✅ NEW: Final memory and disk space check after cleanup
+                self._check_memory_usage()
                 self._check_disk_space()
 
             self.log.info("✅ Field Area Analysis completed successfully")
@@ -879,16 +880,18 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """
         ✅ OPTIMIZED: Process all fields with spatial analysis directly in DuckDB.
 
-        This replaces the batch processing approach with direct DuckDB operations
-        for maximum performance and minimal memory usage.
+        Optimized for DuckDB Spatial v1.2.2 with new spatial join operator:
+        - Single spatial join conditions only (PR #545 limitation)
+        - Sequential processing to avoid memory overflow
+        - Aggressive cleanup between operations
         """
-        self.log.info("🔍 Running spatial analysis directly in DuckDB...")
+        self.log.info("🔍 Running spatial analysis directly in DuckDB (v1.2.2 optimized)...")
 
         # ✅ NEW: Clean up before starting spatial analysis
         self._cleanup_temp_files()
         self._force_duckdb_checkpoint()
 
-        # Property analysis
+        # Property analysis - single spatial join condition
         self.log.info("    🏠 Analyzing property ownership...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_intersections AS
@@ -920,7 +923,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.conn.execute("DROP TABLE IF EXISTS field_property_intersections")
         self._force_duckdb_checkpoint()
 
-        # Soil analysis
+        # Soil analysis - single spatial join condition
         self.log.info("    🌱 Analyzing soil types...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_intersections AS
@@ -953,7 +956,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.conn.execute("DROP TABLE IF EXISTS field_soil_intersections")
         self._force_duckdb_checkpoint()
 
-        # BNBO analysis
+        # BNBO analysis - single spatial join condition
         self.log.info("    🛡️ Analyzing BNBO status...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_intersections AS
@@ -984,7 +987,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.conn.execute("DROP TABLE IF EXISTS field_bnbo_intersections")
         self._force_duckdb_checkpoint()
 
-        # Wetlands analysis
+        # Wetlands analysis - single spatial join condition
         self.log.info("    🌊 Analyzing wetlands...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_shares AS
@@ -999,7 +1002,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         self._force_duckdb_checkpoint()
 
-        # Water projects analysis
+        # Water projects analysis - single spatial join condition
         self.log.info("    💧 Analyzing water projects...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_water_projects_shares AS
@@ -1014,43 +1017,74 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         self._force_duckdb_checkpoint()
 
-        # Complex overlaps - with aggressive cleanup to manage disk space
-        self.log.info("    🔗 Analyzing complex overlaps...")
+        # ✅ OPTIMIZED: Complex overlaps using sequential single joins (DuckDB Spatial v1.2.2 compatible)
+        self.log.info("    🔗 Analyzing complex overlaps (sequential processing)...")
 
-        # Wetland-water project overlaps - break into steps with cleanup
-        self.log.info("    🌊💧 Analyzing wetland-water projects overlap...")
+        # Step 1: Find fields that intersect with wetlands
+        self.log.info("    🌊 Step 1: Finding wetland intersections...")
         self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_water_overlap AS
+            CREATE OR REPLACE TABLE fields_with_wetlands AS
             SELECT 
                 f.field_id,
                 f.block_id,
-                ST_Area(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)) / ST_Area(f.geom) * 100 as wetland_water_projects_share
+                f.geom as field_geom,
+                ST_Intersection(f.geom, w.geom) as wetland_intersection_geom
             FROM current_fields f
             JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
-            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
-            WHERE ST_Area(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)) / ST_Area(f.geom) > 0.01
         """)
 
-        # Cleanup and checkpoint after wetland-water overlaps
+        self._force_duckdb_checkpoint()
+
+        # Step 2: Find wetland-water project overlaps using the wetland intersections
+        self.log.info("    🌊💧 Step 2: Finding wetland-water project overlaps...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_wetland_water_overlap AS
+            SELECT 
+                fw.field_id,
+                fw.block_id,
+                ST_Area(ST_Intersection(fw.wetland_intersection_geom, wp.geom)) / ST_Area(fw.field_geom) * 100 as wetland_water_projects_share
+            FROM fields_with_wetlands fw
+            JOIN water_projects wp ON ST_Intersects(fw.wetland_intersection_geom, wp.geom)
+            WHERE ST_Area(ST_Intersection(fw.wetland_intersection_geom, wp.geom)) / ST_Area(fw.field_geom) > 0.01
+        """)
+
+        # Cleanup intermediate table
+        self.conn.execute("DROP TABLE IF EXISTS fields_with_wetlands")
         self._force_duckdb_checkpoint()
         self._cleanup_temp_files()
 
-        # BNBO-water project overlaps - break into steps with cleanup
-        self.log.info("    🛡️💧 Analyzing BNBO-water projects overlap...")
+        # Step 3: Find fields that intersect with BNBO areas
+        self.log.info("    🛡️ Step 3: Finding BNBO intersections...")
         self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_overlap AS
+            CREATE OR REPLACE TABLE fields_with_bnbo AS
             SELECT 
                 f.field_id,
                 f.block_id,
                 b.status_category,
-                ST_Area(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)) / ST_Area(f.geom) * 100 as bnbo_water_projects_share
+                f.geom as field_geom,
+                ST_Intersection(f.geom, b.geom) as bnbo_intersection_geom
             FROM current_fields f
             JOIN bnbo_areas b ON ST_Intersects(f.geom, b.geom)
-            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
-            WHERE ST_Area(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)) / ST_Area(f.geom) > 0.01
         """)
 
-        # Cleanup and checkpoint after BNBO-water overlaps
+        self._force_duckdb_checkpoint()
+
+        # Step 4: Find BNBO-water project overlaps using the BNBO intersections
+        self.log.info("    🛡️💧 Step 4: Finding BNBO-water project overlaps...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_water_overlap AS
+            SELECT 
+                fb.field_id,
+                fb.block_id,
+                fb.status_category,
+                ST_Area(ST_Intersection(fb.bnbo_intersection_geom, wp.geom)) / ST_Area(fb.field_geom) * 100 as bnbo_water_projects_share
+            FROM fields_with_bnbo fb
+            JOIN water_projects wp ON ST_Intersects(fb.bnbo_intersection_geom, wp.geom)
+            WHERE ST_Area(ST_Intersection(fb.bnbo_intersection_geom, wp.geom)) / ST_Area(fb.field_geom) > 0.01
+        """)
+
+        # Cleanup intermediate table
+        self.conn.execute("DROP TABLE IF EXISTS fields_with_bnbo")
         self._force_duckdb_checkpoint()
         self._cleanup_temp_files()
 
@@ -1090,21 +1124,24 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             GROUP BY field_id, block_id
         """)
 
-        # BNBO-water overlap shares JSON (simplified)
+        # BNBO-water overlap shares JSON
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_json AS
             SELECT 
                 field_id,
                 block_id,
-                '{}' as bnbo_water_projects_shares  -- Simplified for now
-            FROM current_fields
+                COALESCE('{' || string_agg('"' || status_category || '":' || bnbo_water_projects_share, ',') || '}', '{}') as bnbo_water_projects_shares
+            FROM field_bnbo_water_overlap
+            GROUP BY field_id, block_id
         """)
 
         # ✅ NEW: Final cleanup after all spatial operations
         self._force_duckdb_checkpoint()
         self._cleanup_temp_files()
 
-        self.log.info("✅ Spatial analysis completed in DuckDB (with aggressive cleanup)")
+        self.log.info(
+            "✅ Spatial analysis completed in DuckDB (v1.2.2 optimized with sequential joins)"
+        )
 
     def _prepare_fields_table_for_analysis(self, fields_table_name: str, year: int):
         """Prepare fields table for spatial analysis."""
@@ -1180,27 +1217,57 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """)
 
     def _check_disk_space(self):
-        """Check available disk space and log warnings if running low."""
+        """Check available disk space and log warning if low."""
         import shutil
 
+        # Check main disk space
+        total, used, free = shutil.disk_usage("/")
+        total_gb = total / (1024**3)
+        used_gb = used / (1024**3)
+        free_gb = free / (1024**3)
+
+        self.log.info(
+            f"💾 Disk space: {free_gb:.1f}GB free / {total_gb:.1f}GB total ({used_gb:.1f}GB used)"
+        )
+
+        if free_gb < 5:
+            self.log.warning(f"⚠️ Low disk space: only {free_gb:.1f}GB free")
+
+        # Check temp directory space
+        temp_dir = "/tmp/duckdb_field_analysis"
+        if os.path.exists(temp_dir):
+            temp_size = sum(
+                os.path.getsize(os.path.join(dirpath, filename))
+                for dirpath, dirnames, filenames in os.walk(temp_dir)
+                for filename in filenames
+            )
+            temp_gb = temp_size / (1024**3)
+            self.log.info(f"🗂️ Temp directory: {temp_gb:.1f}GB used")
+
+    def _check_memory_usage(self):
+        """Check current memory usage and log warning if high."""
         try:
-            # Check available space in /tmp
-            total, used, free = shutil.disk_usage("/tmp")
-            free_gb = free / (1024**3)
-            total_gb = total / (1024**3)
-            used_gb = used / (1024**3)
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_gb = memory_info.rss / (1024**3)
+
+            # Get system memory info
+            system_memory = psutil.virtual_memory()
+            total_memory_gb = system_memory.total / (1024**3)
+            available_memory_gb = system_memory.available / (1024**3)
 
             self.log.info(
-                f"💾 Disk space: {free_gb:.1f}GB free / {total_gb:.1f}GB total ({used_gb:.1f}GB used)"
+                f"💾 Memory usage: {memory_gb:.1f}GB process / {available_memory_gb:.1f}GB available / {total_memory_gb:.1f}GB total"
             )
 
-            if free_gb < 5:
-                self.log.warning(f"⚠️ Low disk space: only {free_gb:.1f}GB free in /tmp")
-            elif free_gb < 2:
-                self.log.error(f"❌ Critical disk space: only {free_gb:.1f}GB free in /tmp")
+            if memory_gb > 10:  # Warning if process uses more than 10GB
+                self.log.warning(f"⚠️ High memory usage: {memory_gb:.1f}GB")
+
+            if available_memory_gb < 2:  # Warning if system has less than 2GB available
+                self.log.warning(f"⚠️ Low system memory: only {available_memory_gb:.1f}GB available")
 
         except Exception as e:
-            self.log.debug(f"Could not check disk space: {e}")
+            self.log.debug(f"Could not check memory usage: {e}")
 
     def _cleanup_temp_files(self):
         """Clean up temporary files to prevent disk space issues."""

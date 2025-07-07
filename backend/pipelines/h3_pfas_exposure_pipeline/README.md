@@ -1,5 +1,40 @@
 # H3 PFAS Exposure Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: PFAS Contamination in Agriculture
+**PFAS** (Per- and polyfluoroalkyl substances) are synthetic chemicals nicknamed "forever chemicals" because they don't break down naturally in the environment or human body. They're found in many pesticides used in Danish agriculture and can contaminate:
+- Soil and groundwater
+- Food crops
+- Drinking water sources
+- The surrounding environment
+
+### What This Pipeline Does
+This pipeline is like a sophisticated mapping system that:
+
+1. **Identifies PFAS-containing pesticides**: Scans through Danish pesticide registration data to find which products contain PFAS chemicals
+2. **Maps where they're used**: Combines this with actual field-by-field pesticide application records from Danish farms
+3. **Creates exposure maps**: Generates detailed maps showing PFAS exposure levels across Denmark using a hexagonal grid system (H3)
+4. **Calculates impact**: Measures how much PFAS-containing chemicals are being applied per hectare of agricultural land
+
+### Why Hexagonal Maps?
+Instead of using administrative boundaries (like municipalities), this pipeline uses **H3 hexagons** - a mapping system that divides Denmark into equal-sized hexagonal cells. This provides:
+- **Consistent area measurements**: Each hexagon covers roughly 1.5 hectares
+- **Better spatial analysis**: Hexagons don't have the irregular shapes of administrative boundaries
+- **Multiple resolution levels**: Can zoom from regional (516 hectares) to field-level (1.5 hectares) analysis
+
+### Real-World Impact
+The results help:
+- **Environmental agencies** identify hotspots of PFAS contamination
+- **Farmers** understand their pesticide usage patterns
+- **Researchers** study the environmental impact of agricultural chemicals
+- **Policy makers** make informed decisions about pesticide regulations
+- **Citizens** understand potential exposure risks in their area
+
+---
+
+## Technical Overview
+
 A production-ready pipeline for analyzing PFAS exposure using H3 hexagonal spatial indexing. This pipeline creates comprehensive PFAS exposure maps by joining pesticide application data with agricultural field geometries and PFAS-containing pesticide information.
 
 ## Overview

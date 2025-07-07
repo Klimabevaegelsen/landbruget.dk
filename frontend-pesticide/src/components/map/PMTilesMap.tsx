@@ -89,6 +89,38 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     hideTooltip
   } = useMapStore()
 
+  // Helper function to safely get available interactive layers
+  const getAvailableInteractiveLayers = (): string[] => {
+    if (!map.current) return []
+    
+    const layers = []
+    try {
+      if ((map.current as any).getLayer('kommune-fill')) {
+        layers.push('kommune-fill')
+      }
+    } catch (e) {
+      // Layer doesn't exist, ignore
+    }
+    
+    try {
+      if ((map.current as any).getLayer('h3-fill')) {
+        layers.push('h3-fill')
+      }
+    } catch (e) {
+      // Layer doesn't exist, ignore
+    }
+    
+    try {
+      if ((map.current as any).getLayer('bnbo-fill')) {
+        layers.push('bnbo-fill')
+      }
+    } catch (e) {
+      // Layer doesn't exist, ignore
+    }
+    
+    return layers
+  }
+
   // Load MapLibre and PMTiles
   useEffect(() => {
     let mounted = true
@@ -696,21 +728,41 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       })
 
       ;(map.current as any).on('click', (e: any) => {
-        const features = (map.current as any)?.queryRenderedFeatures(e.point, {
-          layers: ['kommune-fill', 'h3-fill', 'bnbo-fill']
-        })
-        if (features && features.length > 0) {
-          const feature = features[0]
-          showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
-          
-          // On mobile, also show the mobile panel
-          if (isMobile) {
-            setShowMobilePanel(true)
-          }
-        } else {
+        // Get available layers before querying
+        const availableLayers = getAvailableInteractiveLayers()
+        
+        if (availableLayers.length === 0) {
+          // No interactive layers available, just hide tooltip
           hideTooltip()
-          
-          // On mobile, hide the mobile panel when clicking empty space
+          if (isMobile) {
+            setShowMobilePanel(false)
+          }
+          return
+        }
+        
+        try {
+          const features = (map.current as any)?.queryRenderedFeatures(e.point, {
+            layers: availableLayers
+          })
+          if (features && features.length > 0) {
+            const feature = features[0]
+            showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+            
+            // On mobile, also show the mobile panel
+            if (isMobile) {
+              setShowMobilePanel(true)
+            }
+          } else {
+            hideTooltip()
+            
+            // On mobile, hide the mobile panel when clicking empty space
+            if (isMobile) {
+              setShowMobilePanel(false)
+            }
+          }
+        } catch (error) {
+          console.warn('Error querying rendered features on click:', error)
+          hideTooltip()
           if (isMobile) {
             setShowMobilePanel(false)
           }
@@ -723,16 +775,36 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           return
         }
         
-        const features = (map.current as any)?.queryRenderedFeatures(e.point, {
-          layers: ['kommune-fill', 'h3-fill', 'bnbo-fill']
-        })
-        if (features && features.length > 0) {
-          const feature = features[0]
-          showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+        // Get available layers before querying
+        const availableLayers = getAvailableInteractiveLayers()
+        
+        if (availableLayers.length === 0) {
+          // No interactive layers available, just hide tooltip
+          hideTooltip()
           if (map.current) {
-            (map.current as any).getCanvas().style.cursor = 'pointer'
+            (map.current as any).getCanvas().style.cursor = ''
           }
-        } else {
+          return
+        }
+        
+        try {
+          const features = (map.current as any)?.queryRenderedFeatures(e.point, {
+            layers: availableLayers
+          })
+          if (features && features.length > 0) {
+            const feature = features[0]
+            showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+            if (map.current) {
+              (map.current as any).getCanvas().style.cursor = 'pointer'
+            }
+          } else {
+            hideTooltip()
+            if (map.current) {
+              (map.current as any).getCanvas().style.cursor = ''
+            }
+          }
+        } catch (error) {
+          console.warn('Error querying rendered features on mousemove:', error)
           hideTooltip()
           if (map.current) {
             (map.current as any).getCanvas().style.cursor = ''
@@ -784,6 +856,28 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           errorMessage = e.message
         } else if (e.sourceId) {
           errorMessage = `Source error: ${e.sourceId}`
+        }
+        
+        // Check if this is a layer query error
+        if (errorMessage.includes('kommune-fill') || errorMessage.includes('does not exist')) {
+          console.error('❌ Layer query error detected - checking available layers')
+          if (map.current) {
+            try {
+              const style = (map.current as any).getStyle()
+              const availableLayers = style.layers.map((l: any) => l.id)
+              console.error('❌ Available layers:', availableLayers)
+              console.error('❌ Available sources:', Object.keys(style.sources))
+              
+              // Check if kommune source exists
+              if (style.sources.kommune) {
+                console.error('❌ Kommune source exists:', style.sources.kommune)
+              } else {
+                console.error('❌ Kommune source NOT found in style')
+              }
+            } catch (styleError) {
+              console.error('❌ Could not check map style:', styleError)
+            }
+          }
         }
         
         setError(`Map loading error: ${errorMessage}`)

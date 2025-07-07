@@ -1,12 +1,36 @@
 #!/usr/bin/env python3
 """
-H3 PFAS Exposure Pipeline main entry point.
+H3 PFAS Exposure Pipeline - Main Entry Point
+
+=== WHAT THIS PIPELINE DOES (FOR NON-TECHNICAL READERS) ===
+
+This pipeline analyzes PFAS (Per- and polyfluoroalkyl substances) contamination in Danish agriculture.
+PFAS are "forever chemicals" found in pesticides that don't break down naturally and can contaminate
+soil, water, and food crops.
+
+The pipeline:
+1. Loads pesticide registration data to identify which products contain PFAS
+2. Loads field-by-field pesticide application records from Danish farms
+3. Loads agricultural field boundaries and locations
+4. Creates a hexagonal grid over Denmark (H3 system) for consistent mapping
+5. Calculates PFAS exposure levels for each hexagon based on pesticide usage
+6. Generates maps and data files showing contamination hotspots
+
+The results help environmental agencies, farmers, researchers, and policymakers understand
+where PFAS contamination is occurring and make informed decisions about pesticide use.
+
+=== TECHNICAL DETAILS ===
 
 This pipeline creates H3-based PFAS exposure analysis by joining:
-- Pesticide disaggregation data (from gold layer)
-- Field geometries (from silver layer)
-- BMD pesticide data with PFAS indicators (from silver layer)
-- H3 hexagons at resolution 10 (~1.5 hectares per hexagon)
+- Pesticide disaggregation data (from gold layer) - actual pesticide usage records
+- Field geometries (from silver layer) - farm field boundaries and locations
+- BMD pesticide data with PFAS indicators (from silver layer) - which pesticides contain PFAS
+- H3 hexagons at resolution 10 (~1.5 hectares per hexagon) - mapping grid system
+
+The pipeline can run in different modes:
+- 'h3': Creates hexagonal grid analysis (default, most detailed)
+- 'kommune': Creates municipality-level analysis (administrative boundaries)
+- 'cumulative': Combines data from multiple years for long-term impact analysis
 """
 
 import argparse
@@ -19,9 +43,9 @@ from pathlib import Path
 import dotenv
 from loguru import logger
 
-# Load environment variables
-# Only load .env file if it exists (for local development)
-# In GitHub Actions, environment variables are set directly
+# === ENVIRONMENT SETUP ===
+# Load environment variables from .env file for local development
+# In production (GitHub Actions), environment variables are set directly
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(env_path):
     dotenv.load_dotenv(env_path)
@@ -29,20 +53,26 @@ if os.path.exists(env_path):
 else:
     print("No .env file found, using environment variables directly")
 
-# Add the src directory to the path
+# Add the source code directory to Python's path so we can import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-
-# Import the new refactored modules
+# Import our analysis functions (the main workhorses of the pipeline)
 from h3_pfas_exposure.gold import (
-    run_combined_analysis,
-    run_cumulative_analysis,
-    run_multi_year_kommune_analysis,
+    run_combined_analysis,  # Runs multiple analysis types together
+    run_cumulative_analysis,  # Combines data from multiple years
+    run_multi_year_kommune_analysis,  # Municipality-level analysis
 )
 
 
 def setup_logging():
-    """Set up logging configuration."""
+    """
+    Configure logging to show what the pipeline is doing.
+
+    Logging helps us track progress and debug issues. This sets up:
+    - Log level (how much detail to show)
+    - Log format (how messages look)
+    - Colored output for easier reading
+    """
     log_level = os.getenv("LOG_LEVEL", "INFO")
     logger.remove()  # Remove default handler
     logger.add(
@@ -54,7 +84,12 @@ def setup_logging():
 
 
 def setup_directories() -> Path:
-    """Set up output directories and return their paths."""
+    """
+    Create the directories where we'll save our results.
+
+    This ensures the output directory exists before we try to save files there.
+    Returns the path where results will be saved.
+    """
     output_dir = Path(os.getenv("OUTPUT_DIR", "data/gold/h3_pfas_exposure"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,108 +109,170 @@ async def run_pipeline(
     """
     Run the H3 PFAS exposure analysis pipeline.
 
-    Args:
-        mode: Analysis mode ('h3', 'kommune', or 'cumulative')
-        years: List of years to process (None for all available)
-        h3_resolution: H3 resolution(s) for analysis (comma-separated for multiple)
-        memory_limit: Memory limit for processing
-        thread_count: Number of threads to use
-        chunk_size: Chunk size for processing
-        include_kommune: Include kommune analysis when running H3 mode
+    This is the main function that orchestrates the entire analysis process.
+
+    === PARAMETERS EXPLAINED ===
+
+    mode: What type of analysis to run
+        - 'h3': Creates hexagonal grid maps (most detailed, default)
+        - 'kommune': Creates municipality-level maps (administrative boundaries)
+        - 'cumulative': Combines multiple years of data for long-term analysis
+
+    years: Which years to analyze (e.g., [2022, 2023])
+        - None means analyze all available years
+        - Specific years like [2022] analyzes only that year
+        - Data availability depends on what's in our database
+
+    h3_resolution: How detailed the hexagonal grid should be
+        - "10": ~1.5 hectares per hexagon (field-level detail, default)
+        - "9": ~11 hectares per hexagon (farm-level detail)
+        - "8": ~74 hectares per hexagon (regional detail)
+        - "7": ~516 hectares per hexagon (county-level detail)
+        - Higher resolution = more detail but slower processing
+
+    memory_limit: How much computer memory to use
+        - "14GB": Uses up to 14 gigabytes of RAM (default for GitHub Actions)
+        - "8GB": Uses less memory for smaller computers
+        - More memory = faster processing but needs more powerful hardware
+
+    thread_count: How many CPU cores to use for parallel processing
+        - 4: Uses 4 CPU cores (default, good for most systems)
+        - 1: Uses single-threaded processing (slower but uses less resources)
+        - More threads = faster processing on multi-core systems
+
+    chunk_size: How many hexagons to process at once
+        - 10000: Process 10,000 hexagons per batch (default)
+        - 5000: Smaller batches use less memory but may be slower
+        - Larger chunks = faster processing but more memory usage
+
+    include_kommune: Whether to also create municipality-level analysis
+        - False: Only create the requested analysis type (default)
+        - True: Also create municipality-level analysis for comparison
+
+    === WHAT HAPPENS DURING PROCESSING ===
+
+    1. Load pesticide registration data (which products contain PFAS)
+    2. Load field application data (where and how much pesticide was used)
+    3. Load field boundary data (geographic locations of farms)
+    4. Create hexagonal grid over Denmark
+    5. For each hexagon:
+       - Find which farm fields overlap with it
+       - Calculate how much of each field is in the hexagon
+       - Sum up PFAS exposure from all pesticide applications
+       - Calculate exposure per hectare
+    6. Save results as maps and data files
 
     Returns:
-        True if successful, False otherwise
+        True if analysis completed successfully, False if there were errors
     """
     pipeline_start_time = datetime.now()
     logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
+    # Log the parameters so we know what settings were used
+    logger.info(f"📊 Analysis mode: {mode}")
+    logger.info(f"📅 Years: {years if years else 'all available'}")
+    logger.info(f"🔷 H3 resolution: {h3_resolution}")
+    logger.info(f"💾 Memory limit: {memory_limit}")
+    logger.info(f"🔄 Thread count: {thread_count}")
+    logger.info(f"📦 Chunk size: {chunk_size}")
+    logger.info(f"🏛️ Include kommune: {include_kommune}")
+
     try:
-        # Parse H3 resolutions
-        h3_resolutions = []
-        if mode in ["h3", "cumulative"]:
-            resolutions_str = h3_resolution.split(",")
-            for res_str in resolutions_str:
-                res = int(res_str.strip())
-                if res not in [7, 8, 9, 10]:
-                    logger.error(f"❌ Invalid H3 resolution: {res}. Must be 7, 8, 9, or 10")
-                    return False
-                h3_resolutions.append(res)
-        else:
-            # For kommune mode, use default resolution for any H3 operations
-            h3_resolutions = [10]
+        # Parse H3 resolution(s) - can be single value or comma-separated list
+        h3_resolutions = [int(r.strip()) for r in h3_resolution.split(",")]
 
-        logger.info(f"📊 Configuration: {mode} mode")
-        if mode in ["h3", "cumulative"]:
-            logger.info(f"   🎯 H3 resolutions: {h3_resolutions}")
-            if include_kommune:
-                logger.info("   🏛️ Including kommune analysis")
-        logger.info(
-            f"⚙️ Resources: {memory_limit} memory, {thread_count} threads, {chunk_size} chunk size"
-        )
+        # Validate that resolutions are supported
+        for res in h3_resolutions:
+            if res not in [7, 8, 9, 10]:
+                logger.error(f"❌ Unsupported H3 resolution: {res}. Must be 7, 8, 9, or 10.")
+                return False
 
-        # Run analyses for each resolution
-        all_success = True
-
+        # Run the appropriate analysis based on mode
         if mode == "h3":
-            # Use combined analysis for efficiency (shared data loading)
+            # Standard hexagonal grid analysis
+            logger.info("🔷 Running H3 hexagonal grid analysis")
             success = await run_combined_analysis(
                 years=years,
                 h3_resolutions=h3_resolutions,
                 include_kommune=include_kommune,
             )
-            all_success = success
-
+        elif mode == "kommune":
+            # Municipality-level analysis
+            logger.info("🏛️ Running kommune (municipality) analysis")
+            success = await run_multi_year_kommune_analysis(years=years)
         elif mode == "cumulative":
-            # Run cumulative analysis that aggregates all years
+            # Multi-year cumulative analysis
+            logger.info("📈 Running cumulative analysis across multiple years")
             success = await run_cumulative_analysis(
                 years=years,
                 h3_resolutions=h3_resolutions,
                 include_kommune=include_kommune,
             )
-            all_success = success
-
-        elif mode == "kommune":
-            success = await run_multi_year_kommune_analysis(years)
-            if not success:
-                logger.error("❌ Kommune analysis failed")
-                all_success = False
         else:
             logger.error(f"❌ Unknown analysis mode: {mode}")
             return False
 
-        if all_success:
-            logger.info("✅ All analyses completed successfully!")
-            return True
+        # Log the final result
+        pipeline_end_time = datetime.now()
+        duration = pipeline_end_time - pipeline_start_time
+
+        if success:
+            logger.info(f"✅ Pipeline completed successfully in {duration}")
+            logger.info("📊 Results saved to Google Cloud Storage")
+            logger.info("🗺️ Maps and data files are ready for visualization")
         else:
-            logger.error("❌ Some analyses failed!")
-            return False
+            logger.error(f"❌ Pipeline failed after {duration}")
+
+        return success
 
     except Exception as e:
         logger.error(f"❌ Pipeline failed with error: {e}")
+        import traceback
+
+        logger.error(f"Full error details: {traceback.format_exc()}")
         return False
 
 
 def parse_args():
-    """Parse command line arguments."""
+    """
+    Parse command-line arguments to configure the pipeline.
+
+    This function defines all the command-line options that users can specify
+    when running the pipeline. It provides help text and default values.
+    """
     parser = argparse.ArgumentParser(
-        description="H3 PFAS Exposure Analysis Pipeline",
+        description="H3 PFAS Exposure Analysis Pipeline - Analyze PFAS contamination in Danish agriculture",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run H3 analysis for all available years at resolution 10
-  python main.py --mode h3
+  # Run basic hexagonal analysis for all available years
+  python main.py
+  
+  # Run analysis for specific years only
+  python main.py --years 2022 2023
+  
+  # Run municipality-level analysis
+  python main.py --mode kommune
+  
+  # Run cumulative analysis combining multiple years
+  python main.py --mode cumulative --years 2020 2021 2022 2023
+  
+  # Run with multiple H3 resolutions (creates maps at different detail levels)
+  python main.py --h3-resolution "8,9,10"
+  
+  # Run with lower memory usage for smaller computers
+  python main.py --memory-limit 8GB --thread-count 2 --chunk-size 5000
 
-  # Run cumulative analysis (sum across all years) for PMTiles frontend
-  python main.py --mode cumulative --h3-resolution 10
+Analysis Modes:
+  h3         - Hexagonal grid analysis (default, most detailed)
+  kommune    - Municipality-level analysis (administrative boundaries)
+  cumulative - Multi-year cumulative analysis (long-term impact)
 
-  # Run kommune analysis for specific years
-  python main.py --mode kommune --years 2022 2023
-
-  # Run H3 analysis with custom parameters
-  python main.py --mode h3 --h3-resolution 9 --memory-limit 12GB --thread-count 2
-
-  # Run with verbose logging
-  python main.py --mode h3 --verbose --years 2022
+H3 Resolution Levels:
+  7  - ~516 hectares per hexagon (regional level)
+  8  - ~74 hectares per hexagon (county level)
+  9  - ~11 hectares per hexagon (municipal level)
+  10 - ~1.5 hectares per hexagon (field level, default)
         """,
     )
 
@@ -183,75 +280,94 @@ Examples:
         "--mode",
         choices=["h3", "kommune", "cumulative"],
         default="h3",
-        help="Analysis mode (default: h3)",
+        help="Analysis mode: 'h3' for hexagonal grid (default), 'kommune' for municipalities, 'cumulative' for multi-year analysis",
     )
 
     parser.add_argument(
         "--years",
-        nargs="*",
         type=int,
-        help="Years to process (default: all available years)",
+        nargs="*",
+        help="Years to analyze (e.g., 2022 2023). If not specified, analyzes all available years",
     )
 
     parser.add_argument(
         "--h3-resolution",
+        type=str,
         default="10",
-        help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 7,8,9,10)",
-    )
-
-    parser.add_argument(
-        "--include-kommune",
-        action="store_true",
-        help="Include kommune analysis when running H3 mode (combines both analyses)",
+        help="H3 resolution level(s) - single value or comma-separated (e.g., '10' or '8,9,10'). Higher = more detail",
     )
 
     parser.add_argument(
         "--memory-limit",
+        type=str,
         default="14GB",
-        help="Memory limit for processing (default: 14GB)",
+        help="Memory limit for processing (e.g., '8GB', '14GB'). More memory = faster processing",
     )
 
     parser.add_argument(
         "--thread-count",
         type=int,
         default=4,
-        help="Number of threads to use (default: 4)",
+        help="Number of CPU threads to use for parallel processing. More threads = faster on multi-core systems",
     )
 
     parser.add_argument(
         "--chunk-size",
         type=int,
         default=10000,
-        help="Chunk size for processing (default: 10000)",
+        help="Number of hexagons to process per batch. Larger = faster but uses more memory",
+    )
+
+    parser.add_argument(
+        "--include-kommune",
+        action="store_true",
+        help="Also generate municipality-level analysis when running H3 mode",
     )
 
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose logging",
+        help="Enable verbose logging to see more detailed progress information",
     )
 
     return parser.parse_args()
 
 
 def main():
-    """Main entry point."""
+    """
+    Main entry point for the pipeline.
+
+    This function:
+    1. Parses command-line arguments
+    2. Sets up logging and directories
+    3. Runs the pipeline with the specified settings
+    4. Reports success or failure
+    """
     args = parse_args()
 
-    # Set up logging
+    # Set up logging level based on verbose flag
     if args.verbose:
         os.environ["LOG_LEVEL"] = "DEBUG"
     setup_logging()
 
-    # Set up directories
+    # Create output directories
     setup_directories()
 
+    # Log startup information
     logger.info("🏗️ H3 PFAS Exposure Analysis Pipeline")
+    logger.info("=" * 50)
+    logger.info("🧪 Analyzing PFAS contamination in Danish agriculture")
+    logger.info("🗺️ Creating detailed exposure maps using hexagonal grids")
+    logger.info("=" * 50)
     logger.info(f"📊 Mode: {args.mode}")
     if args.years:
         logger.info(f"📅 Years: {args.years}")
     else:
         logger.info("📅 Years: all available")
+    logger.info(f"🔷 H3 resolution: {args.h3_resolution}")
+    logger.info(f"💾 Memory limit: {args.memory_limit}")
+    logger.info(f"🔄 Threads: {args.thread_count}")
+    logger.info(f"📦 Chunk size: {args.chunk_size}")
 
     # Run the pipeline
     try:
@@ -269,16 +385,20 @@ def main():
 
         if success:
             logger.info("🎉 Pipeline completed successfully!")
+            logger.info("📊 Check the output directory for results")
+            logger.info("🗺️ Maps and data are ready for visualization")
             sys.exit(0)
         else:
             logger.error("❌ Pipeline failed!")
+            logger.error("🔍 Check the logs above for error details")
             sys.exit(1)
 
     except KeyboardInterrupt:
-        logger.warning("⚠️ Pipeline interrupted by user")
+        logger.warning("⚠️ Pipeline interrupted by user (Ctrl+C)")
         sys.exit(130)
     except Exception as e:
         logger.error(f"❌ Pipeline failed with unexpected error: {e}")
+        logger.error("🔍 This might be a bug - please report it with the error details")
         sys.exit(1)
 
 
