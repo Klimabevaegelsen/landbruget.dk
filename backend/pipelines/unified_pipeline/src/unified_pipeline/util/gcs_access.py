@@ -522,25 +522,47 @@ class GCSDataAccess:
             self.log.error(f"Failed to download JSON from {gcs_path}: {e}")
             raise
 
-    def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **parquet_options):
-        """Upload DuckDB table directly to GCS without DataFrame conversion."""
+    def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **format_options):
+        """Upload DuckDB table directly to GCS without DataFrame conversion.
+
+        Supports both Parquet and CSV formats based on file extension.
+        For CSV files, uses human-readable formatting with proper headers and delimiters.
+        """
         self.monitor.check_resources("start_duckdb_upload")
 
-        # Build COPY options for optimal Parquet export
-        copy_options = ["FORMAT PARQUET"]
+        # Detect format based on file extension
+        if gcs_path.lower().endswith(".csv"):
+            # CSV format with human-readable options
+            copy_options = ["FORMAT CSV"]
+            copy_options.append("HEADER true")  # Include column headers
+            copy_options.append("DELIMITER ','")  # Use comma delimiter
+            copy_options.append("QUOTE '\"'")  # Use double quotes for text fields
 
-        # Add compression (default to zstd for best balance of speed/size)
-        compression = parquet_options.get("compression", "zstd")
-        copy_options.append(f"COMPRESSION {compression}")
+            # Add any additional CSV options passed in
+            if "delimiter" in format_options:
+                copy_options[-2] = f"DELIMITER '{format_options['delimiter']}'"
+            if "quote" in format_options:
+                copy_options[-1] = f"QUOTE '{format_options['quote']}'"
 
-        # Add row group size for better performance
-        if "row_group_size" in parquet_options:
-            copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+            file_suffix = ".csv"
+        else:
+            # Default to Parquet format
+            copy_options = ["FORMAT PARQUET"]
+
+            # Add compression (default to zstd for best balance of speed/size)
+            compression = format_options.get("compression", "zstd")
+            copy_options.append(f"COMPRESSION {compression}")
+
+            # Add row group size for better performance
+            if "row_group_size" in format_options:
+                copy_options.append(f"ROW_GROUP_SIZE {format_options['row_group_size']}")
+
+            file_suffix = ".parquet"
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
-            # DuckDB writes directly to optimized parquet
+        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+            # DuckDB writes directly to the specified format
             self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS without loading into memory
@@ -549,27 +571,50 @@ class GCSDataAccess:
                     shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_duckdb_upload")
-        self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path}")
+        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path} ({format_type} format)")
 
-    def upload_from_duckdb_query(self, query: str, gcs_path: str, **parquet_options):
-        """Execute query and upload result directly to GCS without DataFrame conversion."""
+    def upload_from_duckdb_query(self, query: str, gcs_path: str, **format_options):
+        """Execute query and upload result directly to GCS without DataFrame conversion.
+
+        Supports both Parquet and CSV formats based on file extension.
+        For CSV files, uses human-readable formatting with proper headers and delimiters.
+        """
         self.monitor.check_resources("start_query_upload")
 
-        # Build COPY options for optimal Parquet export
-        copy_options = ["FORMAT PARQUET"]
+        # Detect format based on file extension
+        if gcs_path.lower().endswith(".csv"):
+            # CSV format with human-readable options
+            copy_options = ["FORMAT CSV"]
+            copy_options.append("HEADER true")  # Include column headers
+            copy_options.append("DELIMITER ','")  # Use comma delimiter
+            copy_options.append("QUOTE '\"'")  # Use double quotes for text fields
 
-        # Add compression (default to zstd for best balance of speed/size)
-        compression = parquet_options.get("compression", "zstd")
-        copy_options.append(f"COMPRESSION {compression}")
+            # Add any additional CSV options passed in
+            if "delimiter" in format_options:
+                copy_options[-2] = f"DELIMITER '{format_options['delimiter']}'"
+            if "quote" in format_options:
+                copy_options[-1] = f"QUOTE '{format_options['quote']}'"
 
-        # Add row group size for better performance
-        if "row_group_size" in parquet_options:
-            copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+            file_suffix = ".csv"
+        else:
+            # Default to Parquet format
+            copy_options = ["FORMAT PARQUET"]
+
+            # Add compression (default to zstd for best balance of speed/size)
+            compression = format_options.get("compression", "zstd")
+            copy_options.append(f"COMPRESSION {compression}")
+
+            # Add row group size for better performance
+            if "row_group_size" in format_options:
+                copy_options.append(f"ROW_GROUP_SIZE {format_options['row_group_size']}")
+
+            file_suffix = ".parquet"
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
-            # DuckDB writes query result directly to optimized parquet
+        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+            # DuckDB writes query result directly to the specified format
             self.duckdb_conn.execute(f"COPY ({query}) TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS
@@ -578,7 +623,8 @@ class GCSDataAccess:
                     shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_query_upload")
-        self.log.info(f"Uploaded query result to {gcs_path}")
+        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded query result to {gcs_path} ({format_type} format)")
 
     def create_table_from_gcs(self, table_name: str, gcs_path: str):
         """Create a DuckDB table directly from GCS parquet file."""
