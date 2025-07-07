@@ -222,6 +222,19 @@ jobs:
         path: /tmp/chr_context.json
         retention-days: 1
 
+    - name: Create bronze timestamp file
+      run: |
+        # Create a file with the bronze timestamp for other jobs to use
+        echo "${{ env.BRONZE_EXPORT_TIMESTAMP }}" > /tmp/bronze_timestamp.txt
+        echo "Bronze timestamp: ${{ env.BRONZE_EXPORT_TIMESTAMP }}"
+
+    - name: Upload bronze timestamp artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bronze-timestamp
+        path: /tmp/bronze_timestamp.txt
+        retention-days: 1
+
     - name: Upload bronze data summary
       if: always()
       uses: actions/upload-artifact@v4
@@ -829,29 +842,28 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Set up environment variables
+    - name: Download bronze timestamp artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: bronze-timestamp
+        path: /tmp/
+
+    - name: Set up environment variables (NO FVM CREDENTIALS)
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
-        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/chr_pipeline
+        
+        # Read the bronze timestamp from artifact
+        BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+        echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
+        
+        # Set up environment WITHOUT FVM credentials (silver doesn't need them)
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        
-        # Set up VetStat credentials if provided
-        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
-          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-        fi
-        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
-          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
-        fi
+        echo "BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP" >> .env
         
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
@@ -861,31 +873,25 @@ jobs:
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
-        # Download all bronze data from the shared timestamp folder
-        echo "Downloading bronze data from GCS..."
-        
-        # Use the same shared timestamp that all bronze jobs used
-        SHARED_TIMESTAMP="${{ env.BRONZE_EXPORT_TIMESTAMP }}"
-        echo "Using shared bronze timestamp: $SHARED_TIMESTAMP"
+        # Read the bronze timestamp from artifact
+        BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+        echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
         
         # Create the target directory with the timestamp
-        mkdir -p /tmp/data/bronze/chr/$SHARED_TIMESTAMP
+        mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
         
-        # Download all files from the shared timestamp folder to the timestamped directory
-        echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/"
-        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$SHARED_TIMESTAMP/* /tmp/data/bronze/chr/$SHARED_TIMESTAMP/ || {
-          echo "Failed to download bronze data from shared timestamp folder"
+        # Download all files from the bronze timestamp folder
+        echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || {
+          echo "Failed to download bronze data from timestamp folder"
           echo "Checking what timestamp folders exist..."
           gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
           exit 1
         }
         
-        # Set the timestamp for silver processing
-        echo "BRONZE_DATE_FOLDER_OVERRIDE=$SHARED_TIMESTAMP" >> .env
-        
         # List what we downloaded
         echo "=== Downloaded bronze files ==="
-        ls -la /tmp/data/bronze/chr/$SHARED_TIMESTAMP/
+        ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
 
     - name: Run Silver Processing
       working-directory: backend/pipelines/chr_pipeline
@@ -911,27 +917,6 @@ jobs:
         
         echo "Running silver processing command: $CMD"
         $CMD
-
-    - name: Verify Pipeline Output
-      if: always()
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      run: |
-        echo "=== Silver Processing Output Verification ==="
-        
-        if [[ -n "$GCS_BUCKET" ]]; then
-          echo "Checking silver data in GCS..."
-          gsutil ls -l gs://$GCS_BUCKET/silver/chr/ | tail -20 || echo "No silver data found in GCS"
-          echo ""
-          echo "Checking bronze data in GCS..."
-          gsutil ls -l gs://$GCS_BUCKET/bronze/chr/ | tail -20 || echo "No bronze data found in GCS"
-        fi
-        
-        if [[ -d "/tmp/data/silver" ]]; then
-          echo "Local silver data files:"
-          find /tmp/data/silver -name "*.parquet" | head -20
-        fi
 
   # Job 6: Single Step Execution (for individual steps not covered above)
   single-step:

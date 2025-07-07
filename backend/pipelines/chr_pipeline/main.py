@@ -953,36 +953,39 @@ def main():
             bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
             has_bronze_files = False
 
-            # List of potential bronze directories to check
-            bronze_paths_to_check = []
-
+            # PRIORITY 1: Check override directory first (most reliable)
             if bronze_dir_override:
-                # Check override directory
-                bronze_paths_to_check.append(config.BRONZE_BASE_DIR / bronze_dir_override)
-
-            # Always also check default bronze directory with EXPORT_TIMESTAMP
-            bronze_paths_to_check.append(config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP)
-
-            # Check each potential bronze directory
-            for bronze_path in bronze_paths_to_check:
+                bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
                 if bronze_path.exists() and any(bronze_path.glob("*.json")):
                     has_bronze_files = True
-                    logging.warning(f"Found bronze files in directory: {bronze_path}")
-                    break
+                    logging.warning(f"Found bronze files in override directory: {bronze_path}")
+                else:
+                    logging.warning(f"Override directory specified but no files found: {bronze_path}")
 
-            # If still no files found, check if there are any timestamped subdirectories with JSON files
+            # PRIORITY 2: Check current export timestamp directory
+            if not has_bronze_files:
+                bronze_path = config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP
+                if bronze_path.exists() and any(bronze_path.glob("*.json")):
+                    has_bronze_files = True
+                    logging.warning(f"Found bronze files in current timestamp directory: {bronze_path}")
+
+            # PRIORITY 3: Check any timestamped subdirectories (fallback)
             if not has_bronze_files and config.BRONZE_BASE_DIR.exists():
                 for subdir in config.BRONZE_BASE_DIR.iterdir():
                     if subdir.is_dir() and any(subdir.glob("*.json")):
                         has_bronze_files = True
-                        logging.warning(f"Found bronze files in directory: {subdir}")
+                        logging.warning(f"Found bronze files in fallback directory: {subdir}")
                         break
 
             if has_buffer_data or has_context_import or has_bronze_files:
                 logging.warning(
-                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}"
+                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Override: {bronze_dir_override}"
                 )
                 needs_fvm_credentials = False
+            else:
+                logging.warning(
+                    f"Silver-only operation but no existing data found. Will need to run bronze steps. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Override: {bronze_dir_override}"
+                )
 
         # Initialize context based on whether we need FVM credentials
         if context_import_path and os.path.exists(context_import_path):
