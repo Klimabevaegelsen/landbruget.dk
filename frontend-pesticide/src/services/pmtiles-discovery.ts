@@ -18,7 +18,7 @@ interface PMTilesUrls {
 }
 
 class PMTilesDiscoveryService {
-  private cache: Map<string, any> = new Map();
+  private cache: Map<string, unknown> = new Map();
   private readonly baseUrl = 'https://storage.googleapis.com/landbrugsdata-raw-data';
   
   // Discover available data by checking GCS bucket structure

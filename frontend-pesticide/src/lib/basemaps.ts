@@ -1,7 +1,7 @@
 export interface BasemapConfig {
   id: string
   name: string
-  style: any
+  style: Record<string, unknown>
   attribution: string
   flavor: string
 }

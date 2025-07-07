@@ -5,29 +5,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 // Define HoverInfo interface
 interface HoverInfo {
   layer: 'h3' | 'bnbo' | 'bbr';
-  data: any;
+  data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
 }
 
-// Color classes for different data types
-const COLOR_CLASSES = {
-  BNBO: {
-    protected: 'bg-green-100 text-green-800 border-green-300',
-    buffer: 'bg-blue-100 text-blue-800 border-blue-300',
-    agricultural: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    transition: 'bg-orange-100 text-orange-800 border-orange-300',
-    unprotected: 'bg-gray-100 text-gray-800 border-gray-300',
-  },
-  BBR: {
-    Residential: 'bg-blue-100 text-blue-800 border-blue-300',
-    Agricultural: 'bg-green-100 text-green-800 border-green-300',
-    Industrial: 'bg-red-100 text-red-800 border-red-300',
-    Commercial: 'bg-purple-100 text-purple-800 border-purple-300',
-    Public: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    Other: 'bg-gray-100 text-gray-800 border-gray-300',
-  }
-};
+// Color classes removed as they were unused
 
 // Color mapping functions
 const getBNBOStatusColor = (statusCode: string): string => {
@@ -55,10 +38,9 @@ const getBBRTypeColor = (buildingType: string): string => {
 
 interface HoverTooltipProps {
   hoverInfo?: HoverInfo | null;
-  onHoverChange?: (info: HoverInfo | null) => void;
 }
 
-export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
+export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
@@ -78,32 +60,20 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
   }, [hoverInfo]);
 
   // Format functions
-  const formatNumber = useCallback((value: number | undefined, decimals: number = 2): string => {
-    if (value === undefined || value === null) return '0';
-    if (value === 0) return '0';
-    if (value < 0.01 && value > 0) return '<0.01';
-    return value.toLocaleString(undefined, {
+  const formatNumber = useCallback((value: number | unknown, decimals: number = 2): string => {
+    const numValue = typeof value === 'number' ? value : Number(value) || 0;
+    if (numValue === 0) return '0';
+    if (numValue < 0.01 && numValue > 0) return '<0.01';
+    return numValue.toLocaleString(undefined, {
       minimumFractionDigits: 0,
       maximumFractionDigits: decimals,
     });
   }, []);
 
-  const formatScientific = useCallback((value: number | undefined, unit: string): string => {
-    if (value === undefined || value === null) return `0 ${unit}`;
-    if (value === 0) return `0 ${unit}`;
-    if (value < 0.01 && value > 0) return `<0.01 ${unit}`;
-    return `${formatNumber(value)} ${unit}`;
+  const formatPercentage = useCallback((value: number | unknown): string => {
+    const numValue = typeof value === 'number' ? value : Number(value) || 0;
+    return `${formatNumber(numValue * 100, 1)}%`;
   }, [formatNumber]);
-
-  const formatPercentage = useCallback((value: number | undefined): string => {
-    if (value === undefined || value === null) return '0%';
-    return `${formatNumber(value * 100, 1)}%`;
-  }, [formatNumber]);
-
-  // Get building type color class for BBR
-  const getBBRTypeClass = useCallback((buildingType: string): string => {
-    return COLOR_CLASSES.BBR[buildingType as keyof typeof COLOR_CLASSES.BBR] || COLOR_CLASSES.BBR.Other;
-  }, []);
 
   // Render tooltip content based on layer type
   const renderTooltipContent = useMemo(() => {
@@ -111,17 +81,17 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
 
     switch (hoverInfo.layer) {
       case 'h3':
-        const pfasGrams = hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0;
-        const pesticideLoad = hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load || 0;
-        const diquatGrams = hoverInfo.data.diquat_grams || 0;
-        const glyphosateGrams = hoverInfo.data.glyphosate_grams || 0;
-        const area = hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0;
+        const pfasGrams = Number(hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0);
+        const pesticideLoad = Number(hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load || 0);
+        const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
+        const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
+        const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0);
         
         // Calculate intensities
-        const pfasIntensity = hoverInfo.data.pfas_intensity || (area > 0 ? pfasGrams / area : 0);
-        const pesticideIntensity = hoverInfo.data.pesticide_intensity || (area > 0 ? pesticideLoad / area : 0);
-        const diquatIntensity = hoverInfo.data.diquat_intensity || (area > 0 ? diquatGrams / area : 0);
-        const glyphosateIntensity = hoverInfo.data.glyphosate_intensity || (area > 0 ? glyphosateGrams / area : 0);
+        const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
+        const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
+        const diquatIntensity = Number(hoverInfo.data.diquat_intensity) || (area > 0 ? diquatGrams / area : 0);
+        const glyphosateIntensity = Number(hoverInfo.data.glyphosate_intensity) || (area > 0 ? glyphosateGrams / area : 0);
 
         return (
           <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -305,7 +275,7 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
           </div>
         );
     }
-  }, [hoverInfo, formatNumber, formatScientific, formatPercentage, getBNBOStatusColor, getBBRTypeClass]);
+  }, [hoverInfo, formatNumber, formatPercentage]);
 
   if (!isVisible || !position || !hoverInfo) {
     return null;
@@ -323,7 +293,7 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
   const spaceBelow = window.innerHeight - position.y;
   const spaceAbove = position.y;
   
-  let adjustedPosition = {
+  const adjustedPosition = {
     left: position.x + tooltipDistance,
     top: position.y + tooltipDistance
   };
@@ -388,7 +358,7 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
 export function useHoverTooltip() {
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
 
-  const handleHover = useCallback((info: any) => {
+  const handleHover = useCallback((info: Record<string, unknown>) => {
     if (info?.object && info?.coordinate && info?.pixel) {
       // Determine layer type based on data structure
       let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';
