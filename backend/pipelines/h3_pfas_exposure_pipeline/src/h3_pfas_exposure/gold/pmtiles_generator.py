@@ -273,6 +273,9 @@ class H3PMTilesGenerator:
             )
 
             # Generate GeoJSON with H3 geometries
+            # Properly handle year parameter - ensure it's treated as a string literal
+            year_value = f"'{year}'" if isinstance(year, str) else str(year)
+
             self.conn.execute(f"""
                 COPY (
                     SELECT 
@@ -280,7 +283,7 @@ class H3PMTilesGenerator:
                         ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt({h3_col})))::JSON as geometry,
                         json_object(
                             'h3_id', CAST({h3_col} AS VARCHAR),
-                            'year', {year},
+                            'year', {year_value},
                             'resolution', {self.config.h3_resolution},
                             'pfas_grams', ROUND({pfas_value}, 3),
                             'pesticide_load', ROUND({pesticide_value}, 3),
@@ -549,6 +552,9 @@ class H3PMTilesGenerator:
                 join_clause = ""
 
             # Create GeoJSON with proper kommune geometries
+            # Properly handle year parameter - ensure it's treated as a string literal
+            year_value = f"'{year}'" if isinstance(year, str) else str(year)
+
             query = f"""
                 COPY (
                     SELECT 
@@ -558,7 +564,7 @@ class H3PMTilesGenerator:
                             'kommune_code', r.kommune_code,
                             'kommune_name', r.kommune_name,
                             'region_code', r.region_code,
-                            'year', {year},
+                            'year', {year_value},
                             'kommune_area_ha', ROUND(COALESCE(r.kommune_area_ha, 0), 2),
                             'agricultural_area_ha', ROUND(COALESCE(r.total_agricultural_area_ha, 0), 2),
                             'agricultural_coverage_pct', ROUND(COALESCE(r.agricultural_coverage_pct, 0), 1),

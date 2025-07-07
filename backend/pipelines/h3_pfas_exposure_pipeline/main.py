@@ -37,6 +37,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 from h3_pfas_exposure.gold import (
     run_combined_analysis,
     run_cumulative_analysis,
+    run_cumulative_analysis_from_artifacts,
+    run_cumulative_analysis_github_actions_optimized,
+    run_cumulative_analysis_optimized,
     run_multi_year_kommune_analysis,
 )
 
@@ -70,6 +73,7 @@ async def run_pipeline(
     thread_count: int = 4,
     chunk_size: int = 10000,
     include_kommune: bool = False,
+    use_legacy_cumulative: bool = False,
 ) -> bool:
     """
     Run the H3 PFAS exposure analysis pipeline.
@@ -82,6 +86,7 @@ async def run_pipeline(
         thread_count: Number of threads to use
         chunk_size: Chunk size for processing
         include_kommune: Include kommune analysis when running H3 mode
+        use_legacy_cumulative: Use legacy cumulative analysis instead of optimized version
 
     Returns:
         True if successful, False otherwise
@@ -126,12 +131,45 @@ async def run_pipeline(
             all_success = success
 
         elif mode == "cumulative":
-            # Run cumulative analysis that aggregates all years
-            success = await run_cumulative_analysis(
-                years=years,
-                h3_resolutions=h3_resolutions,
-                include_kommune=include_kommune,
-            )
+            # Choose between different cumulative analysis strategies
+            if use_legacy_cumulative:
+                logger.info("🔄 Using legacy cumulative analysis (reprocesses all data)")
+                success = await run_cumulative_analysis(
+                    years=years,
+                    h3_resolutions=h3_resolutions,
+                    include_kommune=include_kommune,
+                )
+            else:
+                # Detect if running in GitHub Actions and check for artifacts
+                is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+                artifacts_dir = "downloaded-artifacts"
+
+                if is_github_actions and os.path.exists(artifacts_dir):
+                    logger.info(
+                        "📦 Using GitHub Actions artifact-based cumulative analysis (fastest - no searching)"
+                    )
+                    success = await run_cumulative_analysis_from_artifacts(
+                        years=years,
+                        h3_resolutions=h3_resolutions,
+                        include_kommune=include_kommune,
+                        artifacts_dir=artifacts_dir,
+                    )
+                elif is_github_actions:
+                    logger.info(
+                        "⚡ Using GitHub Actions optimized cumulative analysis (leverages fresh workflow results)"
+                    )
+                    success = await run_cumulative_analysis_github_actions_optimized(
+                        years=years,
+                        h3_resolutions=h3_resolutions,
+                        include_kommune=include_kommune,
+                    )
+                else:
+                    logger.info("⚡ Using optimized cumulative analysis (loads existing results)")
+                    success = await run_cumulative_analysis_optimized(
+                        years=years,
+                        h3_resolutions=h3_resolutions,
+                        include_kommune=include_kommune,
+                    )
             all_success = success
 
         elif mode == "kommune":
@@ -206,6 +244,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--use-legacy-cumulative",
+        action="store_true",
+        help="Use legacy cumulative analysis (reprocesses all data) instead of optimized version",
+    )
+
+    parser.add_argument(
         "--memory-limit",
         default="14GB",
         help="Memory limit for processing (default: 14GB)",
@@ -264,6 +308,7 @@ def main():
                 thread_count=args.thread_count,
                 chunk_size=args.chunk_size,
                 include_kommune=args.include_kommune,
+                use_legacy_cumulative=args.use_legacy_cumulative,
             )
         )
 
