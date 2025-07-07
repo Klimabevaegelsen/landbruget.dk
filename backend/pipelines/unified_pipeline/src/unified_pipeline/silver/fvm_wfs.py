@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -328,26 +329,39 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create spatial table with transformed geometry as WKT string
             # Return DuckDB relation instead of pandas  to avoid Shapely conversion
-            # ✅ COORDINATE FIX: Apply ST_FlipCoordinates to fix swapped lat/lon coordinates
+            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
             result_query = f"""
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
                     CASE 
                         WHEN geometry_wkt IS NOT NULL AND geometry_wkt != '' THEN
-                            COALESCE(
-                                ST_AsText(ST_FlipCoordinates(ST_Transform(ST_GeomFromText(geometry_wkt), 'EPSG:25832', 'EPSG:4326'))),
-                                geometry_wkt  -- Fallback to original if transformation fails
-                            )
+                            ST_GeomFromText(geometry_wkt)
                         ELSE NULL
-                    END as geometry_wkt
+                    END as geometry
                 FROM raw_features_{table_suffix}
                 WHERE geometry_wkt IS NOT NULL AND geometry_wkt != ''
             """
 
-            # Execute query and return as a table/relation that can be registered
+            # Execute query and create table
             self.conn.execute(
                 f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS {result_query}"
             )
+
+            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+            validate_and_transform_geometries_duckdb(
+                self.conn,
+                f"extracted_features_{table_suffix}",
+                "fvm_wfs",
+                geometry_column="geometry",
+            )
+
+            # Update geometry_wkt column with transformed coordinates
+            self.conn.execute(f"""
+                UPDATE extracted_features_{table_suffix} 
+                SET geometry_wkt = ST_AsText(geometry)
+                WHERE geometry IS NOT NULL
+            """)
+
             return f"extracted_features_{table_suffix}"
 
         except json.JSONDecodeError as e:
