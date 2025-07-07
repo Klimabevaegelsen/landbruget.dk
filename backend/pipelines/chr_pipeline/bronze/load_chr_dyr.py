@@ -119,34 +119,54 @@ def _load_problematic_herds() -> None:
 
 
 def _load_high_volume_herds() -> None:
-    """Load high-volume herds configuration from persistent storage (GCS)."""
-    global HIGH_VOLUME_HERDS, HIGH_VOLUME_HERDS_LOADED
-
-    if HIGH_VOLUME_HERDS_LOADED:
+    """Load high-volume herds configuration from GCS or create default."""
+    global HIGH_VOLUME_HERDS
+    if HIGH_VOLUME_HERDS is not None:
         return
 
     try:
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        gcs_data_access = GCSDataAccess()
+        config_path = "bronze/chr/config/high_volume_herds.json"
 
-        gcs = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        high_volume_herds_path = "bronze/chr/high_volume_herds.json"
-        gcs_path = f"gs://{bucket_name}/{high_volume_herds_path}"
+        if gcs_data_access.file_exists(config_path):
+            data = gcs_data_access.read_file(config_path, encoding="utf-8")
+            HIGH_VOLUME_HERDS = json.loads(data)
+            logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herds from GCS")
+        else:
+            logger.info("No high-volume herds config found in GCS, creating default")
+            HIGH_VOLUME_HERDS = {}
 
-        try:
-            data = gcs.download_json(gcs_path)
-            if data and "high_volume_herds" in data:
-                HIGH_VOLUME_HERDS.update(data["high_volume_herds"])
-                logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herd configurations from GCS")
-            else:
-                logger.info("No high-volume herd configurations found in GCS - starting with empty dict")
-        except Exception as e:
-            logger.debug(f"Could not load high-volume herds from GCS: {e}")
+        # Initialize known problematic herds if not already configured
+        _initialize_known_high_volume_herds()
 
-    except ImportError:
-        logger.debug("GCS access not available - high-volume herds will not persist across runs")
+    except Exception as e:
+        logger.warning(f"Failed to load high-volume herds config: {e}, using empty dict")
+        HIGH_VOLUME_HERDS = {}
+        _initialize_known_high_volume_herds()
 
-    HIGH_VOLUME_HERDS_LOADED = True
+
+def _initialize_known_high_volume_herds() -> None:
+    """Initialize known high-volume herds with optimized settings."""
+    global HIGH_VOLUME_HERDS
+
+    # Known problematic herds from production logs
+    known_high_volume = {
+        "112389": {"max_days": 7, "reason": "known_high_volume", "volume_estimate": None},
+        "104641": {"max_days": 7, "reason": "known_high_volume", "volume_estimate": None},
+    }
+
+    for herd_str, config in known_high_volume.items():
+        if herd_str not in HIGH_VOLUME_HERDS:
+            HIGH_VOLUME_HERDS[herd_str] = {
+                **config,
+                "last_updated": datetime.now().isoformat(),
+                "auto_initialized": True,
+            }
+            logger.info(f"Auto-initialized high-volume herd {herd_str} with {config['max_days']}-day chunks")
+
+    # Save if we added any new herds
+    if any(config.get("auto_initialized") for config in HIGH_VOLUME_HERDS.values()):
+        _save_high_volume_herds()
 
 
 def _save_problematic_herds() -> None:
@@ -178,31 +198,20 @@ def _save_problematic_herds() -> None:
 
 
 def _save_high_volume_herds() -> None:
-    """Save high-volume herds configuration to persistent storage (GCS)."""
-    global HIGH_VOLUME_HERDS
-
-    if not HIGH_VOLUME_HERDS:
-        return
-
+    """Save high-volume herds configuration to GCS."""
     try:
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        gcs_data_access = GCSDataAccess()
+        config_path = "bronze/chr/config/high_volume_herds.json"
 
-        gcs = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        high_volume_herds_path = "bronze/chr/high_volume_herds.json"
-        gcs_path = f"gs://{bucket_name}/{high_volume_herds_path}"
+        # Save the high-volume herds dictionary directly as JSON
+        data = json.dumps(HIGH_VOLUME_HERDS, indent=2, default=str)
+        gcs_data_access.write_file(config_path, data, encoding="utf-8")
 
-        data = {
-            "high_volume_herds": HIGH_VOLUME_HERDS,
-            "last_updated": datetime.now().isoformat(),
-            "total_count": len(HIGH_VOLUME_HERDS),
-        }
-
-        gcs.upload_json(data, gcs_path)
         logger.info(f"Saved {len(HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
 
     except Exception as e:
-        logger.warning(f"Could not save high-volume herds to GCS: {e}")
+        logger.warning(f"Failed to save high-volume herds config to GCS: {e}")
+        # Continue execution - this is not critical for pipeline operation
 
 
 def add_problematic_herd(herd_number: int) -> None:
@@ -220,11 +229,22 @@ def add_high_volume_herd(herd_number: int, max_days: int, volume_estimate: int =
     """Add a herd to the high-volume herds list with specific processing constraints."""
     _load_high_volume_herds()
 
+    # Auto-optimize chunk size based on herd number and known patterns
+    if herd_number in [112389, 104641]:  # Known problematic herds from logs
+        max_days = min(max_days, 7)  # Force weekly chunks for these herds
+        logger.warning(f"Herd {herd_number} is a known high-volume herd - using aggressive 7-day chunking")
+    elif volume_estimate and volume_estimate > 100000:
+        max_days = min(max_days, 3)  # Very aggressive for massive herds
+        logger.warning(f"Herd {herd_number} has massive volume estimate ({volume_estimate}) - using 3-day chunking")
+    elif volume_estimate and volume_estimate > 50000:
+        max_days = min(max_days, 7)  # Weekly chunks for large herds
+
     HIGH_VOLUME_HERDS[str(herd_number)] = {
         "max_days": max_days,
         "last_updated": datetime.now().isoformat(),
         "volume_estimate": volume_estimate,
         "reason": "high_volume_detected",
+        "auto_optimized": True if herd_number in [112389, 104641] else False,
     }
 
     logger.warning(f"Added herd {herd_number} to high-volume herds (max {max_days} days per request)")
@@ -241,6 +261,12 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
     _load_high_volume_herds()
 
     herd_str = str(herd_number)
+
+    # Pre-configure known problematic herds with aggressive chunking
+    if herd_number in [112389, 104641] and herd_str not in HIGH_VOLUME_HERDS:
+        logger.warning(f"Auto-configuring known problematic herd {herd_number} with 7-day chunks")
+        add_high_volume_herd(herd_number, max_days=7, volume_estimate=None)
+
     if herd_str in HIGH_VOLUME_HERDS:
         max_days = HIGH_VOLUME_HERDS[herd_str]["max_days"]
         logger.info(f"Herd {herd_number} is high-volume, splitting into {max_days}-day chunks")
@@ -248,6 +274,16 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
         # Split the requested range into smaller chunks
         chunks = []
         current_start = requested_start
+
+        # For very large date ranges, add extra safety by limiting total chunks
+        total_days = (requested_end - requested_start).days + 1
+        max_chunks = 100  # Prevent excessive chunking
+
+        if total_days / max_days > max_chunks:
+            logger.warning(
+                f"Herd {herd_number}: Date range too large ({total_days} days), limiting to {max_chunks} chunks"
+            )
+            max_days = max(max_days, total_days // max_chunks)
 
         while current_start <= requested_end:
             current_end = min(current_start + timedelta(days=max_days - 1), requested_end)
@@ -766,23 +802,33 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 },
             }
 
-        # Ensure animals is iterable
+        # Ensure animals is iterable - MORE ROBUST CHECK
         if not hasattr(animals, "__iter__") or isinstance(animals, (str, bytes)):
             logger.warning(
                 f"Herd {reporting_herd}: Enkeltdyrsoplysninger is not iterable (type: {type(animals)}) - converting to empty list"
             )
             animals = []
 
-        if not animals:
+        # ADDITIONAL SAFETY CHECK: Ensure animals is a proper list/sequence
+        try:
+            animals_count = len(animals) if animals else 0
+        except TypeError:
+            logger.error(
+                f"Herd {reporting_herd}: Cannot get length of Enkeltdyrsoplysninger (type: {type(animals)}) - converting to empty list"
+            )
+            animals = []
+            animals_count = 0
+
+        if not animals or animals_count == 0:
             logger.info(f"No animals found for herd {reporting_herd}")
             return movement_summaries
 
-        logger.info(f"Herd {reporting_herd}: Processing {len(animals)} individual animals...")
+        logger.info(f"Herd {reporting_herd}: Processing {animals_count} individual animals...")
 
         # Skip herds with extremely large datasets that might cause timeouts
-        if len(animals) > 100000:  # 100k animals threshold
+        if animals_count > 100000:  # 100k animals threshold
             logger.warning(
-                f"Herd {reporting_herd}: Dataset too large ({len(animals)} animals) - skipping to prevent timeout"
+                f"Herd {reporting_herd}: Dataset too large ({animals_count} animals) - skipping to prevent timeout"
             )
             return {
                 "reporting_herd_number": reporting_herd,
@@ -792,31 +838,31 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     "total_animals_processed": 0,
                     "unique_movement_dates": 0,
                     "counterparty_herds": 0,
-                    "dataset_size": len(animals),
+                    "dataset_size": animals_count,
                 },
             }
 
         # Detect high-volume herds and suggest chunking instead of processing
-        if len(animals) > 20000:  # 20k animals threshold for chunking suggestion
+        if animals_count > 20000:  # 20k animals threshold for chunking suggestion
             # Calculate suggested chunk size based on volume
-            if len(animals) > 50000:
+            if animals_count > 50000:
                 suggested_days = 7  # Very high volume: weekly chunks
-            elif len(animals) > 30000:
+            elif animals_count > 30000:
                 suggested_days = 14  # High volume: bi-weekly chunks
             else:
                 suggested_days = 30  # Moderate high volume: monthly chunks
 
             logger.warning(
-                f"Herd {reporting_herd}: Large dataset ({len(animals)} animals) detected - suggesting {suggested_days}-day chunks for future processing"
+                f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - suggesting {suggested_days}-day chunks for future processing"
             )
 
             # Auto-add to high-volume list if not already there
             if not is_high_volume_herd(reporting_herd):
-                add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=len(animals))
+                add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=animals_count)
                 logger.info(f"Auto-added herd {reporting_herd} to high-volume list with {suggested_days}-day chunks")
 
             # For very large datasets, still skip this current processing to avoid timeout
-            if len(animals) > 50000:
+            if animals_count > 50000:
                 return {
                     "reporting_herd_number": reporting_herd,
                     "movements": [],
@@ -826,12 +872,12 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                         "total_animals_processed": 0,
                         "unique_movement_dates": 0,
                         "counterparty_herds": 0,
-                        "dataset_size": len(animals),
+                        "dataset_size": animals_count,
                     },
                 }
 
         # Log dataset size for monitoring
-        logger.info(f"Herd {reporting_herd}: Processing {len(animals)} animals for aggregation")
+        logger.info(f"Herd {reporting_herd}: Processing {animals_count} animals for aggregation")
 
         # Group movements by date and counterparty
         # Key: (movement_date, counterparty_herd, movement_type)
@@ -846,66 +892,88 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             }
         )
 
-        for i, animal in enumerate(animals):
-            try:
-                # Progress logging for large datasets and timeout check
-                if i > 0 and i % 5000 == 0:  # More frequent progress updates
-                    elapsed_time = time.time() - aggregation_start_time
-                    logger.info(
-                        f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
-                    )
+        # FINAL SAFETY CHECK before iteration
+        try:
+            # Convert to list if it's not already to ensure we can iterate safely
+            if not isinstance(animals, (list, tuple)):
+                animals = list(animals) if hasattr(animals, "__iter__") else []
 
-                    # Check if aggregation is taking too long
-                    if elapsed_time > MAX_AGGREGATION_TIME:
-                        logger.error(
-                            f"Herd {reporting_herd}: Aggregation timeout after {elapsed_time:.1f}s - stopping at animal {i}/{len(animals)}"
+            for i, animal in enumerate(animals):
+                try:
+                    # Progress logging for large datasets and timeout check
+                    if i > 0 and i % 5000 == 0:  # More frequent progress updates
+                        elapsed_time = time.time() - aggregation_start_time
+                        logger.info(
+                            f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
                         )
-                        # Mark this herd as problematic before breaking
-                        add_problematic_herd(reporting_herd)
-                        break
 
-                # Extract key movement information (using ACTUAL field names from CHR_dyr)
-                ckr_nr = getattr(animal, "CkrNr", None)
-                entry_date = getattr(animal, "DatoIndgaaet", None)
-                exit_date = getattr(animal, "DatoAfgaaet", None)
-                source_herd = getattr(animal, "BesaetningsNummerFra", None)
-                dest_herd = getattr(animal, "BesaetningsNummerTil", None)
-                exit_reason = getattr(animal, "AarsagAfgaaet", None)  # Movement reason (e.g., "Slagtning")
+                        # Check if aggregation is taking too long
+                        if elapsed_time > MAX_AGGREGATION_TIME:
+                            logger.error(
+                                f"Herd {reporting_herd}: Aggregation timeout after {elapsed_time:.1f}s - stopping at animal {i}/{len(animals)}"
+                            )
+                            # Mark this herd as problematic before breaking
+                            add_problematic_herd(reporting_herd)
+                            break
 
-                movement_summaries["summary_stats"]["total_animals_processed"] += 1
+                    # Extract key movement information (using ACTUAL field names from CHR_dyr)
+                    ckr_nr = getattr(animal, "CkrNr", None)
+                    entry_date = getattr(animal, "DatoIndgaaet", None)
+                    exit_date = getattr(animal, "DatoAfgaaet", None)
+                    source_herd = getattr(animal, "BesaetningsNummerFra", None)
+                    dest_herd = getattr(animal, "BesaetningsNummerTil", None)
+                    exit_reason = getattr(animal, "AarsagAfgaaet", None)  # Movement reason (e.g., "Slagtning")
 
-                # Process incoming movements (animal entered this herd)
-                if entry_date and source_herd and source_herd != reporting_herd:
-                    movement_date = _parse_date(entry_date)
-                    if movement_date:
-                        key = (movement_date, source_herd, "incoming")
-                        movement_groups[key]["animal_count"] += 1
-                        movement_groups[key]["movement_date"] = movement_date
-                        movement_groups[key]["counterparty_herd"] = source_herd
-                        movement_groups[key]["movement_type"] = "incoming"
-                        movement_groups[key]["animals"].append(ckr_nr)
+                    movement_summaries["summary_stats"]["total_animals_processed"] += 1
 
-                        movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
-                        movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
+                    # Process incoming movements (animal entered this herd)
+                    if entry_date and source_herd and source_herd != reporting_herd:
+                        movement_date = _parse_date(entry_date)
+                        if movement_date:
+                            key = (movement_date, source_herd, "incoming")
+                            movement_groups[key]["animal_count"] += 1
+                            movement_groups[key]["movement_date"] = movement_date
+                            movement_groups[key]["counterparty_herd"] = source_herd
+                            movement_groups[key]["movement_type"] = "incoming"
+                            movement_groups[key]["animals"].append(ckr_nr)
 
-                # Process outgoing movements (animal left this herd)
-                if exit_date and dest_herd and dest_herd != reporting_herd:
-                    movement_date = _parse_date(exit_date)
-                    if movement_date:
-                        key = (movement_date, dest_herd, "outgoing")
-                        movement_groups[key]["animal_count"] += 1
-                        movement_groups[key]["movement_date"] = movement_date
-                        movement_groups[key]["counterparty_herd"] = dest_herd
-                        movement_groups[key]["movement_type"] = "outgoing"
-                        movement_groups[key]["animals"].append(ckr_nr)
-                        movement_groups[key]["movement_reasons"].append(exit_reason)  # Save AarsagAfgaaet
+                            movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
+                            movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
 
-                        movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
-                        movement_summaries["summary_stats"]["counterparty_herds"].add(dest_herd)
+                    # Process outgoing movements (animal left this herd)
+                    if exit_date and dest_herd and dest_herd != reporting_herd:
+                        movement_date = _parse_date(exit_date)
+                        if movement_date:
+                            key = (movement_date, dest_herd, "outgoing")
+                            movement_groups[key]["animal_count"] += 1
+                            movement_groups[key]["movement_date"] = movement_date
+                            movement_groups[key]["counterparty_herd"] = dest_herd
+                            movement_groups[key]["movement_type"] = "outgoing"
+                            movement_groups[key]["animals"].append(ckr_nr)
+                            movement_groups[key]["movement_reasons"].append(exit_reason)  # Save AarsagAfgaaet
 
-            except Exception as e:
-                logger.debug(f"Error processing individual animal {getattr(animal, 'CkrNr', 'unknown')}: {e}")
-                continue
+                            movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
+                            movement_summaries["summary_stats"]["counterparty_herds"].add(dest_herd)
+
+                except Exception as e:
+                    logger.debug(f"Error processing individual animal {getattr(animal, 'CkrNr', 'unknown')}: {e}")
+                    continue
+
+        except TypeError as e:
+            logger.error(
+                f"Herd {reporting_herd}: Failed to iterate over animals - {e}. Type: {type(animals)}, Value: {animals}"
+            )
+            return {
+                "reporting_herd_number": reporting_herd,
+                "movements": [],
+                "skipped_reason": "iteration_failed",
+                "summary_stats": {
+                    "total_animals_processed": 0,
+                    "unique_movement_dates": 0,
+                    "counterparty_herds": 0,
+                    "error_details": str(e),
+                },
+            }
 
         # Convert grouped movements to list format (similar to pig movements)
         for (movement_date, counterparty_herd, movement_type), group_data in movement_groups.items():
