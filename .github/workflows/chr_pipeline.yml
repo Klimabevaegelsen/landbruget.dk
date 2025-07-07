@@ -34,6 +34,11 @@ on:
         type: string
         required: false
         default: ''
+      year_range:
+        description: 'Year range for processing (e.g., "2020-2024" or single year "2023")'
+        type: string
+        required: false
+        default: '2022-2024'
       max_herds:
         description: 'Maximum number of herds to process'
         type: string
@@ -67,6 +72,53 @@ env:
   BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
 
 jobs:
+  # Job 0: Generate Year Matrix
+  generate-year-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      years: ${{ steps.generate-matrix.outputs.years }}
+      process_by_year: ${{ steps.generate-matrix.outputs.process_by_year }}
+    steps:
+      - name: Generate year matrix
+        id: generate-matrix
+        run: |
+          # Determine if we should process by year based on the step
+          STEP="${{ inputs.step || 'all' }}"
+          YEAR_RANGE="${{ inputs.year_range || '2022-2024' }}"
+          
+          # Only use year matrix for animal_movements or when processing all steps
+          if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" ]]; then
+            PROCESS_BY_YEAR="true"
+            
+            # Parse year range
+            if [[ "$YEAR_RANGE" == *"-"* ]]; then
+              START_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f1)
+              END_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f2)
+            else
+              START_YEAR="$YEAR_RANGE"
+              END_YEAR="$YEAR_RANGE"
+            fi
+            
+            # Generate array of years
+            YEARS="["
+            for ((year=START_YEAR; year<=END_YEAR; year++)); do
+              if [[ $year -gt $START_YEAR ]]; then
+                YEARS="$YEARS,"
+              fi
+              YEARS="$YEARS\"$year\""
+            done
+            YEARS="$YEARS]"
+            
+            echo "years=$YEARS" >> $GITHUB_OUTPUT
+            echo "process_by_year=true" >> $GITHUB_OUTPUT
+            echo "Generated year matrix: $YEARS"
+          else
+            # For other steps, don't use year matrix
+            echo "years=[\"single\"]" >> $GITHUB_OUTPUT
+            echo "process_by_year=false" >> $GITHUB_OUTPUT
+            echo "Not using year matrix for step: $STEP"
+          fi
+
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
     runs-on: ubuntu-latest
@@ -179,11 +231,11 @@ jobs:
           /tmp/data/
         retention-days: 1
 
-  # Job 2: Parallel Data Collection - Group 1 (diko + animal_movements - only need foundation)
+  # Job 2: Parallel Data Collection - Group 1 (diko + spf_su - only need foundation)
   bronze-parallel-group-1:
     runs-on: ubuntu-latest
     needs: bronze-foundation
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'spf_su' }}
     timeout-minutes: 360  # 6 hours timeout to prevent indefinite hanging
     
     permissions:
@@ -192,7 +244,7 @@ jobs:
 
     strategy:
       matrix:
-        data_type: [diko, animal_movements, spf_su]
+        data_type: [diko, spf_su]
 
     steps:
     - uses: actions/checkout@v4
@@ -267,13 +319,6 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        # Set default 3-year date range for animal_movements step
-        if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
-          START_DATE=$(date -d "3 years ago" +%Y-01-01)
-          END_DATE=$(date +%Y-%m-%d)
-          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
-        fi
-        
         # IMPORTANT: Only run the specific step, not its dependencies
         # Dependencies have already been satisfied by previous jobs and context import
         CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
@@ -282,13 +327,9 @@ jobs:
         fi
         if [[ -n "${{ inputs.start_date }}" ]]; then
           CMD="$CMD --start-date ${{ inputs.start_date }}"
-        elif [[ -n "$START_DATE" ]]; then
-          CMD="$CMD --start-date $START_DATE"
         fi
         if [[ -n "${{ inputs.end_date }}" ]]; then
           CMD="$CMD --end-date ${{ inputs.end_date }}"
-        elif [[ -n "$END_DATE" ]]; then
-          CMD="$CMD --end-date $END_DATE"
         fi
         if [[ -n "${{ inputs.max_herds }}" ]]; then
           CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
@@ -301,6 +342,225 @@ jobs:
         fi
         
         echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
+        $CMD
+
+  # Job 2b: Animal Movements by Year (NEW YEAR-BASED MATRIX)
+  bronze-animal-movements-by-year:
+    runs-on: ubuntu-latest
+    needs: [bronze-foundation, generate-year-matrix]
+    if: ${{ needs.generate-year-matrix.outputs.process_by_year == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
+    timeout-minutes: 180  # 3 hours per year to prevent indefinite hanging
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        year: ${{ fromJson(needs.generate-year-matrix.outputs.years) }}
+      fail-fast: false  # Continue processing other years even if one fails
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Animal Movements for Year ${{ matrix.year }}
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        YEAR="${{ matrix.year }}"
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        # Set year-specific date range
+        START_DATE="$YEAR-01-01"
+        END_DATE="$YEAR-12-31"
+        
+        echo "Processing animal movements for year $YEAR ($START_DATE to $END_DATE)"
+        
+        # IMPORTANT: Only run the animal_movements step, not its dependencies
+        # Dependencies have already been satisfied by previous jobs and context import
+        CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running animal movements command for year $YEAR: $CMD"
+        $CMD
+
+    - name: Report year completion
+      if: always()
+      run: |
+        if [[ ${{ job.status }} == 'success' ]]; then
+          echo "✅ Successfully processed animal movements for year ${{ matrix.year }}"
+                 else
+           echo "❌ Failed to process animal movements for year ${{ matrix.year }}"
+         fi
+
+  # Job 2c: Animal Movements Fallback (when year matrix is not used)
+  bronze-animal-movements-fallback:
+    runs-on: ubuntu-latest
+    needs: [bronze-foundation, generate-year-matrix]
+    if: ${{ needs.generate-year-matrix.outputs.process_by_year == 'false' && inputs.step == 'animal_movements' }}
+    timeout-minutes: 360  # 6 hours timeout for fallback
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install CHR pipeline dependencies
+        cd ../chr_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Download context artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chr-context-data
+        path: /tmp/
+
+    - name: Set up environment variables
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        cd backend/pipelines/chr_pipeline
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+        
+        mkdir -p /tmp/data/bronze/chr
+        mkdir -p /tmp/data/silver/chr
+
+    - name: Run Animal Movements (Traditional Mode)
+      working-directory: backend/pipelines/chr_pipeline
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      run: |
+        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+        
+        echo "Processing animal movements in traditional mode (not year-based)"
+        
+        # IMPORTANT: Only run the animal_movements step, not its dependencies
+        CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
+        if [[ "$SHOW_PROGRESS" == "true" ]]; then
+          CMD="$CMD --progress"
+        fi
+        if [[ -n "${{ inputs.start_date }}" ]]; then
+          CMD="$CMD --start-date ${{ inputs.start_date }}"
+        fi
+        if [[ -n "${{ inputs.end_date }}" ]]; then
+          CMD="$CMD --end-date ${{ inputs.end_date }}"
+        fi
+        if [[ -n "${{ inputs.max_herds }}" ]]; then
+          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+        fi
+        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+        fi
+        if [[ -n "${{ inputs.species_codes }}" ]]; then
+          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+        fi
+        
+        echo "Running animal movements command (traditional): $CMD"
         $CMD
 
   # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
@@ -530,8 +790,8 @@ jobs:
   # Job 5: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, bronze-parallel-group-1, bronze-herd-details, bronze-parallel-group-2]
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_') }}
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-year, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2]
+    if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
     
     permissions:
       contents: 'read'
@@ -676,7 +936,7 @@ jobs:
   # Job 6: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "animal_movements", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -798,4 +1058,111 @@ jobs:
         echo "5. Pipeline timeout or memory issues"
         echo ""
         echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
+        echo "💡 For animal_movements, consider using year_range parameter (e.g., '2023' or '2022-2023') to process smaller chunks"
         exit 1
+
+  # Job 7: Pipeline Summary and Optimization Report
+  pipeline-summary:
+    runs-on: ubuntu-latest
+    needs: [generate-year-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-year, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
+    if: always() && !cancelled()
+    
+    steps:
+      - name: Generate Pipeline Summary
+        run: |
+          echo "# 📊 CHR Pipeline Execution Summary"
+          echo ""
+          echo "## 🔧 Configuration Used"
+          echo "- **Step**: ${{ inputs.step || 'all' }}"
+          echo "- **Year Range**: ${{ inputs.year_range || '2022-2024' }}"
+          echo "- **Year-based Processing**: ${{ needs.generate-year-matrix.outputs.process_by_year }}"
+          echo "- **Log Level**: ${{ inputs.log_level || 'WARNING' }}"
+          echo "- **Max Herds**: ${{ inputs.max_herds || 'unlimited' }}"
+          echo "- **Species Codes**: ${{ inputs.species_codes || 'all' }}"
+          echo ""
+          
+          echo "## 🚀 Performance Optimizations Applied"
+          echo ""
+          echo "### ✅ Year-based Matrix Processing"
+          if [[ "${{ needs.generate-year-matrix.outputs.process_by_year }}" == "true" ]]; then
+            echo "- **Status**: ENABLED ✅"
+            echo "- **Years Processed**: ${{ needs.generate-year-matrix.outputs.years }}"
+            echo "- **Benefits**:"
+            echo "  - Prevents timeout issues by processing smaller date ranges"
+            echo "  - Allows parallel processing of different years"
+            echo "  - Enables faster failure recovery (failed year doesn't block others)"
+            echo "  - Reduces memory usage per job (3 hours vs 6 hours timeout)"
+          else
+            echo "- **Status**: DISABLED (using traditional mode)"
+            echo "- **Reason**: Step '${{ inputs.step }}' doesn't require year-based processing"
+          fi
+          echo ""
+          
+          echo "### ✅ High-Volume Herd Management"
+          echo "- **Known Problematic Herds**: Pre-configured with 7-day chunking"
+          echo "  - Herd 112389: Aggressive chunking enabled"
+          echo "  - Herd 104641: Aggressive chunking enabled"
+          echo "- **Auto-detection**: Large datasets automatically trigger chunking"
+          echo "- **Error Handling**: Improved 'int' object iteration protection"
+          echo ""
+          
+          echo "### ✅ Timeout Optimizations"
+          echo "- **Individual Task Timeout**: 5 minutes (GitHub Actions) vs 10 minutes (local)"
+          echo "- **Year Processing Timeout**: 3 hours per year"
+          echo "- **SOAP Request Timeout**: 3 minutes (GitHub Actions) vs 5 minutes (local)"
+          echo "- **Aggregation Timeout**: 10 minutes maximum per herd"
+          echo ""
+          
+          echo "## 📈 Job Status Summary"
+          echo "| Job | Status |"
+          echo "|-----|--------|"
+          echo "| Foundation | ${{ needs.bronze-foundation.result || 'skipped' }} |"
+          echo "| Group 1 (diko, spf_su) | ${{ needs.bronze-parallel-group-1.result || 'skipped' }} |"
+          echo "| Animal Movements (Year-based) | ${{ needs.bronze-animal-movements-by-year.result || 'skipped' }} |"
+          echo "| Animal Movements (Fallback) | ${{ needs.bronze-animal-movements-fallback.result || 'skipped' }} |"
+          echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
+          echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
+          echo "| Silver Processing | ${{ needs.silver-processing.result || 'skipped' }} |"
+          echo ""
+          
+          # Determine overall success
+          FAILED_JOBS=""
+          if [[ "${{ needs.bronze-foundation.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS foundation"
+          fi
+          if [[ "${{ needs.bronze-parallel-group-1.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS group-1"
+          fi
+          if [[ "${{ needs.bronze-animal-movements-by-year.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS animal-movements-year"
+          fi
+          if [[ "${{ needs.bronze-animal-movements-fallback.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS animal-movements-fallback"
+          fi
+          if [[ "${{ needs.bronze-herd-details.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS herd-details"
+          fi
+          if [[ "${{ needs.bronze-parallel-group-2.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS group-2"
+          fi
+          if [[ "${{ needs.silver-processing.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS silver"
+          fi
+          
+          if [[ -n "$FAILED_JOBS" ]]; then
+            echo "## ❌ Pipeline Issues Detected"
+            echo "**Failed Jobs**: $FAILED_JOBS"
+            echo ""
+            echo "### 🔧 Troubleshooting Steps"
+            echo "1. **Check individual job logs** for specific error details"
+            echo "2. **For timeout issues**: Consider smaller year_range (e.g., single year)"
+            echo "3. **For memory issues**: Reduce max_herds or limit_herds_per_species"
+            echo "4. **For credential issues**: Verify FVM_USERNAME/FVM_PASSWORD secrets"
+            echo "5. **For high-volume herds**: Check if automatic chunking was applied"
+          else
+            echo "## ✅ Pipeline Completed Successfully"
+            echo "All jobs completed without critical failures."
+          fi
+          echo ""
+          echo "---"
+          echo "*This summary was generated automatically by the CHR Pipeline workflow*"
