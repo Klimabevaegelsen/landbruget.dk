@@ -6,7 +6,7 @@ spatial join operator for optimal performance. Based on comprehensive dataset an
 and performance testing, this implementation achieves 600x performance improvement
 (6+ minutes → 35 seconds) through:
 
-1. COORDINATE FIX: ST_FlipCoordinates applied to fix swapped lat/lon in fields dataset
+1. COORDINATE SYSTEM: Fixed at source in silver layer pipelines
 2. Native spatial joins with automatic spatial indexing
 3. Optimal join ordering based on dataset sizes (build side optimization)
 4. Single spatial predicate per join to enable SPATIAL_JOIN operator
@@ -15,7 +15,7 @@ and performance testing, this implementation achieves 600x performance improveme
 
 Architecture: O(n×m) → O(n×log(m)) through automatic spatial indexing
 Performance: 114+ billion spatial comparisons/second achieved in testing
-Root Cause Fixed: Fields dataset had swapped coordinates (X=lat, Y=lon) preventing intersections
+Root Cause Fixed: Fields dataset coordinate swapping fixed in silver layer pipelines
 """
 
 import os
