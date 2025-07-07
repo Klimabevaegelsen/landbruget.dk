@@ -1023,12 +1023,12 @@ class H3PFASProcessorRefactored:
                     f.crop_code,
                     f.crop_name,
                     ST_Area_Spheroid(
-                        ST_Intersection(f.flipped_geometry, k.geometry)
+                        ST_Intersection(f.geometry, k.geometry)
                     ) / 10000.0 as intersection_area_ha,
                     f.area_ha as field_area_ha
                 FROM {kommune_table} k
-                INNER JOIN {fields_table} f ON ST_Intersects(f.flipped_geometry, k.geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.flipped_geometry, k.geometry)) > 0
+                INNER JOIN {fields_table} f ON ST_Intersects(f.geometry, k.geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, k.geometry)) > 0
             ),
             pesticide_kommune_data AS (
                 SELECT
