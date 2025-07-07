@@ -1,6 +1,6 @@
 'use client';
 
-import { useMapStore, useAvailableYearOptions, useSelectedYear, type YearSelection } from '@/stores/map-store';
+import { useMapStore, useAvailableYearOptions, useSelectedYear } from '@/stores/map-store';
 import { ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

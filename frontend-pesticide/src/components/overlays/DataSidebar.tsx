@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 // Define HoverInfo interface
 interface HoverInfo {
   layer: 'h3' | 'bnbo' | 'bbr';
-  data: any;
+  data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
 }
@@ -35,21 +35,21 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
 
     switch (hoverInfo.layer) {
       case 'h3':
-        const pfasGrams = hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0;
-        const pesticideLoad = hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load || 0;
-        const diquatGrams = hoverInfo.data.diquat_grams || 0;
-        const glyphosateGrams = hoverInfo.data.glyphosate_grams || 0;
-        const area = hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0;
+        const pfasGrams = Number(hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams) || 0;
+        const pesticideLoad = Number(hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load) || 0;
+        const diquatGrams = Number(hoverInfo.data.diquat_grams) || 0;
+        const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams) || 0;
+        const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha) || 0;
         
         // Calculate intensities
-        const pfasIntensity = hoverInfo.data.pfas_intensity || (area > 0 ? pfasGrams / area : 0);
-        const pesticideIntensity = hoverInfo.data.pesticide_intensity || (area > 0 ? pesticideLoad / area : 0);
-        const diquatIntensity = hoverInfo.data.diquat_intensity || (area > 0 ? diquatGrams / area : 0);
-        const glyphosateIntensity = hoverInfo.data.glyphosate_intensity || (area > 0 ? glyphosateGrams / area : 0);
+        const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
+        const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
+        const diquatIntensity = Number(hoverInfo.data.diquat_intensity) || (area > 0 ? diquatGrams / area : 0);
+        const glyphosateIntensity = Number(hoverInfo.data.glyphosate_intensity) || (area > 0 ? glyphosateGrams / area : 0);
 
-        const applicationCount = hoverInfo.data.application_count || 0;
-        const fieldCount = hoverInfo.data.field_count || 0;
-        const coveragePercent = hoverInfo.data.coverage_percent || 0;
+        const applicationCount = Number(hoverInfo.data.application_count) || 0;
+        const fieldCount = Number(hoverInfo.data.field_count) || 0;
+        const coveragePercent = Number(hoverInfo.data.coverage_percent) || 0;
 
         return (
           <div className="space-y-4">
@@ -168,7 +168,7 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Area:</span>
-                  <span className="font-medium text-slate-200">{formatNumber(hoverInfo.data.area_ha, 2)} ha</span>
+                  <span className="font-medium text-slate-200">{formatNumber(Number(hoverInfo.data.area_ha), 2)} ha</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Protection Level:</span>

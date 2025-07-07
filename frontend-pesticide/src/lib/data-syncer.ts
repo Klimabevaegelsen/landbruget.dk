@@ -426,7 +426,7 @@ export class H3DataSyncer {
   /**
    * Transform H3 raw data for Supabase insertion
    */
-  private transformH3DataForSupabase(rawData: H3RawData[]): any[] {
+  private transformH3DataForSupabase(rawData: H3RawData[]): Record<string, unknown>[] {
     return rawData.map(row => ({
       h3_id: row.h3_id,
       year: row.year,
@@ -446,7 +446,7 @@ export class H3DataSyncer {
   /**
    * Transform BNBO raw data for Supabase insertion
    */
-  private transformBNBODataForSupabase(rawData: BNBORawData[]): any[] {
+  private transformBNBODataForSupabase(rawData: BNBORawData[]): Record<string, unknown>[] {
     return rawData.map(row => ({
       bnbo_id: row.bnbo_id,
       status_code: row.status_code,
@@ -460,7 +460,7 @@ export class H3DataSyncer {
   /**
    * Transform BBR raw data for Supabase insertion
    */
-  private transformBBRDataForSupabase(rawData: BBRRawData[]): any[] {
+  private transformBBRDataForSupabase(rawData: BBRRawData[]): Record<string, unknown>[] {
     return rawData.map(row => ({
       bbr_id: row.bbr_id,
       building_code: row.building_code,
@@ -477,7 +477,7 @@ export class H3DataSyncer {
    */
   private async syncDataInBatches(
     tableName: string,
-    data: any[],
+    data: Record<string, unknown>[],
     conflictColumns: string[],
     syncKey: string
   ): Promise<SyncResult> {

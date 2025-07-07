@@ -1,8 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
-
-const BUCKET_NAME = 'landbrugsdata-raw-data'
-const PMTILES_BASE_PATH = 'gold/pmtiles'
-const GCS_BASE_URL = `https://storage.googleapis.com/${BUCKET_NAME}/${PMTILES_BASE_PATH}`
+import { NextResponse } from 'next/server'
 
 interface PMTilesFile {
   year: number
@@ -55,7 +51,7 @@ interface PMTilesMetadata {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Create static metadata based on known file structure
     // Years: 2015-2023, Resolutions: 7-10

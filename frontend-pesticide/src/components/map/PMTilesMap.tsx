@@ -1,11 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ErrorBoundary } from 'react-error-boundary'
-import { MapTooltip } from './MapTooltip'
-import { useMapStore, useMapViewState, useDataState, useLayerVisibility, useLoadingState, getComputedLayerVisibility } from '@/stores/map-store'
+import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility } from '@/stores/map-store'
+import { useUIStore } from '@/stores/ui-store'
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery'
+
+// Type definitions
+type MapInstance = unknown;
+type MapLibreGL = unknown;
 
 // Dynamic imports for browser-only modules
 const loadMapLibreAndPMTiles = async () => {
@@ -38,17 +43,17 @@ interface PMTilesMapProps {
 
 const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full' }) => {
   const mapContainer = useRef<HTMLDivElement>(null)
-  const map = useRef<any>(null)
-  const [mapLibre, setMapLibre] = useState<any>(null)
+  const map = useRef<MapInstance | null>(null)
+  const [mapLibre, setMapLibre] = useState<MapLibreGL>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
-  const [pmtilesUrls, setPmtilesUrls] = useState<any>({})
+  const [pmtilesUrls, setPmtilesUrls] = useState<Record<string, string>>({})
   
   // Store state
   const { zoom, center, bearing, pitch } = useMapViewState()
-  const { selectedYear, selectedDataMode, availableYears } = useDataState()
-  const showBNBOLayer = useMapStore((state) => state.showBNBOLayer)
+  const { selectedYear, selectedDataMode } = useDataState()
   const showBasemap = useMapStore((state) => state.showBasemap)
   const { isLoading, error } = useLoadingState()
+  const { isMobile, setShowMobilePanel } = useUIStore()
   
   // Compute layer visibility based on zoom (stable) - use centralized function
   const layerVisibility = getComputedLayerVisibility(zoom)
@@ -76,12 +81,12 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   // Store actions
   const { 
     setViewState,
+    setMapInstance,
     setIsLoading,
     setError, 
     clearError,
     showTooltipWithData,
-    hideTooltip,
-    setAvailableYears
+    hideTooltip
   } = useMapStore()
 
   // Load MapLibre and PMTiles
@@ -112,7 +117,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     return () => {
       mounted = false
     }
-  }, [])
+  }, [setError, setIsLoading, clearError])
 
   // Load PMTiles URLs
   useEffect(() => {
@@ -126,16 +131,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         console.log('🔍 Starting PMTiles URL discovery for:', { selectedYear, currentH3Resolution })
         
         // Discover and validate URLs
-        const [validatedUrls, years] = await Promise.all([
-          pmtilesDiscovery.discoverAndValidateUrls(selectedYear, currentH3Resolution),
-          pmtilesDiscovery.getAvailableYears()
-        ])
+        const validatedUrls = await pmtilesDiscovery.discoverAndValidateUrls(selectedYear, currentH3Resolution)
         
         console.log('🔍 PMTiles URL discovery results:', validatedUrls)
         
         if (mounted) {
           // Only set URLs that are valid
-          const urls: any = {}
+          const urls: Record<string, string> = {}
           if (validatedUrls.basemap) urls.basemap = validatedUrls.basemap
           if (validatedUrls.kommune) urls.kommune = validatedUrls.kommune
           if (validatedUrls.h3) urls.h3 = validatedUrls.h3
@@ -213,7 +215,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     return () => {
       mounted = false
     }
-  }, [selectedYear, currentH3Resolution])
+  }, [selectedYear, currentH3Resolution, zoom, setError, setIsLoading, clearError, setPmtilesUrls])
 
   // Initialize map
   useEffect(() => {
@@ -254,7 +256,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       })))
       
       // Create sources object with only available URLs
-      const sources: any = {}
+      const sources: Record<string, { type: string; url: string }> = {}
       
       if (pmtilesUrls.basemap) {
         sources.basemap = {
@@ -295,7 +297,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       // Create layers array with only layers for available sources
       // Layer order matters: layers added later appear on top
       // Order: basemap (bottom) -> kommune -> h3 -> bnbo (top)
-      const layers: any[] = []
+      const layers: Array<Record<string, string | number | boolean | object>> = []
       
       // Always add basemap layer if available (bottom layer)
       if (sources.basemap) {
@@ -575,7 +577,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       
       console.log('🗺️ Final layers configuration:', layers.map(l => ({ id: l.id, source: l.source })))
       
-      map.current = new mapLibre.Map({
+      map.current = new (mapLibre as unknown as { Map: unknown }).Map({
         container: mapContainer.current,
         style: {
           version: 8,
@@ -592,32 +594,35 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           [7.0, 54.0], // Southwest bounds (Denmark)
           [13.0, 58.0], // Northeast bounds (Denmark)
         ],
-      })
+      }) as MapInstance
 
       // Add controls
-      map.current.addControl(new mapLibre.NavigationControl(), 'top-right')
-      map.current.addControl(new mapLibre.ScaleControl(), 'bottom-left')
+      (map.current as unknown as Record<string, unknown>).addControl(new (mapLibre as unknown as Record<string, unknown>).NavigationControl(), 'top-right')
+      ;(map.current as unknown as Record<string, unknown>).addControl(new (mapLibre as unknown as Record<string, unknown>).ScaleControl(), 'bottom-left')
+      
+      // Set map instance in store for external control
+      setMapInstance(map.current as unknown)
 
       // Map event handlers
-      map.current.on('load', () => {
+      ;(map.current as unknown as Record<string, unknown>).on('load', () => {
         console.log('🎉 Map loaded successfully!')
         
         // Debug: Check available sources and layers
-        const style = map.current.getStyle()
+        const style = (map.current as unknown as Record<string, unknown>).getStyle()
         console.log('📊 Map style sources:', Object.keys(style.sources))
-        console.log('📊 Map style layers:', style.layers.map((l: any) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
+        console.log('📊 Map style layers:', style.layers.map((l: Record<string, unknown>) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
         
         // Debug: Try to get source data and inspect tiles
         setTimeout(() => {
           if (!map.current) return
           
-          console.log(`📊 Current zoom: ${map.current.getZoom()}, center:`, map.current.getCenter())
+          console.log(`📊 Current zoom: ${(map.current as unknown as Record<string, unknown>).getZoom()}, center:`, (map.current as unknown as Record<string, unknown>).getCenter())
           
           // Try to inspect each source more thoroughly
           const sources = ['basemap', 'kommune', 'h3', 'bnbo']
           sources.forEach(sourceId => {
             if (!map.current) return
-            const source = map.current.getSource(sourceId)
+            const source = (map.current as unknown as Record<string, unknown>).getSource(sourceId)
             if (source) {
               console.log(`📊 Source ${sourceId}:`, source)
               
@@ -629,7 +634,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               // Try to query all features from this source
               try {
                 if (!map.current) return
-                const allFeatures = map.current.querySourceFeatures(sourceId)
+                const allFeatures = (map.current as unknown as Record<string, unknown>).querySourceFeatures(sourceId)
                 console.log(`📊 ${sourceId} total features: ${allFeatures.length}`)
                 
                 if (allFeatures.length > 0) {
@@ -647,11 +652,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           // Also try to get all rendered features at current view
           try {
             if (!map.current) return
-            const allRenderedFeatures = map.current.queryRenderedFeatures()
+            const allRenderedFeatures = (map.current as unknown as Record<string, unknown>).queryRenderedFeatures()
             console.log(`📊 Total rendered features in view: ${allRenderedFeatures.length}`)
             
             if (allRenderedFeatures.length > 0) {
-              const sourceLayerCounts = allRenderedFeatures.reduce((acc: any, f: any) => {
+              const sourceLayerCounts = allRenderedFeatures.reduce((acc: Record<string, unknown>, f: Record<string, unknown>) => {
                 const key = `${f.source}:${f.sourceLayer}`
                 acc[key] = (acc[key] || 0) + 1
                 return acc
@@ -659,7 +664,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               console.log(`📊 Rendered features by source:layer:`, sourceLayerCounts)
               
               // Check specifically for BNBO features
-              const bnboFeatures = allRenderedFeatures.filter((f: any) => f.source === 'bnbo')
+              const bnboFeatures = allRenderedFeatures.filter((f: Record<string, unknown>) => f.source === 'bnbo')
               if (bnboFeatures.length > 0) {
                 console.log(`🛡️ Found ${bnboFeatures.length} BNBO features:`, bnboFeatures.slice(0, 3))
               } else {
@@ -675,12 +680,12 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         clearError()
       })
 
-      map.current.on('move', () => {
+      ;(map.current as any).on('move', () => {
         if (!map.current) return
-        const { lng, lat } = map.current.getCenter()
-        const zoom = map.current.getZoom()
-        const bearing = map.current.getBearing()
-        const pitch = map.current.getPitch()
+        const { lng, lat } = (map.current as any).getCenter()
+        const zoom = (map.current as any).getZoom()
+        const bearing = (map.current as any).getBearing()
+        const pitch = (map.current as any).getPitch()
         
         setViewState({ 
           center: [lng, lat], 
@@ -690,44 +695,64 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         })
       })
 
-      map.current.on('click', (e: any) => {
-        const features = map.current?.queryRenderedFeatures(e.point, {
+      ;(map.current as any).on('click', (e: any) => {
+        const features = (map.current as any)?.queryRenderedFeatures(e.point, {
           layers: ['kommune-fill', 'h3-fill', 'bnbo-fill']
         })
         if (features && features.length > 0) {
           const feature = features[0]
           showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+          
+          // On mobile, also show the mobile panel
+          if (isMobile) {
+            setShowMobilePanel(true)
+          }
         } else {
           hideTooltip()
+          
+          // On mobile, hide the mobile panel when clicking empty space
+          if (isMobile) {
+            setShowMobilePanel(false)
+          }
         }
       })
 
-      map.current.on('mousemove', (e: any) => {
-        const features = map.current?.queryRenderedFeatures(e.point, {
+      ;(map.current as any).on('mousemove', (e: any) => {
+        // Skip hover behavior on mobile devices
+        if (isMobile) {
+          return
+        }
+        
+        const features = (map.current as any)?.queryRenderedFeatures(e.point, {
           layers: ['kommune-fill', 'h3-fill', 'bnbo-fill']
         })
         if (features && features.length > 0) {
           const feature = features[0]
           showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
           if (map.current) {
-            map.current.getCanvas().style.cursor = 'pointer'
+            (map.current as any).getCanvas().style.cursor = 'pointer'
           }
         } else {
           hideTooltip()
           if (map.current) {
-            map.current.getCanvas().style.cursor = ''
+            (map.current as any).getCanvas().style.cursor = ''
           }
         }
       })
 
-      map.current.on('mouseleave', () => {
+      ;(map.current as any).on('mouseleave', () => {
+        // Skip hover behavior on mobile devices
+        if (isMobile) {
+          return
+        }
+        
         hideTooltip()
         if (map.current) {
-          map.current.getCanvas().style.cursor = ''
+          (map.current as any).getCanvas().style.cursor = ''
         }
       })
 
-      map.current.on('error', (e: any) => {
+      ;(map.current as any).on('error', (e: any) => {
         console.error('❌ Map error:', e)
         console.error('❌ Map error details:', {
           type: e.type,
@@ -765,7 +790,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       })
       
       // Add more specific error handlers
-      map.current.on('sourceerror', (e: any) => {
+      ;(map.current as any).on('sourceerror', (e: any) => {
         console.error('❌ Source error:', e)
         console.error('❌ Source error details:', {
           sourceId: e.sourceId,
@@ -776,7 +801,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         setError(`Source loading error: ${e.sourceId}`)
       })
       
-      map.current.on('styleerror', (e: any) => {
+      ;(map.current as any).on('styleerror', (e: any) => {
         console.error('❌ Style error:', e)
         console.error('❌ Style error details:', {
           error: e.error,
@@ -785,7 +810,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         setError(`Style error: ${e.error?.message || 'Unknown style error'}`)
       })
       
-      map.current.on('sourcedata', (e: any) => {
+      ;(map.current as any).on('sourcedata', (e: any) => {
         if (e.isSourceLoaded) {
           console.log(`📊 Source loaded: ${e.sourceId}`, e)
         } else if (e.dataType === 'source') {
@@ -793,12 +818,12 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
       })
       
-      map.current.on('sourcedataloading', (e: any) => {
+      ;(map.current as any).on('sourcedataloading', (e: any) => {
         console.log(`📊 Source loading: ${e.sourceId}`, e)
       })
       
       // Add data event handler to track tile loading
-      map.current.on('data', (e: any) => {
+      ;(map.current as any).on('data', (e: any) => {
         if (e.dataType === 'source') {
           console.log(`📊 Data event for source: ${e.sourceId}`, {
             dataType: e.dataType,
@@ -809,7 +834,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       })
       
       // Add tile events to track individual tile loading
-      map.current.on('dataloading', (e: any) => {
+      ;(map.current as any).on('dataloading', (e: any) => {
         if (e.dataType === 'source') {
           console.log(`📊 Data loading for source: ${e.sourceId}`)
         }
@@ -822,11 +847,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
     return () => {
       if (map.current) {
-        map.current.remove()
+        (map.current as any).remove()
         map.current = null
       }
+      // Clear map instance from store
+      setMapInstance(null)
     }
-  }, [mapLibre, pmtilesUrls])
+  }, [mapLibre, pmtilesUrls, bearing, center, clearError, currentH3Resolution, currentPropertyName, hideTooltip, isMobile, pitch, selectedYear, setError, setMapInstance, setShowMobilePanel, setViewState, shouldShowH3, shouldShowKommune, showBasemap, showTooltipWithData, zoom])
 
   // Update layer visibility based on zoom
   useEffect(() => {
@@ -837,8 +864,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
-        if (map.current && map.current.getLayer(layerId)) {
-          map.current.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+        if (map.current && (map.current as any).getLayer(layerId)) {
+          (map.current as any).setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
           console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
         } else {
           console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)

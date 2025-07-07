@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useTooltipState, DATA_MODE_CONFIG, BNBO_STATUS_CONFIG } from '@/stores/map-store';
+import { useTooltipState, BNBO_STATUS_CONFIG } from '@/stores/map-store';
 
 interface TooltipData {
   // H3 data fields - both old and new field names
@@ -98,19 +98,7 @@ const formatNumber = (value: number | undefined, decimals: number = 2): string =
   });
 };
 
-const formatScientific = (value: number | undefined, unit: string): string => {
-  if (value === undefined || value === null) return 'N/A';
-  if (value === 0) return `0 ${unit}`;
-  
-  if (value < 0.01 && value > 0) {
-    return `${value.toExponential(2)} ${unit}`;
-  }
-  
-  return `${value.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })} ${unit}`;
-};
+
 
 const formatPercentage = (value: number | undefined): string => {
   if (value === undefined || value === null) return 'N/A';
@@ -124,9 +112,6 @@ function getTooltipType(data: TooltipData): 'h3' | 'kommune' | 'bnbo' {
 }
 
 const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-  const h3Id = data.h3_id || data.h3_cell;
-  const year = data.year || 2023;
-  const resolution = data.resolution || data.h3_resolution || 7;
   
   const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
   const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
@@ -243,7 +228,6 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 };
 
 const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-  const year = data.year || 2023;
   
   const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
   const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
@@ -442,7 +426,7 @@ export const MapTooltip: React.FC = () => {
   const spaceBelow = window.innerHeight - tooltipPosition.y;
   const spaceAbove = tooltipPosition.y;
   
-  let adjustedPosition = {
+  const adjustedPosition = {
     left: tooltipPosition.x + tooltipDistance,
     top: tooltipPosition.y + tooltipDistance
   };

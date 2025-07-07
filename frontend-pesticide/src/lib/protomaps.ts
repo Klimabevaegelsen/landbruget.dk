@@ -39,7 +39,7 @@ export class ProtomapsManager {
     }
   }
 
-  getMapStyle(): any {
+  getMapStyle(): Record<string, unknown> {
     return {
       version: 8,
       name: 'Denmark Base Map',
@@ -60,7 +60,7 @@ export class ProtomapsManager {
     };
   }
 
-  private getDenmarkStyleLayers(): any[] {
+  private getDenmarkStyleLayers(): Array<Record<string, unknown>> {
     return [
       // Background
       {
@@ -320,18 +320,18 @@ export class ProtomapsManager {
   }
 
   // Get optimized style for different zoom levels
-  getOptimizedStyle(zoom: number): any {
+  getOptimizedStyle(zoom: number): Record<string, unknown> {
     const baseStyle = this.getMapStyle();
     
     // Optimize layers based on zoom level
     if (zoom < 8) {
       // Country/region level - hide detailed features
-      baseStyle.layers = baseStyle.layers.filter((layer: any) => 
-        !['buildings', 'roads-local', 'road-labels'].includes(layer.id)
+      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) => 
+        !['buildings', 'roads-local', 'road-labels'].includes(layer.id as string)
       );
     } else if (zoom < 12) {
       // County level - show more detail but hide buildings
-      baseStyle.layers = baseStyle.layers.filter((layer: any) => 
+      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) => 
         layer.id !== 'buildings'
       );
     }
@@ -340,17 +340,17 @@ export class ProtomapsManager {
   }
 
   // Create custom style for agricultural focus
-  getAgriculturalStyle(): any {
+  getAgriculturalStyle(): Record<string, unknown> {
     const baseStyle = this.getMapStyle();
     
     // Enhance agricultural areas visibility
-    const agriculturalLayer = baseStyle.layers.find((layer: any) => 
+    const agriculturalLayer = (baseStyle.layers as Array<Record<string, unknown>>).find((layer: Record<string, unknown>) => 
       layer.id === 'landuse-agricultural'
     );
     
-    if (agriculturalLayer) {
-      agriculturalLayer.paint['fill-opacity'] = 0.7;
-      agriculturalLayer.paint['fill-color'] = '#e8f5e8';
+    if (agriculturalLayer && agriculturalLayer.paint && typeof agriculturalLayer.paint === 'object') {
+      (agriculturalLayer.paint as Record<string, unknown>)['fill-opacity'] = 0.7;
+      (agriculturalLayer.paint as Record<string, unknown>)['fill-color'] = '#e8f5e8';
     }
     
     return baseStyle;

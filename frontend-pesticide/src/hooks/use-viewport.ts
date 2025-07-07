@@ -10,7 +10,7 @@ export interface ViewState {
   bearing?: number;
   pitch?: number;
   transitionDuration?: number;
-  transitionInterpolator?: any;
+  transitionInterpolator?: unknown;
 }
 
 export interface ViewportBounds {
@@ -23,7 +23,7 @@ export interface ViewportBounds {
 export interface ViewportInfo {
   viewport: ViewState;
   bounds: ViewportBounds | null;
-  zoomLevel: number;
+  zoomLevel: 'country' | 'region' | 'city' | 'street';
   isTransitioning: boolean;
   center: [number, number];
 }
@@ -223,7 +223,7 @@ export function useViewport() {
   const getViewportInfo = useCallback((): ViewportInfo => ({
     viewport,
     bounds,
-    zoomLevel: zoomLevel as any,
+    zoomLevel: zoomLevel as 'country' | 'region' | 'city' | 'street',
     isTransitioning,
     center: [viewport.longitude, viewport.latitude]
   }), [viewport, bounds, zoomLevel, isTransitioning]);

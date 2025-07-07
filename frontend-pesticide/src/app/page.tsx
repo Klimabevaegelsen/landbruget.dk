@@ -4,16 +4,18 @@ import { useEffect, useState } from 'react';
 import { PMTilesMap } from '@/components/map/PMTilesMap';
 import { DataModeSelector } from '@/components/controls/DataModeSelector';
 import { StepSlider } from '@/components/controls/StepSlider';
+import { SearchBar } from '@/components/controls/SearchBar';
 import { DataSidebar } from '@/components/overlays/DataSidebar';
-import { useMapStore, useDataState, useLayerVisibility, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
+import { MobileBottomPanel } from '@/components/overlays/MobileBottomPanel';
+import { useMapStore, useDataState, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
+import { useUIStore } from '@/stores/ui-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
-import { Settings, Eye, EyeOff, PanelRightOpen, PanelRightClose } from 'lucide-react';
-import { BasemapToggle } from '@/components/controls/BasemapToggle';
+import { Settings, PanelRightOpen, PanelRightClose } from 'lucide-react';
 
 // Define HoverInfo interface to match the sidebar component
 interface HoverInfo {
   layer: 'h3' | 'bnbo' | 'bbr';
-  data: any;
+  data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
 }
@@ -25,16 +27,37 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
   
   // Store state
-  const { selectedYear, selectedDataMode, availableYearOptions } = useDataState();
+  const { selectedYear } = useDataState();
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
+  const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } = useUIStore();
   
   // Store actions
   const { 
     setAvailableYearOptions, 
     setError: mapSetError,
-    clearError: mapClearError
+    clearError: mapClearError,
+    flyToLocation
   } = useMapStore();
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileViewport = window.innerWidth < 768;
+      setIsMobile(isMobileViewport);
+      
+      // Close sidebar on mobile, close mobile panel on desktop
+      if (isMobileViewport) {
+        setShowSidebar(false);
+      } else {
+        setShowMobilePanel(false);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [setIsMobile, setShowMobilePanel]);
 
   // Initialize the application
   useEffect(() => {
@@ -67,7 +90,7 @@ export default function Home() {
   }, [setAvailableYearOptions, mapSetError, mapClearError]);
 
   // Convert tooltip data to HoverInfo format for sidebar
-  const convertToHoverInfo = (tooltipData: any, position: { x: number; y: number }): HoverInfo | null => {
+  const convertToHoverInfo = (tooltipData: Record<string, unknown>, position: { x: number; y: number }): HoverInfo | null => {
     if (!tooltipData) return null;
     
     // Determine layer type based on data
@@ -88,26 +111,48 @@ export default function Home() {
     };
   };
 
-  // Get current hover info for sidebar - only when there's tooltip data
+  // Get current hover info for sidebar/mobile panel - only when there's tooltip data
   const hoverInfo = showTooltip && tooltipData ? convertToHoverInfo(tooltipData, tooltipPosition) : null;
 
   const handleToggleSidebar = () => {
-    setShowSidebar(!showSidebar);
+    if (isMobile) {
+      setShowMobilePanel(!showMobilePanel);
+    } else {
+      setShowSidebar(!showSidebar);
+    }
   };
 
   const handleCloseSidebar = () => {
-    setShowSidebar(false);
+    if (isMobile) {
+      setShowMobilePanel(false);
+    } else {
+      setShowSidebar(false);
+    }
+  };
+
+  const handleCloseMobilePanel = () => {
+    setShowMobilePanel(false);
+  };
+
+  const handleLocationSelect = (location: { lat: number; lng: number; address: string }) => {
+    console.log('Selected location:', location);
+    // Navigate to the selected location on the map
+    flyToLocation({
+      lat: location.lat,
+      lng: location.lng,
+      zoom: 12 // Zoom to a reasonable level to see the area
+    });
   };
 
   // Loading state
   if (isInitializing || !isInitialized) {
     console.log('🔄 Still loading - isInitializing:', isInitializing, 'isInitialized:', isInitialized);
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-8 h-8 border-2 border-white/40 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-white text-lg font-medium">Loading PMTiles Map...</p>
-          <p className="text-gray-400 text-sm mt-2">Discovering latest data from GCS bucket</p>
+          <p className="text-white/60 text-sm mt-2">Discovering latest data from GCS bucket</p>
         </div>
       </div>
     );
@@ -116,26 +161,35 @@ export default function Home() {
   // Error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-4xl mb-4">⚠️</div>
           <p className="text-white text-lg font-medium">Error Loading Map</p>
-          <p className="text-gray-400 text-sm mt-2">{error}</p>
+          <p className="text-white/60 text-sm mt-2">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Top Bar */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-black flex flex-col">
+      {/* Top Bar - London Underground Style */}
+      <div className="bg-black/90 backdrop-blur-md border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-3">
             <h1 className="text-xl font-bold text-white">PFAS Exposure Analysis</h1>
             <div className="text-sm text-gray-400">
               {selectedYear === 'total' ? 'All Years' : `Year ${selectedYear}`}
             </div>
+          </div>
+          
+          {/* Search Bar - London Underground Style */}
+          <div className="flex-1 max-w-md">
+            <SearchBar 
+              onLocationSelect={handleLocationSelect}
+              placeholder="Search Danish addresses..."
+              className="w-full"
+            />
           </div>
           
           {/* Data Mode Selector - Top Bar Version */}
@@ -150,13 +204,17 @@ export default function Home() {
           <button
             onClick={handleToggleSidebar}
             className={`p-2 rounded-lg transition-colors ${
-              showSidebar 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+              (isMobile ? showMobilePanel : showSidebar)
+                ? 'bg-white/20 text-white border border-white/30' 
+                : 'bg-black/20 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
             }`}
-            title={showSidebar ? 'Hide Details Panel' : 'Show Details Panel'}
+            title={
+              isMobile 
+                ? (showMobilePanel ? 'Hide Details Panel' : 'Show Details Panel')
+                : (showSidebar ? 'Hide Details Panel' : 'Show Details Panel')
+            }
           >
-            {showSidebar ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+            {(isMobile ? showMobilePanel : showSidebar) ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
           </button>
           
           {/* Advanced Controls Toggle */}
@@ -164,8 +222,8 @@ export default function Home() {
             onClick={() => setShowControls(!showControls)}
             className={`p-2 rounded-lg transition-colors ${
               showControls 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                ? 'bg-white/20 text-white border border-white/30' 
+                : 'bg-black/20 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
             }`}
             title={showControls ? 'Hide Advanced Controls' : 'Show Advanced Controls'}
           >
@@ -177,7 +235,7 @@ export default function Home() {
       <div className="flex-1 flex relative">
         {/* Left Sidebar - Advanced Controls (hidden by default) */}
         {showControls && (
-          <div className="w-80 bg-gray-800/95 backdrop-blur-sm border-r border-gray-700 overflow-y-auto">
+          <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto">
             <div className="p-4 space-y-6">
               <h3 className="text-lg font-semibold text-white mb-4">Advanced Controls</h3>
               
@@ -191,8 +249,8 @@ export default function Home() {
               <div>
                 <h4 className="text-sm font-medium text-gray-300 mb-3">Layer Visibility</h4>
                 <div className="space-y-3">
-                  {/* Basemap Toggle */}
-                  <BasemapToggle />
+                  {/* Basemap controls would go here */}
+                  <div className="text-sm text-gray-400">Basemap controls coming soon...</div>
                 </div>
               </div>
             </div>
@@ -201,18 +259,29 @@ export default function Home() {
         
         {/* Map Container */}
         <div className={`flex-1 relative transition-all duration-300 ease-in-out ${
-          showSidebar ? 'mr-96' : 'mr-0'
+          !isMobile && showSidebar ? 'mr-96' : 'mr-0'
         }`}>
           <PMTilesMap className="w-full h-full" />
         </div>
 
-        {/* Right Sidebar - Data Details */}
-        <DataSidebar 
-          hoverInfo={hoverInfo}
-          onClose={handleCloseSidebar}
-          isVisible={showSidebar}
-        />
+        {/* Right Sidebar - Data Details (Desktop Only) */}
+        {!isMobile && (
+          <DataSidebar 
+            hoverInfo={hoverInfo}
+            onClose={handleCloseSidebar}
+            isVisible={showSidebar}
+          />
+        )}
       </div>
+
+      {/* Mobile Bottom Panel */}
+      {isMobile && (
+        <MobileBottomPanel 
+          hoverInfo={hoverInfo}
+          onClose={handleCloseMobilePanel}
+          isVisible={showMobilePanel}
+        />
+      )}
     </div>
   );
 } 
