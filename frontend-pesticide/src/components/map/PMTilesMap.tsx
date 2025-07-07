@@ -626,11 +626,22 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           [7.0, 54.0], // Southwest bounds (Denmark)
           [13.0, 58.0], // Northeast bounds (Denmark)
         ],
+        // Enable smooth scroll zoom for better UX
+        scrollZoom: true,
+        doubleClickZoom: true,
+        touchZoomRotate: true
       }) as MapInstance
 
-      // Add controls
-      (map.current as unknown as Record<string, unknown>).addControl(new (mapLibre as unknown as Record<string, unknown>).NavigationControl(), 'top-right')
-      ;(map.current as unknown as Record<string, unknown>).addControl(new (mapLibre as unknown as Record<string, unknown>).ScaleControl(), 'bottom-left')
+      // Add controls with custom options for smoother zoom
+      (map.current as unknown as Record<string, unknown>).addControl(
+        new (mapLibre as unknown as any).NavigationControl({
+          showCompass: true,
+          showZoom: true,
+          visualizePitch: false
+        }), 
+        'top-right'
+      )
+      ;(map.current as unknown as any).addControl(new (mapLibre as unknown as any).ScaleControl(), 'bottom-left')
       
       // Set map instance in store for external control
       setMapInstance(map.current as unknown)
@@ -666,7 +677,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               // Try to query all features from this source
               try {
                 if (!map.current) return
-                const allFeatures = (map.current as unknown as Record<string, unknown>).querySourceFeatures(sourceId)
+                const allFeatures = (map.current as any).querySourceFeatures(sourceId)
                 console.log(`📊 ${sourceId} total features: ${allFeatures.length}`)
                 
                 if (allFeatures.length > 0) {
@@ -684,15 +695,15 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           // Also try to get all rendered features at current view
           try {
             if (!map.current) return
-            const allRenderedFeatures = (map.current as unknown as Record<string, unknown>).queryRenderedFeatures()
+            const allRenderedFeatures = (map.current as any).queryRenderedFeatures()
             console.log(`📊 Total rendered features in view: ${allRenderedFeatures.length}`)
             
             if (allRenderedFeatures.length > 0) {
-              const sourceLayerCounts = allRenderedFeatures.reduce((acc: Record<string, unknown>, f: Record<string, unknown>) => {
+              const sourceLayerCounts = allRenderedFeatures.reduce((acc: Record<string, number>, f: Record<string, unknown>) => {
                 const key = `${f.source}:${f.sourceLayer}`
                 acc[key] = (acc[key] || 0) + 1
                 return acc
-              }, {})
+              }, {} as Record<string, number>)
               console.log(`📊 Rendered features by source:layer:`, sourceLayerCounts)
               
               // Check specifically for BNBO features
@@ -991,8 +1002,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
-        if (map.current && map.current.getLayer(layerId)) {
-          map.current.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+        if (map.current && (map.current as any).getLayer(layerId)) {
+          (map.current as any).setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
           console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
         } else {
           console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
