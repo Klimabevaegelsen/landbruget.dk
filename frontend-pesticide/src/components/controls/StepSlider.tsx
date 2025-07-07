@@ -81,12 +81,12 @@ export function StepSlider({ className = '' }: StepSliderProps) {
   }
 
   return (
-    <div className={`${className} flex items-center space-x-4`}>
+    <div className={`${className} flex items-center space-x-2`}>
       {/* Previous Button */}
       <button
         onClick={goToPrevious}
         disabled={!canGoPrevious || isAnimating}
-        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -95,23 +95,23 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       <button
         onClick={isAnimating ? stopAnimation : startAnimation}
         disabled={numericYears.length <= 1}
-        className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
         {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
       </button>
 
       {/* Step Buttons */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1">
         {/* Year Buttons */}
         {numericYears.map((year) => (
           <button
             key={year}
             onClick={() => setSelectedYear(year)}
             disabled={isAnimating}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all min-w-[60px] ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[50px] ${
               selectedYear === year
-                ? 'bg-blue-600 text-white shadow-lg scale-105'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
             } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             {year}
@@ -123,10 +123,10 @@ export function StepSlider({ className = '' }: StepSliderProps) {
           <button
             onClick={() => setSelectedYear('total')}
             disabled={isAnimating}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all min-w-[80px] ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[60px] ${
               selectedYear === 'total'
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg scale-105'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
             } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             Total
@@ -138,7 +138,7 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       <button
         onClick={goToNext}
         disabled={!canGoNext || isAnimating}
-        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
         <ChevronRight className="w-4 h-4" />
       </button>
