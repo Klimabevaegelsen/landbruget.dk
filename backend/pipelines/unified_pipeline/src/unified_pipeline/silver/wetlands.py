@@ -404,6 +404,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 self.log.info(f"Inserted {i + batch_size:,} features into temp table")
 
         # Create spatial table with proper geometry column
+        # ✅ COORDINATE FIX: Don't transform here - let the geometry validator handle it
         table_name = "wetlands_processed"
         conn.execute(f"""
             CREATE TABLE {table_name} AS
@@ -411,16 +412,20 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 id,
                 gridcode,
                 toerv_pct,
-                ST_Transform(
-                    ST_GeomFromText(geometry_wkt), 
-                    'EPSG:25832', 
-                    'EPSG:4326'
-                ) as geometry
+                ST_GeomFromText(geometry_wkt) as geometry
             FROM temp_features
             WHERE geometry_wkt IS NOT NULL
         """)
 
         self.log.info(f"Created DuckDB table '{table_name}' with {len(features):,} features")
+
+        # ✅ COORDINATE FIX: Apply geometry validation and transformation to ensure proper WGS84 coordinates
+        from unified_pipeline.common.geometry_validator import (
+            validate_and_transform_geometries_duckdb,
+        )
+
+        validate_and_transform_geometries_duckdb(conn, table_name, f"silver.{self.config.dataset}")
+
         return table_name
 
     @timed(name="Creating dissolved DuckDB table")  # type: ignore
