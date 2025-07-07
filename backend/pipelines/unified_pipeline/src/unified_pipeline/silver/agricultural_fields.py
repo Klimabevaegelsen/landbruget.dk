@@ -23,6 +23,7 @@ import psutil
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -464,12 +465,13 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 processing_conn.execute(sql_query)
 
-                # Transform geometries from EPSG:25832 to EPSG:4326 for consistency
-                processing_conn.execute(f"""
-                    UPDATE {final_table_name} 
-                    SET geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
-                    WHERE is_valid_geometry = true
-                """)
+                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
+                validate_and_transform_geometries_duckdb(
+                    processing_conn,
+                    final_table_name,
+                    "agricultural_fields",
+                    geometry_column="geometry",
+                )
 
                 # ✅ MIGRATION: Return table name instead of
                 row_count = processing_conn.execute(

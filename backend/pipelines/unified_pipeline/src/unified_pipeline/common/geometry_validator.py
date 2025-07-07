@@ -13,6 +13,7 @@ logger = Logger.get_logger()
 
 # DuckDB-spatial geometry validation utilities
 
+
 def validate_and_transform_geometries_duckdb(
     conn: duckdb.DuckDBPyConnection,
     table_name: str,
@@ -131,6 +132,42 @@ def validate_and_transform_geometries_duckdb(
             WHERE {geometry_column} IS NOT NULL
         """)
 
+        # Check if coordinates need flipping by sampling a few geometries
+        sample_bounds = conn.execute(f"""
+            SELECT 
+                MIN(ST_XMin({geometry_column})) as min_x,
+                MAX(ST_XMax({geometry_column})) as max_x,
+                MIN(ST_YMin({geometry_column})) as min_y,
+                MAX(ST_YMax({geometry_column})) as max_y
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
+            LIMIT 100
+        """).fetchone()
+
+        if sample_bounds:
+            min_x, max_x, min_y, max_y = sample_bounds
+
+            # Check if coordinates appear to be in wrong order (lat/lon instead of lon/lat)
+            # Denmark bounds: longitude 7-16, latitude 54-58
+            x_looks_like_latitude = (50 <= min_x <= 60) and (50 <= max_x <= 60)
+            y_looks_like_longitude = (5 <= min_y <= 20) and (5 <= max_y <= 20)
+
+            if x_looks_like_latitude and y_looks_like_longitude:
+                logger.info(
+                    f"{dataset_name}: Coordinates appear to be in wrong order, applying ST_FlipCoordinates"
+                )
+                conn.execute(f"""
+                    UPDATE {table_name} SET 
+                        {geometry_column} = ST_FlipCoordinates({geometry_column})
+                    WHERE {geometry_column} IS NOT NULL
+                """)
+            else:
+                logger.info(
+                    f"{dataset_name}: Coordinates appear to be in correct order (X: {min_x:.3f}-{max_x:.3f}, Y: {min_y:.3f}-{max_y:.3f})"
+                )
+        else:
+            logger.warning(f"{dataset_name}: Could not determine coordinate order, skipping flip")
+
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""
             SELECT COUNT(*) FROM {table_name} 
@@ -190,6 +227,7 @@ def validate_and_transform_geometries_duckdb(
     except Exception as e:
         logger.error(f"{dataset_name}: Error in geometry validation: {str(e)}")
         raise
+
 
 def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bool:
     """

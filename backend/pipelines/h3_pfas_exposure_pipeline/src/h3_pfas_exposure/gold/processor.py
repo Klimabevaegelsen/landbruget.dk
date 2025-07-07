@@ -399,6 +399,53 @@ class H3PFASProcessorRefactored:
         """Validate the analysis results."""
         self.log.info("🔍 Validating analysis results...")
 
+        # First check if the results table exists and has data
+        try:
+            count = self.conn.execute(f"SELECT COUNT(*) FROM {results_table}").fetchone()[0]
+            if count == 0:
+                self.log.error(
+                    f"❌ Results table '{results_table}' is empty - no spatial intersections found"
+                )
+                self.log.error("   This usually indicates:")
+                self.log.error("   - No overlap between H3 grid and field geometries")
+                self.log.error("   - Invalid field geometries")
+                self.log.error("   - Coordinate system mismatch")
+                self.log.error("   - Empty input data")
+                return
+            else:
+                self.log.info(f"📊 Results table contains {count:,} records")
+        except Exception as e:
+            self.log.error(f"❌ Cannot access results table '{results_table}': {e}")
+            return
+
+        # Check for NULL values in critical columns
+        try:
+            null_check = self.conn.execute(f"""
+                SELECT 
+                    COUNT(*) as total_rows,
+                    COUNT(h3_area_ha) as non_null_h3_area,
+                    COUNT(total_intersection_area_ha) as non_null_intersection_area,
+                    COUNT(actual_coverage_ratio) as non_null_coverage_ratio
+                FROM {results_table}
+            """).fetchone()
+
+            total_rows, non_null_h3, non_null_int, non_null_cov = null_check
+            if non_null_h3 != total_rows:
+                self.log.warning(
+                    f"⚠️ Found {total_rows - non_null_h3} NULL values in h3_area_ha column"
+                )
+            if non_null_int != total_rows:
+                self.log.warning(
+                    f"⚠️ Found {total_rows - non_null_int} NULL values in total_intersection_area_ha column"
+                )
+            if non_null_cov != total_rows:
+                self.log.warning(
+                    f"⚠️ Found {total_rows - non_null_cov} NULL values in actual_coverage_ratio column"
+                )
+
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not check for NULL values: {e}")
+
         # Validate H3 cell areas
         area_validation = self.area_validator.validate_h3_cell_areas(results_table)
         if area_validation.passed:
