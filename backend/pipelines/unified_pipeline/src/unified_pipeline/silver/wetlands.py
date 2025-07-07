@@ -459,16 +459,35 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM {input_table_name}
             """)
 
+            # ✅ PERFORMANCE: Create spatial index to optimize spatial joins
+            # This helps the SPATIAL_JOIN operator work more efficiently
+            try:
+                conn.execute(
+                    "CREATE INDEX idx_wetlands_spatial_geom ON wetlands_spatial USING GIST (geometry)"
+                )
+                self.log.info("✅ Created spatial index on wetlands_spatial.geometry")
+            except Exception as e:
+                # Spatial indexing may not be available in all DuckDB versions
+                self.log.info(
+                    f"ℹ️ Spatial indexing not available, will rely on temporary index: {e}"
+                )
+
             # ✅ OPTIMIZED: Single-condition SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
             # Based on PR #545: SPATIAL_JOIN operator only supports a single join condition
             # Use ONLY the spatial predicate in JOIN, filter duplicates afterwards
             adjacency_query = """
+                WITH spatial_touches AS (
+                    SELECT 
+                        w1.wetland_id as id1,
+                        w2.wetland_id as id2
+                    FROM wetlands_spatial w1
+                    INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
+                )
                 SELECT DISTINCT
-                    LEAST(w1.wetland_id, w2.wetland_id) as id1,
-                    GREATEST(w1.wetland_id, w2.wetland_id) as id2
-                FROM wetlands_spatial w1
-                INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
-                WHERE w1.wetland_id != w2.wetland_id
+                    LEAST(id1, id2) as id1,
+                    GREATEST(id1, id2) as id2
+                FROM spatial_touches
+                WHERE id1 != id2
             """
 
             # Verify SPATIAL_JOIN is being used
