@@ -38,7 +38,7 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
 
     # Processing configuration
     batch_size: int = 2500  # Increased batch size for better performance with 16GB RAM
-    memory_limit: str = "6GB"  # Very conservative: Use ~43% of available 14GB space
+    memory_limit: str = "12GB"  # Increased from 6GB to use ~86% of available 14GB space
     thread_count: int = 2  # Reduced threads for memory-intensive spatial operations
 
     # Quality thresholds
@@ -71,8 +71,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
         self.conn.execute(
-            "SET max_temp_directory_size='8GB'"
-        )  # Very conservative: Use ~57% of available 14GB space
+            "SET max_temp_directory_size='12GB'"
+        )  # Increased from 8GB to match memory limit for GitHub Actions 16GB runners
         self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
 
         # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
@@ -84,6 +84,27 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # self.conn.execute("SET checkpoint_threshold='1GB'")  # Checkpoint more frequently
         # Note: force_checkpoint is not available in this DuckDB version
         self.conn.execute("SET enable_progress_bar=false")  # Disable progress bar to save memory
+
+        # ✅ OPTIMIZATION: Apply DuckDB's recommended memory optimization settings
+        # These are the settings suggested in the error message for Out of Memory issues
+        try:
+            # Increase memory limit to use more of the available 16GB GitHub Actions memory
+            self.conn.execute("SET memory_limit='12GB'")
+            # Set max_temp_directory_size to match memory limit
+            self.conn.execute("SET max_temp_directory_size='12GB'")
+            # Reduce threads to 1 for memory-intensive spatial operations (already set above)
+            # Disable insertion order preservation for better memory efficiency (already set above)
+
+            # Additional aggressive memory optimizations for GitHub Actions
+            self.conn.execute("SET checkpoint_threshold='1GB'")  # More frequent checkpoints
+            self.conn.execute("SET wal_autocheckpoint=1000")  # Auto-checkpoint every 1000 pages
+            self.conn.execute("SET max_expression_depth=100")  # Limit expression complexity
+
+            self.log.info(
+                "✅ Applied aggressive DuckDB memory optimization settings for GitHub Actions 16GB runner"
+            )
+        except Exception as e:
+            self.log.warning(f"Could not apply some DuckDB optimizations: {e}")
 
         # ✅ NEW: Optimize for spatial operations with limited disk space
         # Note: max_expression_depth and enable_external_access may not be available in all DuckDB versions
