@@ -384,12 +384,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
 
         # ✅ COORDINATE TRANSFORMATION: Transform from EPSG:25832 (UTM Zone 32N) to EPSG:4326 (WGS84)
         # The WFS source provides data in EPSG:25832, but we need WGS84 for web mapping
+        # ✅ COORDINATE FIX: Apply ST_FlipCoordinates to fix swapped lat/lon coordinates
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT 
                 *,
-                ST_Transform(ST_GeomFromText(geometry), 'EPSG:25832', 'EPSG:4326') as geometry_spatial,
-                ST_AsText(ST_Transform(ST_GeomFromText(geometry), 'EPSG:25832', 'EPSG:4326')) as geometry_wgs84
+                ST_FlipCoordinates(ST_Transform(ST_GeomFromText(geometry), 'EPSG:25832', 'EPSG:4326')) as geometry_spatial,
+                ST_AsText(ST_FlipCoordinates(ST_Transform(ST_GeomFromText(geometry), 'EPSG:25832', 'EPSG:4326'))) as geometry_wgs84
             FROM bnbo_features_raw
             WHERE geometry IS NOT NULL
         """)
