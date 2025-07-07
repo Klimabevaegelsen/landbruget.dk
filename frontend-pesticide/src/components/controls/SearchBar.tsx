@@ -177,8 +177,8 @@ export function SearchBar({
   return (
     <div ref={searchRef} className={`relative ${className}`}>
       <div className="relative">
-        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60">
-          <Search className="w-4 h-4" />
+        <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400">
+          <Search className="w-5 h-5" />
         </div>
         
         <input
@@ -188,40 +188,40 @@ export function SearchBar({
           onChange={handleInputChange}
           onFocus={() => query.length > 0 && setIsOpen(true)}
           placeholder={placeholder}
-          className="w-full pl-10 pr-10 py-2 bg-black/20 backdrop-blur-sm border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/40 focus:border-white/40 transition-all duration-200"
+          className="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-base"
         />
         
         {query && (
           <button
             onClick={clearSearch}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         )}
       </div>
 
       {/* Loading indicator */}
       {isLoading && (
-        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-          <div className="w-4 h-4 border-2 border-white/40 border-t-transparent rounded-full animate-spin"></div>
+        <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+          <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
 
       {/* Results dropdown */}
       {isOpen && (results.length > 0 || (!isLoading && query.length >= 2)) && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-black/80 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
           {results.length > 0 ? (
             results.map((result, index) => (
               <button
                 key={index}
                 onClick={() => handleSelectResult(result)}
-                className={`w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-white/10 last:border-b-0 ${
-                  index === selectedIndex ? 'bg-white/10' : ''
+                className={`w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-600 last:border-b-0 ${
+                  index === selectedIndex ? 'bg-slate-700' : ''
                 }`}
               >
                 <div className="flex items-start space-x-3">
-                  <MapPin className="w-4 h-4 text-white/60 mt-0.5 flex-shrink-0" />
+                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-white text-sm font-medium truncate">
                       {result.tekst}
@@ -231,7 +231,7 @@ export function SearchBar({
               </button>
             ))
           ) : (
-            <div className="px-4 py-3 text-white/60 text-sm">
+            <div className="px-4 py-3 text-slate-400 text-sm">
               No addresses found
             </div>
           )}
