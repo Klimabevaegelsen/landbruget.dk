@@ -178,6 +178,9 @@ class BaseSource(Generic[T], ABC):
             # Memory and performance settings
             self.conn.execute("SET memory_limit = '12GB'")
             self.conn.execute("SET max_memory = '12GB'")
+            self.conn.execute(
+                "SET max_temp_directory_size = '14GB'"
+            )  # Set explicit temp directory size limit
             self.conn.execute("SET threads = 4")
             self.conn.execute("SET enable_progress_bar = true")
             self.conn.execute("SET preserve_insertion_order = false")
