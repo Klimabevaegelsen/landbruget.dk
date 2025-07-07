@@ -71,8 +71,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
         self.conn.execute(
-            "SET max_temp_directory_size='12GB'"
-        )  # Increased from 8GB to match memory limit for GitHub Actions 16GB runners
+            "SET max_temp_directory_size='14GB'"
+        )  # Set to 14GB for single year processing
         self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
 
         # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
@@ -91,7 +91,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Increase memory limit to use more of the available 16GB GitHub Actions memory
             self.conn.execute("SET memory_limit='12GB'")
             # Set max_temp_directory_size to match memory limit
-            self.conn.execute("SET max_temp_directory_size='12GB'")
+            self.conn.execute("SET max_temp_directory_size='14GB'")
             # Reduce threads to 1 for memory-intensive spatial operations (already set above)
             # Disable insertion order preservation for better memory efficiency (already set above)
 
@@ -814,81 +814,68 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("Starting Field Area Analysis Gold processing (optimized)")
 
         try:
-            # ✅ OPTIMIZATION: Load reference datasets first (shared across all years)
-            self.log.info("🔧 Loading reference datasets...")
+            # ✅ FIXED: Only process the latest available year
+            available_years = self._get_available_fvm_marker_years()
+            if not available_years:
+                self.log.error("No fvm_marker years found - cannot proceed with analysis")
+                return
+
+            # Get the latest year only
+            latest_year = max(available_years)
+            self.log.info(f"Found fvm_marker data for years: {available_years}")
+            self.log.info(f"🚀 Processing only the latest year: {latest_year}")
+
+            # ✅ OPTIMIZATION: Load reference datasets once for the single year
+            self.log.info(f"🔧 Loading reference datasets for year {latest_year}...")
             dataset_paths = self._load_silver_data_streaming(silver_data)
             self._load_reference_data_into_duckdb_streaming(dataset_paths)
 
             # ✅ NEW: Check memory usage after loading reference data
             self._check_memory_usage()
 
-            # ✅ OPTIMIZATION: Process each year separately to avoid memory overflow
-            available_years = self._get_available_fvm_marker_years()
-            if not available_years:
-                self.log.error("No fvm_marker years found - cannot proceed with analysis")
+            # Load fields for the latest year
+            fields_table_name = self._load_agricultural_fields_for_years_optimized(
+                [latest_year], silver_data
+            )
+            if not fields_table_name:
+                self.log.error(f"No fields found for latest year {latest_year}")
                 return
 
-            self.log.info(f"Found fvm_marker data for years: {available_years}")
-            self.log.info("🚀 Processing each year separately to avoid memory overflow")
+            # Prepare fields table for analysis
+            self._prepare_fields_table_for_analysis(fields_table_name, latest_year)
 
-            total_fields_processed = 0
-            for year in available_years:
-                self.log.info(f"Processing year {year}...")
+            # ✅ NEW: Check memory usage after loading fields
+            self._check_memory_usage()
 
-                # ✅ NEW: Check memory and disk usage before processing each year
-                self._check_memory_usage()
-                self._check_disk_space()
+            # Process all fields with spatial analysis
+            self._process_all_fields_spatial_optimized()
 
-                # Load fields for this year
-                fields_table_name = self._load_agricultural_fields_for_years_optimized(
-                    [year], silver_data
-                )
-                if not fields_table_name:
-                    self.log.warning(f"No fields found for year {year}")
-                    continue
+            # ✅ NEW: Check memory usage after spatial analysis
+            self._check_memory_usage()
 
-                # Prepare fields table for analysis
-                self._prepare_fields_table_for_analysis(fields_table_name, year)
+            # Create year results table
+            year_results_table = f"field_area_analysis_results_{latest_year}"
+            self._create_year_results_table(year_results_table, latest_year)
 
-                # ✅ NEW: Check memory usage after loading fields
-                self._check_memory_usage()
+            # Get field count for this year
+            fields_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {year_results_table}"
+            ).fetchone()[0]
 
-                # Process all fields with spatial analysis
-                self._process_all_fields_spatial_optimized()
+            self.log.info(f"✅ Year {latest_year} completed: {fields_count:,} fields processed")
 
-                # ✅ NEW: Check memory usage after spatial analysis
-                self._check_memory_usage()
-
-                # Create year results table
-                year_results_table = f"field_area_analysis_results_{year}"
-                self._create_year_results_table(year_results_table, year)
-
-                # Get field count for this year
-                fields_count = self.conn.execute(
-                    f"SELECT COUNT(*) FROM {year_results_table}"
-                ).fetchone()[0]
-
-                self.log.info(f"✅ Year {year} completed: {fields_count:,} fields processed")
-
-                # Save results for this year
-                self.save_data_direct(
-                    year_results_table, f"{self.config.dataset}_{year}", self.config.bucket, "gold"
-                )
-
-                total_fields_processed += fields_count
-
-                # ✅ CLEANUP: Clean up intermediate tables to free memory
-                self._cleanup_year_processing(fields_table_name, year)
-                self.log.info(f"✅ Completed and cleaned up year {year}")
-
-                # ✅ NEW: Final memory and disk space check after cleanup
-                self._check_memory_usage()
-                self._check_disk_space()
+            # Save results for this year
+            self.save_data_direct(
+                year_results_table,
+                f"{self.config.dataset}_{latest_year}",
+                self.config.bucket,
+                "gold",
+            )
 
             self.log.info("✅ Field Area Analysis completed successfully")
-            self.log.info(f"   Total fields processed: {total_fields_processed:,}")
-            self.log.info(f"   Years processed: {len(available_years)}")
-            self.log.info("   Results saved per year to avoid memory overflow")
+            self.log.info(f"   Fields processed: {fields_count:,}")
+            self.log.info(f"   Year processed: {latest_year}")
+            self.log.info(f"   Results saved to: {self.config.dataset}_{latest_year}")
 
         except Exception as e:
             self.log.error(f"Field Area Analysis Gold processing failed: {e}")
