@@ -241,15 +241,20 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
         True if SPATIAL_JOIN operator is detected, False otherwise
     """
     try:
-        explain_result = conn.execute(f"EXPLAIN {query}").fetchdf()
-        spatial_join_detected = any(
-            "SPATIAL_JOIN" in str(row) for row in explain_result.values.flatten()
-        )
+        explain_result = conn.execute(f"EXPLAIN {query}").fetchall()
+        explain_text = "\n".join([str(row[0]) for row in explain_result])
+
+        spatial_join_detected = "SPATIAL_JOIN" in explain_text
 
         if spatial_join_detected:
             logger.info("✅ SPATIAL_JOIN operator detected in query plan!")
+            # Log a snippet of the plan showing the SPATIAL_JOIN
+            for line in explain_text.split("\n"):
+                if "SPATIAL_JOIN" in line:
+                    logger.info(f"   📍 {line.strip()}")
         else:
-            logger.warning("⚠️ SPATIAL_JOIN operator not used - check query structure")
+            logger.warning("⚠️ SPATIAL_JOIN operator not used - query may use standard join")
+            logger.debug(f"Query plan:\n{explain_text}")
 
         return spatial_join_detected
     except Exception as e:

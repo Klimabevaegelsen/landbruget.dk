@@ -332,7 +332,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as soil_area_share
             FROM current_fields f
             LEFT JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
-            WHERE s.soil_code IS NULL OR ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) > 0.01
         """)
 
         soil_time = time.time() - join_start
@@ -354,7 +353,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 END as bnbo_area_share
             FROM fields_with_soil f
             LEFT JOIN bnbo_polygons b ON ST_Intersects(f.geom, b.geom)
-            WHERE b.status_category IS NULL OR ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) > 0.01
         """)
 
         bnbo_time = time.time() - join_start
@@ -376,7 +374,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 END as water_projects_area_share
             FROM fields_with_bnbo f
             LEFT JOIN water_project_polygons wp ON ST_Intersects(f.geom, wp.geom)
-            WHERE wp.project_id IS NULL OR ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) > 0.01
         """)
 
         water_time = time.time() - join_start
@@ -386,7 +383,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with wetlands...")
         join_start = time.time()
 
-        # Use aggregated wetland intersection for proper area calculation
+        # Simplified wetland join using single spatial predicate for SPATIAL_JOIN operator
         self.conn.execute("""
             CREATE TABLE fields_with_wetlands AS
             WITH wetland_intersections AS (
@@ -513,7 +510,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
-                    WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > 0.01
                 """)
 
                 processed_properties += chunk_properties
@@ -560,7 +556,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
                 FROM fields_with_wetlands f
                 JOIN properties p ON ST_Intersects(f.geom, p.geom)
-                WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > 0.01
             """)
 
         properties_time = time.time() - chunk_start
