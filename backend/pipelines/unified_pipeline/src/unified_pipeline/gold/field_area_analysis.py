@@ -1347,3 +1347,34 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     self.conn.close()
             except Exception as close_error:
                 self.log.debug(f"Error closing connection: {close_error}")
+
+    def _final_cleanup_temp_files(self):
+        """Final cleanup of all temporary files after DuckDB connection is closed."""
+        import glob
+        import os
+        import shutil
+
+        temp_dir = "/tmp/duckdb_field_analysis"
+        try:
+            if os.path.exists(temp_dir):
+                # Now we can safely remove all files since DuckDB is closed
+                for file_path in glob.glob(os.path.join(temp_dir, "*")):
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                    except Exception as e:
+                        self.log.debug(f"Could not remove temp file {file_path}: {e}")
+
+                # Try to remove the temp directory itself if it's empty
+                try:
+                    os.rmdir(temp_dir)
+                    self.log.debug(f"Removed empty temp directory: {temp_dir}")
+                except OSError:
+                    # Directory not empty or other error - that's OK
+                    pass
+
+                self.log.info(f"🧹 Final cleanup completed for {temp_dir}")
+        except Exception as e:
+            self.log.debug(f"Error in final temp file cleanup: {e}")
