@@ -37,10 +37,10 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Processing configuration
-    batch_size: int = 1000  # Reduced from 2500 to stay within memory constraints (H3 PFAS uses 10k but for H3 cells, not complex polygons)
-    memory_limit: str = "8GB"  # Reduced from 12GB to leave more headroom for spatial operations
-    thread_count: int = 1  # Single thread for memory-intensive spatial operations (H3 PFAS uses 4 but has simpler data)
-    max_temp_directory_size: str = "6GB"  # Reduced temp directory limit to prevent overflow
+    batch_size: int = 2000  # Increased from 1000 - wetlands optimization allows larger chunks
+    memory_limit: str = "8GB"  # Keep at 8GB for safety
+    thread_count: int = 1  # Single thread for memory-intensive spatial operations
+    max_temp_directory_size: str = "6GB"  # Keep temp directory limit
 
     # Quality thresholds
     min_area_threshold: float = 0.01  # Minimum area share to include (1%)
@@ -65,58 +65,32 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
     def _configure_duckdb_additional(self):
         """Configure additional DuckDB settings for field area analysis."""
-        # Update memory settings to use config values
-        self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
-        self.conn.execute(f"SET threads={self.config.thread_count}")
-        self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
-
-        # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
-        self.conn.execute(
-            f"SET max_temp_directory_size='{self.config.max_temp_directory_size}'"
-        )  # Set to 8GB for single year processing
-        self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
-
-        # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
-        self.conn.execute("SET threads=1")  # Single thread for memory-intensive spatial ops
-        self.conn.execute("SET preserve_insertion_order=false")  # Allow reordering for efficiency
-
-        # ✅ NEW: More aggressive memory management for spatial operations
-        # Note: checkpoint_threshold may not be available in all DuckDB versions
-        # self.conn.execute("SET checkpoint_threshold='1GB'")  # Checkpoint more frequently
-        # Note: force_checkpoint is not available in this DuckDB version
-        self.conn.execute("SET enable_progress_bar=false")  # Disable progress bar to save memory
-
-        # ✅ OPTIMIZATION: Apply DuckDB's recommended memory optimization settings
-        # These are the settings suggested in the error message for Out of Memory issues
         try:
-            # Use more conservative memory settings for GitHub Actions
+            # Update memory settings to use config values
             self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
-            # Set max_temp_directory_size to be smaller than memory limit
+            self.conn.execute(f"SET threads={self.config.thread_count}")
+            self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
+
+            # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
             self.conn.execute(
                 f"SET max_temp_directory_size='{self.config.max_temp_directory_size}'"
             )
-            # Use single thread for memory-intensive spatial operations
+            self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
+
+            # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
             self.conn.execute("SET threads=1")
-            # Disable insertion order preservation for better memory efficiency
             self.conn.execute("SET preserve_insertion_order=false")
 
-            # Additional aggressive memory optimizations for GitHub Actions
-            self.conn.execute("SET checkpoint_threshold='500MB'")  # More frequent checkpoints
-            self.conn.execute("SET wal_autocheckpoint=500")  # Auto-checkpoint every 500 pages
-            self.conn.execute("SET max_expression_depth=50")  # Limit expression complexity
+            # ✅ NEW: Enable spatial optimizations
+            self.conn.execute(
+                "SET enable_spatial_index=true"
+            )  # Enable spatial indexing if available
+            self.conn.execute("SET enable_progress_bar=false")
 
-            self.log.info(
-                f"✅ Applied conservative DuckDB memory optimization settings: {self.config.memory_limit} memory, {self.config.max_temp_directory_size} temp"
-            )
         except Exception as e:
             self.log.warning(f"Could not apply some DuckDB optimizations: {e}")
 
-        # ✅ NEW: Optimize for spatial operations with limited disk space
-        # Note: max_expression_depth and enable_external_access may not be available in all DuckDB versions
-        # self.conn.execute("SET max_expression_depth=1000")  # Limit expression complexity
-        # self.conn.execute("SET enable_external_access=false")  # Disable external access to save memory
-
-        # Create temp directory if it doesn't exist
+        # Create temp directory
         temp_dir = "/tmp/duckdb_field_analysis"
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir, exist_ok=True)
@@ -348,6 +322,17 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             """)
             self.conn.execute("DROP TABLE properties_temp")
             self.conn.execute("DROP TABLE properties_check")
+
+            # ✅ NEW: Create spatial index on properties for faster intersection queries
+            try:
+                self.conn.execute(
+                    "CREATE INDEX idx_properties_geom ON properties USING GIST (geom)"
+                )
+                self.log.info("    🚀 Created spatial index on properties")
+            except Exception as e:
+                # Spatial indexing may not be available in all DuckDB versions
+                self.log.info(f"    ℹ️ Spatial indexing not available: {e}")
+
             property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
             self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
 
@@ -494,6 +479,15 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     geometry as geom""",
                 "wetlands",
             )
+
+            # ✅ NEW: Create spatial index on wetlands for faster intersection queries
+            try:
+                self.conn.execute("CREATE INDEX idx_wetlands_geom ON wetlands USING GIST (geom)")
+                self.log.info("    🚀 Created spatial index on wetlands")
+            except Exception as e:
+                # Spatial indexing may not be available in all DuckDB versions
+                self.log.info(f"    ℹ️ Spatial indexing not available: {e}")
+
             count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
             self.log.info(f"    ✅ Loaded {count:,} wetlands from GCS (optimized)")
 
@@ -967,20 +961,20 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """
         Calculate optimal chunk size based on total field count and available memory.
 
-        Similar to H3 PFAS pipeline's chunk size calculation but adapted for field complexity.
+        ✅ OPTIMIZED: Larger chunks are now possible due to wetlands spatial optimization.
         """
         base_chunk_size = self.config.batch_size
 
-        # Adjust chunk size based on field count (more fields = smaller chunks)
+        # ✅ NEW: More aggressive chunk sizes due to spatial optimizations
         if total_fields > 100000:  # Very large datasets
-            adjusted_chunk_size = min(base_chunk_size, 500)
+            adjusted_chunk_size = min(base_chunk_size, 1000)  # Increased from 500
             self.log.info(
-                f"🔧 Large dataset detected ({total_fields:,} fields), reducing chunk size to {adjusted_chunk_size}"
+                f"🔧 Large dataset detected ({total_fields:,} fields), using optimized chunk size: {adjusted_chunk_size}"
             )
         elif total_fields > 50000:  # Large datasets
-            adjusted_chunk_size = min(base_chunk_size, 750)
+            adjusted_chunk_size = min(base_chunk_size, 1500)  # Increased from 750
             self.log.info(
-                f"🔧 Medium-large dataset detected ({total_fields:,} fields), reducing chunk size to {adjusted_chunk_size}"
+                f"🔧 Medium-large dataset detected ({total_fields:,} fields), using optimized chunk size: {adjusted_chunk_size}"
             )
         else:
             adjusted_chunk_size = base_chunk_size
@@ -1091,99 +1085,90 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """)
 
     def _process_chunk_spatial_analysis(self, chunk_table: str, chunk_idx: int):
-        """Process spatial analysis for a single chunk of fields."""
+        """Process spatial analysis for a single chunk of fields with optimized spatial operations."""
 
         # Property analysis
         self.log.info(f"    🏠 Chunk {chunk_idx + 1}: Analyzing property ownership...")
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_property_intersections AS
+            CREATE OR REPLACE TABLE chunk_property_shares AS
             SELECT 
                 f.field_id,
                 f.block_id,
                 p.bfe_number,
-                f.geom as field_geom,
-                p.geom as property_geom
+                ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
             FROM {chunk_table} f
             JOIN properties p ON ST_Intersects(f.geom, p.geom)
-        """)
-
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_property_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                bfe_number,
-                ST_Area(ST_Intersection(field_geom, property_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM chunk_property_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, property_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
+            WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
         """)
 
         # Soil analysis
         self.log.info(f"    🌱 Chunk {chunk_idx + 1}: Analyzing soil types...")
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_soil_intersections AS
+            CREATE OR REPLACE TABLE chunk_soil_shares AS
             SELECT 
                 f.field_id,
                 f.block_id,
                 s.soil_code,
                 s.soil_description,
-                f.geom as field_geom,
-                s.geom as soil_geom
+                ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as area_share
             FROM {chunk_table} f
             JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
-        """)
-
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_soil_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                soil_code,
-                soil_description,
-                ST_Area(ST_Intersection(field_geom, soil_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM chunk_soil_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, soil_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
+            WHERE ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
         """)
 
         # BNBO analysis
         self.log.info(f"    🛡️ Chunk {chunk_idx + 1}: Analyzing BNBO status...")
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_bnbo_intersections AS
+            CREATE OR REPLACE TABLE chunk_bnbo_shares AS
             SELECT 
                 f.field_id,
                 f.block_id,
                 b.status_category,
-                f.geom as field_geom,
-                b.geom as bnbo_geom
+                ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) * 100 as area_share
             FROM {chunk_table} f
             JOIN bnbo_areas b ON ST_Intersects(f.geom, b.geom)
+            WHERE ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
         """)
 
+        # ✅ OPTIMIZED: Wetlands analysis with spatial bounding box filter
+        self.log.info(f"    🌊 Chunk {chunk_idx + 1}: Analyzing wetlands (optimized)...")
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_bnbo_shares AS
+            CREATE OR REPLACE TABLE chunk_wetland_shares AS
+            WITH field_bounds AS (
+                SELECT 
+                    field_id,
+                    block_id,
+                    geom,
+                    ST_Area(geom) as field_area,
+                    ST_Envelope(geom) as bbox
+                FROM {chunk_table}
+            ),
+            relevant_wetlands AS (
+                -- ✅ OPTIMIZATION: Pre-filter wetlands using bounding box intersection
+                SELECT w.geom as wetland_geom, w.wetland_id
+                FROM wetlands w
+                JOIN field_bounds f ON ST_Intersects(f.bbox, w.geom)
+            ),
+            wetland_intersections AS (
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.field_area,
+                    ST_Area(ST_Intersection(f.geom, w.wetland_geom)) as intersection_area
+                FROM field_bounds f
+                JOIN relevant_wetlands w ON ST_Intersects(f.geom, w.wetland_geom)
+                WHERE ST_Area(ST_Intersection(f.geom, w.wetland_geom)) > 0
+            )
             SELECT 
                 field_id,
                 block_id,
-                status_category,
-                ST_Area(ST_Intersection(field_geom, bnbo_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM chunk_bnbo_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, bnbo_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
+                SUM(intersection_area) / field_area * 100 as wetland_area_share
+            FROM wetland_intersections
+            WHERE SUM(intersection_area) / field_area > 0.01
+            GROUP BY field_id, block_id, field_area
         """)
 
-        # Wetlands analysis
-        self.log.info(f"    🌊 Chunk {chunk_idx + 1}: Analyzing wetlands...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_wetland_shares AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                ST_Area(ST_Intersection(f.geom, w.geom)) / ST_Area(f.geom) * 100 as wetland_area_share
-            FROM {chunk_table} f
-            JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
-            WHERE ST_Area(ST_Intersection(f.geom, w.geom)) / ST_Area(f.geom) > 0.01
-        """)
-
-        # Water projects analysis
+        # ✅ OPTIMIZED: Water projects analysis (simplified since only 1 record)
         self.log.info(f"    💧 Chunk {chunk_idx + 1}: Analyzing water projects...")
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE chunk_water_projects_shares AS
@@ -1268,11 +1253,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """Clean up all temporary tables for a chunk."""
         chunk_tables = [
             f"field_chunk_{chunk_idx}",
-            "chunk_property_intersections",
             "chunk_property_shares",
-            "chunk_soil_intersections",
             "chunk_soil_shares",
-            "chunk_bnbo_intersections",
             "chunk_bnbo_shares",
             "chunk_wetland_shares",
             "chunk_water_projects_shares",

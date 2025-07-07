@@ -102,9 +102,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       // Layer doesn't exist, ignore
     }
     
+    // Check for the current H3 resolution layer
     try {
-      if ((map.current as any).getLayer('h3-fill')) {
-        layers.push('h3-fill')
+      const h3LayerId = `h3-fill-res${currentH3Resolution}`
+      if ((map.current as any).getLayer(h3LayerId)) {
+        layers.push(h3LayerId)
       }
     } catch (e) {
       // Layer doesn't exist, ignore
@@ -505,50 +507,59 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         console.log('✅ Added kommune layers')
       }
       
-      // Add H3 layers if available
+      // Add H3 layers if available - CREATE ALL RESOLUTIONS TO AVOID LAYER REMOVAL
       if (sources.h3) {
-        layers.push(
-          {
-            id: 'h3-fill',
-            type: 'fill',
-            source: 'h3',
-            'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
-            layout: {
-              visibility: shouldShowH3 ? 'visible' : 'none'
+        // Create layers for all H3 resolutions (7, 8, 9, 10) to avoid layer removal during zoom
+        const h3Resolutions = [7, 8, 9, 10]
+        
+        h3Resolutions.forEach(resolution => {
+          const isCurrentResolution = resolution === currentH3Resolution
+          const shouldShow = shouldShowH3 && isCurrentResolution
+          
+          layers.push(
+            {
+              id: `h3-fill-res${resolution}`,
+              type: 'fill',
+              source: 'h3',
+              'source-layer': `h3_pfas_${selectedYear}_res${resolution}`,
+              layout: {
+                visibility: shouldShow ? 'visible' : 'none'
+              },
+              paint: {
+                'fill-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['get', currentPropertyName],
+                  0, 'transparent',
+                  0.1, '#fee5d9',
+                  1, '#fcbba1',
+                  5, '#fc9272',
+                  10, '#fb6a4a',
+                  20, '#ef3b2c',
+                  50, '#cb181d',
+                  100, '#99000d'
+                ],
+                'fill-opacity': 0.7
+              }
             },
-            paint: {
-              'fill-color': [
-                'interpolate',
-                ['linear'],
-                ['get', currentPropertyName],
-                0, 'transparent',
-                0.1, '#fee5d9',
-                1, '#fcbba1',
-                5, '#fc9272',
-                10, '#fb6a4a',
-                20, '#ef3b2c',
-                50, '#cb181d',
-                100, '#99000d'
-              ],
-              'fill-opacity': 0.7
+            {
+              id: `h3-stroke-res${resolution}`,
+              type: 'line',
+              source: 'h3',
+              'source-layer': `h3_pfas_${selectedYear}_res${resolution}`,
+              layout: {
+                visibility: shouldShow ? 'visible' : 'none'
+              },
+              paint: {
+                'line-color': '#ffffff',
+                'line-width': 0.2,
+                'line-opacity': 0
+              }
             }
-          },
-          {
-            id: 'h3-stroke',
-            type: 'line',
-            source: 'h3',
-            'source-layer': `h3_pfas_${selectedYear}_res${currentH3Resolution}`,
-            layout: {
-              visibility: shouldShowH3 ? 'visible' : 'none'
-            },
-            paint: {
-              'line-color': '#ffffff',
-              'line-width': 0.2,
-              'line-opacity': 0
-            }
-          }
-        )
-        console.log('✅ Added H3 layers')
+          )
+        })
+        
+        console.log('✅ Added H3 layers for all resolutions (7, 8, 9, 10)')
       }
       
       // Add BNBO layers if available - ALWAYS VISIBLE
@@ -964,7 +975,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     }
   }, [mapLibre, pmtilesUrls, bearing, center, clearError, currentH3Resolution, currentPropertyName, hideTooltip, isMobile, pitch, selectedYear, setError, setMapInstance, setShowMobilePanel, setViewState, shouldShowH3, shouldShowKommune, showBasemap, showTooltipWithData, zoom])
 
-  // Update layer visibility based on zoom
+  // Update layer visibility based on zoom - NOW HANDLES MULTIPLE H3 RESOLUTION LAYERS
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
@@ -985,13 +996,17 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       updateLayerVisibility('kommune-fill', layerVisibility.shouldShowKommune)
       updateLayerVisibility('kommune-stroke', layerVisibility.shouldShowKommune)
       
-      // Update H3 layer visibility
-      updateLayerVisibility('h3-fill', layerVisibility.shouldShowH3)
-      updateLayerVisibility('h3-stroke', layerVisibility.shouldShowH3)
+      // Update H3 layer visibility - NOW HANDLES ALL RESOLUTION LAYERS
+      const h3Resolutions = [7, 8, 9, 10]
+      h3Resolutions.forEach(resolution => {
+        const isCurrentResolution = resolution === layerVisibility.currentH3Resolution
+        const shouldShow = layerVisibility.shouldShowH3 && isCurrentResolution
+        
+        updateLayerVisibility(`h3-fill-res${resolution}`, shouldShow)
+        updateLayerVisibility(`h3-stroke-res${resolution}`, shouldShow)
+      })
       
       // BNBO layers are always visible - no need to update visibility
-      // updateLayerVisibility('bnbo-fill', true) // Always visible
-      // updateLayerVisibility('bnbo-stroke', true) // Always visible
     } catch (error) {
       console.warn('Error updating layer visibility:', error)
     }
@@ -1042,7 +1057,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       console.log('🎨 Updating paint expressions for data mode:', selectedDataMode, 'property:', currentPropertyName)
       
       // Update Kommune layer paint
-      if (map.current.getLayer('kommune-fill')) {
+      if ((map.current as any).getLayer('kommune-fill')) {
         const newPaint = [
           'interpolate',
           ['linear'],
@@ -1056,37 +1071,39 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           50, '#cb181d',
           100, '#99000d'
         ]
-        map.current.setPaintProperty('kommune-fill', 'fill-color', newPaint)
+        ;(map.current as any).setPaintProperty('kommune-fill', 'fill-color', newPaint)
         console.log('✅ Updated kommune-fill paint property')
       } else {
         console.log('⚠️ kommune-fill layer not found, skipping paint update')
       }
       
-      // Update H3 layer paint
-      if (map.current.getLayer('h3-fill')) {
-        const newPaint = [
-          'interpolate',
-          ['linear'],
-          ['get', currentPropertyName],
-          0, 'transparent',
-          0.1, '#fee5d9',
-          1, '#fcbba1',
-          5, '#fc9272',
-          10, '#fb6a4a',
-          20, '#ef3b2c',
-          50, '#cb181d',
-          100, '#99000d'
-        ]
-        map.current.setPaintProperty('h3-fill', 'fill-color', newPaint)
-        console.log('✅ Updated h3-fill paint property')
-      } else {
-        console.log('⚠️ h3-fill layer not found, skipping paint update')
-      }
+      // Update H3 layer paint for all resolution layers
+      const h3Resolutions = [7, 8, 9, 10]
+      h3Resolutions.forEach(resolution => {
+        const layerId = `h3-fill-res${resolution}`
+        if ((map.current as any).getLayer(layerId)) {
+          const newPaint = [
+            'interpolate',
+            ['linear'],
+            ['get', currentPropertyName],
+            0, 'transparent',
+            0.1, '#fee5d9',
+            1, '#fcbba1',
+            5, '#fc9272',
+            10, '#fb6a4a',
+            20, '#ef3b2c',
+            50, '#cb181d',
+            100, '#99000d'
+          ]
+          ;(map.current as any).setPaintProperty(layerId, 'fill-color', newPaint)
+          console.log(`✅ Updated ${layerId} paint property`)
+        }
+      })
       
       // Debug: Try to get some feature data to see what properties are available
       setTimeout(() => {
         try {
-          const features = map.current.queryRenderedFeatures()
+          const features = (map.current as any).queryRenderedFeatures()
           if (features.length > 0) {
             const sampleFeature = features[0]
             console.log('🔍 Sample feature properties:', sampleFeature.properties)
@@ -1097,106 +1114,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
       }, 1000)
       
-        } catch (error) {
+    } catch (error) {
       console.warn('Error updating paint expressions:', error)
     }
   }, [selectedDataMode, currentPropertyName, mapLoaded])
 
-  // Update source-layer names when year or resolution changes
-  // DEBOUNCED to prevent rapid layer updates during smooth zoom
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return
-
-    // Debounce the layer updates to prevent black screen during smooth zoom
-    const timeoutId = setTimeout(() => {
-      try {
-        console.log('🔄 Updating source-layer names for year:', selectedYear, 'resolution:', currentH3Resolution)
-        
-        // Only update layers if the source-layer actually changed
-        const kommuneSourceLayer = `kommune_pfas_${selectedYear}`
-        const h3SourceLayer = `h3_pfas_${selectedYear}_res${currentH3Resolution}`
-        
-        // Check if kommune layers need updating
-        const kommuneFillLayer = (map.current as any).getLayer?.('kommune-fill')
-        if (kommuneFillLayer && kommuneFillLayer['source-layer'] !== kommuneSourceLayer) {
-          console.log('🔄 Kommune source-layer changed, updating...')
-          
-          // Update kommune layers
-          ;(map.current as any).removeLayer('kommune-fill')
-          ;(map.current as any).removeLayer('kommune-stroke')
-          
-          ;(map.current as any).addLayer({
-            id: 'kommune-fill',
-            type: 'fill',
-            source: 'kommune',
-            'source-layer': kommuneSourceLayer,
-            layout: { visibility: shouldShowKommune ? 'visible' : 'none' },
-            paint: {
-              'fill-color': [
-                'interpolate', ['linear'], ['get', currentPropertyName],
-                0, 'transparent', 0.1, '#fee5d9', 1, '#fcbba1', 5, '#fc9272',
-                10, '#fb6a4a', 20, '#ef3b2c', 50, '#cb181d', 100, '#99000d'
-              ],
-              'fill-opacity': 0.8
-            }
-          }, 'bnbo-fill')
-          
-          ;(map.current as any).addLayer({
-            id: 'kommune-stroke',
-            type: 'line',
-            source: 'kommune',
-            'source-layer': kommuneSourceLayer,
-            layout: { visibility: shouldShowKommune ? 'visible' : 'none' },
-            paint: { 'line-color': '#ffffff', 'line-width': 0.5, 'line-opacity': 0.5 }
-          }, 'bnbo-fill')
-          
-          console.log('✅ Updated kommune layers with source-layer:', kommuneSourceLayer)
-        }
-        
-        // Check if H3 layers need updating
-        const h3FillLayer = (map.current as any).getLayer?.('h3-fill')
-        if (h3FillLayer && h3FillLayer['source-layer'] !== h3SourceLayer) {
-          console.log('🔄 H3 source-layer changed, updating...')
-          
-          // Update H3 layers
-          ;(map.current as any).removeLayer('h3-fill')
-          ;(map.current as any).removeLayer('h3-stroke')
-          
-          ;(map.current as any).addLayer({
-            id: 'h3-fill',
-            type: 'fill',
-            source: 'h3',
-            'source-layer': h3SourceLayer,
-            layout: { visibility: shouldShowH3 ? 'visible' : 'none' },
-            paint: {
-              'fill-color': [
-                'interpolate', ['linear'], ['get', currentPropertyName],
-                0, 'transparent', 0.1, '#fee5d9', 1, '#fcbba1', 5, '#fc9272',
-                10, '#fb6a4a', 20, '#ef3b2c', 50, '#cb181d', 100, '#99000d'
-              ],
-              'fill-opacity': 0.7
-            }
-          }, 'bnbo-fill')
-          
-          ;(map.current as any).addLayer({
-            id: 'h3-stroke',
-            type: 'line',
-            source: 'h3',
-            'source-layer': h3SourceLayer,
-            layout: { visibility: shouldShowH3 ? 'visible' : 'none' },
-            paint: { 'line-color': '#ffffff', 'line-width': 0.2, 'line-opacity': 0 }
-          }, 'bnbo-fill')
-          
-          console.log('✅ Updated H3 layers with source-layer:', h3SourceLayer)
-        }
-        
-      } catch (error) {
-        console.warn('Error updating source-layer names:', error)
-      }
-    }, 300) // 300ms debounce to prevent rapid updates during smooth zoom
-
-    return () => clearTimeout(timeoutId)
-  }, [selectedYear, currentH3Resolution, mapLoaded, shouldShowKommune, shouldShowH3, currentPropertyName])
+  // NO MORE LAYER REMOVAL - All H3 resolution layers are pre-created and we just toggle visibility
+  // This completely eliminates the black screen issue during zoom
 
  
 
