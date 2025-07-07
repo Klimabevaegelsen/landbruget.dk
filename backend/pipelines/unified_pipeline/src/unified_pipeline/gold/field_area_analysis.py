@@ -1,14 +1,23 @@
 """
-Field Area Analysis Gold Layer
+Field Area Analysis Gold Layer - Optimized Implementation
 
-This module implements the gold layer processor for field area analysis.
-It performs comprehensive spatial analysis of agricultural fields against multiple datasets
-including properties, soil types, BNBO status, wetlands, and water projects.
+This module implements the gold layer processor for field area analysis with performance optimizations
+from the redesigned implementation. It performs comprehensive spatial analysis of agricultural fields
+against multiple datasets including properties, soil types, BNBO status, wetlands, and water projects.
+
+Key optimizations applied:
+1. Optimal spatial join ordering (smallest to largest build side)
+2. Multipolygon splitting using ST_Dump for better spatial indexing
+3. Single spatial predicate per join to enable SPATIAL_JOIN operator
+4. Chunked processing only for properties dataset (6.5M rows)
+5. Direct spatial joins for smaller datasets with automatic spatial indexing
+6. Performance tracking and detailed timing metrics
 
 Migrated from the standalone field_area_analysis_pipeline to the unified pipeline architecture.
 """
 
 import os
+import time
 from typing import Any, Dict, List, Optional
 
 import psutil
@@ -36,11 +45,11 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
     wetlands_dataset: str = "wetlands_dissolved"
     water_projects_dataset: str = "water_projects_dissolved"
 
-    # Processing configuration
-    batch_size: int = 2000  # Increased from 1000 - wetlands optimization allows larger chunks
-    memory_limit: str = "8GB"  # Keep at 8GB for safety
+    # Processing configuration - optimized for direct spatial joins
+    batch_size: int = 500000  # Increased for properties chunking only
+    memory_limit: str = "8GB"
     thread_count: int = 1  # Single thread for memory-intensive spatial operations
-    max_temp_directory_size: str = "6GB"  # Keep temp directory limit
+    max_temp_directory_size: str = "6GB"
 
     # Quality thresholds
     min_area_threshold: float = 0.01  # Minimum area share to include (1%)
@@ -50,41 +59,43 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
 
 class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInterface):
     """
-    Gold layer processor for field area analysis.
+    Gold layer processor for field area analysis with performance optimizations.
 
     Performs comprehensive spatial analysis of agricultural fields against multiple datasets
-    to create analytics-ready spatial intersection results.
+    to create analytics-ready spatial intersection results using optimal spatial join ordering.
     """
 
     def __init__(self, config: FieldAreaAnalysisGoldConfig):
         super().__init__(config)
         self.log = Logger.get_logger()
 
+        # Performance tracking
+        self.start_time = None
+        self.phase_times = {}
+
         # Use the base class connection - don't create a new one
         self._configure_duckdb_additional()
 
     def _configure_duckdb_additional(self):
-        """Configure additional DuckDB settings for field area analysis."""
+        """Configure additional DuckDB settings for optimized field area analysis."""
         try:
             # Update memory settings to use config values
             self.conn.execute(f"SET memory_limit='{self.config.memory_limit}'")
             self.conn.execute(f"SET threads={self.config.thread_count}")
             self.conn.execute(f"SET max_memory='{self.config.memory_limit}'")
 
-            # ✅ OPTIMIZATION: Set temp directory size limit to prevent overflow
+            # Set temp directory size limit to prevent overflow
             self.conn.execute(
                 f"SET max_temp_directory_size='{self.config.max_temp_directory_size}'"
             )
             self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
 
-            # ✅ OPTIMIZATION: Reduce threads for spatial operations to save memory
+            # Optimize for spatial operations
             self.conn.execute("SET threads=1")
             self.conn.execute("SET preserve_insertion_order=false")
 
-            # ✅ NEW: Enable spatial optimizations
-            self.conn.execute(
-                "SET enable_spatial_index=true"
-            )  # Enable spatial indexing if available
+            # Enable spatial optimizations
+            self.conn.execute("SET enable_spatial_index=true")
             self.conn.execute("SET enable_progress_bar=false")
 
         except Exception as e:
@@ -99,10 +110,609 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self._cleanup_temp_files()
 
         # Spatial extension is already loaded in base class
-        self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer")
+        self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer (Optimized)")
         self.log.info(
-            f"   Memory: {self.config.memory_limit}, Threads: 1 (optimized), Batch size: {self.config.batch_size:,}"
+            f"   Memory: {self.config.memory_limit}, Threads: 1, Properties chunk size: {self.config.batch_size:,}"
         )
+
+    def _prepare_geometries_optimized(self, fields_table_name: str, year: int):
+        """
+        Phase 1: Load and prepare all geometries for optimal spatial joins.
+
+        Key optimizations:
+        - Convert agricultural fields WKT to geometry (probe side)
+        - Split multipolygons using ST_Dump for better spatial indexing
+        - Validate geometry quality
+        """
+        phase_start = time.time()
+        self.log.info("📥 Phase 1: Geometry preprocessing and validation (optimized)...")
+
+        # Prepare fields table for spatial analysis
+        self._prepare_fields_table_for_analysis(fields_table_name, year)
+
+        field_count = self.conn.execute("SELECT COUNT(*) FROM current_fields").fetchone()[0]
+        self.log.info(f"✅ Processed {field_count:,} valid agricultural fields")
+
+        # Load and prepare build side datasets with optimal spatial indexing
+        self._prepare_build_side_datasets_optimized()
+
+        self.phase_times["geometry_preprocessing"] = time.time() - phase_start
+        self.log.info(
+            f"✅ Phase 1 completed in {self.phase_times['geometry_preprocessing']:.1f} seconds"
+        )
+
+    def _prepare_build_side_datasets_optimized(self):
+        """Prepare all build side datasets with optimal spatial indexing and multipolygon splitting."""
+
+        # Load reference datasets in optimal order for spatial joins
+        dataset_paths = self._load_silver_data_streaming(None)
+
+        # 1. Soil types (smallest build side) - load directly
+        self._load_soil_types_optimized(dataset_paths)
+
+        # 2. BNBO status - split multipolygons using ST_Dump
+        self._load_bnbo_status_optimized(dataset_paths)
+
+        # 3. Water projects - split multipolygons using ST_Dump
+        self._load_water_projects_optimized(dataset_paths)
+
+        # 4. Wetlands - large but fits in memory
+        self._load_wetlands_optimized(dataset_paths)
+
+        # 5. Properties - will be processed separately with chunking
+
+    def _load_soil_types_optimized(self, dataset_paths: Dict[str, Any]):
+        """Load soil types dataset (smallest build side for optimal spatial indexing)."""
+        self.log.info("🔄 Loading soil types (optimized)...")
+
+        soil_data = dataset_paths.get(self.config.soil_types_dataset)
+        if soil_data is None:
+            self.log.warning("No soil data available - creating empty table")
+            self.conn.execute(
+                "CREATE TABLE soil_types (soil_description VARCHAR, soil_code VARCHAR, geom GEOMETRY)"
+            )
+            return
+
+        if isinstance(soil_data, str) and soil_data.startswith("gs://"):
+            # Load from GCS
+            self.gcs_access.query_parquet_direct(
+                soil_data,
+                """SELECT 
+                    soil_description,
+                    soil_code,
+                    geometry as geom""",
+                "soil_types",
+            )
+        else:
+            # Load from memory
+            self.conn.register("soil_df", soil_data)
+            self.conn.execute("""
+                CREATE TABLE soil_types AS
+                SELECT 
+                    soil_description,
+                    soil_code,
+                    geometry as geom
+                FROM soil_df
+            """)
+
+        soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+        self.log.info(f"✅ Loaded {soil_count:,} soil type polygons")
+
+    def _load_bnbo_status_optimized(self, dataset_paths: Dict[str, Any]):
+        """Load BNBO status dataset and split multipolygons using ST_Dump for optimal spatial indexing."""
+        self.log.info("🔄 Loading and splitting BNBO multipolygons (optimized)...")
+
+        bnbo_data = dataset_paths.get(self.config.bnbo_status_dataset)
+        if bnbo_data is None:
+            self.log.warning("No BNBO data available - creating empty table")
+            self.conn.execute("CREATE TABLE bnbo_polygons (status_category VARCHAR, geom GEOMETRY)")
+            return
+
+        if isinstance(bnbo_data, str) and bnbo_data.startswith("gs://"):
+            # Load from GCS
+            self.gcs_access.create_table_from_gcs("bnbo_raw", bnbo_data)
+        else:
+            # Load from memory
+            self.conn.register("bnbo_df", bnbo_data)
+            self.conn.execute("CREATE TABLE bnbo_raw AS SELECT * FROM bnbo_df")
+
+        # Split multipolygons into individual polygons for optimal spatial indexing
+        self.conn.execute("""
+            CREATE TABLE bnbo_polygons AS
+            SELECT 
+                status_category,
+                (unnest(ST_Dump(geometry))).geom as geom,
+                ROW_NUMBER() OVER () as polygon_id
+            FROM bnbo_raw
+        """)
+
+        # Clean up raw table
+        self.conn.execute("DROP TABLE bnbo_raw")
+
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_polygons").fetchone()[0]
+        self.log.info(f"✅ Split BNBO into {bnbo_count:,} individual polygons")
+
+    def _load_water_projects_optimized(self, dataset_paths: Dict[str, Any]):
+        """Load water projects dataset and split multipolygons using ST_Dump for optimal spatial indexing."""
+        self.log.info("🔄 Loading and splitting water project multipolygons (optimized)...")
+
+        water_data = dataset_paths.get(self.config.water_projects_dataset)
+        if water_data is None:
+            self.log.warning("No water projects data available - creating empty table")
+            self.conn.execute(
+                "CREATE TABLE water_project_polygons (project_id VARCHAR, geom GEOMETRY)"
+            )
+            return
+
+        if isinstance(water_data, str) and water_data.startswith("gs://"):
+            # Load from GCS
+            self.gcs_access.create_table_from_gcs("water_raw", water_data)
+        else:
+            # Load from memory
+            self.conn.register("water_df", water_data)
+            self.conn.execute("CREATE TABLE water_raw AS SELECT * FROM water_df")
+
+        # Split multipolygons into individual polygons for optimal spatial indexing
+        self.conn.execute("""
+            CREATE TABLE water_project_polygons AS
+            SELECT
+                project_id,
+                (unnest(ST_Dump(geometry))).geom as geom,
+                ROW_NUMBER() OVER () as polygon_id
+            FROM water_raw
+        """)
+
+        # Clean up raw table
+        self.conn.execute("DROP TABLE water_raw")
+
+        water_count = self.conn.execute("SELECT COUNT(*) FROM water_project_polygons").fetchone()[0]
+        self.log.info(f"✅ Split water projects into {water_count:,} individual polygons")
+
+    def _load_wetlands_optimized(self, dataset_paths: Dict[str, Any]):
+        """Load wetlands dataset (large but fits in memory with spatial indexing)."""
+        self.log.info("🔄 Loading wetlands (optimized)...")
+
+        wetlands_data = dataset_paths.get(self.config.wetlands_dataset)
+        if wetlands_data is None:
+            self.log.warning("No wetlands data available - creating empty table")
+            self.conn.execute("CREATE TABLE wetlands (wetland_id VARCHAR, geom GEOMETRY)")
+            return
+
+        if isinstance(wetlands_data, str) and wetlands_data.startswith("gs://"):
+            # Load from GCS
+            self.gcs_access.query_parquet_direct(
+                wetlands_data,
+                """SELECT 
+                    wetland_id,
+                    geometry as geom""",
+                "wetlands",
+            )
+        else:
+            # Load from memory
+            self.conn.register("wetlands_df", wetlands_data)
+            self.conn.execute("""
+                CREATE TABLE wetlands AS
+                SELECT 
+                    wetland_id,
+                    geometry as geom
+                FROM wetlands_df
+            """)
+
+        # Create spatial index on wetlands for faster intersection queries
+        try:
+            self.conn.execute("CREATE INDEX idx_wetlands_geom ON wetlands USING GIST (geom)")
+            self.log.info("    🚀 Created spatial index on wetlands")
+        except Exception as e:
+            # Spatial indexing may not be available in all DuckDB versions
+            self.log.info(f"    ℹ️ Spatial indexing not available: {e}")
+
+        wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
+        self.log.info(f"✅ Loaded {wetlands_count:,} wetland polygons")
+
+    def _execute_optimal_spatial_joins(self):
+        """
+        Phase 2: Execute spatial joins in optimal order using DuckDB Spatial v1.2.2.
+
+        Join order: smallest to largest build side for optimal spatial indexing.
+        Each join uses single spatial predicate to enable SPATIAL_JOIN operator.
+        """
+        phase_start = time.time()
+        self.log.info("⚡ Phase 2: Executing optimal spatial joins...")
+
+        # 1. Soil types (smallest build side) - fastest spatial index creation
+        self.log.info("🔄 Joining with soil types...")
+        join_start = time.time()
+
+        self.conn.execute("""
+            CREATE TABLE fields_with_soil AS
+            SELECT 
+                f.*,
+                s.soil_code,
+                s.soil_description,
+                ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as soil_area_share
+            FROM current_fields f
+            LEFT JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
+            WHERE s.soil_code IS NULL OR ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) > 0.01
+        """)
+
+        soil_time = time.time() - join_start
+        self.log.info(f"✅ Soil types join completed in {soil_time:.1f} seconds")
+
+        # 2. BNBO polygons (individual polygons) - optimized with spatial indexing
+        self.log.info("🔄 Joining with BNBO polygons...")
+        join_start = time.time()
+
+        self.conn.execute("""
+            CREATE TABLE fields_with_bnbo AS
+            SELECT 
+                f.*,
+                b.status_category,
+                CASE 
+                    WHEN b.status_category IS NOT NULL THEN 
+                        ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) * 100
+                    ELSE NULL
+                END as bnbo_area_share
+            FROM fields_with_soil f
+            LEFT JOIN bnbo_polygons b ON ST_Intersects(f.geom, b.geom)
+            WHERE b.status_category IS NULL OR ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) > 0.01
+        """)
+
+        bnbo_time = time.time() - join_start
+        self.log.info(f"✅ BNBO polygons join completed in {bnbo_time:.1f} seconds")
+
+        # 3. Water project polygons - optimized spatial indexing
+        self.log.info("🔄 Joining with water project polygons...")
+        join_start = time.time()
+
+        self.conn.execute("""
+            CREATE TABLE fields_with_water AS
+            SELECT 
+                f.*,
+                wp.project_id,
+                CASE 
+                    WHEN wp.project_id IS NOT NULL THEN 
+                        ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) * 100
+                    ELSE 0
+                END as water_projects_area_share
+            FROM fields_with_bnbo f
+            LEFT JOIN water_project_polygons wp ON ST_Intersects(f.geom, wp.geom)
+            WHERE wp.project_id IS NULL OR ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) > 0.01
+        """)
+
+        water_time = time.time() - join_start
+        self.log.info(f"✅ Water project polygons join completed in {water_time:.1f} seconds")
+
+        # 4. Wetlands (large build side but benefits from spatial indexing)
+        self.log.info("🔄 Joining with wetlands...")
+        join_start = time.time()
+
+        # Use aggregated wetland intersection for proper area calculation
+        self.conn.execute("""
+            CREATE TABLE fields_with_wetlands AS
+            WITH wetland_intersections AS (
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.year,
+                    f.geom,
+                    f.field_area_m2,
+                    f.soil_code,
+                    f.soil_description,
+                    f.soil_area_share,
+                    f.status_category,
+                    f.bnbo_area_share,
+                    f.project_id,
+                    f.water_projects_area_share,
+                    COALESCE(ST_Area(ST_Union_Agg(ST_Intersection(f.geom, w.geom))) / ST_Area(f.geom) * 100, 0) as wetland_area_share
+                FROM fields_with_water f
+                LEFT JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2, 
+                         f.soil_code, f.soil_description, f.soil_area_share, 
+                         f.status_category, f.bnbo_area_share, f.project_id, f.water_projects_area_share
+            )
+            SELECT * FROM wetland_intersections
+        """)
+
+        wetlands_time = time.time() - join_start
+        self.log.info(f"✅ Wetlands join completed in {wetlands_time:.1f} seconds")
+
+        # 5. Properties (large dataset) - requires chunked processing
+        properties_time = self._process_properties_chunked()
+
+        self.phase_times["spatial_joins"] = {
+            "soil_types": soil_time,
+            "bnbo_polygons": bnbo_time,
+            "water_projects": water_time,
+            "wetlands": wetlands_time,
+            "properties": properties_time,
+            "total": time.time() - phase_start,
+        }
+
+        self.log.info(
+            f"✅ Phase 2 completed in {self.phase_times['spatial_joins']['total']:.1f} seconds"
+        )
+
+    def _process_properties_chunked(self) -> float:
+        """
+        Process properties dataset using spatial chunking approach.
+        Properties dataset is too large to be build side, so we chunk it.
+        """
+        self.log.info("🔄 Processing properties with spatial chunking approach...")
+        chunk_start = time.time()
+
+        # Get properties dataset path
+        dataset_paths = self._load_silver_data_streaming(None)
+        properties_data = dataset_paths.get(self.config.properties_dataset)
+
+        if properties_data is None:
+            self.log.warning("No property_cadastral_merged data found, skipping...")
+            # Create empty results table
+            self.conn.execute("""
+                CREATE TABLE field_property_results (
+                    field_id VARCHAR,
+                    block_id VARCHAR,
+                    cvr_number VARCHAR,
+                    bfe_number VARCHAR,
+                    area_share DOUBLE
+                )
+            """)
+            return 0.0
+
+        if isinstance(properties_data, str) and properties_data.startswith("gs://"):
+            # Stream from GCS
+            properties_path = properties_data
+
+            # Get total properties count WITHOUT loading the entire dataset
+            self.log.info("🔍 Getting properties count without loading full dataset...")
+            total_properties = self.conn.execute(f"""
+                SELECT COUNT(*) FROM read_parquet('{properties_path}')
+            """).fetchone()[0]
+
+            chunk_size = self.config.batch_size  # Use config batch size for properties
+
+            # Create results table
+            self.conn.execute("""
+                CREATE TABLE field_property_results (
+                    field_id VARCHAR,
+                    block_id VARCHAR,
+                    cvr_number VARCHAR,
+                    bfe_number VARCHAR,
+                    area_share DOUBLE
+                )
+            """)
+
+            # Process properties in chunks
+            processed_properties = 0
+            for offset in range(0, total_properties, chunk_size):
+                chunk_properties = min(chunk_size, total_properties - offset)
+
+                self.log.info(
+                    f"   Processing properties chunk {offset // chunk_size + 1}: {chunk_properties:,} properties"
+                )
+
+                # Create current properties chunk (build side)
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE properties_chunk AS
+                    SELECT 
+                        bestemtFastEjendomBFENr as bfe_number,
+                        geometry as geom
+                    FROM read_parquet('{properties_path}')
+                    WHERE bestemtFastEjendomBFENr IS NOT NULL
+                    LIMIT {chunk_size} OFFSET {offset}
+                """)
+
+                # Spatial join with area calculation
+                self.conn.execute("""
+                    INSERT INTO field_property_results
+                    SELECT 
+                        f.field_id,
+                        f.block_id,
+                        f.cvr_number,
+                        p.bfe_number,
+                        ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
+                    FROM fields_with_wetlands f
+                    JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
+                    WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > 0.01
+                """)
+
+                processed_properties += chunk_properties
+                self.log.info(
+                    f"   Processed {processed_properties:,}/{total_properties:,} properties ({processed_properties / total_properties * 100:.1f}%)"
+                )
+
+        else:
+            # Handle in-memory properties data
+            self.log.info("🔄 Processing properties from memory...")
+            self.conn.register("properties_df", properties_data)
+
+            # Check columns
+            available_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE properties_df").fetchall()
+            ]
+
+            if "bfe_number" not in available_columns:
+                if "bestemtFastEjendomBFENr" in available_columns:
+                    bfe_column = "bestemtFastEjendomBFENr"
+                else:
+                    raise ValueError("Required BFE column not found in property data")
+            else:
+                bfe_column = "bfe_number"
+
+            # Create properties table
+            self.conn.execute(f"""
+                CREATE TABLE properties AS
+                SELECT 
+                    {bfe_column} as bfe_number,
+                    geometry as geom
+                FROM properties_df
+                WHERE {bfe_column} IS NOT NULL
+            """)
+
+            # Create results table and process
+            self.conn.execute("""
+                CREATE TABLE field_property_results AS
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    p.bfe_number,
+                    ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
+                FROM fields_with_wetlands f
+                JOIN properties p ON ST_Intersects(f.geom, p.geom)
+                WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > 0.01
+            """)
+
+        properties_time = time.time() - chunk_start
+        self.log.info(f"✅ Properties processing completed in {properties_time:.1f} seconds")
+
+        return properties_time
+
+    def _generate_final_results_optimized(self, year: int) -> Dict[str, any]:
+        """
+        Phase 3: Generate final consolidated results with JSON aggregations.
+        """
+        phase_start = time.time()
+        self.log.info("📊 Phase 3: Generating final results with JSON aggregations...")
+
+        # Create JSON aggregations for properties
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_property_json AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                COALESCE('{' || string_agg('"' || bfe_number || '":' || area_share, ',') || '}', '{}') as property_area_shares
+            FROM field_property_results
+            GROUP BY field_id, block_id, cvr_number
+        """)
+
+        # Create JSON aggregations for soil types
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_json AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                CASE 
+                    WHEN soil_code IS NOT NULL THEN 
+                        '{' || '"' || soil_code || '":' || soil_area_share || '}'
+                    ELSE '{}'
+                END as soil_area_shares
+            FROM fields_with_wetlands
+            WHERE soil_code IS NOT NULL
+        """)
+
+        # Create JSON aggregations for BNBO status
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_json AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                CASE 
+                    WHEN status_category IS NOT NULL THEN 
+                        '{' || '"' || status_category || '":' || bnbo_area_share || '}'
+                    ELSE '{}'
+                END as bnbo_area_shares
+            FROM fields_with_wetlands
+            WHERE status_category IS NOT NULL
+        """)
+
+        # Create final consolidated table
+        year_results_table = f"field_area_analysis_results_{year}"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {year_results_table} AS
+            SELECT 
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                f.wetland_area_share,
+                0 as wetland_water_projects_share,  -- Complex overlap simplified
+                f.water_projects_area_share,
+                COALESCE(fpj.property_area_shares, '{{}}') as property_area_shares,
+                COALESCE(fsj.soil_area_shares, '{{}}') as soil_area_shares,
+                COALESCE(fbj.bnbo_area_shares, '{{}}') as bnbo_area_shares,
+                '{{}}' as bnbo_water_projects_shares  -- Complex overlap simplified
+            FROM fields_with_wetlands f
+            LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
+            LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
+            LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
+        """)
+
+        # Generate summary statistics
+        total_fields = self.conn.execute(f"SELECT COUNT(*) FROM {year_results_table}").fetchone()[0]
+
+        soil_coverage = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {year_results_table} WHERE soil_area_shares != '{{}}'
+        """).fetchone()[0]
+
+        bnbo_coverage = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {year_results_table} WHERE bnbo_area_shares != '{{}}'
+        """).fetchone()[0]
+
+        wetland_coverage = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {year_results_table} WHERE wetland_area_share > 0
+        """).fetchone()[0]
+
+        property_coverage = self.conn.execute(f"""
+            SELECT COUNT(*) FROM {year_results_table} WHERE property_area_shares != '{{}}'
+        """).fetchone()[0]
+
+        results = {
+            "total_fields": total_fields,
+            "coverage": {
+                "soil_types": {
+                    "count": soil_coverage,
+                    "percentage": soil_coverage / total_fields * 100 if total_fields > 0 else 0,
+                },
+                "bnbo_status": {
+                    "count": bnbo_coverage,
+                    "percentage": bnbo_coverage / total_fields * 100 if total_fields > 0 else 0,
+                },
+                "wetlands": {
+                    "count": wetland_coverage,
+                    "percentage": wetland_coverage / total_fields * 100 if total_fields > 0 else 0,
+                },
+                "properties": {
+                    "count": property_coverage,
+                    "percentage": property_coverage / total_fields * 100 if total_fields > 0 else 0,
+                },
+            },
+        }
+
+        self.phase_times["final_results"] = time.time() - phase_start
+        self.log.info(f"✅ Phase 3 completed in {self.phase_times['final_results']:.1f} seconds")
+
+        return results, year_results_table
+
+    def _log_performance_summary(self, total_time: float):
+        """Log comprehensive performance summary."""
+        self.log.info("\n" + "=" * 80)
+        self.log.info("📈 FIELD AREA ANALYSIS PERFORMANCE SUMMARY")
+        self.log.info("=" * 80)
+        self.log.info(
+            f"Total execution time: {total_time:.1f} seconds ({total_time / 60:.1f} minutes)"
+        )
+        self.log.info(f"Geometry preprocessing: {self.phase_times['geometry_preprocessing']:.1f}s")
+
+        if "spatial_joins" in self.phase_times:
+            joins = self.phase_times["spatial_joins"]
+            self.log.info(f"Spatial joins total: {joins['total']:.1f}s")
+            self.log.info(f"  - Soil types: {joins['soil_types']:.1f}s")
+            self.log.info(f"  - BNBO polygons: {joins['bnbo_polygons']:.1f}s")
+            self.log.info(f"  - Water projects: {joins['water_projects']:.1f}s")
+            self.log.info(f"  - Wetlands: {joins['wetlands']:.1f}s")
+            self.log.info(f"  - Properties (chunked): {joins['properties']:.1f}s")
+
+        self.log.info(f"Final results generation: {self.phase_times['final_results']:.1f}s")
+        self.log.info("🚀 OPTIMIZATIONS APPLIED:")
+        self.log.info("  - Optimal spatial join ordering (smallest to largest build side)")
+        self.log.info("  - Multipolygon splitting with ST_Dump for better indexing")
+        self.log.info("  - Single spatial predicate per join for SPATIAL_JOIN operator")
+        self.log.info("  - Chunked processing only for properties dataset")
+        self.log.info("=" * 80)
 
     def _load_agricultural_fields_for_years_optimized(
         self, years: List[int], silver_data: Optional[Dict[str, Any]] = None
@@ -241,579 +851,29 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         return dataset_paths
 
-    def _load_reference_data_into_duckdb_streaming(self, dataset_paths: Dict[str, Any]):
-        """Load reference datasets into DuckDB tables using streaming for large datasets."""
+    # Legacy reference data loading methods removed - now handled in optimized build side datasets preparation
 
-        self.log.info("Loading reference datasets into DuckDB with streaming...")
-
-        # Load properties - STREAM LARGE DATASET DIRECTLY
-        properties_path = dataset_paths.get(self.config.properties_dataset)
-        if (
-            properties_path
-            and isinstance(properties_path, str)
-            and properties_path.startswith("gs://")
-        ):
-            self.log.info("🏠 Streaming property cadastral data from GCS...")
-
-            # ✅ OPTIMIZED: Load directly into DuckDB without temp files
-            # First, check what columns are available in the property cadastral merged data
-            self.gcs_access.create_table_from_gcs("properties_check", properties_path)
-            available_columns = [
-                row[0] for row in self.conn.execute("DESCRIBE properties_check").fetchall()
-            ]
-            self.log.info(
-                f"Available columns in property cadastral merged data: {available_columns}"
-            )
-
-            # Check if we have the expected columns
-            if "bfe_number" not in available_columns:
-                # Check if we have the old column name
-                if "bestemtFastEjendomBFENr" in available_columns:
-                    self.log.info(
-                        "Using legacy column name 'bestemtFastEjendomBFENr' instead of 'bfe_number'"
-                    )
-                    bfe_column = "bestemtFastEjendomBFENr"
-                else:
-                    self.log.error(
-                        f"Neither 'bfe_number' nor 'bestemtFastEjendomBFENr' found in property data. Available columns: {available_columns}"
-                    )
-                    raise ValueError(
-                        "Required BFE column not found in property cadastral merged data"
-                    )
-            else:
-                bfe_column = "bfe_number"
-
-                # Check for geometry column
-            if "geometry" in available_columns:
-                geometry_column = "geometry"
-            elif "geometry_wkt" in available_columns:
-                self.log.info("Using 'geometry_wkt' column instead of 'geometry'")
-                geometry_column = "geometry_wkt"
-            else:
-                self.log.error(
-                    f"No geometry column found in property data. Available columns: {available_columns}"
-                )
-                raise ValueError(
-                    "Required geometry column not found in property cadastral merged data"
-                )
-
-            # Convert geometry_wkt to geometry if needed
-            if geometry_column == "geometry_wkt":
-                self.gcs_access.query_parquet_direct(
-                    properties_path,
-                    f"""SELECT 
-                        {bfe_column} as bfe_number,
-                        ST_GeomFromText({geometry_column}) as geom""",
-                    "properties_temp",
-                )
-            else:
-                self.gcs_access.query_parquet_direct(
-                    properties_path,
-                    f"""SELECT 
-                        {bfe_column} as bfe_number,
-                        {geometry_column} as geom""",
-                    "properties_temp",
-                )
-            # Apply WHERE filter after loading
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE properties AS
-                SELECT * FROM properties_temp
-                WHERE bfe_number IS NOT NULL
-            """)
-            self.conn.execute("DROP TABLE properties_temp")
-            self.conn.execute("DROP TABLE properties_check")
-
-            # ✅ NEW: Create spatial index on properties for faster intersection queries
-            try:
-                self.conn.execute(
-                    "CREATE INDEX idx_properties_geom ON properties USING GIST (geom)"
-                )
-                self.log.info("    🚀 Created spatial index on properties")
-            except Exception as e:
-                # Spatial indexing may not be available in all DuckDB versions
-                self.log.info(f"    ℹ️ Spatial indexing not available: {e}")
-
-            property_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
-            self.log.info(f"    ✅ Streamed {property_count:,} properties directly to DuckDB")
-
-        elif properties_path is not None:
-            # Handle in-memory data
-            self.log.info(
-                f"🏠 Loading property cadastral data from memory ({len(properties_path)} records)..."
-            )
-            self.conn.register("properties_df", properties_path)
-
-            # Check what columns are available in the in-memory data
-            available_columns = [
-                row[0] for row in self.conn.execute("DESCRIBE properties_df").fetchall()
-            ]
-            self.log.info(f"Available columns in in-memory property data: {available_columns}")
-
-            # Check if we have the expected columns
-            if "bfe_number" not in available_columns:
-                # Check if we have the old column name
-                if "bestemtFastEjendomBFENr" in available_columns:
-                    self.log.info(
-                        "Using legacy column name 'bestemtFastEjendomBFENr' instead of 'bfe_number'"
-                    )
-                    bfe_column = "bestemtFastEjendomBFENr"
-                else:
-                    self.log.error(
-                        f"Neither 'bfe_number' nor 'bestemtFastEjendomBFENr' found in in-memory property data. Available columns: {available_columns}"
-                    )
-                    raise ValueError(
-                        "Required BFE column not found in property cadastral merged data"
-                    )
-            else:
-                bfe_column = "bfe_number"
-
-            # Check for geometry column
-            if "geometry" in available_columns:
-                geometry_column = "geometry"
-            elif "geometry_wkt" in available_columns:
-                self.log.info("Using 'geometry_wkt' column instead of 'geometry' in in-memory data")
-                geometry_column = "geometry_wkt"
-            else:
-                self.log.error(
-                    f"No geometry column found in in-memory property data. Available columns: {available_columns}"
-                )
-                raise ValueError(
-                    "Required geometry column not found in property cadastral merged data"
-                )
-
-            # Convert geometry_wkt to geometry if needed
-            if geometry_column == "geometry_wkt":
-                self.conn.execute(f"""
-                    CREATE TABLE properties AS
-                    SELECT 
-                        {bfe_column} as bfe_number,
-                        ST_GeomFromText({geometry_column}) as geom
-                    FROM properties_df
-                    WHERE {bfe_column} IS NOT NULL
-                """)
-            else:
-                self.conn.execute(f"""
-                    CREATE TABLE properties AS
-                    SELECT 
-                        {bfe_column} as bfe_number,
-                        {geometry_column} as geom
-                    FROM properties_df
-                    WHERE {bfe_column} IS NOT NULL
-                """)
-        else:
-            self.log.warning("No property data available - creating empty table")
-            self.conn.execute("CREATE TABLE properties (bfe_number VARCHAR, geom GEOMETRY)")
-
-        # Load other datasets - these are typically smaller and can be loaded normally
-        for dataset_name, dataset_data in dataset_paths.items():
-            if dataset_name == self.config.properties_dataset:
-                continue  # Already handled above
-
-            if dataset_data is None:
-                self._create_empty_table_for_dataset(dataset_name)
-                continue
-
-            if isinstance(dataset_data, str) and dataset_data.startswith("gs://"):
-                # Stream smaller datasets if needed
-                self._load_dataset_from_gcs(dataset_name, dataset_data)
-            else:
-                # Load from memory
-                self._load_dataset_from_memory(dataset_name, dataset_data)
-
-    def _create_empty_table_for_dataset(self, dataset_name: str):
-        """Create empty tables for missing datasets."""
-        if dataset_name == self.config.soil_types_dataset:
-            self.log.warning("No soil data available - creating empty table")
-            self.conn.execute(
-                "CREATE TABLE soil_types (soil_description VARCHAR, soil_code VARCHAR, geom GEOMETRY)"
-            )
-        elif dataset_name == self.config.bnbo_status_dataset:
-            self.log.warning("No BNBO data available - creating empty table")
-            self.conn.execute("CREATE TABLE bnbo_areas (status_category VARCHAR, geom GEOMETRY)")
-        elif dataset_name == self.config.wetlands_dataset:
-            self.log.warning("No wetlands data available - creating empty table")
-            self.conn.execute("CREATE TABLE wetlands (wetland_id VARCHAR, geom GEOMETRY)")
-        elif dataset_name == self.config.water_projects_dataset:
-            self.log.warning("No water projects data available - creating empty table")
-            self.conn.execute("CREATE TABLE water_projects (project_id VARCHAR, geom GEOMETRY)")
-
-    def _load_dataset_from_gcs(self, dataset_name: str, gcs_path: str):
-        """
-        ✅ MIGRATED: Load dataset from GCS path into DuckDB using optimized access.
-
-        This now uses the new GCSDataAccess layer for:
-        - 5x faster downloads with gcsfs
-        - Direct DuckDB table creation without  conversion
-        - Automatic cleanup of temp files
-        """
-
-        if dataset_name == self.config.soil_types_dataset:
-            # ✅ OPTIMIZED: Direct table creation without  conversion
-            self.gcs_access.query_parquet_direct(
-                gcs_path,
-                """SELECT 
-                    soil_description,
-                    soil_code,
-                    geometry as geom""",
-                "soil_types",
-            )
-            count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
-            self.log.info(f"    ✅ Loaded {count:,} soil areas from GCS (optimized)")
-
-        elif dataset_name == self.config.bnbo_status_dataset:
-            self.gcs_access.query_parquet_direct(
-                gcs_path,
-                """SELECT 
-                    status_category,
-                    geometry as geom""",
-                "bnbo_areas",
-            )
-            count = self.conn.execute("SELECT COUNT(*) FROM bnbo_areas").fetchone()[0]
-            self.log.info(f"    ✅ Loaded {count:,} BNBO areas from GCS (optimized)")
-
-        elif dataset_name == self.config.wetlands_dataset:
-            self.gcs_access.query_parquet_direct(
-                gcs_path,
-                """SELECT 
-                    wetland_id,
-                    geometry as geom""",
-                "wetlands",
-            )
-
-            # ✅ NEW: Create spatial index on wetlands for faster intersection queries
-            try:
-                self.conn.execute("CREATE INDEX idx_wetlands_geom ON wetlands USING GIST (geom)")
-                self.log.info("    🚀 Created spatial index on wetlands")
-            except Exception as e:
-                # Spatial indexing may not be available in all DuckDB versions
-                self.log.info(f"    ℹ️ Spatial indexing not available: {e}")
-
-            count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
-            self.log.info(f"    ✅ Loaded {count:,} wetlands from GCS (optimized)")
-
-        elif dataset_name == self.config.water_projects_dataset:
-            self.gcs_access.query_parquet_direct(
-                gcs_path,
-                """SELECT 
-                    project_id,
-                    geometry as geom""",
-                "water_projects",
-            )
-            count = self.conn.execute("SELECT COUNT(*) FROM water_projects").fetchone()[0]
-            self.log.info(f"    ✅ Loaded {count:,} water projects from GCS (optimized)")
-
-    def _load_dataset_from_memory(self, dataset_name: str, dataset_data):
-        """Load dataset from memory into DuckDB."""
-        if dataset_name == self.config.soil_types_dataset:
-            self.log.info(f"🌱 Loading soil types from memory ({len(dataset_data)} records)...")
-            self.conn.register("soil_df", dataset_data)
-            self.conn.execute("""
-                CREATE TABLE soil_types AS
-                SELECT 
-                    soil_description,
-                    soil_code,
-                    geometry as geom
-                FROM soil_df
-            """)
-        elif dataset_name == self.config.bnbo_status_dataset:
-            self.log.info(
-                f"🛡️ Loading BNBO status areas from memory ({len(dataset_data)} records)..."
-            )
-            self.conn.register("bnbo_df", dataset_data)
-            self.conn.execute("""
-                CREATE TABLE bnbo_areas AS
-                SELECT 
-                    status_category,
-                    geometry as geom
-                FROM bnbo_df
-            """)
-        elif dataset_name == self.config.wetlands_dataset:
-            self.log.info(f"🌊 Loading wetlands from memory ({len(dataset_data)} records)...")
-            self.conn.register("wetlands_df", dataset_data)
-            self.conn.execute("""
-                CREATE TABLE wetlands AS
-                SELECT 
-                    wetland_id,
-                    geometry as geom
-                FROM wetlands_df
-            """)
-        elif dataset_name == self.config.water_projects_dataset:
-            self.log.info(f"💧 Loading water projects from memory ({len(dataset_data)} records)...")
-            self.conn.register("water_df", dataset_data)
-            self.conn.execute("""
-                CREATE TABLE water_projects AS
-                SELECT 
-                    project_id,
-                    geometry as geom
-                FROM water_df
-            """)
-
-    def _process_field_batch_spatial(self, fields_batch: str) -> str:
-        """Process field batch with spatial analysis using unified pipeline data."""
-
-        # Register the fields batch with DuckDB
-        self.conn.register("fields_batch_df", fields_batch)
-
-        # Load the field batch - only essential fields
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE current_fields AS
-            SELECT 
-                field_id,
-                block_id,
-                cvr_number,
-                geometry as geom
-            FROM fields_batch_df
-        """)
-
-        actual_fields = self.conn.execute("SELECT COUNT(*) FROM current_fields").fetchone()[0]
-        self.log.info(f"    📋 Processing {actual_fields:,} fields...")
-
-        # Property analysis - SINGLE spatial join condition only (DuckDB Spatial v1.2.2 limitation)
-        self.log.info("    🔍 Analyzing property ownership...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_property_intersections AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                p.bfe_number,
-                f.geom as field_geom,
-                p.geom as property_geom
-            FROM current_fields f
-            JOIN properties p ON ST_Intersects(f.geom, p.geom)
-        """)
-
-        # Calculate area shares separately (not in JOIN due to single condition limitation)
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE field_property_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                bfe_number,
-                ST_Area(ST_Intersection(field_geom, property_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM field_property_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, property_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
-        """)
-
-        # Soil analysis - SINGLE spatial join condition only
-        self.log.info("    🌱 Analyzing soil types...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_soil_intersections AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                s.soil_code,
-                s.soil_description,
-                f.geom as field_geom,
-                s.geom as soil_geom
-            FROM current_fields f
-            JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
-        """)
-
-        # Calculate soil area shares separately
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE field_soil_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                soil_code,
-                soil_description,
-                ST_Area(ST_Intersection(field_geom, soil_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM field_soil_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, soil_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
-        """)
-
-        # BNBO analysis - SINGLE spatial join condition only
-        self.log.info("    🛡️ Analyzing BNBO status...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_intersections AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                b.status_category,
-                f.geom as field_geom,
-                b.geom as bnbo_geom
-            FROM current_fields f
-            JOIN bnbo_areas b ON ST_Intersects(f.geom, b.geom)
-        """)
-
-        # Calculate BNBO area shares separately
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE field_bnbo_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                status_category,
-                ST_Area(ST_Intersection(field_geom, bnbo_geom)) / ST_Area(field_geom) * 100 as area_share
-            FROM field_bnbo_intersections
-            WHERE ST_Area(ST_Intersection(field_geom, bnbo_geom)) / ST_Area(field_geom) > {self.config.min_area_threshold}
-        """)
-
-        # Wetlands analysis - SINGLE spatial join condition only
-        self.log.info("    🌊 Analyzing wetlands...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_intersections AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                f.geom as field_geom,
-                w.geom as wetland_geom
-            FROM current_fields f
-            JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
-        """)
-
-        # Calculate wetland area shares with proper union aggregation
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                ST_Area(ST_Union_Agg(ST_Intersection(field_geom, wetland_geom))) / ST_Area(field_geom) * 100 as wetland_area_share
-            FROM field_wetland_intersections
-            GROUP BY field_id, block_id, field_geom
-        """)
-
-        # Water projects analysis - SINGLE spatial join condition only
-        self.log.info("    💧 Analyzing water projects...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_water_intersections AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                f.geom as field_geom,
-                wp.geom as water_geom
-            FROM current_fields f
-            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
-        """)
-
-        # Calculate water projects area shares with proper union aggregation
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_water_projects_shares AS
-            SELECT 
-                field_id,
-                block_id,
-                ST_Area(ST_Union_Agg(ST_Intersection(field_geom, water_geom))) / ST_Area(field_geom) * 100 as water_projects_area_share
-            FROM field_water_intersections
-            GROUP BY field_id, block_id, field_geom
-        """)
-
-        # Complex overlaps - simplified to avoid triple joins that consume too much temp space
-        self.log.info("    🔗 Analyzing complex overlaps (simplified)...")
-
-        # ✅ SIMPLIFIED: Wetland-water project overlaps - use simpler approach
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_water_overlap AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                0.0 as wetland_water_projects_share  -- Simplified for now to avoid complex spatial ops
-            FROM current_fields f
-            WHERE 1=0  -- Empty result set for now
-        """)
-
-        # ✅ SIMPLIFIED: BNBO-water project overlaps - use simpler approach
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_overlap AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                'none' as status_category,
-                0.0 as bnbo_water_projects_share  -- Simplified for now to avoid complex spatial ops
-            FROM current_fields f
-            WHERE 1=0  -- Empty result set for now
-        """)
-
-        self._force_duckdb_checkpoint()
-
-        # Create JSON aggregation tables
-        self.log.info("    📋 Creating JSON aggregations...")
-
-        # Property shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_property_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || bfe_number || '":' || area_share, ',') || '}', '{}') as property_area_shares
-            FROM field_property_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # Soil shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_soil_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || soil_code || '":' || area_share, ',') || '}', '{}') as soil_area_shares
-            FROM field_soil_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # BNBO shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || status_category || '":' || area_share, ',') || '}', '{}') as bnbo_area_shares
-            FROM field_bnbo_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # BNBO-water overlap shares JSON (simplified)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_json AS
-            SELECT 
-                field_id,
-                block_id,
-                '{}' as bnbo_water_projects_shares  -- Simplified for now
-            FROM current_fields
-        """)
-
-        # ✅ MIGRATION: Combine all results into final table using DuckDB directly
-        self.log.info("    🔗 Combining all results...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE final_results AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                f.cvr_number,
-                COALESCE(fw.wetland_area_share, 0) as wetland_area_share,
-                COALESCE(fwo.wetland_water_projects_share, 0) as wetland_water_projects_share,
-                COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share,
-                COALESCE(fpj.property_area_shares, '{}') as property_area_shares,
-                COALESCE(fsj.soil_area_shares, '{}') as soil_area_shares,
-                COALESCE(fbj.bnbo_area_shares, '{}') as bnbo_area_shares,
-                COALESCE(fbwj.bnbo_water_projects_shares, '{}') as bnbo_water_projects_shares
-            FROM current_fields f
-            LEFT JOIN field_wetland_shares fw ON f.field_id = fw.field_id AND f.block_id = fw.block_id
-            LEFT JOIN field_wetland_water_overlap fwo ON f.field_id = fwo.field_id AND f.block_id = fwo.block_id
-            LEFT JOIN field_water_projects_shares fwp ON f.field_id = fwp.field_id AND f.block_id = fwp.block_id
-            LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
-            LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
-            LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
-            LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
-        """)
-
-        return "final_results"
+    # Legacy field batch processing removed - now using optimized direct spatial joins
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """
-        ✅ MIGRATED: Run the field area analysis gold processing with optimized patterns.
+        Run the optimized field area analysis gold processing.
 
-        This now uses:
-        - Direct DuckDB table operations (no  conversions)
-        - Optimized GCS access with gcsfs
-        - Direct table export to GCS
-        - Memory-efficient batch processing
+        This implementation uses performance optimizations from the redesigned version:
+        - Optimal spatial join ordering (smallest to largest build side)
+        - Multipolygon splitting with ST_Dump for better spatial indexing
+        - Single spatial predicate per join to enable SPATIAL_JOIN operator
+        - Chunked processing only for properties dataset
+        - Performance tracking and detailed timing metrics
 
         Args:
             silver_data: Optional dictionary of silver datasets for in-memory processing
         """
-        self.log.info("Starting Field Area Analysis Gold processing (optimized)")
+        self.start_time = time.time()
+        self.log.info("🚀 Starting Field Area Analysis Gold processing (optimized)")
 
         try:
-            # ✅ FIXED: Only process the latest available year
+            # Get available years and process the latest one
             available_years = self._get_available_fvm_marker_years()
             if not available_years:
                 self.log.error("No fvm_marker years found - cannot proceed with analysis")
@@ -824,14 +884,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.log.info(f"Found fvm_marker data for years: {available_years}")
             self.log.info(f"🚀 Processing only the latest year: {latest_year}")
 
-            # ✅ OPTIMIZATION: Load reference datasets once for the single year
-            self.log.info(f"🔧 Loading reference datasets for year {latest_year}...")
-            dataset_paths = self._load_silver_data_streaming(silver_data)
-            self._load_reference_data_into_duckdb_streaming(dataset_paths)
-
-            # ✅ NEW: Check memory usage after loading reference data
-            self._check_memory_usage()
-
             # Load fields for the latest year
             fields_table_name = self._load_agricultural_fields_for_years_optimized(
                 [latest_year], silver_data
@@ -840,21 +892,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 self.log.error(f"No fields found for latest year {latest_year}")
                 return
 
-            # Prepare fields table for analysis
-            self._prepare_fields_table_for_analysis(fields_table_name, latest_year)
+            # Phase 1: Geometry preprocessing and validation
+            self._prepare_geometries_optimized(fields_table_name, latest_year)
 
-            # ✅ NEW: Check memory usage after loading fields
-            self._check_memory_usage()
+            # Phase 2: Execute spatial joins in optimal order
+            self._execute_optimal_spatial_joins()
 
-            # Process all fields with spatial analysis
-            self._process_all_fields_spatial_optimized()
-
-            # ✅ NEW: Check memory usage after spatial analysis
-            self._check_memory_usage()
-
-            # Create year results table
-            year_results_table = f"field_area_analysis_results_{latest_year}"
-            self._create_year_results_table(year_results_table, latest_year)
+            # Phase 3: Generate final results with JSON aggregations
+            results, year_results_table = self._generate_final_results_optimized(latest_year)
 
             # Get field count for this year
             fields_count = self.conn.execute(
@@ -871,9 +916,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 "gold",
             )
 
+            # Performance summary
+            total_time = time.time() - self.start_time
+            self._log_performance_summary(total_time)
+
             self.log.info("✅ Field Area Analysis completed successfully")
             self.log.info(f"   Fields processed: {fields_count:,}")
             self.log.info(f"   Year processed: {latest_year}")
+            self.log.info(f"   Total time: {total_time / 60:.1f} minutes")
             self.log.info(f"   Results saved to: {self.config.dataset}_{latest_year}")
 
         except Exception as e:
@@ -883,103 +933,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         finally:
             self._safe_close_connection()
 
-    def _process_all_fields_spatial_optimized(self):
-        """
-        ✅ CHUNKED: Process all fields with spatial analysis using chunked processing.
+    # Legacy chunked processing methods removed - now using optimized direct spatial joins
 
-        Uses the same chunked approach as H3 PFAS pipeline to stay within memory constraints:
-        - Process fields in chunks of 1000 (configurable via batch_size)
-        - Aggressive cleanup between chunks
-        - Sequential processing to avoid memory overflow
-        - Dynamic batch size adjustment based on field count
-        """
-        self.log.info("🔍 Running chunked spatial analysis (H3 PFAS pattern)...")
-
-        # Get total field count and adjust batch size if needed
-        total_fields = self.conn.execute("SELECT COUNT(*) FROM current_fields").fetchone()[0]
-        chunk_size = self._calculate_optimal_chunk_size(total_fields)
-        total_chunks = (total_fields + chunk_size - 1) // chunk_size  # Ceiling division
-
-        self.log.info(
-            f"📦 Processing {total_fields:,} fields in {total_chunks} chunks of {chunk_size:,} each"
-        )
-        self.log.info(
-            f"🧠 Memory settings: {self.config.memory_limit} limit, {self.config.max_temp_directory_size} temp directory"
-        )
-
-        # Create result tables for aggregating chunk results
-        self._create_result_tables()
-
-        # Process fields in chunks
-        for chunk_idx in range(total_chunks):
-            offset = chunk_idx * chunk_size
-
-            self.log.info(f"📦 Processing chunk {chunk_idx + 1}/{total_chunks} (offset {offset:,})")
-
-            # ✅ NEW: Monitor memory usage before each chunk
-            self._log_memory_usage(f"Before chunk {chunk_idx + 1}")
-
-            # ✅ NEW: Clean up before each chunk
-            self._cleanup_temp_files()
-            self._force_duckdb_checkpoint()
-
-            # Create chunk table
-            chunk_table = f"field_chunk_{chunk_idx}"
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {chunk_table} AS
-                SELECT * FROM current_fields
-                LIMIT {chunk_size} OFFSET {offset}
-            """)
-
-            chunk_count = self.conn.execute(f"SELECT COUNT(*) FROM {chunk_table}").fetchone()[0]
-            self.log.info(f"    📋 Processing chunk with {chunk_count:,} fields...")
-
-            # Process this chunk through all spatial analyses
-            self._process_chunk_spatial_analysis(chunk_table, chunk_idx)
-
-            # Append chunk results to main result tables
-            self._append_chunk_results_to_main(chunk_idx)
-
-            # Clean up chunk tables
-            self._cleanup_chunk_tables(chunk_idx)
-
-            # Force cleanup between chunks
-            self._force_duckdb_checkpoint()
-
-            # ✅ NEW: Monitor memory usage after each chunk
-            self._log_memory_usage(f"After chunk {chunk_idx + 1}")
-
-            if (chunk_idx + 1) % 5 == 0:  # Every 5 chunks
-                self.log.info(
-                    f"✅ Completed {chunk_idx + 1}/{total_chunks} chunks ({((chunk_idx + 1) / total_chunks * 100):.1f}%)"
-                )
-
-        self.log.info("✅ Chunked spatial analysis completed - creating final JSON aggregations")
-        self._create_final_json_aggregations()
-
-    def _calculate_optimal_chunk_size(self, total_fields: int) -> int:
-        """
-        Calculate optimal chunk size based on total field count and available memory.
-
-        ✅ OPTIMIZED: Larger chunks are now possible due to wetlands spatial optimization.
-        """
-        base_chunk_size = self.config.batch_size
-
-        # ✅ NEW: More aggressive chunk sizes due to spatial optimizations
-        if total_fields > 100000:  # Very large datasets
-            adjusted_chunk_size = min(base_chunk_size, 1000)  # Increased from 500
-            self.log.info(
-                f"🔧 Large dataset detected ({total_fields:,} fields), using optimized chunk size: {adjusted_chunk_size}"
-            )
-        elif total_fields > 50000:  # Large datasets
-            adjusted_chunk_size = min(base_chunk_size, 1500)  # Increased from 750
-            self.log.info(
-                f"🔧 Medium-large dataset detected ({total_fields:,} fields), using optimized chunk size: {adjusted_chunk_size}"
-            )
-        else:
-            adjusted_chunk_size = base_chunk_size
-
-        return adjusted_chunk_size
+    # Legacy chunk size calculation removed - now using direct spatial joins
 
     def _log_memory_usage(self, context: str):
         """Log memory and disk usage like H3 PFAS pipeline does."""
@@ -1015,305 +971,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         except Exception as e:
             self.log.warning(f"Could not monitor memory usage: {e}")
 
-    def _create_result_tables(self):
-        """Create empty result tables to accumulate chunk results."""
-        # Property shares
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_property_shares (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                bfe_number VARCHAR,
-                area_share DOUBLE
-            )
-        """)
+    # Legacy result table creation removed - now using direct spatial joins
 
-        # Soil shares
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_soil_shares (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                soil_code VARCHAR,
-                soil_description VARCHAR,
-                area_share DOUBLE
-            )
-        """)
-
-        # BNBO shares
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_shares (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                status_category VARCHAR,
-                area_share DOUBLE
-            )
-        """)
-
-        # Wetland shares
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_shares (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                wetland_area_share DOUBLE
-            )
-        """)
-
-        # Water project shares
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_water_projects_shares (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                water_projects_area_share DOUBLE
-            )
-        """)
-
-        # Complex overlap shares (simplified for memory efficiency)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_wetland_water_overlap (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                wetland_water_projects_share DOUBLE
-            )
-        """)
-
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_overlap (
-                field_id VARCHAR,
-                block_id VARCHAR,
-                status_category VARCHAR,
-                bnbo_water_projects_share DOUBLE
-            )
-        """)
-
-    def _process_chunk_spatial_analysis(self, chunk_table: str, chunk_idx: int):
-        """Process spatial analysis for a single chunk of fields with optimized spatial operations."""
-
-        # Property analysis
-        self.log.info(f"    🏠 Chunk {chunk_idx + 1}: Analyzing property ownership...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_property_shares AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                p.bfe_number,
-                ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
-            FROM {chunk_table} f
-            JOIN properties p ON ST_Intersects(f.geom, p.geom)
-            WHERE ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
-        """)
-
-        # Soil analysis
-        self.log.info(f"    🌱 Chunk {chunk_idx + 1}: Analyzing soil types...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_soil_shares AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                s.soil_code,
-                s.soil_description,
-                ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as area_share
-            FROM {chunk_table} f
-            JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
-            WHERE ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
-        """)
-
-        # BNBO analysis
-        self.log.info(f"    🛡️ Chunk {chunk_idx + 1}: Analyzing BNBO status...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_bnbo_shares AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                b.status_category,
-                ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) * 100 as area_share
-            FROM {chunk_table} f
-            JOIN bnbo_areas b ON ST_Intersects(f.geom, b.geom)
-            WHERE ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) > {self.config.min_area_threshold}
-        """)
-
-        # ✅ OPTIMIZED: Wetlands analysis with spatial bounding box filter
-        self.log.info(f"    🌊 Chunk {chunk_idx + 1}: Analyzing wetlands (optimized)...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_wetland_shares AS
-            WITH field_bounds AS (
-                SELECT 
-                    field_id,
-                    block_id,
-                    geom,
-                    ST_Area(geom) as field_area,
-                    ST_Envelope(geom) as bbox
-                FROM {chunk_table}
-            ),
-            relevant_wetlands AS (
-                -- ✅ OPTIMIZATION: Pre-filter wetlands using bounding box intersection
-                SELECT w.geom as wetland_geom, w.wetland_id
-                FROM wetlands w
-                JOIN field_bounds f ON ST_Intersects(f.bbox, w.geom)
-            ),
-            wetland_intersections AS (
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.field_area,
-                    ST_Area(ST_Intersection(f.geom, w.wetland_geom)) as intersection_area
-                FROM field_bounds f
-                JOIN relevant_wetlands w ON ST_Intersects(f.geom, w.wetland_geom)
-                WHERE ST_Area(ST_Intersection(f.geom, w.wetland_geom)) > 0
-            )
-            SELECT 
-                field_id,
-                block_id,
-                SUM(intersection_area) / field_area * 100 as wetland_area_share
-            FROM wetland_intersections
-            WHERE SUM(intersection_area) / field_area > 0.01
-            GROUP BY field_id, block_id, field_area
-        """)
-
-        # ✅ OPTIMIZED: Water projects analysis (simplified since only 1 record)
-        self.log.info(f"    💧 Chunk {chunk_idx + 1}: Analyzing water projects...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_water_projects_shares AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) * 100 as water_projects_area_share
-            FROM {chunk_table} f
-            JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
-            WHERE ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) > 0.01
-        """)
-
-        # Simplified complex overlaps (skip for memory efficiency)
-        self.log.info(
-            f"    🔗 Chunk {chunk_idx + 1}: Skipping complex overlaps for memory efficiency..."
-        )
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_wetland_water_overlap AS
-            SELECT 
-                field_id,
-                block_id,
-                0.0 as wetland_water_projects_share
-            FROM {chunk_table}
-            WHERE 1=0  -- Empty result set
-        """)
-
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE chunk_bnbo_water_overlap AS
-            SELECT 
-                field_id,
-                block_id,
-                'none' as status_category,
-                0.0 as bnbo_water_projects_share
-            FROM {chunk_table}
-            WHERE 1=0  -- Empty result set
-        """)
-
-    def _append_chunk_results_to_main(self, chunk_idx: int):
-        """Append chunk results to main result tables."""
-        # Property shares
-        self.conn.execute("""
-            INSERT INTO field_property_shares 
-            SELECT * FROM chunk_property_shares
-        """)
-
-        # Soil shares
-        self.conn.execute("""
-            INSERT INTO field_soil_shares 
-            SELECT * FROM chunk_soil_shares
-        """)
-
-        # BNBO shares
-        self.conn.execute("""
-            INSERT INTO field_bnbo_shares 
-            SELECT * FROM chunk_bnbo_shares
-        """)
-
-        # Wetland shares
-        self.conn.execute("""
-            INSERT INTO field_wetland_shares 
-            SELECT * FROM chunk_wetland_shares
-        """)
-
-        # Water project shares
-        self.conn.execute("""
-            INSERT INTO field_water_projects_shares 
-            SELECT * FROM chunk_water_projects_shares
-        """)
-
-        # Complex overlaps
-        self.conn.execute("""
-            INSERT INTO field_wetland_water_overlap 
-            SELECT * FROM chunk_wetland_water_overlap
-        """)
-
-        self.conn.execute("""
-            INSERT INTO field_bnbo_water_overlap 
-            SELECT * FROM chunk_bnbo_water_overlap
-        """)
-
-    def _cleanup_chunk_tables(self, chunk_idx: int):
-        """Clean up all temporary tables for a chunk."""
-        chunk_tables = [
-            f"field_chunk_{chunk_idx}",
-            "chunk_property_shares",
-            "chunk_soil_shares",
-            "chunk_bnbo_shares",
-            "chunk_wetland_shares",
-            "chunk_water_projects_shares",
-            "chunk_wetland_water_overlap",
-            "chunk_bnbo_water_overlap",
-        ]
-
-        for table in chunk_tables:
-            self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-
-    def _create_final_json_aggregations(self):
-        """Create final JSON aggregation tables from accumulated results."""
-        self.log.info("📋 Creating final JSON aggregations...")
-
-        # Property shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_property_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || bfe_number || '":' || area_share, ',') || '}', '{}') as property_area_shares
-            FROM field_property_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # Soil shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_soil_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || soil_code || '":' || area_share, ',') || '}', '{}') as soil_area_shares
-            FROM field_soil_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # BNBO shares JSON
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_json AS
-            SELECT 
-                field_id,
-                block_id,
-                COALESCE('{' || string_agg('"' || status_category || '":' || area_share, ',') || '}', '{}') as bnbo_area_shares
-            FROM field_bnbo_shares
-            GROUP BY field_id, block_id
-        """)
-
-        # BNBO-water overlap shares JSON (simplified)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_json AS
-            SELECT 
-                field_id,
-                block_id,
-                '{}' as bnbo_water_projects_shares  -- Simplified for memory efficiency
-            FROM (SELECT DISTINCT field_id, block_id FROM field_property_shares 
-                  UNION SELECT DISTINCT field_id, block_id FROM field_soil_shares)
-        """)
-
-        self.log.info("✅ Chunked spatial analysis completed with JSON aggregations")
+    # Legacy chunked processing methods removed - now using optimized direct spatial joins
 
     def _prepare_fields_table_for_analysis(self, fields_table_name: str, year: int):
         """Prepare fields table for spatial analysis."""
@@ -1361,32 +1021,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 FROM {fields_table_name}
             """)
 
-    def _create_year_results_table(self, year_results_table: str, year: int):
-        """Create final results table for a specific year."""
-        self.log.info(f"🔗 Creating final results table for year {year}...")
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {year_results_table} AS
-            SELECT 
-                f.field_id,
-                f.block_id,
-                f.cvr_number,
-                f.year,
-                COALESCE(fw.wetland_area_share, 0) as wetland_area_share,
-                COALESCE(fwo.wetland_water_projects_share, 0) as wetland_water_projects_share,
-                COALESCE(fwp.water_projects_area_share, 0) as water_projects_area_share,
-                COALESCE(fpj.property_area_shares, '{{}}') as property_area_shares,
-                COALESCE(fsj.soil_area_shares, '{{}}') as soil_area_shares,
-                COALESCE(fbj.bnbo_area_shares, '{{}}') as bnbo_area_shares,
-                COALESCE(fbwj.bnbo_water_projects_shares, '{{}}') as bnbo_water_projects_shares
-            FROM current_fields f
-            LEFT JOIN field_wetland_shares fw ON f.field_id = fw.field_id AND f.block_id = fw.block_id
-            LEFT JOIN field_wetland_water_overlap fwo ON f.field_id = fwo.field_id AND f.block_id = fwo.block_id
-            LEFT JOIN field_water_projects_shares fwp ON f.field_id = fwp.field_id AND f.block_id = fwp.block_id
-            LEFT JOIN field_property_json fpj ON f.field_id = fpj.field_id AND f.block_id = fpj.block_id
-            LEFT JOIN field_soil_json fsj ON f.field_id = fsj.field_id AND f.block_id = fsj.block_id
-            LEFT JOIN field_bnbo_json fbj ON f.field_id = fbj.field_id AND f.block_id = fbj.block_id
-            LEFT JOIN field_bnbo_water_json fbwj ON f.field_id = fbwj.field_id AND f.block_id = fbwj.block_id
-        """)
+    # Legacy year results table creation removed - now handled in optimized final results generation
 
     def _check_disk_space(self):
         """Check available disk space and log warning if low."""
@@ -1490,47 +1125,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         except Exception as e:
             self.log.debug(f"Could not force checkpoint: {e}")
 
-    def _cleanup_year_processing(self, fields_table_name: str, year: int):
-        """Clean up intermediate tables after processing a year to free memory."""
-        self.log.info(f"🧹 Cleaning up intermediate tables for year {year}...")
-
-        # List of intermediate tables to clean up
-        intermediate_tables = [
-            fields_table_name,
-            "current_fields",
-            "field_property_intersections",
-            "field_property_shares",
-            "field_soil_intersections",
-            "field_soil_shares",
-            "field_bnbo_intersections",
-            "field_bnbo_shares",
-            "field_wetland_shares",
-            "field_water_projects_shares",
-            "field_wetland_water_overlap",
-            "field_bnbo_water_overlap",
-            "field_property_json",
-            "field_soil_json",
-            "field_bnbo_json",
-            "field_bnbo_water_json",
-        ]
-
-        # Drop all intermediate tables
-        for table in intermediate_tables:
-            try:
-                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-            except Exception as e:
-                self.log.debug(f"Could not drop table {table}: {e}")
-
-        # ✅ FIXED: Force checkpoint first, then careful cleanup
-        self._force_duckdb_checkpoint()
-        self._cleanup_temp_files()
-
-        # Force garbage collection
-        import gc
-
-        gc.collect()
-
-        self.log.info(f"✅ Cleaned up intermediate tables and temp files for year {year}")
+    # Legacy year processing cleanup removed - now handled in optimized final cleanup
 
     def _get_available_fvm_marker_years(self) -> List[int]:
         """Get list of available FVM marker years from GCS."""
