@@ -626,10 +626,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           [7.0, 54.0], // Southwest bounds (Denmark)
           [13.0, 58.0], // Northeast bounds (Denmark)
         ],
-        // Enable smooth scroll zoom for better UX
-        scrollZoom: true,
+        // Configure zoom behavior to prevent black screen during layer updates
+        scrollZoom: {
+          around: 'center'
+        },
         doubleClickZoom: true,
-        touchZoomRotate: true
+        touchZoomRotate: true,
+        // Disable smooth transitions during zoom to prevent layer conflicts
+        fadeDuration: 0
       }) as MapInstance
 
       // Add controls with custom options for smoother zoom
@@ -1099,124 +1103,99 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   }, [selectedDataMode, currentPropertyName, mapLoaded])
 
   // Update source-layer names when year or resolution changes
+  // DEBOUNCED to prevent rapid layer updates during smooth zoom
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
-    try {
-      console.log('🔄 Updating source-layer names for year:', selectedYear, 'resolution:', currentH3Resolution)
-      
-      // Remove existing layers
-      const layersToUpdate = ['kommune-fill', 'kommune-stroke', 'h3-fill', 'h3-stroke']
-      layersToUpdate.forEach(layerId => {
-        if (map.current && map.current.getLayer(layerId)) {
-          map.current.removeLayer(layerId)
-          console.log(`🗑️ Removed layer: ${layerId}`)
-        }
-      })
-      
-      // Re-add Kommune layers with correct source-layer name (only if source exists)
-      // Add before BNBO layers to ensure BNBO stays on top
-      if (map.current.getSource('kommune')) {
+    // Debounce the layer updates to prevent black screen during smooth zoom
+    const timeoutId = setTimeout(() => {
+      try {
+        console.log('🔄 Updating source-layer names for year:', selectedYear, 'resolution:', currentH3Resolution)
+        
+        // Only update layers if the source-layer actually changed
         const kommuneSourceLayer = `kommune_pfas_${selectedYear}`
-        map.current.addLayer({
-          id: 'kommune-fill',
-          type: 'fill',
-          source: 'kommune',
-          'source-layer': kommuneSourceLayer,
-          layout: {
-            visibility: shouldShowKommune ? 'visible' : 'none'
-          },
-          paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['get', currentPropertyName],
-              0, 'transparent',
-              0.1, '#fee5d9',
-              1, '#fcbba1',
-              5, '#fc9272',
-              10, '#fb6a4a',
-              20, '#ef3b2c',
-              50, '#cb181d',
-              100, '#99000d'
-            ],
-            'fill-opacity': 0.8
-          }
-        }, 'bnbo-fill') // Add before BNBO fill layer
-        
-        map.current.addLayer({
-          id: 'kommune-stroke',
-          type: 'line',
-          source: 'kommune',
-          'source-layer': kommuneSourceLayer,
-          layout: {
-            visibility: shouldShowKommune ? 'visible' : 'none'
-          },
-          paint: {
-            'line-color': '#ffffff',
-            'line-width': 0.5,
-            'line-opacity': 0.5
-          }
-        }, 'bnbo-fill') // Add before BNBO fill layer
-        
-        console.log('✅ Re-added kommune layers with source-layer:', kommuneSourceLayer)
-      } else {
-        console.log('⚠️ Kommune source not found, skipping layer re-addition')
-      }
-      
-      // Re-add H3 layers with correct source-layer name (only if source exists)
-      // Add before BNBO layers to ensure BNBO stays on top
-      if (map.current.getSource('h3')) {
         const h3SourceLayer = `h3_pfas_${selectedYear}_res${currentH3Resolution}`
-        map.current.addLayer({
-          id: 'h3-fill',
-          type: 'fill',
-          source: 'h3',
-          'source-layer': h3SourceLayer,
-          layout: {
-            visibility: shouldShowH3 ? 'visible' : 'none'
-          },
-          paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['get', currentPropertyName],
-              0, 'transparent',
-              0.1, '#fee5d9',
-              1, '#fcbba1',
-              5, '#fc9272',
-              10, '#fb6a4a',
-              20, '#ef3b2c',
-              50, '#cb181d',
-              100, '#99000d'
-            ],
-            'fill-opacity': 0.7
-          }
-        }, 'bnbo-fill') // Add before BNBO fill layer
         
-        map.current.addLayer({
-          id: 'h3-stroke',
-          type: 'line',
-          source: 'h3',
-          'source-layer': h3SourceLayer,
-          layout: {
-            visibility: shouldShowH3 ? 'visible' : 'none'
-          },
-          paint: {
-            'line-color': '#ffffff',
-            'line-width': 0.2,
-            'line-opacity': 0
-          }
-        }, 'bnbo-fill') // Add before BNBO fill layer
+        // Check if kommune layers need updating
+        const kommuneFillLayer = (map.current as any).getLayer?.('kommune-fill')
+        if (kommuneFillLayer && kommuneFillLayer['source-layer'] !== kommuneSourceLayer) {
+          console.log('🔄 Kommune source-layer changed, updating...')
+          
+          // Update kommune layers
+          ;(map.current as any).removeLayer('kommune-fill')
+          ;(map.current as any).removeLayer('kommune-stroke')
+          
+          ;(map.current as any).addLayer({
+            id: 'kommune-fill',
+            type: 'fill',
+            source: 'kommune',
+            'source-layer': kommuneSourceLayer,
+            layout: { visibility: shouldShowKommune ? 'visible' : 'none' },
+            paint: {
+              'fill-color': [
+                'interpolate', ['linear'], ['get', currentPropertyName],
+                0, 'transparent', 0.1, '#fee5d9', 1, '#fcbba1', 5, '#fc9272',
+                10, '#fb6a4a', 20, '#ef3b2c', 50, '#cb181d', 100, '#99000d'
+              ],
+              'fill-opacity': 0.8
+            }
+          }, 'bnbo-fill')
+          
+          ;(map.current as any).addLayer({
+            id: 'kommune-stroke',
+            type: 'line',
+            source: 'kommune',
+            'source-layer': kommuneSourceLayer,
+            layout: { visibility: shouldShowKommune ? 'visible' : 'none' },
+            paint: { 'line-color': '#ffffff', 'line-width': 0.5, 'line-opacity': 0.5 }
+          }, 'bnbo-fill')
+          
+          console.log('✅ Updated kommune layers with source-layer:', kommuneSourceLayer)
+        }
         
-        console.log('✅ Re-added H3 layers with source-layer:', h3SourceLayer)
-      } else {
-        console.log('⚠️ H3 source not found, skipping layer re-addition')
+        // Check if H3 layers need updating
+        const h3FillLayer = (map.current as any).getLayer?.('h3-fill')
+        if (h3FillLayer && h3FillLayer['source-layer'] !== h3SourceLayer) {
+          console.log('🔄 H3 source-layer changed, updating...')
+          
+          // Update H3 layers
+          ;(map.current as any).removeLayer('h3-fill')
+          ;(map.current as any).removeLayer('h3-stroke')
+          
+          ;(map.current as any).addLayer({
+            id: 'h3-fill',
+            type: 'fill',
+            source: 'h3',
+            'source-layer': h3SourceLayer,
+            layout: { visibility: shouldShowH3 ? 'visible' : 'none' },
+            paint: {
+              'fill-color': [
+                'interpolate', ['linear'], ['get', currentPropertyName],
+                0, 'transparent', 0.1, '#fee5d9', 1, '#fcbba1', 5, '#fc9272',
+                10, '#fb6a4a', 20, '#ef3b2c', 50, '#cb181d', 100, '#99000d'
+              ],
+              'fill-opacity': 0.7
+            }
+          }, 'bnbo-fill')
+          
+          ;(map.current as any).addLayer({
+            id: 'h3-stroke',
+            type: 'line',
+            source: 'h3',
+            'source-layer': h3SourceLayer,
+            layout: { visibility: shouldShowH3 ? 'visible' : 'none' },
+            paint: { 'line-color': '#ffffff', 'line-width': 0.2, 'line-opacity': 0 }
+          }, 'bnbo-fill')
+          
+          console.log('✅ Updated H3 layers with source-layer:', h3SourceLayer)
+        }
+        
+      } catch (error) {
+        console.warn('Error updating source-layer names:', error)
       }
-      
-    } catch (error) {
-      console.warn('Error updating source-layer names:', error)
-    }
+    }, 300) // 300ms debounce to prevent rapid updates during smooth zoom
+
+    return () => clearTimeout(timeoutId)
   }, [selectedYear, currentH3Resolution, mapLoaded, shouldShowKommune, shouldShowH3, currentPropertyName])
 
  
