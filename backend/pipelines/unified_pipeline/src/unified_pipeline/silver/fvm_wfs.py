@@ -252,7 +252,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             if not features:
                 self.log.warning("No features found in payload")
-                return self.conn.execute("SELECT NULL as geometry_wkt LIMIT 0")
+                return self.conn.execute("SELECT NULL as geometry LIMIT 0")
 
             # Convert features to data for DuckDB registration
             feature_data = []
@@ -264,7 +264,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # Convert geometry to WKT for DuckDB
                     wkt_geom = self._geometry_to_wkt(geometry)
                     if wkt_geom:  # Only add features with valid geometry
-                        feature_data.append({**properties, "geometry_wkt": wkt_geom})
+                        feature_data.append({**properties, "geometry": wkt_geom})
                     else:
                         self.log.debug(f"Skipping feature with invalid geometry: {geometry}")
 
@@ -272,7 +272,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.warning("No features with valid geometry found in payload")
                 # Create empty table for consistency
                 self.conn.execute(
-                    f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+                    f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
                 )
                 return f"extracted_features_{table_suffix}"
 
@@ -324,7 +324,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Add any unmapped columns with their original names
             for col in columns:
-                if col != "geometry_wkt" and col not in column_mapping:
+                if col != "geometry" and col not in column_mapping:
                     column_mappings.append(f'"{col}"')
 
             # Create spatial table with transformed geometry as WKT string
@@ -334,12 +334,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
                     CASE 
-                        WHEN geometry_wkt IS NOT NULL AND geometry_wkt != '' THEN
-                            ST_GeomFromText(geometry_wkt)
+                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
                         ELSE NULL
                     END as geometry
                 FROM raw_features_{table_suffix}
-                WHERE geometry_wkt IS NOT NULL AND geometry_wkt != ''
+                WHERE geometry IS NOT NULL AND geometry != ''
             """
 
             # Execute query and create table
@@ -355,12 +355,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 geometry_column="geometry",
             )
 
-            # Update geometry_wkt column with transformed coordinates
-            self.conn.execute(f"""
-                UPDATE extracted_features_{table_suffix} 
-                SET geometry_wkt = ST_AsText(geometry)
-                WHERE geometry IS NOT NULL
-            """)
+            # No need to update geometry_wkt - we use the validated geometry column directly
 
             return f"extracted_features_{table_suffix}"
 
@@ -368,14 +363,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.error(f"Error parsing JSON payload: {e}")
             # Create empty table for consistency
             self.conn.execute(
-                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
             )
             return f"extracted_features_{table_suffix}"
         except Exception as e:
             self.log.error(f"Error processing payload: {e}")
             # Create empty table for consistency
             self.conn.execute(
-                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry_wkt LIMIT 0"
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
             )
             return f"extracted_features_{table_suffix}"
 
@@ -761,7 +756,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.warning(f"No valid data extracted for {layer_type} {year}")
                 # Create empty result table
                 self.conn.execute(
-                    "CREATE OR REPLACE TABLE empty_final_result AS SELECT NULL as geometry_wkt LIMIT 0"
+                    "CREATE OR REPLACE TABLE empty_final_result AS SELECT NULL as geometry LIMIT 0"
                 )
                 return "empty_final_result"
 

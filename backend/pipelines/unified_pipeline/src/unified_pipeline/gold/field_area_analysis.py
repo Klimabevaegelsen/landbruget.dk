@@ -162,7 +162,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # 5. Properties - will be processed separately with chunking
 
     def _load_soil_types_optimized(self, dataset_paths: Dict[str, Any]):
-        """Load soil types dataset (smallest build side for optimal spatial indexing)."""
+        """Load soil types dataset (smallest build side for optimal spatial indexing) with geometry validation."""
         self.log.info("🔄 Loading soil types (optimized)...")
 
         soil_data = dataset_paths.get(self.config.soil_types_dataset)
@@ -195,8 +195,26 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 FROM soil_df
             """)
 
+        # Check for invalid geometries and apply centralized validator if needed
         soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
-        self.log.info(f"✅ Loaded {soil_count:,} soil type polygons")
+        invalid_soil = self.conn.execute("""
+            SELECT COUNT(*) FROM soil_types 
+            WHERE NOT ST_IsValid(geom)
+        """).fetchone()[0]
+
+        if invalid_soil > 0:
+            self.log.warning(
+                f"⚠️ Found {invalid_soil:,} invalid soil geometries - applying centralized geometry validator as fallback"
+            )
+
+            # Use the centralized geometry validator to fix the issue
+            validate_and_transform_geometries_duckdb(
+                self.conn, "soil_types", "soil_types_validation", geometry_column="geom"
+            )
+
+            soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+
+        self.log.info(f"✅ Loaded {soil_count:,} valid soil type polygons")
 
     def _load_bnbo_status_optimized(self, dataset_paths: Dict[str, Any]):
         """Load BNBO status dataset and split multipolygons using ST_Dump for optimal spatial indexing."""
@@ -1003,6 +1021,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     year,
                     ST_GeomFromText({geometry_column}) as geom
                 FROM {fields_table_name}
+                WHERE {geometry_column} IS NOT NULL
             """)
         else:
             self.conn.execute(f"""
@@ -1014,7 +1033,27 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     year,
                     {geometry_column} as geom
                 FROM {fields_table_name}
+                WHERE {geometry_column} IS NOT NULL
             """)
+
+            # Debug: Check for invalid geometries that might have slipped through silver layer validation
+        invalid_count = self.conn.execute("""
+            SELECT COUNT(*) FROM current_fields 
+            WHERE NOT ST_IsValid(geom)
+        """).fetchone()[0]
+
+        if invalid_count > 0:
+            self.log.warning(
+                f"⚠️ Found {invalid_count:,} invalid geometries in silver data - applying centralized geometry validator as fallback"
+            )
+
+            # Use the centralized geometry validator to fix the issue
+            validate_and_transform_geometries_duckdb(
+                self.conn, "current_fields", "field_area_analysis_fields", geometry_column="geom"
+            )
+
+        final_count = self.conn.execute("SELECT COUNT(*) FROM current_fields").fetchone()[0]
+        self.log.info(f"✅ Prepared {final_count:,} agricultural fields for analysis")
 
     # Legacy year results table creation removed - now handled in optimized final results generation
 
