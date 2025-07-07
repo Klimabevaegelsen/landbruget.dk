@@ -55,6 +55,7 @@ backend/pipelines/sync_secrets.sh
 backend/pipelines/vetstat.p12
 
 # Data files
+*.csv
 *.geojson
 *.parquet
 *.shp
