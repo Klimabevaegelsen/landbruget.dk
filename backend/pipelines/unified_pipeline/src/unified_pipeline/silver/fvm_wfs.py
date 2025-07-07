@@ -273,13 +273,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create spatial table with transformed geometry as WKT string
             # Return DuckDB relation instead of pandas  to avoid Shapely conversion
+            # ✅ COORDINATE FIX: Apply ST_FlipCoordinates to fix swapped lat/lon coordinates
             result_query = f"""
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
                     CASE 
                         WHEN geometry_wkt IS NOT NULL AND geometry_wkt != '' THEN
                             COALESCE(
-                                ST_AsText(ST_Transform(ST_GeomFromText(geometry_wkt), 'EPSG:25832', 'EPSG:4326')),
+                                ST_AsText(ST_FlipCoordinates(ST_Transform(ST_GeomFromText(geometry_wkt), 'EPSG:25832', 'EPSG:4326'))),
                                 geometry_wkt  -- Fallback to original if transformation fails
                             )
                         ELSE NULL

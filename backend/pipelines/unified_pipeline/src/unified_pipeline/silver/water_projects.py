@@ -737,10 +737,11 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
 
             # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
             # Transform geometries to EPSG:4326 first, then dissolve
+            # ✅ COORDINATE FIX: Apply ST_FlipCoordinates to fix swapped lat/lon coordinates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
                 SELECT 
-                    ST_Transform(geometry_spatial, 'EPSG:25832', 'EPSG:4326') as geometry_4326
+                    ST_FlipCoordinates(ST_Transform(geometry_spatial, 'EPSG:25832', 'EPSG:4326')) as geometry_4326
                 FROM {input_table_name}
                 WHERE geometry_spatial IS NOT NULL
                 AND ST_IsValid(geometry_spatial)
