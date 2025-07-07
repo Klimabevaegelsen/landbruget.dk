@@ -155,10 +155,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                         batch_data.append((properties_json, geometry_json))
 
                 if batch_data:
-                    # Insert batch using DuckDB's VALUES clause with coordinate fix
-                    placeholders = ",".join(
-                        ["(?, ST_FlipCoordinates(ST_GeomFromGeoJSON(?)))"] * len(batch_data)
-                    )
+                    # Insert batch using DuckDB's VALUES clause
+                    placeholders = ",".join(["(?, ST_GeomFromGeoJSON(?))"] * len(batch_data))
                     params = []
                     for props, geom in batch_data:
                         params.extend([props, geom])
