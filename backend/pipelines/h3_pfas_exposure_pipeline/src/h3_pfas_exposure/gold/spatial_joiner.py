@@ -192,10 +192,9 @@ class SpatialJoiner:
             f.area_ha as field_area_ha,
             f.crop_code,
             f.crop_name,
-            f.original_geometry,
-            f.flipped_geometry
+            f.geometry
         FROM {h3_table} h
-        INNER JOIN {fields_table} f ON ST_Intersects(h.h3_geometry, f.flipped_geometry)
+        INNER JOIN {fields_table} f ON ST_Intersects(h.h3_geometry, f.geometry)
         """
 
         self.conn.execute(query)
@@ -219,24 +218,24 @@ class SpatialJoiner:
         CREATE OR REPLACE TABLE {result_table} AS
         SELECT
             *,
-            -- Calculate intersection area using original coordinates
+            -- Calculate intersection area (coordinates now fixed in silver layer)
             ST_Area_Spheroid(ST_Intersection(
-                original_geometry,
-                ST_FlipCoordinates(h3_geometry)
+                geometry,
+                h3_geometry
             )) / 10000.0 as intersection_area_ha,
             -- Calculate coverage ratio
             CASE
-                WHEN ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)) > 0 THEN
+                WHEN ST_Area_Spheroid(h3_geometry) > 0 THEN
                     LEAST(1.0, ST_Area_Spheroid(ST_Intersection(
-                        original_geometry,
-                        ST_FlipCoordinates(h3_geometry)
-                    )) / ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)))
+                        geometry,
+                        h3_geometry
+                    )) / ST_Area_Spheroid(h3_geometry))
                 ELSE 0.0
             END as coverage_ratio
         FROM {intersections_table}
         WHERE ST_Area_Spheroid(ST_Intersection(
-            original_geometry,
-            ST_FlipCoordinates(h3_geometry)
+            geometry,
+            h3_geometry
         )) > 0
         """
 
@@ -270,14 +269,14 @@ class SpatialJoiner:
             crop_code,
             crop_name,
             h3_geometry,
-            original_geometry,
+            geometry,
             -- Keep only ONE intersection area per H3-field combination
             MAX(intersection_area_ha) as intersection_area_ha,
             MAX(coverage_ratio) as coverage_ratio
         FROM {areas_table}
         WHERE h3_cell IS NOT NULL
         GROUP BY h3_cell, center_lat, center_lon, field_id, cvr_number, block_id,
-                 field_area_ha, crop_code, crop_name, h3_geometry, original_geometry
+                 field_area_ha, crop_code, crop_name, h3_geometry, geometry
         """
 
         self.conn.execute(query)
@@ -396,15 +395,15 @@ class SpatialJoiner:
                 r.h3_cell,
                 r.center_lat,
                 r.center_lon,
-                -- Calculate union of all field geometries intersecting this H3 cell
+                -- Calculate union of all field geometries intersecting this H3 cell (coordinates now fixed in silver layer)
                 ST_Area_Spheroid(
                     ST_Intersection(
-                        ST_Union_Agg(r.original_geometry),
-                        ST_FlipCoordinates(r.h3_geometry)
+                        ST_Union_Agg(r.geometry),
+                        r.h3_geometry
                     )
                 ) / 10000.0 as actual_intersection_area_ha,
                 -- Calculate H3 cell area for validation
-                ST_Area_Spheroid(ST_FlipCoordinates(r.h3_geometry)) / 10000.0 as h3_area_ha
+                ST_Area_Spheroid(r.h3_geometry) / 10000.0 as h3_area_ha
             FROM {raw_intersections_table} r
             WHERE r.h3_cell IS NOT NULL
             GROUP BY r.h3_cell, r.center_lat, r.center_lon, r.h3_geometry
