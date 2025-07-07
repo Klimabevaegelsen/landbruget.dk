@@ -1,28 +1,4 @@
 """
-Data Loading for H3 PFAS Exposure Analysis
-
-=== WHAT THIS FILE DOES (FOR NON-TECHNICAL READERS) ===
-
-This file is responsible for loading and preparing all the different types of data
-needed for the PFAS analysis. Think of it as the "librarian" of the system - it
-knows where to find all the different datasets and how to prepare them for analysis.
-
-The main types of data it handles:
-1. BMD Pesticide Data - Official registry of all pesticides and their ingredients
-2. Field Data - Geographic boundaries and details of farm fields
-3. Pesticide Application Data - Records of actual pesticide usage on farms
-4. Municipality Data - Administrative boundaries for regional analysis
-
-=== KEY CONCEPTS ===
-
-- GCS (Google Cloud Storage): Where all our data files are stored in the cloud
-- Parquet Files: Efficient file format for storing large datasets
-- Data Layers: Bronze (raw), Silver (processed), Gold (analysis-ready)
-- Spatial Data: Geographic information with coordinates and boundaries
-- Temporal Data: Information that changes over time (different years)
-
-=== TECHNICAL DETAILS ===
-
 Data loading utilities for H3 PFAS exposure analysis.
 """
 
@@ -35,46 +11,16 @@ from ..config import H3SpatialConfig
 
 
 class H3DataLoader:
-    """
-    Handles loading and preparing data from various sources for PFAS analysis.
-
-    This class is like a specialized librarian that:
-    - Knows where to find different types of data in cloud storage
-    - Can download and prepare data for analysis
-    - Handles different file formats and data structures
-    - Manages memory efficiently when working with large datasets
-    - Ensures data quality and consistency
-    """
+    """Handles data loading from GCS and local sources."""
 
     def __init__(self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, gcs_access=None):
-        """
-        Initialize the data loader.
-
-        Args:
-            conn: Database connection for loading data into tables
-            config: Configuration settings (where to find data, processing parameters)
-            gcs_access: Tool for accessing Google Cloud Storage
-        """
         self.conn = conn
         self.config = config
         self.gcs_access = gcs_access
         self.log = logger.bind(component="H3DataLoader")
 
     def _load_table_from_gcs(self, gcs_path: str, table_name: str):
-        """
-        Load a data file from Google Cloud Storage into a database table.
-
-        This is like downloading a file from the cloud and opening it in a spreadsheet,
-        but optimized for large datasets. It:
-        1. Downloads the file temporarily
-        2. Loads it into the database
-        3. Cleans up the temporary file
-        4. Manages memory usage
-
-        Args:
-            gcs_path: Location of the file in Google Cloud Storage
-            table_name: Name to give the table in our database
-        """
+        """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
         try:
             # Use the optimized download approach with our DuckDB connection
             with self.gcs_access._temp_download(gcs_path) as temp_file:
@@ -85,7 +31,6 @@ class H3DataLoader:
             self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
 
             # Force garbage collection after loading large files
-            # This helps prevent memory issues when working with big datasets
             gc.collect()
 
         except Exception as e:
@@ -93,23 +38,7 @@ class H3DataLoader:
             raise
 
     def _get_latest_silver_path(self, dataset: str) -> str:
-        """
-        Find the most recent processed version of a dataset.
-
-        Data in our system goes through different processing stages:
-        - Bronze: Raw data as received
-        - Silver: Cleaned and standardized data
-        - Gold: Analysis-ready data
-
-        This function finds the latest Silver version of a dataset, which is
-        the best balance of being processed but still general-purpose.
-
-        Args:
-            dataset: Name of the dataset to find (e.g., "bmd", "fvm_marker")
-
-        Returns:
-            str: Path to the latest version of the dataset
-        """
+        """Get path to latest silver data file."""
         # Try new standardized format first
         pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
@@ -147,20 +76,7 @@ class H3DataLoader:
         return sorted(files)[-1]  # Latest by timestamp
 
     def _get_latest_gold_path(self, dataset: str, year: int) -> str:
-        """
-        Find the most recent analysis-ready version of a dataset for a specific year.
-
-        Gold layer data is the final, analysis-ready version that has been processed
-        through all our data pipelines. This is typically year-specific data like
-        pesticide application records or field usage data.
-
-        Args:
-            dataset: Name of the dataset (e.g., "pesticide_disaggregation")
-            year: Year of data to find (e.g., 2022)
-
-        Returns:
-            str: Path to the latest version of the dataset for that year
-        """
+        """Get path to latest gold data file for a specific year."""
         # Try new standardized format first
         pattern = f"gs://{self.config.bucket}/gold/{dataset}/{year}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
@@ -200,17 +116,7 @@ class H3DataLoader:
         return sorted(files)[-1]  # Latest by timestamp
 
     def _check_gcs_path_exists(self, path: str) -> bool:
-        """
-        Check if a file or directory exists in Google Cloud Storage.
-
-        This is like checking if a file exists on your computer, but for cloud storage.
-
-        Args:
-            path: Path to check in cloud storage
-
-        Returns:
-            bool: True if the path exists and has data, False otherwise
-        """
+        """Check if a GCS path exists and has data."""
         try:
             return self.gcs_access.file_exists(path)
         except Exception as e:
@@ -218,22 +124,7 @@ class H3DataLoader:
             return False
 
     def _check_year_data_availability(self, year: int) -> bool:
-        """
-        Check if we have all the required data for a specific year.
-
-        For PFAS analysis, we need:
-        - Pesticide application data for year Y (what pesticides were used)
-        - Field boundary data for year Y+1 (where the fields are located)
-
-        The Y+1 pattern exists because field data is typically reported in the year
-        after the growing season.
-
-        Args:
-            year: Year to check data availability for
-
-        Returns:
-            bool: True if we have all required data for this year
-        """
+        """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
         pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}/"
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
@@ -252,16 +143,7 @@ class H3DataLoader:
         return pesticide_available and field_available
 
     def get_available_years(self) -> list[int]:
-        """
-        Get a list of all years for which we have complete data.
-
-        This scans our data storage to find which years have both pesticide
-        application data and field boundary data available. Only years with
-        complete data can be analyzed.
-
-        Returns:
-            list[int]: List of years that can be analyzed (e.g., [2020, 2021, 2022, 2023])
-        """
+        """Get list of years for which both pesticide and field data are available."""
         self.log.info("🔍 Checking data availability for all years")
 
         available_years = []
@@ -277,21 +159,7 @@ class H3DataLoader:
         return available_years
 
     def load_bmd_data_from_gcs(self) -> str:
-        """
-        Load the BMD pesticide registration database.
-
-        BMD (Bekæmpelsesmidler Database) is the official Danish registry of all
-        approved pesticides. This database contains:
-        - Product names and registration numbers
-        - Active ingredients and their concentrations
-        - Environmental impact ratings
-        - PFAS content indicators (our key interest)
-
-        This data is cached because it doesn't change often and is expensive to process.
-
-        Returns:
-            str: Name of the database table containing BMD data
-        """
+        """Load BMD data from GCS - CACHED to avoid reloading."""
         self.log.info("🧪 Loading BMD pesticide data from GCS")
 
         # Get the latest BMD data from silver layer
@@ -306,7 +174,6 @@ class H3DataLoader:
         self._load_table_from_gcs(bmd_path, temp_bmd_table)
 
         # Process BMD data - use existing PFAS, diquat, and glyphosate detection from BMD pipeline
-        # This creates a clean lookup table with standardized column names
         self.conn.execute("""
             CREATE OR REPLACE TABLE bmd_pfas_lookup AS
             SELECT DISTINCT
@@ -321,392 +188,456 @@ class H3DataLoader:
                 produktstatus as approval_status,
                 godkendelsesdato as approval_date,
                 udløbsdato as expiry_date,
-                -- Include additional BMD-specific columns for environmental impact
+                -- Include additional BMD-specific columns
                 samlet_belastning as total_load_per_unit,
                 belastning_miljøeffekt as environmental_effect_per_unit,
                 belastning_miljøadfærd as environmental_behavior_per_unit,
                 belastning_sundhed as health_effect_per_unit,
-                -- Convert concentration to numeric for calculations
                 TRY_CAST(REPLACE(REPLACE(koncentration_er, ',', '.'), ' ', '') AS DOUBLE) as concentration_numeric,
                 enhed_er
             FROM temp_bmd_raw
             WHERE registrerings_nr IS NOT NULL
             AND produktnavn IS NOT NULL
+            AND aktivstofnavn_e IS NOT NULL
         """)
-
-        # Get statistics about what we loaded
-        stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_products,
-                COUNT(CASE WHEN contains_pfas_compounds = true THEN 1 END) as pfas_products,
-                COUNT(CASE WHEN contains_diquat = true THEN 1 END) as diquat_products,
-                COUNT(CASE WHEN contains_glyphosate = true THEN 1 END) as glyphosate_products
-            FROM bmd_pfas_lookup
-        """).fetchone()
-
-        total, pfas, diquat, glyphosate = stats
-        self.log.info(f"✅ BMD data processed: {total:,} products total")
-        self.log.info(f"   🧪 PFAS-containing products: {pfas:,}")
-        self.log.info(f"   🧪 Diquat-containing products: {diquat:,}")
-        self.log.info(f"   🧪 Glyphosate-containing products: {glyphosate:,}")
 
         # Clean up temporary table
         self.conn.execute(f"DROP TABLE IF EXISTS {temp_bmd_table}")
 
+        # Get statistics for logging
+        total_count = self.conn.execute("SELECT COUNT(*) FROM bmd_pfas_lookup").fetchone()[0]
+        pfas_count = self.conn.execute(
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_pfas_compounds = true"
+        ).fetchone()[0]
+        diquat_count = self.conn.execute(
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_diquat = true"
+        ).fetchone()[0]
+        glyphosate_count = self.conn.execute(
+            "SELECT COUNT(*) FROM bmd_pfas_lookup WHERE contains_glyphosate = true"
+        ).fetchone()[0]
+
+        self.log.info(f"✅ BMD data processed: {total_count:,} products")
+        self.log.info(
+            f"   - PFAS compounds: {pfas_count:,} ({pfas_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Diquat compounds: {diquat_count:,} ({diquat_count / total_count * 100:.1f}%)"
+        )
+        self.log.info(
+            f"   - Glyphosate compounds: {glyphosate_count:,} ({glyphosate_count / total_count * 100:.1f}%)"
+        )
+
         return "bmd_pfas_lookup"
 
     def load_and_prepare_fields_from_gcs(self, field_year: int, pesticide_year: int) -> str:
-        """
-        Load and prepare farm field boundary data.
+        """Load FVM field data from GCS and prepare for spatial intersection."""
+        self.log.info(f"📄 Loading FVM field data for year {field_year} from GCS")
 
-        This loads the FVM (Field and Vegetation Map) data, which contains:
-        - Geographic boundaries of all agricultural fields in Denmark
-        - Field identification numbers
-        - Crop types and areas
-        - Company registration numbers (CVR)
+        # Get FVM data path
+        silver_path = self._get_latest_silver_path(f"fvm_marker_{field_year}")
+        if not silver_path:
+            raise FileNotFoundError(f"No FVM marker data found for year {field_year}")
 
-        The data is filtered to only include fields that:
-        1. Have valid geometric boundaries
-        2. Are associated with actual pesticide applications
-        3. Have complete identification information
+        # Load into temporary table
+        temp_table = f"temp_fvm_{field_year}"
+        self._load_table_from_gcs(silver_path, temp_table)
 
-        Args:
-            field_year: Year of field data to load (typically pesticide_year + 1)
-            pesticide_year: Year of pesticide data (for filtering relevant fields)
-
-        Returns:
-            str: Name of the database table containing prepared field data
-        """
-        self.log.info(
-            f"📍 Loading and preparing field data for year {field_year} (pesticide year {pesticide_year})"
-        )
-
-        # Get the latest field data from silver layer
-        field_dataset = f"fvm_marker_{field_year}"
-        field_path = self._get_latest_silver_path(field_dataset)
-
-        if not field_path:
-            raise Exception(f"Field data not found for year {field_year}")
-
-        self.log.info(f"📄 Loading field data from: {field_path}")
-
-        # Load raw field data
-        temp_field_table = f"temp_fvm_{field_year}"
-        self._load_table_from_gcs(field_path, temp_field_table)
-
-        # First, get the pesticide application data to know which fields we need
-        # This is important for performance - we only process fields that actually have pesticide data
+        # Get pesticide field lookup for filtering
         pesticide_path = self._get_latest_gold_path("pesticide_disaggregation", pesticide_year)
-        if not pesticide_path:
-            raise Exception(f"Pesticide data not found for year {pesticide_year}")
+        if pesticide_path:
+            self.log.info(
+                f"🔗 Filtering FVM fields to only those with pesticide data from {pesticide_year}"
+            )
+            temp_pesticide_table = f"temp_pesticide_lookup_{pesticide_year}"
+            self._load_table_from_gcs(pesticide_path, temp_pesticide_table)
 
-        temp_pesticide_table = f"temp_pesticide_lookup_{pesticide_year}"
-        self._load_table_from_gcs(pesticide_path, temp_pesticide_table)
+            # Check what CVR column exists in pesticide data
+            pest_lookup_columns = self.conn.execute(
+                f"PRAGMA table_info({temp_pesticide_table})"
+            ).fetchall()
+            pest_lookup_column_names = [col[1] for col in pest_lookup_columns]
 
-        # Create a lookup table of fields that have pesticide applications
-        # This helps us focus only on relevant fields
+            # Handle CVR column mapping for lookup
+            if "CompanyRegistrationNumber" in pest_lookup_column_names:
+                pest_cvr_col = "CompanyRegistrationNumber"
+            elif "cvr_number" in pest_lookup_column_names:
+                pest_cvr_col = "cvr_number"
+            elif "company_registration_number" in pest_lookup_column_names:
+                pest_cvr_col = "company_registration_number"
+            else:
+                self.log.warning(
+                    f"No CVR column found in pesticide data. Available columns: {pest_lookup_column_names}"
+                )
+                pest_cvr_col = "NULL"
+
+            # Create lookup table
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE pesticide_field_lookup AS
+                SELECT DISTINCT
+                    {pest_cvr_col} as cvr,
+                    REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as field_id,
+                    REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as block_id
+                FROM {temp_pesticide_table}
+                WHERE MatchedFieldID IS NOT NULL
+                AND MatchedBlockID IS NOT NULL
+                AND {pest_cvr_col} IS NOT NULL
+            """)
+            self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticide_table}")
+        else:
+            # Create empty lookup
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE pesticide_field_lookup AS
+                SELECT 'dummy' as cvr, 'dummy' as field_id, 'dummy' as block_id
+                WHERE FALSE
+            """)
+
+        # Check available columns (handle older years and new standardized names)
+        columns = self.conn.execute(f"PRAGMA table_info({temp_table})").fetchall()
+        column_names = [col[1] for col in columns]
+
+        # Handle CVR column - prioritize new standardized name
+        if "cvr_number" in column_names:
+            cvr_select = "cvr_number"
+        elif "company_registration_number" in column_names:
+            cvr_select = "company_registration_number as cvr_number"
+        else:
+            cvr_select = "NULL as cvr_number"
+
+        # Handle block ID column - prioritize new standardized name
+        if "block_id" in column_names:
+            block_select = "block_id"
+        elif "block_number" in column_names:
+            block_select = "block_number as block_id"
+        else:
+            block_select = "NULL as block_id"
+
+        # Handle area column - prioritize new standardized name with proper casting
+        if "area_ha" in column_names:
+            area_select = "CAST(area_ha AS DOUBLE) as area_ha"
+        elif "field_area_ha" in column_names:
+            area_select = "CAST(field_area_ha AS DOUBLE) as area_ha"
+        else:
+            area_select = "NULL as area_ha"
+
+        self.log.info(f"🔍 Available columns: {column_names}")
+        self.log.info(f"🔍 CVR column handling: {cvr_select}")
+        self.log.info(f"🔍 Block ID column handling: {block_select}")
+        self.log.info(f"🔍 Area column handling: {area_select}")
+
+        # Build the SELECT clause with proper column references
+        if "area_ha" in column_names:
+            area_field_select = "CAST(f.area_ha AS DOUBLE) as area_ha"
+        elif "field_area_ha" in column_names:
+            area_field_select = "CAST(f.field_area_ha AS DOUBLE) as area_ha"
+        else:
+            area_field_select = "NULL as area_ha"
+
+        if "cvr_number" in column_names:
+            cvr_field_select = "f.cvr_number"
+        elif "company_registration_number" in column_names:
+            cvr_field_select = "f.company_registration_number as cvr_number"
+        else:
+            cvr_field_select = "NULL as cvr_number"
+
+        if "block_id" in column_names:
+            block_field_select = "f.block_id"
+        elif "block_number" in column_names:
+            block_field_select = "f.block_number as block_id"
+        else:
+            block_field_select = "NULL as block_id"
+
+        # Process fields with geometry preparation
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE pesticide_field_lookup AS
-            SELECT DISTINCT
-                CompanyRegistrationNumber as cvr,
-                REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as field_id,
-                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as block_id
-            FROM {temp_pesticide_table}
-            WHERE MatchedFieldID IS NOT NULL
-            AND MatchedBlockID IS NOT NULL
-            AND CompanyRegistrationNumber IS NOT NULL
-        """)
-
-        lookup_count = self.conn.execute("SELECT COUNT(*) FROM pesticide_field_lookup").fetchone()[
-            0
-        ]
-        self.log.info(f"📊 Found {lookup_count:,} field-pesticide combinations")
-
-        # Now prepare the field data, filtering to only relevant fields
-        prepared_table = f"prepared_fields_{field_year}"
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {prepared_table} AS
+            CREATE OR REPLACE TABLE prepared_fields AS
             SELECT
                 f.field_id,
-                f.block_id,
-                f.cvr_number,
-                CAST(f.area_ha AS DOUBLE) as area_ha,
+                {area_field_select},
+                {cvr_field_select},
+                {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                f.geometry_wkt,
-                -- Add field identification for easier joining
-                CONCAT(f.cvr_number, '_', f.block_id, '_', f.field_id) as field_key
-            FROM {temp_field_table} f
+                f.geometry_wkt
+            FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
-                f.cvr_number = p.cvr
+                {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
                 AND f.field_id = p.field_id
-                AND f.block_id = p.block_id
+                AND {"f.block_id" if "block_id" in column_names else "f.block_number"} = p.block_id
             )
             WHERE f.geometry_wkt IS NOT NULL
             AND ST_IsValid(ST_GeomFromText(f.geometry_wkt))
-            AND CAST(f.area_ha AS DOUBLE) > 0
-            AND f.cvr_number IS NOT NULL
-            AND f.block_id IS NOT NULL
-            AND f.field_id IS NOT NULL
+            AND {"CAST(f.area_ha AS DOUBLE)" if "area_ha" in column_names else "CAST(f.field_area_ha AS DOUBLE)"} > 0
+            AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} IS NOT NULL
+            AND {"f.block_id" if "block_id" in column_names else "f.block_number"} IS NOT NULL
         """)
 
-        # Get statistics about the prepared data
-        stats = self.conn.execute(f"""
-            SELECT 
-                COUNT(*) as total_fields,
-                COUNT(DISTINCT cvr_number) as unique_companies,
-                COUNT(DISTINCT crop_code) as unique_crops,
-                SUM(area_ha) as total_area_ha,
-                AVG(area_ha) as avg_field_size_ha
-            FROM {prepared_table}
-        """).fetchone()
+        # Clean up temporary table
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
-        total_fields, companies, crops, total_area, avg_size = stats
-        self.log.info(f"✅ Field data prepared: {total_fields:,} fields")
-        self.log.info(f"   🏢 Companies: {companies:,}")
-        self.log.info(f"   🌾 Crop types: {crops:,}")
-        self.log.info(f"   📐 Total area: {total_area:,.0f} hectares")
-        self.log.info(f"   📏 Average field size: {avg_size:.1f} hectares")
+        count = self.conn.execute("SELECT COUNT(*) FROM prepared_fields").fetchone()[0]
+        self.log.info(f"✅ Field data processed: {count:,} fields with geometries")
 
-        # Clean up temporary tables
-        self.conn.execute(f"DROP TABLE IF EXISTS {temp_field_table}")
-        self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticide_table}")
-        self.conn.execute("DROP TABLE IF EXISTS pesticide_field_lookup")
-
-        return prepared_table
+        return "prepared_fields"
 
     def load_pesticide_disaggregation_from_gcs(self, year: int) -> str:
-        """
-        Load pesticide application records for a specific year.
+        """Load pesticide disaggregation data from GCS for a specific year."""
+        table_name = f"pesticides_{year}"
 
-        This loads the "pesticide disaggregation" data, which contains detailed
-        records of actual pesticide applications on Danish farms:
-        - Which pesticide was used (product name and registration number)
-        - How much was applied (dosage and units)
-        - Where it was applied (field and company identification)
-        - When it was applied (year and sometimes season)
+        self.log.info(f"🧪 Loading pesticide disaggregation for year {year} from GCS")
 
-        This is the core data that tells us about actual PFAS exposure.
+        # Get the latest pesticide disaggregation file for the year
+        full_path = self._get_latest_gold_path("pesticide_disaggregation", year)
 
-        Args:
-            year: Year of pesticide application data to load
+        if not full_path:
+            raise Exception(f"No pesticide disaggregation data found for year {year}")
 
-        Returns:
-            str: Name of the database table containing pesticide application data
-        """
-        self.log.info(f"🧪 Loading pesticide disaggregation data for year {year}")
+        self.log.info(f"📄 Loading pesticides from: {full_path}")
 
-        # Get the latest pesticide data from gold layer
-        pesticide_path = self._get_latest_gold_path("pesticide_disaggregation", year)
-        if not pesticide_path:
-            raise Exception(f"Pesticide disaggregation data not found for year {year}")
+        # Load pesticide data directly from GCS
+        temp_pesticides_table = "temp_pesticides_raw"
+        self._load_table_from_gcs(full_path, temp_pesticides_table)
 
-        self.log.info(f"📄 Loading pesticide data from: {pesticide_path}")
+        # Check available columns and handle both old and new standardized names
+        pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticides_raw)").fetchall()
+        pest_column_names = [col[1] for col in pest_columns]
 
-        # Load raw pesticide data
-        temp_pesticide_table = "temp_pesticides_raw"
-        self._load_table_from_gcs(pesticide_path, temp_pesticide_table)
+        # Handle CVR column mapping - check both old and new names
+        cvr_column_candidates = [
+            "CompanyRegistrationNumber",  # Original unified pipeline format
+            "cvr_number",  # New standardized format
+            "company_registration_number",  # Alternative standardized format
+        ]
+        cvr_column = None
+        for candidate in cvr_column_candidates:
+            if candidate in pest_column_names:
+                cvr_column = candidate
+                break
 
-        # Process and clean the pesticide data
-        processed_table = f"pesticides_{year}"
+        if not cvr_column:
+            self.log.error(
+                f"No CVR column found in pesticide disaggregation data. Available columns: {pest_column_names}"
+            )
+            raise Exception("No CVR column found in pesticide disaggregation data")
+
+        # Handle pesticide name column - check both old and new names
+        pesticide_name_candidates = ["PesticideName", "pesticide_name"]
+        pesticide_name_column = None
+        for candidate in pesticide_name_candidates:
+            if candidate in pest_column_names:
+                pesticide_name_column = candidate
+                break
+        if not pesticide_name_column:
+            pesticide_name_column = "PesticideName"  # fallback
+
+        # Handle pesticide registration number column - check both old and new names
+        pesticide_reg_candidates = ["PesticideRegistrationNumber", "pesticide_registration_number"]
+        pesticide_reg_column = None
+        for candidate in pesticide_reg_candidates:
+            if candidate in pest_column_names:
+                pesticide_reg_column = candidate
+                break
+        if not pesticide_reg_column:
+            pesticide_reg_column = "PesticideRegistrationNumber"  # fallback
+
+        # Handle dosage quantity column - check both old and new names
+        dosage_quantity_candidates = ["DosageQuantity", "dosage_quantity"]
+        dosage_quantity_column = None
+        for candidate in dosage_quantity_candidates:
+            if candidate in pest_column_names:
+                dosage_quantity_column = candidate
+                break
+        if not dosage_quantity_column:
+            dosage_quantity_column = "DosageQuantity"  # fallback
+
+        # Handle dosage unit column - check both old and new names
+        dosage_unit_candidates = ["DosageUnit", "dosage_unit"]
+        dosage_unit_column = None
+        for candidate in dosage_unit_candidates:
+            if candidate in pest_column_names:
+                dosage_unit_column = candidate
+                break
+        if not dosage_unit_column:
+            dosage_unit_column = "DosageUnit"  # fallback
+
+        self.log.info("🔍 Pesticide column mappings:")
+        self.log.info(f"   CVR: {cvr_column}")
+        self.log.info(f"   Pesticide name: {pesticide_name_column}")
+        self.log.info(f"   Registration number: {pesticide_reg_column}")
+        self.log.info(f"   Dosage quantity: {dosage_quantity_column}")
+        self.log.info(f"   Dosage unit: {dosage_unit_column}")
+
+        # Process pesticide data with correct field names and CVR + block_id + field_id extraction
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {processed_table} AS
+            CREATE OR REPLACE TABLE {table_name} AS
             SELECT
                 DisaggregatedID,
                 MatchedFieldID,
                 MatchedBlockID,
-                CompanyRegistrationNumber as cvr,
-                PesticideName,
-                PesticideRegistrationNumber,
-                DosageQuantity,
-                DosageUnit,
+                {cvr_column} as cvr,
+                {pesticide_name_column} as PesticideName,
+                {pesticide_reg_column} as PesticideRegistrationNumber,
+                {dosage_quantity_column} as DosageQuantity,
+                {dosage_unit_column} as DosageUnit,
                 AllocatedArea,
                 AllocationMethod,
                 MatchConfidence,
-                -- Extract clean field and block IDs for easier joining
+                -- Extract field_id and block_id for matching
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
-                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id,
-                -- Create composite key for joining with field data
-                CONCAT(CompanyRegistrationNumber, '_', 
-                       REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1), '_',
-                       REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1)) as field_key
-            FROM {temp_pesticide_table}
+                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
+            FROM temp_pesticides_raw
             WHERE MatchedFieldID IS NOT NULL
             AND MatchedBlockID IS NOT NULL
-            AND CompanyRegistrationNumber IS NOT NULL
-            AND PesticideRegistrationNumber IS NOT NULL
-            AND DosageQuantity > 0
+            AND {cvr_column} IS NOT NULL
+            AND {pesticide_reg_column} IS NOT NULL
         """)
 
-        # Get statistics about the loaded data
-        stats = self.conn.execute(f"""
-            SELECT 
-                COUNT(*) as total_applications,
-                COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticides,
-                COUNT(DISTINCT cvr) as unique_companies,
-                COUNT(DISTINCT field_key) as unique_fields,
-                SUM(DosageQuantity) as total_dosage
-            FROM {processed_table}
-        """).fetchone()
-
-        applications, pesticides, companies, fields, total_dosage = stats
-        self.log.info(f"✅ Pesticide data loaded: {applications:,} applications")
-        self.log.info(f"   🧪 Unique pesticides: {pesticides:,}")
-        self.log.info(f"   🏢 Companies: {companies:,}")
-        self.log.info(f"   📍 Fields: {fields:,}")
-        self.log.info(f"   📊 Total dosage: {total_dosage:,.0f} units")
-
         # Clean up temporary table
-        self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticide_table}")
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticides_table}")
 
-        return processed_table
+        # Get count for logging
+        count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"✅ Loaded {count:,} pesticide disaggregation records for year {year}")
+
+        return table_name
 
     def join_pesticide_with_bmd_pfas(self, pesticide_table: str, bmd_table: str, year: int) -> str:
-        """
-        Join pesticide application data with PFAS detection information.
+        """Join pesticide disaggregation with BMD data for PFAS detection."""
+        pesticide_pfas_table = f"pesticide_pfas_{year}"
 
-        This is where the magic happens - we combine:
-        1. Actual pesticide usage records (what was applied and where)
-        2. Official pesticide registry data (which products contain PFAS)
+        self.log.info(f"🧪 Joining pesticide data with BMD PFAS indicators for year {year}")
 
-        The result tells us exactly where PFAS-containing pesticides were applied
-        and in what quantities.
-
-        Args:
-            pesticide_table: Table with pesticide application records
-            bmd_table: Table with BMD registry data (including PFAS indicators)
-            year: Year being processed (for table naming)
-
-        Returns:
-            str: Name of the database table containing joined data with PFAS indicators
-        """
-        self.log.info(f"🔗 Joining pesticide applications with PFAS detection data for year {year}")
-
-        result_table = f"pesticide_pfas_{year}"
-
-        # Perform the join and calculate PFAS exposure amounts
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {result_table} AS
+            CREATE OR REPLACE TABLE {pesticide_pfas_table} AS
             SELECT
-                p.*,
+                p.DisaggregatedID,
+                p.MatchedFieldID,
+                p.MatchedBlockID,
+                p.cvr,
+                p.extracted_field_id,
+                p.extracted_block_id,
+                p.PesticideName,
+                p.PesticideRegistrationNumber,
+                p.DosageQuantity,
+                p.DosageUnit,
+                p.AllocatedArea,
+                p.AllocationMethod,
+                p.MatchConfidence,
+
+                -- BMD substance detection data
                 b.active_ingredients,
                 b.total_load_per_unit,
-                b.environmental_effect_per_unit,
-                b.environmental_behavior_per_unit,
-                b.health_effect_per_unit,
-                
-                -- PFAS detection flags
                 COALESCE(b.contains_pfas_compounds, false) as contains_pfas,
                 COALESCE(b.contains_diquat, false) as contains_diquat,
                 COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
 
-                -- Calculate actual PFAS-containing active ingredient amounts
-                -- This converts dosage quantities to grams of PFAS-containing active ingredients
+                -- Calculate actual PFAS-containing active ingredient amount applied (grams) with proper unit conversion
                 CASE
                     WHEN b.contains_pfas_compounds = true AND b.concentration_numeric IS NOT NULL THEN
                         CASE
-                            -- Liquid pesticides (unit 4) with concentration in g/l
+                            -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
                             WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
-                            -- Solid pesticides (unit 2) with concentration in g/kg  
+
+                            -- Kg dosage (Unit 2) with g/kg concentration: kg × g/kg = g
                             WHEN p.DosageUnit = 2 AND b.enhed_er LIKE '%g/kg%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
+
                             ELSE 0
                         END
                     ELSE 0
                 END as pfas_containing_active_ingredient_grams,
 
-                -- Calculate diquat-containing active ingredient amounts
+                -- Calculate diquat-containing active ingredient amount applied (grams)
                 CASE
                     WHEN b.contains_diquat = true AND b.concentration_numeric IS NOT NULL THEN
                         CASE
+                            -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
                             WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            -- Kg dosage (Unit 2) with g/kg concentration: kg × g/kg = g
                             WHEN p.DosageUnit = 2 AND b.enhed_er LIKE '%g/kg%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
+
                             ELSE 0
                         END
                     ELSE 0
                 END as diquat_containing_active_ingredient_grams,
 
-                -- Calculate glyphosate-containing active ingredient amounts
+                -- Calculate glyphosate-containing active ingredient amount applied (grams)
                 CASE
                     WHEN b.contains_glyphosate = true AND b.concentration_numeric IS NOT NULL THEN
                         CASE
+                            -- Liter dosage (Unit 4) with g/l concentration: L × g/l = g
                             WHEN p.DosageUnit = 4 AND b.enhed_er LIKE '%g/l%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
+
+                            -- Kg dosage (Unit 2) with g/kg concentration: kg × g/kg = g
                             WHEN p.DosageUnit = 2 AND b.enhed_er LIKE '%g/kg%' THEN
                                 p.DosageQuantity * b.concentration_numeric / 1000.0
+
                             ELSE 0
                         END
                     ELSE 0
                 END as glyphosate_containing_active_ingredient_grams,
 
-                -- Calculate environmental load (pesticide impact metrics)
+                -- Pesticide load applied
                 CASE
                     WHEN b.total_load_per_unit IS NOT NULL THEN
                         p.DosageQuantity * b.total_load_per_unit
                     ELSE 0
                 END as pesticide_belastning_applied,
 
-                -- Calculate PFAS-specific environmental load
+                -- PFAS-containing pesticide load
                 CASE
                     WHEN b.contains_pfas_compounds = true AND b.total_load_per_unit IS NOT NULL THEN
                         p.DosageQuantity * b.total_load_per_unit
                     ELSE 0
                 END as pfas_containing_pesticide_belastning_applied,
 
-                -- Calculate diquat-specific environmental load
+                -- Diquat-containing pesticide load
                 CASE
                     WHEN b.contains_diquat = true AND b.total_load_per_unit IS NOT NULL THEN
                         p.DosageQuantity * b.total_load_per_unit
                     ELSE 0
                 END as diquat_containing_pesticide_belastning_applied,
 
-                -- Calculate glyphosate-specific environmental load
+                -- Glyphosate-containing pesticide load
                 CASE
                     WHEN b.contains_glyphosate = true AND b.total_load_per_unit IS NOT NULL THEN
                         p.DosageQuantity * b.total_load_per_unit
                     ELSE 0
                 END as glyphosate_containing_pesticide_belastning_applied
-                
+
             FROM {pesticide_table} p
-            LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registration_number
+            LEFT JOIN {bmd_table} b ON (
+                p.PesticideRegistrationNumber = b.registration_number
+                OR LOWER(p.PesticideName) = LOWER(b.pesticide_name)
+            )
         """)
 
-        # Get statistics about the joined data
-        stats = self.conn.execute(f"""
-            SELECT 
-                COUNT(*) as total_applications,
-                COUNT(CASE WHEN contains_pfas = true THEN 1 END) as pfas_applications,
-                COUNT(CASE WHEN contains_diquat = true THEN 1 END) as diquat_applications,
-                COUNT(CASE WHEN contains_glyphosate = true THEN 1 END) as glyphosate_applications,
-                SUM(pfas_containing_active_ingredient_grams) as total_pfas_grams,
-                SUM(diquat_containing_active_ingredient_grams) as total_diquat_grams,
-                SUM(glyphosate_containing_active_ingredient_grams) as total_glyphosate_grams
-            FROM {result_table}
-        """).fetchone()
+        # Get statistics for logging
+        total_count = self.conn.execute(f"SELECT COUNT(*) FROM {pesticide_pfas_table}").fetchone()[
+            0
+        ]
+        pfas_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_pfas = true"
+        ).fetchone()[0]
+        diquat_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_diquat = true"
+        ).fetchone()[0]
+        glyphosate_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {pesticide_pfas_table} WHERE contains_glyphosate = true"
+        ).fetchone()[0]
 
-        (
-            total,
-            pfas_apps,
-            diquat_apps,
-            glyphosate_apps,
-            pfas_grams,
-            diquat_grams,
-            glyphosate_grams,
-        ) = stats
-
-        self.log.info(f"✅ Pesticide-PFAS join completed: {total:,} total applications")
-        self.log.info(f"   🧪 PFAS applications: {pfas_apps:,} ({pfas_apps / total * 100:.1f}%)")
+        self.log.info(f"✅ Pesticide-BMD join completed: {total_count:,} records")
         self.log.info(
-            f"   🧪 Diquat applications: {diquat_apps:,} ({diquat_apps / total * 100:.1f}%)"
+            f"   - PFAS-containing applications: {pfas_count:,} ({pfas_count / total_count * 100:.1f}%)"
         )
         self.log.info(
-            f"   🧪 Glyphosate applications: {glyphosate_apps:,} ({glyphosate_apps / total * 100:.1f}%)"
+            f"   - Diquat-containing applications: {diquat_count:,} ({diquat_count / total_count * 100:.1f}%)"
         )
-        self.log.info(f"   ⚗️ Total PFAS active ingredients: {pfas_grams:.1f} grams")
-        self.log.info(f"   ⚗️ Total diquat active ingredients: {diquat_grams:.1f} grams")
-        self.log.info(f"   ⚗️ Total glyphosate active ingredients: {glyphosate_grams:.1f} grams")
+        self.log.info(
+            f"   - Glyphosate-containing applications: {glyphosate_count:,} ({glyphosate_count / total_count * 100:.1f}%)"
+        )
 
-        return result_table
+        return pesticide_pfas_table
