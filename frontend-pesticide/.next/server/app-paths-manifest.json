@@ -1,4 +1,6 @@
 {
+  "/api/metadata/route": "app/api/metadata/route.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/pmtiles/[...path]/route": "app/api/pmtiles/[...path]/route.js",
   "/page": "app/page.js"
 }

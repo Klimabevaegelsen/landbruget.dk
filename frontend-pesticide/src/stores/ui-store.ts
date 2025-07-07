@@ -18,6 +18,10 @@ interface UIState {
   showDataPanel: boolean;
   setShowDataPanel: (show: boolean) => void;
   
+  // Mobile bottom panel state
+  showMobilePanel: boolean;
+  setShowMobilePanel: (show: boolean) => void;
+  
   // Animation preferences
   reduceMotion: boolean;
   setReduceMotion: (reduce: boolean) => void;
@@ -35,6 +39,7 @@ export const useUIStore = create<UIState>()(
       theme: 'system',
       isMobile: false,
       showDataPanel: false,
+      showMobilePanel: false,
       reduceMotion: false,
       performanceMode: false,
       
@@ -43,6 +48,7 @@ export const useUIStore = create<UIState>()(
       setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
       setIsMobile: (isMobile: boolean) => set({ isMobile }),
       setShowDataPanel: (show: boolean) => set({ showDataPanel: show }),
+      setShowMobilePanel: (show: boolean) => set({ showMobilePanel: show }),
       setReduceMotion: (reduce: boolean) => set({ reduceMotion: reduce }),
       setPerformanceMode: (enabled: boolean) => set({ performanceMode: enabled }),
     }),

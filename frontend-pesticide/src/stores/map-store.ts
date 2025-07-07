@@ -11,6 +11,9 @@ export interface MapState {
   bearing: number;
   pitch: number;
   
+  // Map instance reference
+  mapInstance: unknown | null;
+  
   // Data selection
   selectedYear: YearSelection;
   selectedDataMode: DataMode;
@@ -36,7 +39,7 @@ export interface MapState {
   // UI state
   showControls: boolean;
   showTooltip: boolean;
-  tooltipData: any;
+  tooltipData: Record<string, unknown> | null;
   tooltipPosition: { x: number; y: number };
 }
 
@@ -47,6 +50,8 @@ export interface MapActions {
   setBearing: (bearing: number) => void;
   setPitch: (pitch: number) => void;
   setViewState: (viewState: Partial<Pick<MapState, 'zoom' | 'center' | 'bearing' | 'pitch'>>) => void;
+  setMapInstance: (mapInstance: unknown | null) => void;
+  flyToLocation: (location: { lat: number; lng: number; zoom?: number }) => void;
   
   // Data selection actions
   setSelectedYear: (year: YearSelection) => void;
@@ -75,9 +80,9 @@ export interface MapActions {
   // UI actions
   setShowControls: (show: boolean) => void;
   setShowTooltip: (show: boolean) => void;
-  setTooltipData: (data: any) => void;
+  setTooltipData: (data: Record<string, unknown> | null) => void;
   setTooltipPosition: (position: { x: number; y: number }) => void;
-  showTooltipWithData: (data: any, position: { x: number; y: number }) => void;
+  showTooltipWithData: (data: Record<string, unknown>, position: { x: number; y: number }) => void;
   hideTooltip: () => void;
   
   // Utility actions
@@ -109,6 +114,7 @@ export const useMapStore = create<MapState & MapActions>()(
       center: DEFAULT_CENTER,
       bearing: 0,
       pitch: 0,
+      mapInstance: null,
       
       selectedYear: DEFAULT_YEAR,
       selectedDataMode: DEFAULT_DATA_MODE,
@@ -138,6 +144,18 @@ export const useMapStore = create<MapState & MapActions>()(
       setBearing: (bearing) => set({ bearing }),
       setPitch: (pitch) => set({ pitch }),
       setViewState: (viewState) => set(viewState),
+      setMapInstance: (mapInstance) => set({ mapInstance }),
+      flyToLocation: (location) => {
+        const { mapInstance } = get();
+        if (mapInstance && typeof mapInstance === 'object' && mapInstance !== null && 'flyTo' in mapInstance) {
+                     (mapInstance as { flyTo: (options: Record<string, unknown>) => void }).flyTo({
+            center: [location.lng, location.lat],
+            zoom: location.zoom || 12,
+            essential: true,
+            duration: 2000
+          });
+        }
+      },
       
       // Data selection actions
       setSelectedYear: (selectedYear) => set({ selectedYear, isLoadingYear: true }),
@@ -364,4 +382,7 @@ export const useTooltipState = () => {
   const tooltipPosition = useTooltipPosition();
   
   return { showTooltip, tooltipData, tooltipPosition };
-}; 
+};
+
+// Navigation actions
+export const useFlyToLocation = () => useMapStore((state) => state.flyToLocation); 

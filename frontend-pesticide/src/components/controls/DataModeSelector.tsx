@@ -100,10 +100,10 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
           <button
             key={mode.key}
             onClick={() => setSelectedDataMode(mode.key)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 border ${
               selectedDataMode === mode.key
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                ? 'bg-white/20 text-white border-white/30 shadow-sm'
+                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
             }`}
           >
             {mode.shortLabel}

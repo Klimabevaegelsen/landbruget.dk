@@ -1,13 +1,12 @@
-import { supabase, handleSupabaseError, transformWKTToGeoJSON, buildBboxQuery } from './supabase';
+import { supabase, handleSupabaseError, buildBboxQuery } from './supabase';
 import type { 
   H3DataPoint, 
-  H3AggregatedData, 
   H3DataFilter, 
   H3ProcessingConfig,
   H3DataQuality 
 } from '@/types/h3-data';
-import type { BNBOArea, BNBODataFilter, BNBOStatistics } from '@/types/bnbo-data';
-import type { BBRBuilding, BBRDataFilter, BBRStatistics } from '@/types/bbr-data';
+import type { BNBOArea, BNBODataFilter } from '@/types/bnbo-data';
+import type { BBRBuilding, BBRDataFilter } from '@/types/bbr-data';
 import { CACHE_SETTINGS, VISUALIZATION_LIMITS } from './shared-constants';
 
 /**
@@ -15,7 +14,7 @@ import { CACHE_SETTINGS, VISUALIZATION_LIMITS } from './shared-constants';
  * Handles all database interactions, caching, and data transformations
  */
 export class DataManager {
-  private cache: Map<string, any> = new Map();
+  private cache: Map<string, unknown> = new Map();
   private cacheTimestamps: Map<string, number> = new Map();
 
   /**
@@ -334,7 +333,7 @@ export class DataManager {
   /**
    * Transform raw H3 data from database to frontend format
    */
-  private transformH3Data(rawData: any[], config?: H3ProcessingConfig): H3DataPoint[] {
+  private transformH3Data(rawData: Record<string, unknown>[], config?: H3ProcessingConfig): H3DataPoint[] {
     return rawData.map(row => {
       const geometry = typeof row.geometry === 'string' 
         ? JSON.parse(row.geometry) 
@@ -372,7 +371,7 @@ export class DataManager {
   /**
    * Aggregate H3 data by hexagon for cumulative mode
    */
-  private aggregateH3DataByYear(data: any[]): any[] {
+  private aggregateH3DataByYear(data: Record<string, unknown>[]): Record<string, unknown>[] {
     const aggregated = new Map();
 
     data.forEach(row => {
@@ -413,7 +412,7 @@ export class DataManager {
   /**
    * Transform aggregated H3 data to frontend format
    */
-  private transformAggregatedH3Data(aggregatedData: any[], config?: H3ProcessingConfig): H3DataPoint[] {
+  private transformAggregatedH3Data(aggregatedData: Record<string, unknown>[]): H3DataPoint[] {
     return aggregatedData.map(row => {
       const geometry = typeof row.geometry === 'string' 
         ? JSON.parse(row.geometry) 
@@ -445,7 +444,7 @@ export class DataManager {
   /**
    * Transform BNBO data from database to frontend format
    */
-  private transformBNBOData(rawData: any[]): BNBOArea[] {
+  private transformBNBOData(rawData: Record<string, unknown>[]): BNBOArea[] {
     return rawData.map(row => ({
       id: row.id,
       bnbo_id: row.bnbo_id,
@@ -463,7 +462,7 @@ export class DataManager {
   /**
    * Transform BBR data from database to frontend format
    */
-  private transformBBRData(rawData: any[]): BBRBuilding[] {
+  private transformBBRData(rawData: Record<string, unknown>[]): BBRBuilding[] {
     return rawData.map(row => ({
       id: row.id,
       bbr_id: row.bbr_id,
@@ -482,11 +481,11 @@ export class DataManager {
   /**
    * Cache management utilities
    */
-  private buildCacheKey(prefix: string, params: any): string {
+  private buildCacheKey(prefix: string, params: Record<string, unknown>): string {
     return `${prefix}_${JSON.stringify(params)}`;
   }
 
-  private getCachedData(key: string, ttlSeconds: number): any | null {
+  private getCachedData(key: string, ttlSeconds: number): unknown | null {
     if (!this.cache.has(key)) {
       return null;
     }
@@ -501,7 +500,7 @@ export class DataManager {
     return this.cache.get(key);
   }
 
-  private setCachedData(key: string, data: any): void {
+  private setCachedData(key: string, data: unknown): void {
     // Implement LRU cache behavior
     if (this.cache.size >= CACHE_SETTINGS.MAX_CACHE_SIZE) {
       const firstKey = this.cache.keys().next().value;
