@@ -1498,17 +1498,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     f.block_id,
                     f.cvr_number,
                     f.year,
-                    f.geom,
-                    f.field_area_m2,
+                    f.geometry as geom,
+                    ST_Area_Spheroid(f.geometry) as field_area_m2,
                     s.soil_code,
                     s.soil_description,
-                    ST_Area_Spheroid(ST_Intersection(f.geom, s.geom)) / ST_Area_Spheroid(f.geom) * 100 as soil_area_share
-                FROM current_fields f
-                LEFT JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
+                    ST_Area_Spheroid(ST_Intersection(f.geometry, s.geom)) / ST_Area_Spheroid(f.geometry) * 100 as soil_area_share
+                FROM combined_fields f
+                LEFT JOIN soil_types s ON ST_Intersects(f.geometry, s.geom)
             """)
 
             # AGGRESSIVE: Immediately drop source tables to free memory
-            self.conn.execute("DROP TABLE IF EXISTS current_fields")
             self.conn.execute("DROP TABLE IF EXISTS combined_fields")
             self.conn.execute("DROP TABLE IF EXISTS soil_types")
 
