@@ -47,9 +47,9 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
 
     # Processing configuration - optimized for direct spatial joins
     batch_size: int = 500000  # Increased for properties chunking only
-    memory_limit: str = "8GB"
-    thread_count: int = 1  # Single thread for memory-intensive spatial operations
-    max_temp_directory_size: str = "6GB"
+    memory_limit: str = "12GB"  # Increased to use more available memory (15GB total)
+    thread_count: int = 2  # Use 2 threads for better spatial join performance
+    max_temp_directory_size: str = "10GB"  # Increased temp space for large spatial operations
 
     # Quality thresholds
     min_area_threshold: float = 0.01  # Minimum area share to include (1%)
@@ -91,12 +91,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.conn.execute("SET temp_directory='/tmp/duckdb_field_analysis'")
 
             # Optimize for spatial operations
-            self.conn.execute("SET threads=1")
+            # Note: threads already set above from config, don't override
             self.conn.execute("SET preserve_insertion_order=false")
 
             # Enable spatial optimizations
             self.conn.execute("SET enable_spatial_index=true")
             self.conn.execute("SET enable_progress_bar=false")
+
+            # Additional memory optimizations for large spatial operations
+            self.conn.execute("SET enable_object_cache=false")  # Reduce memory overhead
+            self.conn.execute("SET enable_checkpoint_on_shutdown=false")  # Faster shutdown
 
         except Exception as e:
             self.log.warning(f"Could not apply some DuckDB optimizations: {e}")
@@ -112,7 +116,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Spatial extension is already loaded in base class
         self.log.info("✅ DuckDB Spatial configured - Field Area Analysis Gold Layer (Optimized)")
         self.log.info(
-            f"   Memory: {self.config.memory_limit}, Threads: 1, Properties chunk size: {self.config.batch_size:,}"
+            f"   Memory: {self.config.memory_limit}, Threads: {self.config.thread_count}, Properties chunk size: {self.config.batch_size:,}"
         )
 
     def _prepare_geometries_optimized(self, fields_table_name: str, year: int):
@@ -341,7 +345,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with soil types...")
         join_start = time.time()
 
-        self.conn.execute("""
+        # Verify SPATIAL_JOIN operator usage
+        soil_join_query = """
             CREATE TABLE fields_with_soil AS
             SELECT 
                 f.*,
@@ -350,7 +355,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as soil_area_share
             FROM current_fields f
             LEFT JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
-        """)
+        """
+
+        # Import and use the verification function
+        from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
+
+        verify_spatial_join_usage(
+            self.conn, soil_join_query.replace("CREATE TABLE fields_with_soil AS\n            ", "")
+        )
+
+        self.conn.execute(soil_join_query)
 
         soil_time = time.time() - join_start
         self.log.info(f"✅ Soil types join completed in {soil_time:.1f} seconds")
