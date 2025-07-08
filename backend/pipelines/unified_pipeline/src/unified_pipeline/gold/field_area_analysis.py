@@ -412,7 +412,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Load from GCS
             self.gcs_access.query_parquet_direct(
                 soil_data,
-                """SELECT 
+                """SELECT
                     soil_description,
                     soil_code,
                     geometry as geom""",
@@ -423,7 +423,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.conn.register("soil_df", soil_data)
             self.conn.execute("""
                 CREATE TABLE soil_types AS
-                SELECT 
+                SELECT
                     soil_description,
                     soil_code,
                     geometry as geom
@@ -433,7 +433,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Check for invalid geometries and apply centralized validator if needed
         soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
         invalid_soil = self.conn.execute("""
-            SELECT COUNT(*) FROM soil_types 
+            SELECT COUNT(*) FROM soil_types
             WHERE NOT ST_IsValid(geom)
         """).fetchone()[0]
 
@@ -472,7 +472,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Split multipolygons into individual polygons for optimal spatial indexing
         self.conn.execute("""
             CREATE TABLE bnbo_polygons AS
-            SELECT 
+            SELECT
                 status_category,
                 (unnest(ST_Dump(geometry))).geom as geom,
                 ROW_NUMBER() OVER () as polygon_id
@@ -535,7 +535,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Load from GCS
             self.gcs_access.query_parquet_direct(
                 wetlands_data,
-                """SELECT 
+                """SELECT
                     wetland_id,
                     geometry as geom""",
                 "wetlands",
@@ -545,7 +545,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.conn.register("wetlands_df", wetlands_data)
             self.conn.execute("""
                 CREATE TABLE wetlands AS
-                SELECT 
+                SELECT
                     wetland_id,
                     geometry as geom
                 FROM wetlands_df
@@ -582,7 +582,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # OPTIMIZATION: Single spatial predicate to enable SPATIAL_JOIN operator
         soil_join_query = """
             CREATE TABLE fields_with_soil AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -616,7 +616,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # OPTIMIZATION: Direct spatial join with aggregation to enable SPATIAL_JOIN
         self.conn.execute("""
             CREATE TABLE fields_with_bnbo AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -633,7 +633,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 ) as bnbo_area_share
             FROM fields_with_soil f
             LEFT JOIN bnbo_polygons b ON ST_Intersects(f.geom, b.geom)
-            GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2, 
+            GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2,
                      f.soil_code, f.soil_description, f.soil_area_share, b.status_category
         """)
 
@@ -648,7 +648,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # OPTIMIZATION: Direct spatial join with aggregation to enable SPATIAL_JOIN
         self.conn.execute("""
             CREATE TABLE fields_with_water AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -668,7 +668,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             FROM fields_with_bnbo f
             LEFT JOIN water_project_polygons wp ON ST_Intersects(f.geom, wp.geom)
             GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2,
-                     f.soil_code, f.soil_description, f.soil_area_share, f.status_category, 
+                     f.soil_code, f.soil_description, f.soil_area_share, f.status_category,
                      f.bnbo_area_share, wp.project_id
         """)
 
@@ -683,7 +683,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # OPTIMIZATION: Direct spatial join with aggregation to enable SPATIAL_JOIN
         self.conn.execute("""
             CREATE TABLE fields_with_wetlands AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -769,7 +769,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute(f"""
                 CREATE TABLE fields_with_soil_bnbo_water_wetlands AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -787,7 +787,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     p.bestemtFastEjendomBFENr as bfe_number,
                     ST_Area_Spheroid(ST_Intersection(f.geom, p.geometry)) / ST_Area_Spheroid(f.geom) * 100 as property_area_share
                 FROM fields_with_wetlands f
-                LEFT JOIN read_parquet('{temp_path}') p 
+                LEFT JOIN read_parquet('{temp_path}') p
                     ON ST_Intersects(f.geom, p.geometry)
                 WHERE p.bestemtFastEjendomBFENr IS NOT NULL OR p.bestemtFastEjendomBFENr IS NULL
             """)
@@ -807,7 +807,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute(f"""
                 CREATE TABLE fields_with_soil_bnbo_water_wetlands AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -891,7 +891,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Create current properties chunk (build side)
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE properties_chunk AS
-                    SELECT 
+                    SELECT
                         bestemtFastEjendomBFENr as bfe_number,
                         geometry as geom
                     FROM read_parquet('{temp_path}')
@@ -902,7 +902,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE properties_spatial_matches AS
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
@@ -916,7 +916,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Step 2: Calculate area shares using spherical area for EPSG:4326
                 self.conn.execute("""
                     INSERT INTO field_property_results
-                    SELECT 
+                    SELECT
                         field_id,
                         block_id,
                         cvr_number,
@@ -956,7 +956,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Create properties table
             self.conn.execute(f"""
                 CREATE TABLE properties AS
-                SELECT 
+                SELECT
                     {bfe_column} as bfe_number,
                     geometry as geom
                 FROM properties_df
@@ -966,7 +966,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
             self.conn.execute("""
                 CREATE TABLE properties_spatial_matches AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -980,7 +980,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Step 2: Calculate area shares using spherical area for EPSG:4326
             self.conn.execute("""
                 CREATE TABLE field_property_results AS
-                SELECT 
+                SELECT
                     field_id,
                     block_id,
                     cvr_number,
@@ -1004,7 +1004,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for properties
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -1016,12 +1016,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for soil types
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
-                CASE 
-                    WHEN soil_code IS NOT NULL THEN 
+                CASE
+                    WHEN soil_code IS NOT NULL THEN
                         '{' || '"' || soil_code || '":' || soil_area_share || '}'
                     ELSE '{}'
                 END as soil_area_shares
@@ -1032,12 +1032,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for BNBO status
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
-                CASE 
-                    WHEN status_category IS NOT NULL THEN 
+                CASE
+                    WHEN status_category IS NOT NULL THEN
                         '{' || '"' || status_category || '":' || bnbo_area_share || '}'
                     ELSE '{}'
                 END as bnbo_area_shares
@@ -1049,7 +1049,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         year_results_table = f"field_area_analysis_results_{year}"
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {year_results_table} AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -1467,7 +1467,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # OPTIMIZATION: Single spatial predicate to enable SPATIAL_JOIN operator
             self.conn.execute("""
                 CREATE TABLE fields_with_soil AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1499,7 +1499,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute("""
                 CREATE TABLE fields_with_bnbo AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1516,7 +1516,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     ) as bnbo_area_share
                 FROM fields_with_soil f
                 LEFT JOIN bnbo_polygons b ON ST_Intersects(f.geom, b.geom)
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2, 
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2,
                          f.soil_code, f.soil_description, f.soil_area_share, b.status_category
             """)
 
@@ -1537,7 +1537,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute("""
                 CREATE TABLE fields_with_water AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1557,7 +1557,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 FROM fields_with_bnbo f
                 LEFT JOIN water_project_polygons wp ON ST_Intersects(f.geom, wp.geom)
                 GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2,
-                         f.soil_code, f.soil_description, f.soil_area_share, f.status_category, 
+                         f.soil_code, f.soil_description, f.soil_area_share, f.status_category,
                          f.bnbo_area_share, wp.project_id
             """)
 
@@ -1578,7 +1578,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute("""
                 CREATE TABLE fields_with_wetlands AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1677,7 +1677,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Create result table directly from streaming join
                 self.conn.execute(f"""
                     CREATE TABLE fields_with_soil_bnbo_water_wetlands AS
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
@@ -1695,7 +1695,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         p.bestemtFastEjendomBFENr as bfe_number,
                         ST_Area_Spheroid(ST_Intersection(f.geom, p.geometry)) / ST_Area_Spheroid(f.geom) * 100 as property_area_share
                     FROM fields_with_wetlands f
-                    LEFT JOIN read_parquet('{temp_path}') p 
+                    LEFT JOIN read_parquet('{temp_path}') p
                         ON ST_Intersects(f.geom, p.geometry)
                     WHERE p.bestemtFastEjendomBFENr IS NOT NULL OR p.bestemtFastEjendomBFENr IS NULL
                 """)
@@ -1715,7 +1715,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             self.conn.execute(f"""
                 CREATE TABLE fields_with_soil_bnbo_water_wetlands AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1768,10 +1768,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             chunk_size = self.config.batch_size  # Use config batch size for properties
 
             # Adjust chunk size based on available memory
-        try:
-            import psutil
+            try:
+                import psutil
 
-            memory = psutil.virtual_memory()
+                memory = psutil.virtual_memory()
                 if memory.percent > 70:  # If memory usage is high, reduce chunk size
                     chunk_size = chunk_size // 2
                     self.log.info(
@@ -1803,7 +1803,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Create current properties chunk (build side)
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE properties_chunk AS
-                    SELECT 
+                    SELECT
                         bestemtFastEjendomBFENr as bfe_number,
                         geometry as geom
                     FROM read_parquet('{temp_path}')
@@ -1814,7 +1814,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE properties_spatial_matches AS
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
@@ -1828,7 +1828,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 # Step 2: Calculate area shares using spherical area for EPSG:4326
                 self.conn.execute("""
                     INSERT INTO field_property_results
-                    SELECT 
+                    SELECT
                         field_id,
                         block_id,
                         cvr_number,
@@ -1868,7 +1868,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Create properties table
             self.conn.execute(f"""
                 CREATE TABLE properties AS
-                SELECT 
+                SELECT
                     {bfe_column} as bfe_number,
                     geometry as geom
                 FROM properties_df
@@ -1878,7 +1878,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
             self.conn.execute("""
                 CREATE TABLE properties_spatial_matches AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1892,7 +1892,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             # Step 2: Calculate area shares using spherical area for EPSG:4326
             self.conn.execute("""
                 CREATE TABLE field_property_results AS
-                SELECT 
+                SELECT
                     field_id,
                     block_id,
                     cvr_number,
@@ -1916,7 +1916,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for properties
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -1928,12 +1928,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for soil types
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
-                CASE 
-                    WHEN soil_code IS NOT NULL THEN 
+                CASE
+                    WHEN soil_code IS NOT NULL THEN
                         '{' || '"' || soil_code || '":' || soil_area_share || '}'
                     ELSE '{}'
                 END as soil_area_shares
@@ -1944,12 +1944,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Create JSON aggregations for BNBO status
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_json AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
-                CASE 
-                    WHEN status_category IS NOT NULL THEN 
+                CASE
+                    WHEN status_category IS NOT NULL THEN
                         '{' || '"' || status_category || '":' || bnbo_area_share || '}'
                     ELSE '{}'
                 END as bnbo_area_shares
@@ -1961,7 +1961,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         year_results_table = f"field_area_analysis_results_{year}"
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {year_results_table} AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -2108,7 +2108,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     self.log.info(f"✅ Loaded {count:,} fields for year {year} (optimized)")
                 else:
                     self.log.warning(f"No data in table {table_name}")
-        except Exception as e:
+            except Exception as e:
                 self.log.warning(f"Failed to verify table {table_name}: {e}")
 
         if all_table_names:
@@ -2189,7 +2189,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     else:
                         self.log.warning(f"No data found for {dataset_name}")
                         dataset_paths[dataset_name] = None
-        except Exception as e:
+                except Exception as e:
                     self.log.error(f"Error finding {dataset_name}: {e}")
                     dataset_paths[dataset_name] = None
 
@@ -2230,7 +2230,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         if geometry_column == "geometry_wkt":
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_fields AS
-                SELECT 
+                SELECT
                     field_id,
                     block_id,
                     cvr_number,
@@ -2243,7 +2243,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         else:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_fields AS
-                SELECT 
+                SELECT
                     field_id,
                     block_id,
                     cvr_number,
@@ -2256,7 +2256,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             # Debug: Check for invalid geometries that might have slipped through silver layer validation
         invalid_count = self.conn.execute("""
-            SELECT COUNT(*) FROM current_fields 
+            SELECT COUNT(*) FROM current_fields
             WHERE NOT ST_IsValid(geom)
         """).fetchone()[0]
 
