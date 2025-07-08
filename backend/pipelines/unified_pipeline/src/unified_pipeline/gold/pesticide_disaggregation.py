@@ -828,9 +828,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     "   This significantly improves performance when no matches are possible"
                 )
 
-                # Return empty results since no processing is possible
+                # Return 0 since no processing is possible
                 self.log.info(f"📊 Year {pesticide_year} completed with 0 records (no CVR matches)")
-                return []
+                return 0
 
             # STEP 4: RUN THE 4-STRATEGY DISAGGREGATION PROCESS
             # =================================================
