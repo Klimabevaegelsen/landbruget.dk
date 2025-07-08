@@ -150,7 +150,7 @@ jobs:
             -j "$STAGE" \
             --fvm-layer-type ${{ matrix.layer_type }} \
             --fvm-year ${{ matrix.year }}
-        timeout-minutes: 30  # Timeout per layer (should be sufficient based on testing)
+        # timeout-minutes: 30  # Removed timeout to allow organic areas processing to complete
 
       - name: Report completion
         if: success()
