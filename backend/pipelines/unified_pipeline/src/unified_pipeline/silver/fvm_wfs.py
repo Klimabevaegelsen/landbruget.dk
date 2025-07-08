@@ -880,7 +880,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 if bronze_data is not None:
                     self.log.info("Using bronze data from memory (in-memory data passing)")
                     # Bronze data structure: {layer_type: {year: raw_data}}
-                    layer_data = bronze_data.get(layer_type.lower(), {})
+                    # Map layer types to bronze data keys
+                    bronze_key_mapping = {
+                        "markblokke": "markblokke",
+                        "marker": "marker",
+                        "smaabiotoper": "smaabiotoper",
+                        "organicareas": "organic_areas",  # Fix: OrganicAreas -> organic_areas
+                    }
+                    bronze_key = bronze_key_mapping.get(layer_type.lower(), layer_type.lower())
+                    layer_data = bronze_data.get(bronze_key, {})
                     if year in layer_data:
                         raw_data = layer_data[year]
                         # ✅ MIGRATION: Convert to  if it's not already using DuckDB
