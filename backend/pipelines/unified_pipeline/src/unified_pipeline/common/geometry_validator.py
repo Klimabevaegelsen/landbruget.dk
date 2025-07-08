@@ -254,6 +254,9 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
                     logger.info(f"   📍 {line.strip()}")
         else:
             logger.warning("⚠️ SPATIAL_JOIN operator not used - query may use standard join")
+            logger.warning(
+                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates without complex calculations in SELECT"
+            )
             logger.debug(f"Query plan:\n{explain_text}")
 
         return spatial_join_detected

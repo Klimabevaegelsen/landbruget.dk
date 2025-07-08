@@ -12,6 +12,7 @@ Key optimizations applied:
 4. Chunked processing only for properties dataset (6.5M rows)
 5. Direct spatial joins for smaller datasets with automatic spatial indexing
 6. Performance tracking and detailed timing metrics
+7. Spherical area calculations (ST_Area_Spheroid) for accurate EPSG:4326 measurements
 
 Migrated from the standalone field_area_analysis_pipeline to the unified pipeline architecture.
 """
@@ -345,14 +346,13 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with soil types...")
         join_start = time.time()
 
-        # Verify SPATIAL_JOIN operator usage
-        soil_join_query = """
-            CREATE TABLE fields_with_soil AS
+        # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
+        simple_soil_join_query = """
             SELECT 
                 f.*,
                 s.soil_code,
                 s.soil_description,
-                ST_Area(ST_Intersection(f.geom, s.geom)) / ST_Area(f.geom) * 100 as soil_area_share
+                s.geom as soil_geom
             FROM current_fields f
             LEFT JOIN soil_types s ON ST_Intersects(f.geom, s.geom)
         """
@@ -360,11 +360,36 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         # Import and use the verification function
         from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
 
-        verify_spatial_join_usage(
-            self.conn, soil_join_query.replace("CREATE TABLE fields_with_soil AS\n            ", "")
-        )
+        verify_spatial_join_usage(self.conn, simple_soil_join_query)
 
-        self.conn.execute(soil_join_query)
+        # Execute the simple spatial join first
+        self.conn.execute(f"""
+            CREATE TABLE fields_with_soil_raw AS
+            {simple_soil_join_query}
+        """)
+
+        # Step 2: Calculate area shares in a separate step using spherical area for EPSG:4326
+        self.conn.execute("""
+            CREATE TABLE fields_with_soil AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                geom,
+                field_area_m2,
+                soil_code,
+                soil_description,
+                CASE 
+                    WHEN soil_geom IS NOT NULL THEN 
+                        ST_Area_Spheroid(ST_Intersection(geom, soil_geom)) / ST_Area_Spheroid(geom) * 100
+                    ELSE NULL
+                END as soil_area_share
+            FROM fields_with_soil_raw
+        """)
+
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE fields_with_soil_raw")
 
         soil_time = time.time() - join_start
         self.log.info(f"✅ Soil types join completed in {soil_time:.1f} seconds")
@@ -373,19 +398,41 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with BNBO polygons...")
         join_start = time.time()
 
+        # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
         self.conn.execute("""
-            CREATE TABLE fields_with_bnbo AS
+            CREATE TABLE fields_with_bnbo_raw AS
             SELECT 
                 f.*,
                 b.status_category,
-                CASE 
-                    WHEN b.status_category IS NOT NULL THEN 
-                        ST_Area(ST_Intersection(f.geom, b.geom)) / ST_Area(f.geom) * 100
-                    ELSE NULL
-                END as bnbo_area_share
+                b.geom as bnbo_geom
             FROM fields_with_soil f
             LEFT JOIN bnbo_polygons b ON ST_Intersects(f.geom, b.geom)
         """)
+
+        # Step 2: Calculate area shares using spherical area for EPSG:4326
+        self.conn.execute("""
+            CREATE TABLE fields_with_bnbo AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                geom,
+                field_area_m2,
+                soil_code,
+                soil_description,
+                soil_area_share,
+                status_category,
+                CASE 
+                    WHEN status_category IS NOT NULL THEN 
+                        ST_Area_Spheroid(ST_Intersection(geom, bnbo_geom)) / ST_Area_Spheroid(geom) * 100
+                    ELSE NULL
+                END as bnbo_area_share
+            FROM fields_with_bnbo_raw
+        """)
+
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE fields_with_bnbo_raw")
 
         bnbo_time = time.time() - join_start
         self.log.info(f"✅ BNBO polygons join completed in {bnbo_time:.1f} seconds")
@@ -394,19 +441,43 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with water project polygons...")
         join_start = time.time()
 
+        # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
         self.conn.execute("""
-            CREATE TABLE fields_with_water AS
+            CREATE TABLE fields_with_water_raw AS
             SELECT 
                 f.*,
                 wp.project_id,
-                CASE 
-                    WHEN wp.project_id IS NOT NULL THEN 
-                        ST_Area(ST_Intersection(f.geom, wp.geom)) / ST_Area(f.geom) * 100
-                    ELSE 0
-                END as water_projects_area_share
+                wp.geom as water_geom
             FROM fields_with_bnbo f
             LEFT JOIN water_project_polygons wp ON ST_Intersects(f.geom, wp.geom)
         """)
+
+        # Step 2: Calculate area shares using spherical area for EPSG:4326
+        self.conn.execute("""
+            CREATE TABLE fields_with_water AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                geom,
+                field_area_m2,
+                soil_code,
+                soil_description,
+                soil_area_share,
+                status_category,
+                bnbo_area_share,
+                project_id,
+                CASE 
+                    WHEN project_id IS NOT NULL THEN 
+                        ST_Area_Spheroid(ST_Intersection(geom, water_geom)) / ST_Area_Spheroid(geom) * 100
+                    ELSE 0
+                END as water_projects_area_share
+            FROM fields_with_water_raw
+        """)
+
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE fields_with_water_raw")
 
         water_time = time.time() - join_start
         self.log.info(f"✅ Water project polygons join completed in {water_time:.1f} seconds")
@@ -415,33 +486,79 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Joining with wetlands...")
         join_start = time.time()
 
-        # Simplified wetland join using single spatial predicate for SPATIAL_JOIN operator
+        # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
+        self.conn.execute("""
+            CREATE TABLE fields_with_wetlands_raw AS
+            SELECT 
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                f.geom,
+                f.field_area_m2,
+                f.soil_code,
+                f.soil_description,
+                f.soil_area_share,
+                f.status_category,
+                f.bnbo_area_share,
+                f.project_id,
+                f.water_projects_area_share,
+                w.geom as wetland_geom
+            FROM fields_with_water f
+            LEFT JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
+        """)
+
+        # Step 2: Calculate wetland area shares with aggregation using spherical area for EPSG:4326
         self.conn.execute("""
             CREATE TABLE fields_with_wetlands AS
-            WITH wetland_intersections AS (
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.year,
-                    f.geom,
-                    f.field_area_m2,
-                    f.soil_code,
-                    f.soil_description,
-                    f.soil_area_share,
-                    f.status_category,
-                    f.bnbo_area_share,
-                    f.project_id,
-                    f.water_projects_area_share,
-                    COALESCE(ST_Area(ST_Union_Agg(ST_Intersection(f.geom, w.geom))) / ST_Area(f.geom) * 100, 0) as wetland_area_share
-                FROM fields_with_water f
-                LEFT JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.geom, f.field_area_m2, 
-                         f.soil_code, f.soil_description, f.soil_area_share, 
-                         f.status_category, f.bnbo_area_share, f.project_id, f.water_projects_area_share
-            )
-            SELECT * FROM wetland_intersections
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                geom,
+                field_area_m2,
+                soil_code,
+                soil_description,
+                soil_area_share,
+                status_category,
+                bnbo_area_share,
+                project_id,
+                water_projects_area_share,
+                COALESCE(
+                    ST_Area_Spheroid(ST_Union_Agg(ST_Intersection(geom, wetland_geom))) / ST_Area_Spheroid(geom) * 100, 
+                    0
+                ) as wetland_area_share
+            FROM fields_with_wetlands_raw
+            WHERE wetland_geom IS NOT NULL
+            GROUP BY field_id, block_id, cvr_number, year, geom, field_area_m2, 
+                     soil_code, soil_description, soil_area_share, 
+                     status_category, bnbo_area_share, project_id, water_projects_area_share
+            
+            UNION ALL
+            
+            -- Include fields with no wetland intersections
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                geom,
+                field_area_m2,
+                soil_code,
+                soil_description,
+                soil_area_share,
+                status_category,
+                bnbo_area_share,
+                project_id,
+                water_projects_area_share,
+                0 as wetland_area_share
+            FROM fields_with_wetlands_raw
+            WHERE wetland_geom IS NULL
         """)
+
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE fields_with_wetlands_raw")
 
         wetlands_time = time.time() - join_start
         self.log.info(f"✅ Wetlands join completed in {wetlands_time:.1f} seconds")
@@ -531,17 +648,30 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     LIMIT {chunk_size} OFFSET {offset}
                 """)
 
-                # Spatial join with area calculation
+                # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
                 self.conn.execute("""
-                    INSERT INTO field_property_results
+                    CREATE OR REPLACE TABLE properties_spatial_matches AS
                     SELECT 
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
+                        f.geom as field_geom,
                         p.bfe_number,
-                        ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
+                        p.geom as property_geom
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
+                """)
+
+                # Step 2: Calculate area shares using spherical area for EPSG:4326
+                self.conn.execute("""
+                    INSERT INTO field_property_results
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        bfe_number,
+                        ST_Area_Spheroid(ST_Intersection(field_geom, property_geom)) / ST_Area_Spheroid(field_geom) * 100 as area_share
+                    FROM properties_spatial_matches
                 """)
 
                 processed_properties += chunk_properties
@@ -577,17 +707,30 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 WHERE {bfe_column} IS NOT NULL
             """)
 
-            # Create results table and process
+            # Step 1: Simple spatial join to enable SPATIAL_JOIN operator
             self.conn.execute("""
-                CREATE TABLE field_property_results AS
+                CREATE TABLE properties_spatial_matches AS
                 SELECT 
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
+                    f.geom as field_geom,
                     p.bfe_number,
-                    ST_Area(ST_Intersection(f.geom, p.geom)) / ST_Area(f.geom) * 100 as area_share
+                    p.geom as property_geom
                 FROM fields_with_wetlands f
                 JOIN properties p ON ST_Intersects(f.geom, p.geom)
+            """)
+
+            # Step 2: Calculate area shares using spherical area for EPSG:4326
+            self.conn.execute("""
+                CREATE TABLE field_property_results AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    bfe_number,
+                    ST_Area_Spheroid(ST_Intersection(field_geom, property_geom)) / ST_Area_Spheroid(field_geom) * 100 as area_share
+                FROM properties_spatial_matches
             """)
 
         properties_time = time.time() - chunk_start
@@ -1024,7 +1167,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             )
             raise ValueError("Required geometry column not found in agricultural fields data")
 
-        # Convert geometry_wkt to geometry if needed and calculate field_area_m2
+        # Convert geometry_wkt to geometry if needed and calculate field_area_m2 using spherical area for EPSG:4326
         if geometry_column == "geometry_wkt":
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_fields AS
@@ -1034,7 +1177,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     cvr_number,
                     year,
                     ST_GeomFromText({geometry_column}) as geom,
-                    ST_Area(ST_GeomFromText({geometry_column})) as field_area_m2
+                    ST_Area_Spheroid(ST_GeomFromText({geometry_column})) as field_area_m2
                 FROM {fields_table_name}
                 WHERE {geometry_column} IS NOT NULL
             """)
@@ -1047,7 +1190,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     cvr_number,
                     year,
                     {geometry_column} as geom,
-                    ST_Area({geometry_column}) as field_area_m2
+                    ST_Area_Spheroid({geometry_column}) as field_area_m2
                 FROM {fields_table_name}
                 WHERE {geometry_column} IS NOT NULL
             """)
