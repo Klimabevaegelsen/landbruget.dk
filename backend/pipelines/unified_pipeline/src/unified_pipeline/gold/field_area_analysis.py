@@ -33,6 +33,7 @@ import psutil
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.log_util import Logger
 
 
@@ -548,7 +549,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         direct_start = time.time()
 
         if isinstance(properties_data, str) and properties_data.startswith("gs://"):
-            # OPTIMIZATION: Direct spatial join with streaming from GCS
+            # OPTIMIZATION: Use GCS access layer instead of direct read_parquet
+            self.log.info("Downloading properties data from GCS for direct processing...")
+            temp_path = self.gcs_access._temp_download(properties_data)
+
             self.conn.execute(f"""
                 CREATE TABLE fields_with_soil_bnbo_water_wetlands AS
                 SELECT 
@@ -569,7 +573,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     p.bestemtFastEjendomBFENr as bfe_number,
                     ST_Area_Spheroid(ST_Intersection(f.geom, p.geometry)) / ST_Area_Spheroid(f.geom) * 100 as property_area_share
                 FROM fields_with_wetlands f
-                LEFT JOIN read_parquet('{properties_data}') p 
+                LEFT JOIN read_parquet('{temp_path}') p 
                     ON ST_Intersects(f.geom, p.geometry)
                 WHERE p.bestemtFastEjendomBFENr IS NOT NULL OR p.bestemtFastEjendomBFENr IS NULL
             """)
@@ -625,13 +629,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         fallback_start = time.time()
 
         if isinstance(properties_data, str) and properties_data.startswith("gs://"):
-            # Stream from GCS
-            properties_path = properties_data
+            # Stream from GCS using temp download
+            self.log.info("Downloading properties data from GCS for chunked processing...")
+            temp_path = self.gcs_access._temp_download(properties_data)
 
             # Get total properties count WITHOUT loading the entire dataset
             self.log.info("🔍 Getting properties count without loading full dataset...")
             total_properties = self.conn.execute(f"""
-                SELECT COUNT(*) FROM read_parquet('{properties_path}')
+                SELECT COUNT(*) FROM read_parquet('{temp_path}')
             """).fetchone()[0]
 
             chunk_size = self.config.batch_size  # Use config batch size for properties
@@ -675,7 +680,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     SELECT 
                         bestemtFastEjendomBFENr as bfe_number,
                         geometry as geom
-                    FROM read_parquet('{properties_path}')
+                    FROM read_parquet('{temp_path}')
                     WHERE bestemtFastEjendomBFENr IS NOT NULL
                     LIMIT {chunk_size} OFFSET {offset}
                 """)
@@ -770,7 +775,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 FROM properties_spatial_matches
             """)
 
-        properties_time = time.time() - chunk_start
+        properties_time = time.time() - fallback_start
         self.log.info(f"✅ Properties processing completed in {properties_time:.1f} seconds")
 
         return properties_time

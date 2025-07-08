@@ -514,11 +514,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info(f"Loading {len(years_batch)} years of data for batch processing...")
 
             # Load multiple years into single table for efficient spatial processing
-            year_selects = []
+            year_tables = []
             total_loaded = 0
 
             for year in years_batch:
                 dataset_name = f"fvm_marker_{year}"
+                temp_table_name = f"temp_fields_{year}"
 
                 if silver_data and dataset_name in silver_data:
                     # Register the dataframe and create temp table
@@ -548,9 +549,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         self.log.warning(f"No geometry column found in {dataset_name}")
                         continue
 
-                    # Build year-specific SELECT
+                    # Build year-specific table
                     if year >= 2008:
-                        year_select = f"""
+                        year_query = f"""
+                            CREATE OR REPLACE TABLE {temp_table_name} AS
                             SELECT 
                                 {field_id_select},
                                 block_id,
@@ -564,7 +566,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             WHERE {geometry_where}
                         """
                     else:
-                        year_select = f"""
+                        year_query = f"""
+                            CREATE OR REPLACE TABLE {temp_table_name} AS
                             SELECT 
                                 {field_id_select},
                                 NULL as block_id,
@@ -578,87 +581,106 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             WHERE {geometry_where}
                         """
 
-                    year_selects.append(year_select)
+                    self.conn.execute(year_query)
+                    year_tables.append(temp_table_name)
 
                 else:
-                    # Load from GCS
+                    # Load from GCS using proper authentication
                     try:
                         gcs_path = self._get_latest_silver_path(dataset_name)
 
-                        # Check column structure first
-                        columns_info = self.conn.execute(
-                            f"DESCRIBE (SELECT * FROM read_parquet('{gcs_path}') LIMIT 1)"
-                        ).fetchall()
-                        column_names = [col[0] for col in columns_info]
+                        # Use gcs_access for proper authentication
+                        with self.gcs_access._temp_download(gcs_path) as temp_file:
+                            # Check column structure first
+                            columns_info = self.conn.execute(
+                                f"DESCRIBE (SELECT * FROM read_parquet('{temp_file}') LIMIT 1)"
+                            ).fetchall()
+                            column_names = [col[0] for col in columns_info]
 
-                        # Build SELECT clause with proper column mapping
-                        field_id_select = (
-                            "field_id" if "field_id" in column_names else "NULL as field_id"
-                        )
+                            # Build SELECT clause with proper column mapping
+                            field_id_select = (
+                                "field_id" if "field_id" in column_names else "NULL as field_id"
+                            )
 
-                        if "crop_type" in column_names:
-                            crop_type_select = "crop_type"
-                        elif "layer_type" in column_names:
-                            crop_type_select = "layer_type as crop_type"
-                        else:
-                            crop_type_select = "'unknown' as crop_type"
+                            if "crop_type" in column_names:
+                                crop_type_select = "crop_type"
+                            elif "layer_type" in column_names:
+                                crop_type_select = "layer_type as crop_type"
+                            else:
+                                crop_type_select = "'unknown' as crop_type"
 
-                        # Handle geometry column
-                        if "geometry" in column_names:
-                            geometry_select = "geometry"
-                            geometry_where = "geometry IS NOT NULL"
-                        else:
-                            self.log.warning(f"No geometry column found in {dataset_name}")
-                            continue
+                            # Handle geometry column
+                            if "geometry" in column_names:
+                                geometry_select = "geometry"
+                                geometry_where = "geometry IS NOT NULL"
+                            else:
+                                self.log.warning(f"No geometry column found in {dataset_name}")
+                                continue
 
-                        # Build year-specific SELECT
-                        if year >= 2008:
-                            year_select = f"""
-                                SELECT 
-                                    {field_id_select},
-                                    block_id,
-                                    cvr_number,
-                                    area_ha,
-                                    {crop_type_select},
-                                    false as organic_farming,
-                                    {year} as year,
-                                    {geometry_select}
-                                FROM read_parquet('{gcs_path}')
-                                WHERE {geometry_where}
-                            """
-                        else:
-                            year_select = f"""
-                                SELECT 
-                                    {field_id_select},
-                                    NULL as block_id,
-                                    cvr_number,
-                                    area_ha,
-                                    {crop_type_select},
-                                    false as organic_farming,
-                                    {year} as year,
-                                    {geometry_select}
-                                FROM read_parquet('{gcs_path}')
-                                WHERE {geometry_where}
-                            """
+                            # Build year-specific table using temp file
+                            if year >= 2008:
+                                year_query = f"""
+                                    CREATE OR REPLACE TABLE {temp_table_name} AS
+                                    SELECT 
+                                        {field_id_select},
+                                        block_id,
+                                        cvr_number,
+                                        area_ha,
+                                        {crop_type_select},
+                                        false as organic_farming,
+                                        {year} as year,
+                                        {geometry_select}
+                                    FROM read_parquet('{temp_file}')
+                                    WHERE {geometry_where}
+                                """
+                            else:
+                                year_query = f"""
+                                    CREATE OR REPLACE TABLE {temp_table_name} AS
+                                    SELECT 
+                                        {field_id_select},
+                                        NULL as block_id,
+                                        cvr_number,
+                                        area_ha,
+                                        {crop_type_select},
+                                        false as organic_farming,
+                                        {year} as year,
+                                        {geometry_select}
+                                    FROM read_parquet('{temp_file}')
+                                    WHERE {geometry_where}
+                                """
 
-                        year_selects.append(year_select)
+                            self.conn.execute(year_query)
+                            year_tables.append(temp_table_name)
 
                     except Exception as e:
                         self.log.warning(f"Could not load {dataset_name} from GCS: {e}")
                         continue
 
-            if not year_selects:
+            if not year_tables:
                 self.log.warning("No data loaded for batch processing")
                 return 0
 
-            # Combine all years in single operation for spatial index efficiency
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE batch_fields AS
-                {" UNION ALL ".join(year_selects)}
-            """)
+            # Combine all year tables into single batch table
+            if len(year_tables) == 1:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE batch_fields AS
+                    SELECT * FROM {year_tables[0]}
+                """)
+            else:
+                union_query = " UNION ALL ".join(
+                    [f"SELECT * FROM {table}" for table in year_tables]
+                )
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE batch_fields AS
+                    {union_query}
+                """)
 
             field_count = self.conn.execute("SELECT COUNT(*) FROM batch_fields").fetchone()[0]
             self.log.info(f"Loaded {field_count:,} fields across {len(years_batch)} years")
+
+            # Clean up temporary year tables
+            for table in year_tables:
+                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
 
             # Single spatial join for entire batch (creates spatial index once)
             spatial_start = time.time()
