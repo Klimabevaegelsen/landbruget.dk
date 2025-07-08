@@ -247,7 +247,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.log.warning(f"Error in aggressive cleanup: {e}")
 
     def _check_emergency_memory_threshold(self) -> bool:
-        """Check if we're approaching emergency memory threshold."""
+        """Check if memory usage is safe to continue (returns True if safe, False if emergency)."""
         try:
             import psutil
 
@@ -256,14 +256,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             if memory.percent > (self.config.emergency_memory_threshold * 100):
                 self.log.warning(f"🚨 Emergency memory threshold exceeded: {memory.percent:.1f}%")
                 self._emergency_resource_cleanup()
-                return True
-            return False
+                return False  # FIXED: Return False when memory is too high
+            return True  # FIXED: Return True when memory is safe
 
         except ImportError:
-            return False
+            return True  # FIXED: Default to safe when psutil unavailable
         except Exception as e:
             self.log.warning(f"Could not check emergency memory threshold: {e}")
-            return False
+            return True  # FIXED: Default to safe on error
 
     def _emergency_resource_cleanup(self):
         """Emergency resource cleanup when approaching memory limits."""

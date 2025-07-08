@@ -962,6 +962,20 @@ def main():
                 else:
                     logging.warning(f"Override directory specified but no files found: {bronze_path}")
 
+                    # GITHUB ACTIONS FIX: Try alternative path if in GitHub Actions
+                    if os.getenv("GITHUB_ACTIONS") == "true":
+                        # Try the standard GitHub Actions data path as fallback
+                        fallback_bronze_path = Path("/tmp/data/bronze/chr") / bronze_dir_override
+                        if fallback_bronze_path.exists() and any(fallback_bronze_path.glob("*.json")):
+                            has_bronze_files = True
+                            logging.warning(
+                                f"Found bronze files in GitHub Actions fallback path: {fallback_bronze_path}"
+                            )
+                            # Update the config to use the correct path for later processing
+                            config.BRONZE_BASE_DIR = Path("/tmp/data/bronze/chr")
+                        else:
+                            logging.warning(f"GitHub Actions fallback path also not found: {fallback_bronze_path}")
+
             # PRIORITY 2: Check current export timestamp directory
             if not has_bronze_files:
                 bronze_path = config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP

@@ -8,9 +8,12 @@ comprehensive production estimates for analytics and downstream consumption.
 Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 """
 
+import gc
 import os
+import time
 from typing import Any, Dict, List, Optional
 
+import psutil
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -154,7 +157,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """Safely clean up temporary files without interfering with active DuckDB operations."""
         import glob
         import os
-        import time
 
         temp_dir = "/tmp/duckdb_optimized"
         try:
@@ -205,14 +207,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self._cleanup_temp_files_safe()
 
             # 4. Python garbage collection
-            import gc
-
             collected = gc.collect()
 
             # 5. Log memory status after cleanup
             try:
-                import psutil
-
                 memory = psutil.virtual_memory()
                 self.log.info(
                     f"   Memory after cleanup: {memory.used / (1024**3):.1f}GB ({memory.percent:.1f}%)"
@@ -227,8 +225,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _check_emergency_memory_threshold(self) -> bool:
         """Check if we're approaching emergency memory threshold."""
         try:
-            import psutil
-
             memory = psutil.virtual_memory()
 
             if memory.percent > (self.config.emergency_memory_threshold * 100):
@@ -273,14 +269,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute("VACUUM")
 
             # 3. Aggressive Python cleanup
-            import gc
-
             gc.collect()
             gc.collect()  # Run twice for better cleanup
 
             # 4. Clean all temp files
-            import shutil
-
             temp_dir = "/tmp/duckdb_optimized"
             if os.path.exists(temp_dir):
                 try:
@@ -367,9 +359,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
     def _log_performance_metrics(self, phase: str, start_time: float) -> None:
         """Log detailed performance metrics for each phase."""
-        import time
-
-        import psutil
 
         duration = time.time() - start_time
         memory = psutil.virtual_memory()
@@ -413,8 +402,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _force_memory_cleanup(self):
         """Force DuckDB and Python memory cleanup with monitoring."""
         try:
-            import psutil
-
             # Check memory before cleanup
             memory_before = psutil.virtual_memory()
 
@@ -423,8 +410,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute("VACUUM")
 
             # Python garbage collection
-            import gc
-
             collected = gc.collect()
 
             # Check memory after cleanup
@@ -444,8 +429,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _monitor_and_adjust_processing(self) -> int:
         """Monitor memory usage and adjust batch sizes dynamically."""
         try:
-            import psutil
-
             memory = psutil.virtual_memory()
             memory_gb = memory.used / (1024**3)
             memory_percent = memory.percent
@@ -472,8 +455,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _check_memory_threshold_for_batch_processing(self, years_count: int) -> bool:
         """Check if we have enough memory for batch processing."""
         try:
-            import psutil
-
             memory = psutil.virtual_memory()
             memory_percent = memory.percent
 
@@ -573,8 +554,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             f"   • Checkpoint frequency: {self.config.checkpoint_threshold_mb}MB (aggressive)"
         )
         self.log.info(f"   • Emergency threshold: {self.config.emergency_memory_threshold:.0%}")
-
-        import time
 
         total_start = time.time()
 
