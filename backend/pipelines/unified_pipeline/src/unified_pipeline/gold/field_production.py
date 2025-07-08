@@ -79,19 +79,26 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _get_latest_silver_path(self, dataset: str) -> str:
         """Override base method to handle both data.parquet and {dataset}.parquet naming patterns."""
         try:
+            all_files = []
+
             # Try the new pattern first: {dataset}.parquet
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/{dataset}.parquet"
-            files = self.gcs_access.list_files(pattern)
-            if files:
-                return sorted(files)[-1]  # Latest by timestamp
+            pattern1 = f"gs://{self.config.bucket}/silver/{dataset}/*/{dataset}.parquet"
+            files1 = self.gcs_access.list_files(pattern1)
+            all_files.extend(files1)
 
-            # Fall back to old pattern: data.parquet
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
-            files = self.gcs_access.list_files(pattern)
-            if files:
-                return sorted(files)[-1]  # Latest by timestamp
+            # Also try the old pattern: data.parquet
+            pattern2 = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
+            files2 = self.gcs_access.list_files(pattern2)
+            all_files.extend(files2)
 
-            raise FileNotFoundError(f"No silver data found for {dataset}")
+            if not all_files:
+                raise FileNotFoundError(f"No silver data found for {dataset}")
+
+            # Return the latest file across all patterns by timestamp
+            latest_file = sorted(all_files)[-1]
+            self.log.info(f"Found latest silver data for {dataset}: {latest_file}")
+            return latest_file
+
         except Exception as e:
             raise FileNotFoundError(f"No silver data found for {dataset}: {e}")
 
