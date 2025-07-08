@@ -85,11 +85,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_water_intersections AS
             SELECT 
-                CAST(NULL AS VARCHAR) as wetland_id,
                 CAST(NULL AS VARCHAR) as project_id,
+                CAST(NULL AS VARCHAR) as wetland_id,
+                CAST(NULL AS GEOMETRY) as water_project_geometry,
+                CAST(NULL AS GEOMETRY) as intersection_geometry,
                 CAST(NULL AS DOUBLE) as intersection_area_m2,
                 CAST(NULL AS DOUBLE) as wetland_area_m2,
-                CAST(NULL AS DOUBLE) as coverage_percentage
+                CAST(NULL AS DOUBLE) as water_project_area_m2,
+                CAST(NULL AS DOUBLE) as wp_coverage_percentage
             WHERE FALSE
         """)
 
@@ -136,6 +139,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 wp.geometry as water_project_geometry,
                 ST_Intersection(w.geometry, wp.geometry) as intersection_geometry,
                 ST_Area_Spheroid(ST_Intersection(w.geometry, wp.geometry)) as intersection_area_m2,
+                w.wetland_area_m2,
                 ST_Area_Spheroid(wp.geometry) as water_project_area_m2,
                 (ST_Area_Spheroid(ST_Intersection(w.geometry, wp.geometry)) / ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
                 
