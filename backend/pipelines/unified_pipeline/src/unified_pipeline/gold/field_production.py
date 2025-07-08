@@ -43,6 +43,12 @@ class FieldProductionGoldConfig(BaseJobConfig):
     batch_size: int = 5000  # Optimized for SPATIAL_JOIN performance
     max_year_lag: int = 3  # Maximum years between field and DST data
 
+    # Memory and performance configuration
+    memory_limit: str = "10GB"  # Reduced from default 12GB to leave more headroom
+    max_temp_directory_size: str = "8GB"  # Reduced temp space to prevent overflow
+    thread_count: int = 2  # Reduced threads to save memory
+    enable_memory_optimizations: bool = True  # Enable DuckDB memory optimizations
+
     # Quality thresholds
     min_yield_coverage: float = 0.3  # Minimum acceptable yield coverage rate
 
@@ -69,6 +75,94 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
             raise RuntimeError("Spatial extension is required but not available from BaseSource")
+
+        # Apply memory optimizations
+        self._configure_memory_optimizations()
+
+    def _configure_memory_optimizations(self):
+        """Configure DuckDB memory optimizations for field production processing."""
+        if not self.config.enable_memory_optimizations:
+            return
+
+        try:
+            self.log.info("🔧 Applying memory optimizations for field production...")
+
+            # Memory settings - override base configuration with more conservative values
+            self.conn.execute(f"SET memory_limit = '{self.config.memory_limit}'")
+            self.conn.execute(f"SET max_memory = '{self.config.memory_limit}'")
+            self.conn.execute(
+                f"SET max_temp_directory_size = '{self.config.max_temp_directory_size}'"
+            )
+
+            # Thread optimization - reduce threads to save memory
+            self.conn.execute(f"SET threads = {self.config.thread_count}")
+
+            # Memory optimization settings as suggested by DuckDB error message
+            self.conn.execute(
+                "SET preserve_insertion_order = false"
+            )  # Allow reordering for efficiency
+
+            # Additional memory optimizations for large spatial operations
+            self.conn.execute("SET enable_object_cache = false")  # Reduce memory overhead
+            self.conn.execute("SET enable_checkpoint_on_shutdown = false")  # Faster shutdown
+            self.conn.execute("SET temp_directory = '/tmp/duckdb_field_production'")
+
+            # Create temp directory if it doesn't exist
+            import os
+
+            temp_dir = "/tmp/duckdb_field_production"
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir, exist_ok=True)
+
+            self.log.info(
+                f"✅ Memory optimizations applied: {self.config.memory_limit} memory, "
+                f"{self.config.max_temp_directory_size} temp, {self.config.thread_count} threads"
+            )
+
+        except Exception as e:
+            self.log.warning(f"Could not apply some memory optimizations: {e}")
+
+    def _cleanup_year_tables(self):
+        """Clean up temporary tables created during year processing."""
+        tables_to_drop = [
+            "current_year_fields",
+            "year_fields_with_zones",
+            "year_production_estimates",
+            "temp_fvm_marker_*",  # Clean up any temp tables from year processing
+        ]
+
+        for table_pattern in tables_to_drop:
+            if "*" in table_pattern:
+                # Handle wildcard patterns
+                try:
+                    all_tables = self.conn.execute("SHOW TABLES").fetchall()
+                    pattern_prefix = table_pattern.replace("*", "")
+                    matching_tables = [t[0] for t in all_tables if t[0].startswith(pattern_prefix)]
+                    for table in matching_tables:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+                except:
+                    pass
+            else:
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
+                except:
+                    pass
+
+    def _force_memory_cleanup(self):
+        """Force DuckDB and Python memory cleanup."""
+        try:
+            # DuckDB cleanup
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("VACUUM")
+
+            # Python garbage collection
+            import gc
+
+            collected = gc.collect()
+            self.log.debug(f"🧹 Garbage collection freed {collected} objects")
+
+        except Exception as e:
+            self.log.debug(f"Memory cleanup warning: {e}")
 
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]
@@ -189,10 +283,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 else:
                     self.log.warning(f"No fields processed for year {year}")
 
-                # Memory cleanup after each year
-                self.conn.execute("DROP TABLE IF EXISTS current_year_fields")
-                self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
-                self.conn.execute("DROP TABLE IF EXISTS year_production_estimates")
+                # Aggressive memory cleanup after each year
+                self._cleanup_year_tables()
+                self._force_memory_cleanup()
 
             except Exception as e:
                 self.log.error(f"Error processing year {year}: {e}")
@@ -219,6 +312,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     ) -> int:
         """Process a single year of fields with DST yields to control memory usage."""
         try:
+            # Reapply memory optimizations before processing each year
+            if self.config.enable_memory_optimizations:
+                self.conn.execute(f"SET threads = {self.config.thread_count}")
+                self.conn.execute("SET preserve_insertion_order = false")
+
             dataset_name = f"fvm_marker_{year}"
 
             # Load single year of agricultural fields
