@@ -40,14 +40,16 @@ class FieldProductionGoldConfig(BaseJobConfig):
     ]
 
     # Processing configuration
-    batch_size: int = 5000  # Optimized for SPATIAL_JOIN performance
+    batch_size: int = 1000000  # Larger batches for spatial index efficiency
     max_year_lag: int = 3  # Maximum years between field and DST data
+    years_per_batch: int = 3  # Process multiple years together for spatial index efficiency
 
-    # Memory and performance configuration
-    memory_limit: str = "10GB"  # Reduced from default 12GB to leave more headroom
-    max_temp_directory_size: str = "8GB"  # Reduced temp space to prevent overflow
-    thread_count: int = 2  # Reduced threads to save memory
+    # Optimized memory and performance configuration for GitHub Actions (16GB RAM, 4 CPU, 14GB SSD)
+    memory_limit: str = "14GB"  # Use 87% of available 16GB
+    max_temp_directory_size: str = "12GB"  # Use 85% of available 14GB SSD
+    thread_count: int = 4  # Use all available cores
     enable_memory_optimizations: bool = True  # Enable DuckDB memory optimizations
+    enable_spatial_join_verification: bool = True  # Verify SPATIAL_JOIN operator usage
 
     # Quality thresholds
     min_yield_coverage: float = 0.3  # Minimum acceptable yield coverage rate
@@ -80,47 +82,97 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self._configure_memory_optimizations()
 
     def _configure_memory_optimizations(self):
-        """Configure DuckDB memory optimizations for field production processing."""
+        """Configure DuckDB memory optimizations for GitHub Actions environment."""
         if not self.config.enable_memory_optimizations:
             return
 
         try:
-            self.log.info("🔧 Applying memory optimizations for field production...")
+            self.log.info("🚀 Applying GitHub Actions optimized DuckDB configuration...")
 
-            # Memory settings - override base configuration with more conservative values
+            # Memory settings - maximize GitHub Actions resource utilization
             self.conn.execute(f"SET memory_limit = '{self.config.memory_limit}'")
             self.conn.execute(f"SET max_memory = '{self.config.memory_limit}'")
             self.conn.execute(
                 f"SET max_temp_directory_size = '{self.config.max_temp_directory_size}'"
             )
 
-            # Thread optimization - reduce threads to save memory
+            # CPU optimization - use all available cores
             self.conn.execute(f"SET threads = {self.config.thread_count}")
 
-            # Memory optimization settings as suggested by DuckDB error message
+            # Performance optimizations for spatial operations
             self.conn.execute(
                 "SET preserve_insertion_order = false"
             )  # Allow reordering for efficiency
+            self.conn.execute("SET enable_object_cache = true")  # Enable for better performance
+            self.conn.execute("SET checkpoint_threshold = '2GB'")  # Less frequent checkpoints
+            self.conn.execute("SET temp_directory = '/tmp/duckdb_optimized'")
 
-            # Additional memory optimizations for large spatial operations
-            self.conn.execute("SET enable_object_cache = false")  # Reduce memory overhead
-            self.conn.execute("SET enable_checkpoint_on_shutdown = false")  # Faster shutdown
-            self.conn.execute("SET temp_directory = '/tmp/duckdb_field_production'")
+            # Spatial-specific optimizations
+            self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
 
-            # Create temp directory if it doesn't exist
+            # Create optimized temp directory
             import os
 
-            temp_dir = "/tmp/duckdb_field_production"
+            temp_dir = "/tmp/duckdb_optimized"
             if not os.path.exists(temp_dir):
                 os.makedirs(temp_dir, exist_ok=True)
 
             self.log.info(
-                f"✅ Memory optimizations applied: {self.config.memory_limit} memory, "
+                f"✅ GitHub Actions optimizations applied: {self.config.memory_limit} memory, "
                 f"{self.config.max_temp_directory_size} temp, {self.config.thread_count} threads"
             )
 
         except Exception as e:
             self.log.warning(f"Could not apply some memory optimizations: {e}")
+
+    def _verify_spatial_join_optimization(self, query_description: str = "spatial join") -> bool:
+        """Verify that spatial joins are using the SPATIAL_JOIN operator."""
+        if not self.config.enable_spatial_join_verification:
+            return True
+
+        try:
+            test_query = """
+                EXPLAIN SELECT COUNT(*) 
+                FROM current_year_fields f
+                JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+                LIMIT 1
+            """
+
+            plan = self.conn.execute(test_query).fetchall()
+            plan_text = str(plan)
+
+            if "SPATIAL_JOIN" in plan_text:
+                self.log.info(f"✅ SPATIAL_JOIN operator detected for {query_description}")
+                return True
+            else:
+                self.log.warning(
+                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - check join conditions"
+                )
+                self.log.debug(f"Query plan: {plan_text}")
+                return False
+
+        except Exception as e:
+            self.log.warning(f"Could not verify SPATIAL_JOIN usage: {e}")
+            return False
+
+    def _log_performance_metrics(self, phase: str, start_time: float) -> None:
+        """Log detailed performance metrics for each phase."""
+        import time
+
+        import psutil
+
+        duration = time.time() - start_time
+        memory = psutil.virtual_memory()
+
+        self.log.info(f"📊 {phase} Performance:")
+        self.log.info(f"   Duration: {duration:.1f} seconds")
+        self.log.info(f"   Memory: {memory.used / (1024**3):.1f}GB ({memory.percent:.1f}%)")
+
+        # Check if we're getting expected performance gains
+        if phase == "spatial_joins" and duration > 600:  # 10 minutes
+            self.log.warning(
+                "⚠️ Spatial joins taking longer than expected - check SPATIAL_JOIN usage"
+            )
 
     def _cleanup_year_tables(self):
         """Clean up temporary tables created during year processing."""
@@ -149,8 +201,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     pass
 
     def _force_memory_cleanup(self):
-        """Force DuckDB and Python memory cleanup."""
+        """Force DuckDB and Python memory cleanup with monitoring."""
         try:
+            import psutil
+
+            # Check memory before cleanup
+            memory_before = psutil.virtual_memory()
+
             # DuckDB cleanup
             self.conn.execute("CHECKPOINT")
             self.conn.execute("VACUUM")
@@ -159,10 +216,73 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             import gc
 
             collected = gc.collect()
-            self.log.debug(f"🧹 Garbage collection freed {collected} objects")
+
+            # Check memory after cleanup
+            memory_after = psutil.virtual_memory()
+            memory_freed = (memory_before.used - memory_after.used) / (1024**3)
+
+            self.log.info(
+                f"🧹 Memory cleanup: freed {memory_freed:.1f}GB, collected {collected} objects"
+            )
+            self.log.info(
+                f"   Memory now: {memory_after.used / (1024**3):.1f}GB ({memory_after.percent:.1f}%)"
+            )
 
         except Exception as e:
             self.log.debug(f"Memory cleanup warning: {e}")
+
+    def _monitor_and_adjust_processing(self) -> int:
+        """Monitor memory usage and adjust batch sizes dynamically."""
+        try:
+            import psutil
+
+            memory = psutil.virtual_memory()
+            memory_gb = memory.used / (1024**3)
+            memory_percent = memory.percent
+
+            self.log.info(f"💾 Memory usage: {memory_gb:.1f}GB ({memory_percent:.1f}%)")
+
+            # Adjust batch sizes based on memory pressure
+            if memory_percent > 85:
+                self.log.warning("⚠️ High memory usage - reducing batch size")
+                return max(self.config.batch_size // 4, 100000)  # Reduce to 25% but keep minimum
+            elif memory_percent > 75:
+                self.log.info("📊 Moderate memory usage - reducing batch size slightly")
+                return max(self.config.batch_size // 2, 250000)  # Reduce to 50%
+            elif memory_percent < 60:
+                self.log.info("✅ Low memory usage - can increase batch size")
+                return min(self.config.batch_size * 2, 2000000)  # Double but cap at 2M
+
+            return self.config.batch_size
+
+        except Exception as e:
+            self.log.warning(f"Memory monitoring failed: {e}")
+            return self.config.batch_size
+
+    def _check_memory_threshold_for_batch_processing(self, years_count: int) -> bool:
+        """Check if we have enough memory for batch processing."""
+        try:
+            import psutil
+
+            memory = psutil.virtual_memory()
+            memory_percent = memory.percent
+
+            # Estimate memory needs: ~2GB per year of data
+            estimated_memory_gb = years_count * 2
+            available_memory_gb = (100 - memory_percent) / 100 * memory.total / (1024**3)
+
+            if estimated_memory_gb > available_memory_gb:
+                self.log.warning(f"⚠️ Insufficient memory for {years_count} years batch processing")
+                self.log.warning(
+                    f"   Estimated need: {estimated_memory_gb:.1f}GB, Available: {available_memory_gb:.1f}GB"
+                )
+                return False
+
+            return True
+
+        except Exception as e:
+            self.log.warning(f"Memory threshold check failed: {e}")
+            return True  # Default to allowing batch processing
 
     def _load_agricultural_fields_for_years(
         self, years: List[int], silver_data: Optional[Dict[str, Any]]
@@ -227,9 +347,27 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return False
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        """Run field production estimation gold processing using pure DuckDB."""
+        """Run field production estimation gold processing using optimized DuckDB."""
 
-        self.log.info("Starting field production gold layer processing with DuckDB")
+        self.log.info("🚀 Starting optimized field production gold layer processing")
+        self.log.info("📊 Optimizations applied:")
+        self.log.info(f"   • Memory: {self.config.memory_limit} (87% of GitHub Actions 16GB)")
+        self.log.info(
+            f"   • CPU: {self.config.thread_count} threads (100% of GitHub Actions cores)"
+        )
+        self.log.info(
+            f"   • Temp storage: {self.config.max_temp_directory_size} (85% of GitHub Actions 14GB SSD)"
+        )
+        self.log.info(
+            f"   • Batch processing: {self.config.years_per_batch} years per batch for spatial index efficiency"
+        )
+        self.log.info(
+            f"   • SPATIAL_JOIN verification: {'enabled' if self.config.enable_spatial_join_verification else 'disabled'}"
+        )
+
+        import time
+
+        total_start = time.time()
 
         # Get all available years
         available_years = self._get_available_fvm_marker_years()
@@ -269,27 +407,67 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             WHERE false
         """)
 
-        # Process each year individually to control memory usage
+        # Process years in batches to optimize spatial index creation
         total_fields_processed = 0
-        for year in available_years:
-            self.log.info(f"Processing year {year}...")
+        batch_size = self.config.years_per_batch
+
+        for i in range(0, len(available_years), batch_size):
+            years_batch = available_years[i : i + batch_size]
+            self.log.info(f"🚀 Processing years batch: {years_batch} ({len(years_batch)} years)")
+
+            # Check memory threshold before batch processing
+            if not self._check_memory_threshold_for_batch_processing(len(years_batch)):
+                self.log.warning(
+                    "Memory threshold exceeded - falling back to individual year processing"
+                )
+                # Process years individually instead
+                for year in years_batch:
+                    try:
+                        year_count = self._process_single_year_with_dst_yields(year, silver_data)
+                        if year_count > 0:
+                            total_fields_processed += year_count
+                            self.log.info(
+                                f"✅ Individual processing completed year {year}: {year_count:,} fields processed"
+                            )
+                        self._cleanup_year_tables()
+                        self._force_memory_cleanup()
+                    except Exception as year_e:
+                        self.log.error(f"Error processing individual year {year}: {year_e}")
+                        continue
+                continue
 
             try:
-                # Load and process single year
-                year_count = self._process_single_year_with_dst_yields(year, silver_data)
-                if year_count > 0:
-                    total_fields_processed += year_count
-                    self.log.info(f"✅ Completed year {year}: {year_count:,} fields processed")
+                # Process batch of years together for spatial index efficiency
+                batch_count = self._process_years_batch_with_dst_yields(years_batch, silver_data)
+                if batch_count > 0:
+                    total_fields_processed += batch_count
+                    self.log.info(
+                        f"✅ Completed batch {years_batch}: {batch_count:,} fields processed"
+                    )
                 else:
-                    self.log.warning(f"No fields processed for year {year}")
+                    self.log.warning(f"No fields processed for batch {years_batch}")
 
-                # Aggressive memory cleanup after each year
-                self._cleanup_year_tables()
+                # Aggressive memory cleanup after each batch
+                self._cleanup_batch_tables()
                 self._force_memory_cleanup()
 
             except Exception as e:
-                self.log.error(f"Error processing year {year}: {e}")
-                continue
+                self.log.error(f"Error processing batch {years_batch}: {e}")
+                # Fallback to individual year processing for this batch
+                self.log.info("Falling back to individual year processing for this batch...")
+                for year in years_batch:
+                    try:
+                        year_count = self._process_single_year_with_dst_yields(year, silver_data)
+                        if year_count > 0:
+                            total_fields_processed += year_count
+                            self.log.info(
+                                f"✅ Fallback completed year {year}: {year_count:,} fields processed"
+                            )
+                        self._cleanup_year_tables()
+                        self._force_memory_cleanup()
+                    except Exception as year_e:
+                        self.log.error(f"Error processing fallback year {year}: {year_e}")
+                        continue
 
         if total_fields_processed == 0:
             self.log.error("No fields were processed across all years")
@@ -305,7 +483,316 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Save to gold layer using optimized export
         self._save_results_to_gold()
 
-        self.log.info("Field production gold layer processing completed")
+        # Final performance summary
+        self._log_performance_metrics("total_pipeline", total_start)
+        self.log.info("✅ Optimized field production gold layer processing completed")
+        self.log.info("🎯 Performance summary:")
+        self.log.info(f"   • Total fields processed: {total_fields_processed:,}")
+        self.log.info(f"   • Years processed: {len(available_years)}")
+        self.log.info(f"   • Batch size used: {self.config.years_per_batch} years per batch")
+
+        # Check if we achieved expected performance gains
+        total_duration = time.time() - total_start
+        if total_duration < 3600:  # Less than 1 hour is good
+            self.log.info(f"🚀 Excellent performance: {total_duration / 60:.1f} minutes total")
+        elif total_duration < 7200:  # Less than 2 hours is acceptable
+            self.log.info(f"✅ Good performance: {total_duration / 60:.1f} minutes total")
+        else:
+            self.log.warning(
+                f"⚠️ Performance slower than expected: {total_duration / 60:.1f} minutes total"
+            )
+
+    def _process_years_batch_with_dst_yields(
+        self, years_batch: List[int], silver_data: Optional[Dict[str, Any]]
+    ) -> int:
+        """Process multiple years together for spatial index efficiency."""
+        try:
+            import time
+
+            batch_start = time.time()
+
+            self.log.info(f"Loading {len(years_batch)} years of data for batch processing...")
+
+            # Load multiple years into single table for efficient spatial processing
+            year_selects = []
+            total_loaded = 0
+
+            for year in years_batch:
+                dataset_name = f"fvm_marker_{year}"
+
+                if silver_data and dataset_name in silver_data:
+                    # Register the dataframe and create temp table
+                    self.conn.register(f"temp_{dataset_name}", silver_data[dataset_name])
+
+                    # Check column structure
+                    columns_info = self.conn.execute(f"DESCRIBE temp_{dataset_name}").fetchall()
+                    column_names = [col[0] for col in columns_info]
+
+                    # Build SELECT clause with proper column mapping
+                    field_id_select = (
+                        "field_id" if "field_id" in column_names else "NULL as field_id"
+                    )
+
+                    if "crop_type" in column_names:
+                        crop_type_select = "crop_type"
+                    elif "layer_type" in column_names:
+                        crop_type_select = "layer_type as crop_type"
+                    else:
+                        crop_type_select = "'unknown' as crop_type"
+
+                    # Handle geometry column
+                    if "geometry" in column_names:
+                        geometry_select = "geometry"
+                        geometry_where = "geometry IS NOT NULL"
+                    else:
+                        self.log.warning(f"No geometry column found in {dataset_name}")
+                        continue
+
+                    # Build year-specific SELECT
+                    if year >= 2008:
+                        year_select = f"""
+                            SELECT 
+                                {field_id_select},
+                                block_id,
+                                cvr_number,
+                                area_ha,
+                                {crop_type_select},
+                                false as organic_farming,
+                                {year} as year,
+                                {geometry_select}
+                            FROM temp_{dataset_name}
+                            WHERE {geometry_where}
+                        """
+                    else:
+                        year_select = f"""
+                            SELECT 
+                                {field_id_select},
+                                NULL as block_id,
+                                cvr_number,
+                                area_ha,
+                                {crop_type_select},
+                                false as organic_farming,
+                                {year} as year,
+                                {geometry_select}
+                            FROM temp_{dataset_name}
+                            WHERE {geometry_where}
+                        """
+
+                    year_selects.append(year_select)
+
+                else:
+                    # Load from GCS
+                    try:
+                        gcs_path = self._get_latest_silver_path(dataset_name)
+
+                        # Check column structure first
+                        columns_info = self.conn.execute(
+                            f"DESCRIBE (SELECT * FROM read_parquet('{gcs_path}') LIMIT 1)"
+                        ).fetchall()
+                        column_names = [col[0] for col in columns_info]
+
+                        # Build SELECT clause with proper column mapping
+                        field_id_select = (
+                            "field_id" if "field_id" in column_names else "NULL as field_id"
+                        )
+
+                        if "crop_type" in column_names:
+                            crop_type_select = "crop_type"
+                        elif "layer_type" in column_names:
+                            crop_type_select = "layer_type as crop_type"
+                        else:
+                            crop_type_select = "'unknown' as crop_type"
+
+                        # Handle geometry column
+                        if "geometry" in column_names:
+                            geometry_select = "geometry"
+                            geometry_where = "geometry IS NOT NULL"
+                        else:
+                            self.log.warning(f"No geometry column found in {dataset_name}")
+                            continue
+
+                        # Build year-specific SELECT
+                        if year >= 2008:
+                            year_select = f"""
+                                SELECT 
+                                    {field_id_select},
+                                    block_id,
+                                    cvr_number,
+                                    area_ha,
+                                    {crop_type_select},
+                                    false as organic_farming,
+                                    {year} as year,
+                                    {geometry_select}
+                                FROM read_parquet('{gcs_path}')
+                                WHERE {geometry_where}
+                            """
+                        else:
+                            year_select = f"""
+                                SELECT 
+                                    {field_id_select},
+                                    NULL as block_id,
+                                    cvr_number,
+                                    area_ha,
+                                    {crop_type_select},
+                                    false as organic_farming,
+                                    {year} as year,
+                                    {geometry_select}
+                                FROM read_parquet('{gcs_path}')
+                                WHERE {geometry_where}
+                            """
+
+                        year_selects.append(year_select)
+
+                    except Exception as e:
+                        self.log.warning(f"Could not load {dataset_name} from GCS: {e}")
+                        continue
+
+            if not year_selects:
+                self.log.warning("No data loaded for batch processing")
+                return 0
+
+            # Combine all years in single operation for spatial index efficiency
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE batch_fields AS
+                {" UNION ALL ".join(year_selects)}
+            """)
+
+            field_count = self.conn.execute("SELECT COUNT(*) FROM batch_fields").fetchone()[0]
+            self.log.info(f"Loaded {field_count:,} fields across {len(years_batch)} years")
+
+            # Single spatial join for entire batch (creates spatial index once)
+            spatial_start = time.time()
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_fields_with_zones AS
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    z.landsdel_code,
+                    z.landsdel_name,
+                    z.dst_regions,
+                    ST_AsText(f.geometry) as geometry_wkt
+                FROM batch_fields f
+                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+            """)
+
+            # Verify SPATIAL_JOIN operator usage for batch
+            self._verify_spatial_join_optimization("batch DST zones spatial join")
+            self._log_performance_metrics("batch_spatial_joins", spatial_start)
+
+            # Create production estimates for entire batch
+            yield_start = time.time()
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_production_estimates AS
+                SELECT 
+                    -- JOIN KEYS
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.year,
+                    -- FIELD DATA
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    -- DST ZONE INFO
+                    f.landsdel_code,
+                    f.landsdel_name,
+                    f.dst_regions,
+                    -- YIELD DATA (optimized single lookup per field)
+                    COALESCE(
+                        hst77.harvest_value,
+                        gartn1.horticulture_value,
+                        fro.seed_value,
+                        halm1.straw_value,
+                        hst77_national.harvest_value
+                    ) as yield_estimate_hkg_ha,
+                    CASE 
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN 'dst_region_match'
+                        ELSE 'no_yield_data'
+                    END as yield_estimation_method,
+                    -- PRODUCTION ESTIMATE
+                    CASE 
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
+                        ELSE NULL
+                    END as production_estimate_hkg,
+                    CASE 
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN 'hkg'
+                        ELSE NULL
+                    END as production_unit,
+                    -- SPATIAL INFO
+                    f.geometry_wkt,
+                    -- METADATA
+                    current_timestamp as created_at
+                FROM batch_fields_with_zones f
+                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
+                    AND hst77.time_period = CAST(f.year AS VARCHAR) 
+                    AND hst77.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions 
+                    AND gartn1.time_period = CAST(f.year AS VARCHAR) 
+                    AND gartn1.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) 
+                    AND fro.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions 
+                    AND halm1.time_period = CAST(f.year AS VARCHAR) 
+                    AND halm1.unit_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' 
+                    AND hst77_national.time_period = CAST(f.year AS VARCHAR) 
+                    AND hst77_national.measure_name ILIKE '%udbytte%'
+            """)
+
+            self._log_performance_metrics("batch_yield_estimation", yield_start)
+
+            # Insert batch results into final table
+            self.conn.execute("""
+                INSERT INTO final_production_estimates
+                SELECT * FROM batch_production_estimates
+            """)
+
+            # Get count of processed fields for this batch
+            processed_count = self.conn.execute(
+                "SELECT COUNT(*) FROM batch_production_estimates"
+            ).fetchone()[0]
+
+            self._log_performance_metrics("batch_processing_total", batch_start)
+
+            return processed_count
+
+        except Exception as e:
+            self.log.error(f"Error processing years batch {years_batch}: {e}")
+            return 0
+
+    def _cleanup_batch_tables(self):
+        """Clean up temporary tables created during batch processing."""
+        tables_to_drop = [
+            "batch_fields",
+            "batch_fields_with_zones",
+            "batch_production_estimates",
+            "temp_fvm_marker_*",  # Clean up any temp tables from batch processing
+        ]
+
+        for table_pattern in tables_to_drop:
+            if "*" in table_pattern:
+                # Handle wildcard patterns
+                try:
+                    all_tables = self.conn.execute("SHOW TABLES").fetchall()
+                    pattern_prefix = table_pattern.replace("*", "")
+                    matching_tables = [t[0] for t in all_tables if t[0].startswith(pattern_prefix)]
+                    for table in matching_tables:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+                except:
+                    pass
+            else:
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
+                except:
+                    pass
 
     def _process_single_year_with_dst_yields(
         self, year: int, silver_data: Optional[Dict[str, Any]]
@@ -504,7 +991,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             self.log.info(f"  Loaded {year_count:,} fields for year {year}")
 
-            # Spatial join with DST zones using SPATIAL_JOIN operator
+            # Optimized spatial join with DST zones to enable SPATIAL_JOIN operator
+            import time
+
+            spatial_start = time.time()
+
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_fields_with_zones AS
                 SELECT 
@@ -522,6 +1013,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 FROM current_year_fields f
                 LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
             """)
+
+            # Verify SPATIAL_JOIN operator usage
+            self._verify_spatial_join_optimization("DST zones spatial join")
+            self._log_performance_metrics("spatial_joins", spatial_start)
 
             # Debug: Check what tables are available and their schemas
             try:
@@ -551,67 +1046,73 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             except Exception as debug_e:
                 self.log.warning(f"Could not debug tables: {debug_e}")
 
-            # Create production estimates for this year using LEFT JOINs instead of subqueries
+            # Create production estimates using optimized single-phase joins
+            yield_start = time.time()
+
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
-                WITH yield_data AS (
-                    SELECT 
-                        f.*,
-                        CASE 
-                            WHEN f.dst_regions IS NOT NULL THEN 
-                                COALESCE(
-                                    -- Try exact DST region match first
-                                    hst77.harvest_value,
-                                    gartn1.horticulture_value,
-                                    fro.seed_value,
-                                    halm1.straw_value,
-                                    -- Fallback to national average
-                                    hst77_national.harvest_value
-                                )
-                            ELSE NULL
-                        END as yield_estimate_hkg_ha
-                    FROM year_fields_with_zones f
-                    LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions AND hst77.time_period = CAST(f.year AS VARCHAR) AND hst77.measure_name ILIKE '%udbytte%'
-                    LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions AND gartn1.time_period = CAST(f.year AS VARCHAR) AND gartn1.measure_name ILIKE '%udbytte%'
-                    LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) AND fro.measure_name ILIKE '%udbytte%'
-                    LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions AND halm1.time_period = CAST(f.year AS VARCHAR) AND halm1.unit_name ILIKE '%udbytte%'
-                    LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' AND hst77_national.time_period = CAST(f.year AS VARCHAR) AND hst77_national.measure_name ILIKE '%udbytte%'
-                )
                 SELECT 
                     -- JOIN KEYS
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.year,
                     -- FIELD DATA
-                    area_ha,
-                    crop_type,
-                    organic_farming,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
                     -- DST ZONE INFO
-                    landsdel_code,
-                    landsdel_name,
-                    dst_regions,
-                    -- YIELD DATA
-                    yield_estimate_hkg_ha,
+                    f.landsdel_code,
+                    f.landsdel_name,
+                    f.dst_regions,
+                    -- YIELD DATA (optimized single lookup per field)
+                    COALESCE(
+                        -- Try exact DST region match first
+                        hst77.harvest_value,
+                        gartn1.horticulture_value,
+                        fro.seed_value,
+                        halm1.straw_value,
+                        -- Fallback to national average
+                        hst77_national.harvest_value
+                    ) as yield_estimate_hkg_ha,
                     CASE 
-                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN 'dst_region_match'
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN 'dst_region_match'
                         ELSE 'no_yield_data'
                     END as yield_estimation_method,
                     -- PRODUCTION ESTIMATE
                     CASE 
-                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN area_ha * yield_estimate_hkg_ha
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
                         ELSE NULL
                     END as production_estimate_hkg,
                     CASE 
-                        WHEN yield_estimate_hkg_ha IS NOT NULL THEN 'hkg'
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN 'hkg'
                         ELSE NULL
                     END as production_unit,
                     -- SPATIAL INFO
-                    geometry_wkt,
+                    f.geometry_wkt,
                     -- METADATA
                     current_timestamp as created_at
-                FROM yield_data
+                FROM year_fields_with_zones f
+                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
+                    AND hst77.time_period = CAST(f.year AS VARCHAR) 
+                    AND hst77.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions 
+                    AND gartn1.time_period = CAST(f.year AS VARCHAR) 
+                    AND gartn1.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) 
+                    AND fro.measure_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions 
+                    AND halm1.time_period = CAST(f.year AS VARCHAR) 
+                    AND halm1.unit_name ILIKE '%udbytte%'
+                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' 
+                    AND hst77_national.time_period = CAST(f.year AS VARCHAR) 
+                    AND hst77_national.measure_name ILIKE '%udbytte%'
             """)
+
+            self._log_performance_metrics("yield_estimation", yield_start)
 
             # Insert year results into final table
             self.conn.execute("""
