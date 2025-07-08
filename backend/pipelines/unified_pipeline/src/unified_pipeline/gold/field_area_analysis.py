@@ -1509,6 +1509,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
             # AGGRESSIVE: Immediately drop source tables to free memory
             self.conn.execute("DROP TABLE IF EXISTS current_fields")
+            self.conn.execute("DROP TABLE IF EXISTS combined_fields")
             self.conn.execute("DROP TABLE IF EXISTS soil_types")
 
             soil_time = time.time() - join_start
