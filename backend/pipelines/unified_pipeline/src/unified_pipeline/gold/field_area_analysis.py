@@ -312,6 +312,32 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         except Exception as e:
             self.log.error(f"Emergency cleanup failed: {e}")
 
+    def _log_memory_usage(self, context: str):
+        """
+        Log current memory usage to help monitor cleanup effectiveness.
+
+        Args:
+            context: Context description for the memory measurement
+        """
+        try:
+            import os
+
+            import psutil
+
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024  # Convert to MB
+
+            # Also get system memory
+            system_memory = psutil.virtual_memory()
+            system_percent = system_memory.percent
+
+            self.log.info(
+                f"📊 Memory usage {context}: {memory_mb:.1f} MB (System: {system_percent:.1f}%)"
+            )
+        except Exception as e:
+            self.log.warning(f"Error getting memory usage: {e}")
+
     def _process_with_memory_fallback(self, processing_func, *args, **kwargs):
         """Execute processing function with automatic memory fallback."""
         if not self.config.enable_emergency_fallbacks:

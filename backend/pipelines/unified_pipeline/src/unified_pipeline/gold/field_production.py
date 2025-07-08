@@ -1040,3 +1040,172 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             """
 
         self.conn.execute(create_query)
+
+    def _setup_spatial_processing_with_dst_zones(self) -> None:
+        """Setup spatial processing with DST zones in DuckDB."""
+        try:
+            self.log.info("Setting up spatial processing with DST zones")
+
+            # Spatial extension should already be loaded by BaseSource
+            # Just verify it's working
+            try:
+                self.conn.execute("SELECT ST_Point(0, 0)")
+                self.log.info("✅ Spatial extension is loaded and working")
+            except Exception as spatial_e:
+                self.log.error(f"❌ Spatial extension not available: {spatial_e}")
+                raise RuntimeError(
+                    "Spatial extension is required but not available from BaseSource"
+                )
+
+            # Debug: Check the structure and sample data of dst_zones_raw table
+            try:
+                columns = self.conn.execute("DESCRIBE dst_zones_raw").fetchall()
+                self.log.info(f"dst_zones_raw table structure: {columns}")
+
+                # Check for NULL geometries
+                null_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM dst_zones_raw WHERE geometry IS NULL"
+                ).fetchone()[0]
+                empty_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM dst_zones_raw WHERE geometry = ''"
+                ).fetchone()[0]
+                total_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones_raw").fetchone()[0]
+                self.log.info(
+                    f"Geometry data: {total_count} total, {null_count} NULL, {empty_count} empty"
+                )
+
+            except Exception as debug_e:
+                self.log.warning(f"Debug info failed: {debug_e}")
+
+            # Create optimized DST zones table with spatial geometry
+            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE dst_zones AS
+                SELECT 
+                    landsdel_code,
+                    landsdel_name,
+                    dst_regions,
+                    ST_GeomFromText(geometry) as geometry
+                FROM dst_zones_raw
+                WHERE geometry IS NOT NULL 
+                AND geometry != ''
+                AND geometry != 'NULL'
+            """)
+
+            # Get count of processed zones
+            zone_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones").fetchone()[0]
+            self.log.info(f"✅ Created dst_zones table with {zone_count} zones")
+
+        except Exception as e:
+            self.log.error(f"Error setting up DST zones: {e}")
+            raise
+
+    def _load_dst_yield_data(self, silver_data: Optional[Dict[str, Any]] = None) -> List[str]:
+        """Load DST yield data into DuckDB tables."""
+        loaded_tables = []
+
+        for dataset in self.config.dst_yield_datasets:
+            table_name = f"dst_{dataset}"
+            try:
+                if self._load_silver_data_to_table(dataset, table_name, silver_data):
+                    # Get record count
+                    count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                    self.log.info(f"Loaded {count} records from {dataset} into {table_name}")
+                    loaded_tables.append(table_name)
+                else:
+                    self.log.warning(f"No data found for {dataset}")
+            except Exception as e:
+                self.log.error(f"Error loading {dataset}: {e}")
+                continue
+
+        return loaded_tables
+
+    def _generate_summary_statistics(self) -> None:
+        """Generate summary statistics using DuckDB."""
+        try:
+            # Get summary statistics
+            summary = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_fields,
+                    COUNT(DISTINCT year) as years_covered,
+                    COUNT(DISTINCT crop_type) as crops_covered,
+                    COUNT(yield_estimate_hkg_ha) as fields_with_yields,
+                    COUNT(production_estimate_hkg) as fields_with_production,
+                    MIN(year) as min_year,
+                    MAX(year) as max_year
+                FROM final_production_estimates
+            """).fetchone()
+
+            (
+                total_fields,
+                years_covered,
+                crops_covered,
+                fields_with_yields,
+                fields_with_production,
+                min_year,
+                max_year,
+            ) = summary
+
+            yield_coverage = fields_with_yields / total_fields if total_fields > 0 else 0
+            production_coverage = fields_with_production / total_fields if total_fields > 0 else 0
+
+            self.log.info("Field production summary:")
+            self.log.info(f"  Total production estimates: {total_fields:,}")
+            self.log.info(f"  Years covered: {years_covered} years ({min_year}-{max_year})")
+            self.log.info(f"  Unique crop types: {crops_covered}")
+            self.log.info(
+                f"  Fields with yield estimates: {fields_with_yields:,} ({yield_coverage:.1%})"
+            )
+            self.log.info(
+                f"  Fields with production estimates: {fields_with_production:,} ({production_coverage:.1%})"
+            )
+
+            # Summary by year
+            year_summary = self.conn.execute("""
+                SELECT 
+                    year,
+                    COUNT(*) as year_count,
+                    COUNT(production_estimate_hkg) as year_with_production,
+                    COUNT(production_estimate_hkg) * 100.0 / COUNT(*) as year_coverage
+                FROM final_production_estimates
+                GROUP BY year
+                ORDER BY year
+            """).fetchall()
+
+            for year, year_count, year_with_production, year_coverage in year_summary:
+                self.log.info(
+                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1f}%)"
+                )
+
+            # Check quality thresholds
+            if yield_coverage < self.config.min_yield_coverage:
+                self.log.warning(
+                    f"Yield coverage {yield_coverage:.1%} below minimum threshold {self.config.min_yield_coverage:.1%}"
+                )
+
+        except Exception as e:
+            self.log.error(f"Error generating summary statistics: {e}")
+            raise
+
+    def _save_results_to_gold(self) -> None:
+        """Save results to gold layer using optimized DuckDB export."""
+        try:
+            # Use optimized save method from base class
+            output_path = (
+                f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
+            )
+
+            # Export directly from DuckDB table to GCS
+            self.gcs_access.upload_from_duckdb_table(
+                self.conn,
+                "final_production_estimates",
+                output_path,
+                compression="zstd",
+                row_group_size=100000,
+            )
+
+            self.log.info(f"Saved field production estimates to {output_path}")
+
+        except Exception as e:
+            self.log.error(f"Error saving results: {e}")
+            raise
