@@ -1236,7 +1236,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute("""
             CREATE TABLE pending_pesticide_rows AS
             SELECT * FROM pesticide 
-            WHERE nopesticides IS NULL OR nopesticides != 1
+            WHERE nopesticides IS NULL 
+               OR (CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE'))
         """)
 
         count = self.duckdb_conn.execute("SELECT COUNT(*) FROM pending_pesticide_rows").fetchone()[
