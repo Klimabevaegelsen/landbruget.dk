@@ -667,21 +667,44 @@ def load_cattle_movement_summaries(
 
             try:
                 # Process this chunk
-                chunk_summaries = load_animal_movements(chr_dyr_client, username, herd_number, chunk_start, chunk_end)
+                chunk_summaries = load_animal_movements(
+                    chr_dyr_client, username, herd_number, chunk_start, chunk_end, max_retries=3
+                )
 
                 if chunk_summaries and chunk_summaries.get("movements"):
-                    # Aggregate this chunk's data
+                    # Combine movements from this chunk
                     combined_movements.extend(chunk_summaries["movements"])
 
-                    # Update statistics
+                    # Add to summary statistics
                     chunk_stats = chunk_summaries.get("summary_stats", {})
                     total_animals_processed += chunk_stats.get("total_animals_processed", 0)
 
-                    # Add movement dates and counterparty herds from this chunk
-                    if "unique_movement_dates" in chunk_stats:
-                        all_movement_dates.update(chunk_stats["unique_movement_dates"])
-                    if "counterparty_herds" in chunk_stats:
-                        all_counterparty_herds.update(chunk_stats["counterparty_herds"])
+                    # CRITICAL FIX: Access the sets BEFORE they're converted to counts
+                    # The _aggregate_cattle_movements function converts sets to counts at the end,
+                    # but we need the actual sets for .update() operations
+                    if "unique_movement_dates_set" in chunk_stats:
+                        # Use the set version for .update() operations
+                        all_movement_dates.update(chunk_stats["unique_movement_dates_set"])
+                    elif "unique_movement_dates" in chunk_stats:
+                        # Fallback: Check if it's still a set (before conversion) or already converted to int
+                        if isinstance(chunk_stats["unique_movement_dates"], set):
+                            all_movement_dates.update(chunk_stats["unique_movement_dates"])
+                        elif isinstance(chunk_stats["unique_movement_dates"], int):
+                            # If it's already converted to count, we can't recover the original dates
+                            # This is expected for the current implementation
+                            pass
+
+                    if "counterparty_herds_set" in chunk_stats:
+                        # Use the set version for .update() operations
+                        all_counterparty_herds.update(chunk_stats["counterparty_herds_set"])
+                    elif "counterparty_herds" in chunk_stats:
+                        # Fallback: Check if it's still a set (before conversion) or already converted to int
+                        if isinstance(chunk_stats["counterparty_herds"], set):
+                            all_counterparty_herds.update(chunk_stats["counterparty_herds"])
+                        elif isinstance(chunk_stats["counterparty_herds"], int):
+                            # If it's already converted to count, we can't recover the original herds
+                            # This is expected for the current implementation
+                            pass
 
                     successful_chunks += 1
                     logger.info(
@@ -1053,9 +1076,19 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             movement_summaries["summary_stats"]["date_range"]["start"] = min(dates)
             movement_summaries["summary_stats"]["date_range"]["end"] = max(dates)
 
+        # CRITICAL FIX: Keep both sets and counts for chunked processing compatibility
+        # The chunked processing needs sets for .update() operations, but final output needs counts
+        movement_summaries["summary_stats"]["unique_movement_dates_set"] = movement_summaries["summary_stats"][
+            "unique_movement_dates"
+        ]
+        movement_summaries["summary_stats"]["counterparty_herds_set"] = movement_summaries["summary_stats"][
+            "counterparty_herds"
+        ]
+
+        # Convert to counts for final output
         movement_summaries["summary_stats"]["unique_movement_dates"] = len(dates)
         movement_summaries["summary_stats"]["counterparty_herds"] = len(
-            movement_summaries["summary_stats"]["counterparty_herds"]
+            movement_summaries["summary_stats"]["counterparty_herds_set"]
         )
 
         logger.info(
