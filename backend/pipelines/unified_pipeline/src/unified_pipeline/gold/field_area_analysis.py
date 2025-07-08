@@ -346,7 +346,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         for attempt in range(self.config.max_memory_retries):
             try:
                 # Check memory before processing
-                if self._check_emergency_memory_threshold():
+                if not self._check_emergency_memory_threshold():
                     self.log.warning(f"Memory threshold exceeded before attempt {attempt + 1}")
 
                 result = processing_func(*args, **kwargs)
