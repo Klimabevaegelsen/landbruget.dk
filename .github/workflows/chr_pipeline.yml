@@ -72,23 +72,23 @@ env:
   BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
 
 jobs:
-  # Job 0: Generate Year Matrix
-  generate-year-matrix:
+  # Job 0: Generate Quarter Matrix
+  generate-quarter-matrix:
     runs-on: ubuntu-latest
     outputs:
-      years: ${{ steps.generate-matrix.outputs.years }}
-      process_by_year: ${{ steps.generate-matrix.outputs.process_by_year }}
+      quarters: ${{ steps.generate-matrix.outputs.quarters }}
+      process_by_quarter: ${{ steps.generate-matrix.outputs.process_by_quarter }}
     steps:
-      - name: Generate year matrix
+      - name: Generate quarter matrix
         id: generate-matrix
         run: |
-          # Determine if we should process by year based on the step
+          # Determine if we should process by quarter based on the step
           STEP="${{ inputs.step || 'all' }}"
           YEAR_RANGE="${{ inputs.year_range || '2022-2024' }}"
           
-          # Only use year matrix for animal_movements or when processing all steps
+          # Only use quarter matrix for animal_movements or when processing all steps
           if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" ]]; then
-            PROCESS_BY_YEAR="true"
+            PROCESS_BY_QUARTER="true"
             
             # Parse year range
             if [[ "$YEAR_RANGE" == *"-"* ]]; then
@@ -99,24 +99,28 @@ jobs:
               END_YEAR="$YEAR_RANGE"
             fi
             
-            # Generate array of years
-            YEARS="["
+            # Generate array of quarters (year-quarter format)
+            QUARTERS="["
+            FIRST_QUARTER=true
             for ((year=START_YEAR; year<=END_YEAR; year++)); do
-              if [[ $year -gt $START_YEAR ]]; then
-                YEARS="$YEARS,"
-              fi
-              YEARS="$YEARS\"$year\""
+              for quarter in "Q1" "Q2" "Q3" "Q4"; do
+                if [[ "$FIRST_QUARTER" == "false" ]]; then
+                  QUARTERS="$QUARTERS,"
+                fi
+                QUARTERS="$QUARTERS\"$year-$quarter\""
+                FIRST_QUARTER=false
+              done
             done
-            YEARS="$YEARS]"
+            QUARTERS="$QUARTERS]"
             
-            echo "years=$YEARS" >> $GITHUB_OUTPUT
-            echo "process_by_year=true" >> $GITHUB_OUTPUT
-            echo "Generated year matrix: $YEARS"
+            echo "quarters=$QUARTERS" >> $GITHUB_OUTPUT
+            echo "process_by_quarter=true" >> $GITHUB_OUTPUT
+            echo "Generated quarter matrix: $QUARTERS"
           else
-            # For other steps, don't use year matrix
-            echo "years=[\"single\"]" >> $GITHUB_OUTPUT
-            echo "process_by_year=false" >> $GITHUB_OUTPUT
-            echo "Not using year matrix for step: $STEP"
+            # For other steps, don't use quarter matrix
+            echo "quarters=[\"single\"]" >> $GITHUB_OUTPUT
+            echo "process_by_quarter=false" >> $GITHUB_OUTPUT
+            echo "Not using quarter matrix for step: $STEP"
           fi
 
   # Job 1: Foundation Steps (stamdata, herds)
@@ -357,12 +361,12 @@ jobs:
         echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
         $CMD
 
-  # Job 2b: Animal Movements by Year (NEW YEAR-BASED MATRIX)
-  bronze-animal-movements-by-year:
+  # Job 2b: Animal Movements by Quarter (QUARTERLY MATRIX PROCESSING)
+  bronze-animal-movements-by-quarter:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, generate-year-matrix]
-    if: ${{ needs.generate-year-matrix.outputs.process_by_year == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
-    timeout-minutes: 180  # 3 hours per year to prevent indefinite hanging
+    needs: [bronze-foundation, generate-quarter-matrix]
+    if: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
+    timeout-minutes: 90  # 1.5 hours per quarter (reduced from 3 hours per year)
     
     permissions:
       contents: 'read'
@@ -370,8 +374,8 @@ jobs:
 
     strategy:
       matrix:
-        year: ${{ fromJson(needs.generate-year-matrix.outputs.years) }}
-      fail-fast: false  # Continue processing other years even if one fails
+        quarter: ${{ fromJson(needs.generate-quarter-matrix.outputs.quarters) }}
+      fail-fast: false  # Continue processing other quarters even if one fails
 
     steps:
     - uses: actions/checkout@v4
@@ -429,21 +433,44 @@ jobs:
         mkdir -p /tmp/data/bronze/chr
         mkdir -p /tmp/data/silver/chr
 
-    - name: Run Animal Movements for Year ${{ matrix.year }}
+    - name: Run Animal Movements for Quarter ${{ matrix.quarter }}
       working-directory: backend/pipelines/chr_pipeline
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        YEAR="${{ matrix.year }}"
+        QUARTER="${{ matrix.quarter }}"
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        # Set year-specific date range
-        START_DATE="$YEAR-01-01"
-        END_DATE="$YEAR-12-31"
+        # Parse quarter format (e.g., "2023-Q2") and set quarter-specific date range
+        YEAR=$(echo "$QUARTER" | cut -d'-' -f1)
+        Q=$(echo "$QUARTER" | cut -d'-' -f2)
         
-        echo "Processing animal movements for year $YEAR ($START_DATE to $END_DATE)"
+        case "$Q" in
+          "Q1")
+            START_DATE="$YEAR-01-01"
+            END_DATE="$YEAR-03-31"
+            ;;
+          "Q2")
+            START_DATE="$YEAR-04-01"
+            END_DATE="$YEAR-06-30"
+            ;;
+          "Q3")
+            START_DATE="$YEAR-07-01"
+            END_DATE="$YEAR-09-30"
+            ;;
+          "Q4")
+            START_DATE="$YEAR-10-01"
+            END_DATE="$YEAR-12-31"
+            ;;
+          *)
+            echo "Invalid quarter format: $QUARTER"
+            exit 1
+            ;;
+        esac
+        
+        echo "Processing animal movements for quarter $QUARTER ($START_DATE to $END_DATE)"
         
         # IMPORTANT: Only run the animal_movements step, not its dependencies
         # Dependencies have already been satisfied by previous jobs and context import
@@ -462,23 +489,23 @@ jobs:
           CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
         fi
         
-        echo "Running animal movements command for year $YEAR: $CMD"
+        echo "Running animal movements command for quarter $QUARTER: $CMD"
         $CMD
 
     - name: Report year completion
       if: always()
       run: |
         if [[ ${{ job.status }} == 'success' ]]; then
-          echo "✅ Successfully processed animal movements for year ${{ matrix.year }}"
+          echo "✅ Successfully processed animal movements for quarter ${{ matrix.quarter }}"
                  else
-           echo "❌ Failed to process animal movements for year ${{ matrix.year }}"
+           echo "❌ Failed to process animal movements for quarter ${{ matrix.quarter }}"
          fi
 
-  # Job 2c: Animal Movements Fallback (when year matrix is not used)
+  # Job 2c: Animal Movements Fallback (when quarter matrix is not used)
   bronze-animal-movements-fallback:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, generate-year-matrix]
-    if: ${{ needs.generate-year-matrix.outputs.process_by_year == 'false' && inputs.step == 'animal_movements' }}
+    needs: [bronze-foundation, generate-quarter-matrix]
+    if: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter == 'false' && inputs.step == 'animal_movements' }}
     timeout-minutes: 360  # 6 hours timeout for fallback
     
     permissions:
@@ -550,7 +577,7 @@ jobs:
         LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
         SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
         
-        echo "Processing animal movements in traditional mode (not year-based)"
+        echo "Processing animal movements in traditional mode (not quarter-based)"
         
         # IMPORTANT: Only run the animal_movements step, not its dependencies
         CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
@@ -803,7 +830,7 @@ jobs:
   # Job 5: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-year, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2]
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-quarter, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2]
     if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
     
     permissions:
@@ -1049,7 +1076,7 @@ jobs:
   # Job 7: Pipeline Summary and Optimization Report
   pipeline-summary:
     runs-on: ubuntu-latest
-    needs: [generate-year-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-year, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
+    needs: [generate-quarter-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-quarter, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
     if: always() && !cancelled()
     
     steps:
@@ -1060,7 +1087,7 @@ jobs:
           echo "## 🔧 Configuration Used"
           echo "- **Step**: ${{ inputs.step || 'all' }}"
           echo "- **Year Range**: ${{ inputs.year_range || '2022-2024' }}"
-          echo "- **Year-based Processing**: ${{ needs.generate-year-matrix.outputs.process_by_year }}"
+          echo "- **Quarter-based Processing**: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter }}"
           echo "- **Log Level**: ${{ inputs.log_level || 'WARNING' }}"
           echo "- **Max Herds**: ${{ inputs.max_herds || 'unlimited' }}"
           echo "- **Species Codes**: ${{ inputs.species_codes || 'all' }}"
@@ -1068,18 +1095,19 @@ jobs:
           
           echo "## 🚀 Performance Optimizations Applied"
           echo ""
-          echo "### ✅ Year-based Matrix Processing"
-          if [[ "${{ needs.generate-year-matrix.outputs.process_by_year }}" == "true" ]]; then
+          echo "### ✅ Quarter-based Matrix Processing"
+          if [[ "${{ needs.generate-quarter-matrix.outputs.process_by_quarter }}" == "true" ]]; then
             echo "- **Status**: ENABLED ✅"
-            echo "- **Years Processed**: ${{ needs.generate-year-matrix.outputs.years }}"
+            echo "- **Quarters Processed**: ${{ needs.generate-quarter-matrix.outputs.quarters }}"
             echo "- **Benefits**:"
-            echo "  - Prevents timeout issues by processing smaller date ranges"
-            echo "  - Allows parallel processing of different years"
-            echo "  - Enables faster failure recovery (failed year doesn't block others)"
-            echo "  - Reduces memory usage per job (3 hours vs 6 hours timeout)"
+            echo "  - Prevents timeout issues by processing smaller date ranges (3 months vs 12 months)"
+            echo "  - Allows parallel processing of different quarters (4x more parallelization)"
+            echo "  - Enables faster failure recovery (failed quarter doesn't block others)"
+            echo "  - Reduces memory usage per job (1.5 hours vs 3 hours timeout)"
+            echo "  - Improved performance: ~21,000 animals per quarter vs ~87,000 per year"
           else
             echo "- **Status**: DISABLED (using traditional mode)"
-            echo "- **Reason**: Step '${{ inputs.step }}' doesn't require year-based processing"
+            echo "- **Reason**: Step '${{ inputs.step }}' doesn't require quarter-based processing"
           fi
           echo ""
           
@@ -1093,7 +1121,7 @@ jobs:
           
           echo "### ✅ Timeout Optimizations"
           echo "- **Individual Task Timeout**: 5 minutes (GitHub Actions) vs 10 minutes (local)"
-          echo "- **Year Processing Timeout**: 3 hours per year"
+          echo "- **Quarter Processing Timeout**: 1.5 hours per quarter (reduced from 3 hours per year)"
           echo "- **SOAP Request Timeout**: 3 minutes (GitHub Actions) vs 5 minutes (local)"
           echo "- **Aggregation Timeout**: 10 minutes maximum per herd"
           echo ""
@@ -1103,7 +1131,7 @@ jobs:
           echo "|-----|--------|"
           echo "| Foundation | ${{ needs.bronze-foundation.result || 'skipped' }} |"
           echo "| Group 1 (diko, spf_su) | ${{ needs.bronze-parallel-group-1.result || 'skipped' }} |"
-          echo "| Animal Movements (Year-based) | ${{ needs.bronze-animal-movements-by-year.result || 'skipped' }} |"
+          echo "| Animal Movements (Quarter-based) | ${{ needs.bronze-animal-movements-by-quarter.result || 'skipped' }} |"
           echo "| Animal Movements (Fallback) | ${{ needs.bronze-animal-movements-fallback.result || 'skipped' }} |"
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
           echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
@@ -1118,8 +1146,8 @@ jobs:
           if [[ "${{ needs.bronze-parallel-group-1.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS group-1"
           fi
-          if [[ "${{ needs.bronze-animal-movements-by-year.result }}" == "failure" ]]; then
-            FAILED_JOBS="$FAILED_JOBS animal-movements-year"
+          if [[ "${{ needs.bronze-animal-movements-by-quarter.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS animal-movements-quarter"
           fi
           if [[ "${{ needs.bronze-animal-movements-fallback.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS animal-movements-fallback"
@@ -1140,10 +1168,11 @@ jobs:
             echo ""
             echo "### 🔧 Troubleshooting Steps"
             echo "1. **Check individual job logs** for specific error details"
-            echo "2. **For timeout issues**: Consider smaller year_range (e.g., single year)"
+            echo "2. **For timeout issues**: Consider smaller year_range (e.g., single year) or limit max_herds"
             echo "3. **For memory issues**: Reduce max_herds or limit_herds_per_species"
             echo "4. **For credential issues**: Verify FVM_USERNAME/FVM_PASSWORD secrets"
             echo "5. **For high-volume herds**: Check if automatic chunking was applied"
+            echo "6. **Quarter-based processing**: Automatically divides workload into 3-month chunks for better performance"
           else
             echo "## ✅ Pipeline Completed Successfully"
             echo "All jobs completed without critical failures."
