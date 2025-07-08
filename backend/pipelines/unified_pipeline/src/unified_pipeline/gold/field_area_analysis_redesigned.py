@@ -108,18 +108,44 @@ class FieldAreaAnalysisRedesigned:
 
         # Convert WKT to geometry (coordinates now fixed in silver layer)
         self.log.info("🔄 Converting agricultural fields WKT to geometry...")
-        self.conn.execute("""
-            CREATE TABLE fields_clean AS
-            SELECT 
-                field_id, 
-                block_id, 
-                cvr_number,
-                ST_GeomFromText(geometry_wkt) as geom,
-                ST_Area(ST_GeomFromText(geometry_wkt)) as field_area_m2
-            FROM fields_raw
-            WHERE geometry_wkt IS NOT NULL 
-            AND ST_IsValid(ST_GeomFromText(geometry_wkt))
-        """)
+        # Check which geometry column exists and clean/prepare field geometries
+        columns_info = self.conn.execute("DESCRIBE fields_raw").fetchall()
+        column_names = [col[0] for col in columns_info]
+
+        if "geometry" in column_names:
+            geometry_column = "geometry"
+            self.log.info("Using 'geometry' column for field geometries")
+            self.conn.execute("""
+                CREATE TABLE fields_clean AS
+                SELECT 
+                    field_id, 
+                    block_id, 
+                    cvr_number,
+                    geometry as geom,
+                    ST_Area(geometry) as field_area_m2
+                FROM fields_raw
+                WHERE geometry IS NOT NULL 
+                AND ST_IsValid(geometry)
+            """)
+        elif "geometry_wkt" in column_names:
+            geometry_column = "geometry_wkt"
+            self.log.info("Using 'geometry_wkt' column for field geometries")
+            self.conn.execute("""
+                CREATE TABLE fields_clean AS
+                SELECT 
+                    field_id, 
+                    block_id, 
+                    cvr_number,
+                    ST_GeomFromText(geometry_wkt) as geom,
+                    ST_Area(ST_GeomFromText(geometry_wkt)) as field_area_m2
+                FROM fields_raw
+                WHERE geometry_wkt IS NOT NULL 
+                AND ST_IsValid(ST_GeomFromText(geometry_wkt))
+            """)
+        else:
+            raise ValueError(
+                f"No geometry column found in fields data. Available columns: {column_names}"
+            )
 
         field_count = self.conn.execute("SELECT COUNT(*) FROM fields_clean").fetchone()[0]
         self.log.info(f"✅ Processed {field_count:,} valid agricultural fields")
