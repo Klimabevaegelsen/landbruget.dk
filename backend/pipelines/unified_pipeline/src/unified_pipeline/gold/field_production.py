@@ -10,6 +10,7 @@ Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 
 import gc
 import os
+import shutil
 import time
 from typing import Any, Dict, List, Optional
 
@@ -49,21 +50,29 @@ class FieldProductionGoldConfig(BaseJobConfig):
 
     # OPTIMIZED: Conservative memory configuration for GitHub Actions (16GB RAM, 4 CPU, 14GB SSD)
     # Leave 4GB buffer for OS and other processes (25% safety margin)
-    memory_limit: str = "12GB"  # Use 75% of available 16GB (was 14GB)
-    max_temp_directory_size: str = "10GB"  # Use 71% of available 14GB SSD (was 12GB)
-    thread_count: int = 4  # Use all available cores
+    memory_limit: str = "8GB"  # REDUCED: Use 50% of available 16GB for safer operation
+    max_temp_directory_size: str = (
+        "6GB"  # REDUCED: Use 43% of available 14GB SSD for safer operation
+    )
+    thread_count: int = 2  # REDUCED: Use 50% of available cores to reduce memory pressure
 
     # CRITICAL: Aggressive memory management for resource-constrained environment
     enable_memory_optimizations: bool = True
     enable_spatial_join_verification: bool = True
     enable_aggressive_cleanup: bool = True  # NEW: Enable aggressive resource cleanup
-    checkpoint_threshold_mb: int = 512  # REDUCED: More frequent checkpoints (was 2GB)
-    emergency_memory_threshold: float = 0.85  # Trigger emergency cleanup at 85% memory usage
+    checkpoint_threshold_mb: int = 256  # REDUCED: More frequent checkpoints (was 512MB)
+    emergency_memory_threshold: float = (
+        0.75  # REDUCED: Trigger emergency cleanup at 75% memory usage
+    )
 
     # NEW: Resource monitoring and fallback configuration
     enable_emergency_fallbacks: bool = True
     max_memory_retries: int = 3
     fallback_batch_reduction_factor: float = 0.5  # Reduce batch size by 50% on memory issues
+
+    # NEW: Spatial join batching configuration for GitHub Actions
+    spatial_join_batch_size: int = 100000  # Process spatial joins in batches of 100k records
+    enable_batched_spatial_joins: bool = True  # Enable batched spatial processing
 
     # Quality thresholds
     min_yield_coverage: float = 0.3  # Minimum acceptable yield coverage rate
@@ -142,13 +151,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self._cleanup_temp_files_safe()
 
             self.log.info("✅ Conservative GitHub Actions optimizations applied:")
-            self.log.info(f"   Memory: {self.config.memory_limit} (75% of 16GB, 4GB OS buffer)")
+            self.log.info(f"   Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
             self.log.info(
-                f"   Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)"
+                f"   Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)"
             )
-            self.log.info(f"   Threads: {self.config.thread_count}")
-            self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (frequent cleanup)")
+            self.log.info(f"   Threads: {self.config.thread_count} (50% of 4 cores)")
+            self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (aggressive cleanup)")
             self.log.info(f"   Emergency threshold: {self.config.emergency_memory_threshold:.0%}")
+            self.log.info(
+                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} (batch size: {self.config.spatial_join_batch_size:,})"
+            )
 
         except Exception as e:
             self.log.warning(f"Could not apply some memory optimizations: {e}")
@@ -544,11 +556,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             "🚀 Starting field production gold layer processing (GitHub Actions optimized)"
         )
         self.log.info("📊 Resource-constrained optimizations applied:")
-        self.log.info(f"   • Memory: {self.config.memory_limit} (75% of 16GB, 4GB OS buffer)")
-        self.log.info(f"   • CPU: {self.config.thread_count} threads (100% of 4 cores)")
-        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)")
+        self.log.info(f"   • Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
+        self.log.info(f"   • CPU: {self.config.thread_count} threads (50% of 4 cores)")
+        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)")
         self.log.info(
             f"   • Batch processing: {self.config.years_per_batch} year at a time (memory control)"
+        )
+        self.log.info(
+            f"   • Spatial join batching: {self.config.spatial_join_batch_size:,} records per batch"
         )
         self.log.info(
             f"   • Checkpoint frequency: {self.config.checkpoint_threshold_mb}MB (aggressive)"
@@ -766,27 +781,30 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Check memory after loading
             self._check_emergency_memory_threshold()
 
-            # OPTIMIZED: Spatial join with DST zones using SPATIAL_JOIN operator
+            # OPTIMIZED: Spatial join with DST zones using batched approach for GitHub Actions
             spatial_start = time.time()
             self.log.info("  🗺️ Performing spatial join with DST zones...")
 
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE year_fields_with_zones AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.area_ha,
-                    f.crop_type,
-                    f.organic_farming,
-                    f.year,
-                    z.landsdel_code,
-                    z.landsdel_name,
-                    z.dst_regions,
-                    ST_AsText(f.geometry) as geometry_wkt
-                FROM current_year_fields f
-                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
-            """)
+            if self.config.enable_batched_spatial_joins:
+                self._perform_batched_spatial_join(year)
+            else:
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE year_fields_with_zones AS
+                    SELECT 
+                        f.field_id,
+                        f.block_id,
+                        f.cvr_number,
+                        f.area_ha,
+                        f.crop_type,
+                        f.organic_farming,
+                        f.year,
+                        z.landsdel_code,
+                        z.landsdel_name,
+                        z.dst_regions,
+                        ST_AsText(f.geometry) as geometry_wkt
+                    FROM current_year_fields f
+                    LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+                """)
 
             # Verify SPATIAL_JOIN operator usage
             self._verify_spatial_join_optimization("DST zones spatial join")
@@ -906,6 +924,94 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 except:
                     pass
             return 0
+
+    def _perform_batched_spatial_join(self, year: int):
+        """Perform spatial join in batches to avoid memory issues on GitHub Actions."""
+        self.log.info(
+            f"  🔄 Using batched spatial join (batch size: {self.config.spatial_join_batch_size:,})"
+        )
+
+        # Get total count of fields to process
+        total_fields = self.conn.execute("SELECT COUNT(*) FROM current_year_fields").fetchone()[0]
+        self.log.info(
+            f"  📊 Processing {total_fields:,} fields in batches of {self.config.spatial_join_batch_size:,}"
+        )
+
+        # Create result table
+        self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
+        self.conn.execute("""
+            CREATE TABLE year_fields_with_zones AS
+            SELECT 
+                NULL::VARCHAR as field_id,
+                NULL::VARCHAR as block_id,
+                NULL::VARCHAR as cvr_number,
+                NULL::DOUBLE as area_ha,
+                NULL::VARCHAR as crop_type,
+                NULL::BOOLEAN as organic_farming,
+                NULL::INTEGER as year,
+                NULL::VARCHAR as landsdel_code,
+                NULL::VARCHAR as landsdel_name,
+                NULL::VARCHAR as dst_regions,
+                NULL::VARCHAR as geometry_wkt
+            WHERE FALSE
+        """)
+
+        # Process in batches
+        batch_num = 0
+        offset = 0
+
+        while offset < total_fields:
+            batch_num += 1
+            self.log.info(f"  📦 Processing batch {batch_num} (offset {offset:,})")
+
+            # Create batch table
+            self.conn.execute("DROP TABLE IF EXISTS current_batch")
+            self.conn.execute(f"""
+                CREATE TABLE current_batch AS
+                SELECT * FROM current_year_fields
+                LIMIT {self.config.spatial_join_batch_size} OFFSET {offset}
+            """)
+
+            # Check if batch has data
+            batch_count = self.conn.execute("SELECT COUNT(*) FROM current_batch").fetchone()[0]
+            if batch_count == 0:
+                break
+
+            # Perform spatial join for this batch
+            self.conn.execute("""
+                INSERT INTO year_fields_with_zones
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    z.landsdel_code,
+                    z.landsdel_name,
+                    z.dst_regions,
+                    ST_AsText(f.geometry) as geometry_wkt
+                FROM current_batch f
+                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+            """)
+
+            # Clean up batch table immediately
+            self.conn.execute("DROP TABLE IF EXISTS current_batch")
+
+            # Force checkpoint after each batch
+            self.conn.execute("CHECKPOINT")
+
+            # Check memory after each batch
+            self._check_emergency_memory_threshold()
+
+            offset += self.config.spatial_join_batch_size
+
+            self.log.info(f"  ✅ Batch {batch_num} completed ({batch_count:,} fields)")
+
+        # Verify final count
+        final_count = self.conn.execute("SELECT COUNT(*) FROM year_fields_with_zones").fetchone()[0]
+        self.log.info(f"  🎯 Batched spatial join completed: {final_count:,} fields processed")
 
     def _create_year_table_optimized(self, source_table: str, year: int, column_names: List[str]):
         """Create optimized year table with minimal memory footprint."""
