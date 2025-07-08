@@ -223,21 +223,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.warning(f"Error in aggressive cleanup: {e}")
 
     def _check_emergency_memory_threshold(self) -> bool:
-        """Check if we're approaching emergency memory threshold."""
+        """Check if memory usage is safe to continue (returns True if safe, False if emergency)."""
         try:
             memory = psutil.virtual_memory()
 
             if memory.percent > (self.config.emergency_memory_threshold * 100):
                 self.log.warning(f"🚨 Emergency memory threshold exceeded: {memory.percent:.1f}%")
                 self._emergency_resource_cleanup()
-                return True
-            return False
+                return False  # FIXED: Return False when memory is too high
+            return True  # FIXED: Return True when memory is safe
 
         except ImportError:
-            return False
+            return True  # FIXED: Default to safe when psutil unavailable
         except Exception as e:
             self.log.warning(f"Could not check emergency memory threshold: {e}")
-            return False
+            return True  # FIXED: Default to safe on error
 
     def _emergency_resource_cleanup(self):
         """Emergency resource cleanup when approaching memory limits."""
@@ -295,7 +295,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         for attempt in range(self.config.max_memory_retries):
             try:
                 # Check memory before processing
-                if self._check_emergency_memory_threshold():
+                if not self._check_emergency_memory_threshold():
                     self.log.warning(f"Memory threshold exceeded before attempt {attempt + 1}")
 
                 result = processing_func(*args, **kwargs)
@@ -618,7 +618,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.info(f"🚀 Processing year {year} ({i + 1}/{len(available_years)})...")
 
                 # Check memory before processing each year
-                if self._check_emergency_memory_threshold():
+                if not self._check_emergency_memory_threshold():
                     self.log.warning(f"High memory usage before year {year} - performing cleanup")
 
                 try:
