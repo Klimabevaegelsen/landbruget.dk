@@ -224,10 +224,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 columns_info = self.conn.execute(f"DESCRIBE temp_{dataset_name}").fetchall()
                 column_names = [col[0] for col in columns_info]
 
-                # Use standardized geometry column
+                # Use standardized geometry column and check its type
                 if "geometry" in column_names:
-                    geometry_select = "geometry"
-                    geometry_where = "geometry IS NOT NULL"
+                    # Check geometry column type to handle both WKT and binary geometry
+                    geom_type_query = f"SELECT typeof(geometry) FROM temp_{dataset_name} WHERE geometry IS NOT NULL LIMIT 1"
+                    geom_type_result = self.conn.execute(geom_type_query).fetchone()
+
+                    if geom_type_result and geom_type_result[0] == "BLOB":
+                        # Binary geometry - spatial extension already loaded by GCSDataAccess
+                        geometry_select = "geometry"
+                        geometry_where = "geometry IS NOT NULL"
+                        self.log.info(f"Using binary geometry format for {dataset_name}")
+                    else:
+                        # Text/WKT geometry
+                        geometry_select = "geometry"
+                        geometry_where = "geometry IS NOT NULL"
+                        self.log.info(f"Using text geometry format for {dataset_name}")
                 else:
                     self.log.warning(f"No geometry column found in {dataset_name}")
                     return 0
@@ -297,10 +309,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         ).fetchall()
                         column_names = [col[0] for col in columns_info]
 
-                        # Use standardized geometry column
+                        # Use standardized geometry column and check its type
                         if "geometry" in column_names:
-                            geometry_select = "geometry"
-                            geometry_where = "geometry IS NOT NULL"
+                            # Check geometry column type to handle both WKT and binary geometry
+                            geom_type_query = f"SELECT typeof(geometry) FROM read_parquet('{temp_file}') WHERE geometry IS NOT NULL LIMIT 1"
+                            geom_type_result = self.conn.execute(geom_type_query).fetchone()
+
+                            if geom_type_result and geom_type_result[0] == "BLOB":
+                                # Binary geometry - spatial extension already loaded by GCSDataAccess
+                                geometry_select = "geometry"
+                                geometry_where = "geometry IS NOT NULL"
+                                self.log.info(f"Using binary geometry format for {dataset_name}")
+                            else:
+                                # Text/WKT geometry
+                                geometry_select = "geometry"
+                                geometry_where = "geometry IS NOT NULL"
+                                self.log.info(f"Using text geometry format for {dataset_name}")
                         else:
                             self.log.warning(f"No geometry column found in {dataset_name}")
                             return 0

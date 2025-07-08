@@ -1068,6 +1068,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             geometry_select = ""
             self.log.warning("⚠️ No geometry data - spatial clustering will be disabled")
 
+        # Handle crop name column - check what's actually available
+        crop_name_column = None
+        if "crop_name" in temp_column_names:
+            crop_name_column = "crop_name"
+        elif "crop_type" in temp_column_names:
+            crop_name_column = "crop_type as crop_name"
+        else:
+            crop_name_column = "NULL as crop_name"
+            self.log.warning("No crop_name or crop_type column found, using NULL")
+
+        # Handle organic farming column - FVM data doesn't contain organic farming info
+        # Organic farming data is in a separate dataset (fvm_organic_areas)
+        organic_farming_column = "false as organic_farming"
+        self.log.info("Note: FVM marker data does not contain organic farming information")
+
         self.duckdb_conn.execute(f"""
             CREATE TABLE marker AS 
             SELECT 
@@ -1075,8 +1090,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 CAST(area_ha AS DOUBLE) as area_ha,
                 CAST({cvr_column} AS VARCHAR) as cvr_number,
                 CAST(crop_code AS VARCHAR) as crop_code,
-                crop_name,
-                organic_farming,
+                {crop_name_column},
+                {organic_farming_column},
                 CAST({block_id_column} AS VARCHAR) as block_id,
                 year{geometry_select}
             FROM marker_temp
@@ -1296,31 +1311,26 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _get_organic_marker_field_ids(self) -> Set[str]:
         """
-        Identifies marker field IDs that are considered organic using the direct organic_farming column.
+        Identifies marker field IDs that are considered organic.
+
+        Note: FVM marker data does NOT contain organic farming information.
+        Organic farming data is in a separate dataset (fvm_organic_areas).
+        Since we don't have access to that data in this pipeline, we return an empty set.
+
         Results are cached.
         Returns a set of marker.field_id strings.
         """
-        if self._organic_marker_field_ids:
+        if self._organic_marker_field_ids is not None:
             self.log.debug("Returning cached organic marker field IDs.")
             return self._organic_marker_field_ids
 
-        self.log.info("Identifying organic marker fields using direct organic_farming column...")
-        query = """
-        SELECT DISTINCT m.field_id 
-        FROM marker m
-        WHERE m.organic_farming IS NOT NULL AND UPPER(TRIM(m.organic_farming)) IN ('JA', 'YES', 'TRUE', '1');
-        """
-        try:
-            result_tuples = self.duckdb_conn.execute(query).fetchall()
-            self._organic_marker_field_ids = {row[0] for row in result_tuples}
-            self.log.info(
-                f"Identified {len(self._organic_marker_field_ids)} organic marker field IDs using organic_farming column."
-            )
-        except Exception as e:
-            self.log.error(
-                f"Error identifying organic marker fields: {e}. Proceeding without organic field exclusion for this run."
-            )
-            self._organic_marker_field_ids = set()
+        self.log.info("Note: FVM marker data does not contain organic farming information")
+        self.log.info("Organic farming data is in separate fvm_organic_areas dataset")
+        self.log.info("No organic field exclusion will be applied in non-organic strategies")
+
+        # Since FVM marker data doesn't contain organic farming info, return empty set
+        self._organic_marker_field_ids = set()
+
         return self._organic_marker_field_ids
 
     def _disaggregate_by_marker_match(self) -> int:

@@ -64,7 +64,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "CVR": "cvr_number",
         "Afgkode": "crop_code",
         "Afgroede": "crop_name",
-        "GB": "organic_farming",
+        "GB": "grundbetaling",  # GB is "grundbetaling" (basic payment), NOT organic farming
         "GBanmeldt": "reported_area_ha",
         "Markblok": "block_id",
         "MB_NR": "block_id",
