@@ -512,10 +512,20 @@ def load_animal_movements(
                     + (f"(period: {period_fra} to {period_til})" if period_fra else "")
                 )
 
-                if animal_count > 0 and not isinstance(animals, int) and animals:
-                    logger.debug(
-                        f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}"
-                    )
+                # FIXED: Comprehensive safety check before accessing animals[0]
+                if (
+                    animal_count > 0
+                    and not isinstance(animals, (int, float, bool, str, bytes, type(None)))
+                    and hasattr(animals, "__len__")
+                    and hasattr(animals, "__getitem__")
+                    and len(animals) > 0
+                ):
+                    try:
+                        logger.debug(
+                            f"Sample animal from herd {herd_number}: " + f"CKR={getattr(animals[0], 'CkrNr', 'N/A')}"
+                        )
+                    except (IndexError, TypeError, AttributeError) as e:
+                        logger.debug(f"Could not access sample animal from herd {herd_number}: {e}")
 
             # Return aggregated summaries instead of massive raw response
             return movement_summaries
@@ -679,9 +689,16 @@ def load_cattle_movement_summaries(
                     )
 
                 elif chunk_summaries and chunk_summaries.get("skipped_reason"):
-                    # Chunk was skipped for a reason (e.g., problematic herd, too large)
-                    logger.warning(f"Chunk {chunk_idx + 1} skipped: {chunk_summaries.get('skipped_reason')}")
-                    # Don't count as failed if it was intentionally skipped
+                    # Check if this is a successful case with no movements (API returned count only)
+                    if chunk_summaries.get("processed_successfully", False):
+                        successful_chunks += 1
+                        logger.info(
+                            f"Chunk {chunk_idx + 1} completed successfully: {chunk_summaries.get('skipped_reason')}"
+                        )
+                    else:
+                        # Chunk was skipped for a problematic reason (e.g., problematic herd, too large)
+                        logger.warning(f"Chunk {chunk_idx + 1} skipped: {chunk_summaries.get('skipped_reason')}")
+                        # Don't count as failed if it was intentionally skipped
 
                 else:
                     logger.warning(f"Chunk {chunk_idx + 1} returned no data")
@@ -787,19 +804,20 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
         # Fix the 'int' object is not iterable error - COMPREHENSIVE CHECK
         if isinstance(animals, int):
-            logger.warning(
-                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is an integer ({animals}) instead of a list - likely indicates count or error"
+            logger.info(
+                f"Herd {reporting_herd}: Enkeltdyrsoplysninger is an integer ({animals}) - API returned count only, no detailed records available"
             )
             return {
                 "reporting_herd_number": reporting_herd,
                 "movements": [],
-                "skipped_reason": "enkeltdyrsoplysninger_is_integer",
+                "skipped_reason": "api_returned_count_only",
                 "summary_stats": {
                     "total_animals_processed": 0,
                     "unique_movement_dates": 0,
                     "counterparty_herds": 0,
-                    "enkeltdyrsoplysninger_value": animals,
+                    "animal_count_from_api": animals,
                 },
+                "processed_successfully": True,  # This is a valid response, not an error
             }
 
         # COMPREHENSIVE SAFETY CHECK: Handle all non-iterable types
