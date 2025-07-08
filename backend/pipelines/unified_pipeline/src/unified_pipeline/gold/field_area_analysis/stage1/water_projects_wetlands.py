@@ -93,6 +93,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             WHERE FALSE
         """)
 
+        # Create timestamp directory for batch files
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        batch_base_path = (
+            f"gs://{CONFIG.bucket}/gold/field_analysis_wetland_water_coverage/{timestamp}"
+        )
+
         total_intersections = 0
         total_wetland_area = 0
         total_covered_area = 0
@@ -144,7 +152,9 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             ).fetchone()[0]
 
             if batch_intersections > 0:
-                batch_gcs_path = f"gs://{CONFIG.bucket}/gold/field_analysis_wetland_water_coverage/batch_{batch_num + 1:04d}_intersections.parquet"
+                batch_gcs_path = (
+                    f"{batch_base_path}/batch_{batch_num + 1:04d}_intersections.parquet"
+                )
                 self.gcs_access.export_table_to_gcs_direct("batch_intersections", batch_gcs_path)
                 self.log.info(f"  📤 Streamed {batch_intersections:,} intersections to GCS")
 
@@ -180,12 +190,12 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Consolidate all batch files into final intersection table
         self.log.info("Consolidating batched intersection files...")
 
-        # Find all batch files
-        batch_pattern = f"gs://{CONFIG.bucket}/gold/field_analysis_wetland_water_coverage/batch_*_intersections.parquet"
+        # Find all batch files in the current timestamp directory
+        batch_pattern = f"{batch_base_path}/batch_*_intersections.parquet"
 
         # Load all batch files into final table
         self.gcs_access.query_multiple_direct(
-            batch_pattern, "wetland_water_intersections", "SELECT * FROM read_parquet_auto('{}')"
+            batch_pattern, "wetland_water_intersections", "SELECT *"
         )
 
         # Create summary statistics for reporting (but keep detailed intersections as foundation data)
