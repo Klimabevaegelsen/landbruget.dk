@@ -1010,7 +1010,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             )
             raise ValueError("Required geometry column not found in agricultural fields data")
 
-        # Convert geometry_wkt to geometry if needed
+        # Convert geometry_wkt to geometry if needed and calculate field_area_m2
         if geometry_column == "geometry_wkt":
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_fields AS
@@ -1019,7 +1019,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     block_id,
                     cvr_number,
                     year,
-                    ST_GeomFromText({geometry_column}) as geom
+                    ST_GeomFromText({geometry_column}) as geom,
+                    ST_Area(ST_GeomFromText({geometry_column})) as field_area_m2
                 FROM {fields_table_name}
                 WHERE {geometry_column} IS NOT NULL
             """)
@@ -1031,7 +1032,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     block_id,
                     cvr_number,
                     year,
-                    {geometry_column} as geom
+                    {geometry_column} as geom,
+                    ST_Area({geometry_column}) as field_area_m2
                 FROM {fields_table_name}
                 WHERE {geometry_column} IS NOT NULL
             """)
