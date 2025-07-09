@@ -1312,12 +1312,14 @@ class H3PFASProcessorRefactored:
         fvm_column_names = [col[1] for col in fvm_columns]
 
         # Handle geometry column name dynamically
-        if "geometry_wkt" in fvm_column_names:
-            geometry_field_select = "f.geometry_wkt"
-            geometry_column = "f.geometry_wkt"
-        elif "geometry" in fvm_column_names:
-            geometry_field_select = "f.geometry as geometry_wkt"
+        if "geometry" in fvm_column_names:
+            geometry_field_select = "f.geometry"
             geometry_column = "f.geometry"
+            geometry_validation = f"ST_IsValid({geometry_column})"
+        elif "geometry_wkt" in fvm_column_names:
+            geometry_field_select = "ST_GeomFromText(f.geometry_wkt) as geometry"
+            geometry_column = "f.geometry_wkt"
+            geometry_validation = f"ST_IsValid(ST_GeomFromText({geometry_column}))"
         else:
             raise Exception("No geometry column found in FVM data")
 
@@ -1383,7 +1385,7 @@ class H3PFASProcessorRefactored:
                 AND {block_join_condition}
             )
             WHERE {geometry_column} IS NOT NULL
-            AND ST_IsValid(ST_GeomFromText({geometry_column}))
+            AND {geometry_validation}
             AND {area_condition}
             AND {cvr_condition}
             AND {block_condition}

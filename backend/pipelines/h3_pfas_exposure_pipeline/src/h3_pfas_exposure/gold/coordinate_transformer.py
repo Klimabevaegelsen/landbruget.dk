@@ -20,19 +20,19 @@ class CoordinateTransformer:
         self.config = config
         self.log = logger.bind(component="CoordinateTransformer")
 
-    def prepare_geometries(self, table_name: str, geometry_column: str = "geometry_wkt") -> str:
+    def prepare_geometries(self, table_name: str, geometry_column: str = "geometry") -> str:
         """Prepare geometries for spatial operations (coordinates now fixed in silver layer)."""
 
         prepared_table = f"{table_name}_prepared"
 
+        # Since we now standardize on 'geometry' column containing geometry objects,
+        # we can use it directly without conversion
         query = f"""
         CREATE OR REPLACE TABLE {prepared_table} AS
-        SELECT *,
-            -- Geometry for both area calculations and spatial operations (coordinates fixed in silver layer)
-            ST_GeomFromText({geometry_column}) as geometry
+        SELECT *
         FROM {table_name}
         WHERE {geometry_column} IS NOT NULL
-        AND ST_IsValid(ST_GeomFromText({geometry_column}))
+        AND ST_IsValid({geometry_column})
         """
 
         self.conn.execute(query)
