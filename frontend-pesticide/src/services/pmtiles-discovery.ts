@@ -26,7 +26,7 @@ class PMTilesDiscoveryService {
     const cacheKey = 'data_availability';
     
     if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
+      return this.cache.get(cacheKey) as DataAvailability;
     }
     
     try {
@@ -65,7 +65,7 @@ class PMTilesDiscoveryService {
     const cacheKey = `h3_${year}_${resolution}`;
     
     if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
+      return this.cache.get(cacheKey) as string;
     }
     
     try {
@@ -85,7 +85,7 @@ class PMTilesDiscoveryService {
     const cacheKey = `kommune_${year}`;
     
     if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
+      return this.cache.get(cacheKey) as string;
     }
     
     try {
