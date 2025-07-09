@@ -142,6 +142,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     hideTooltip
   } = useMapStore()
 
+  // Memoize store functions to prevent unnecessary re-renders
+  const memoizedSetError = useCallback(setError, [setError])
+  const memoizedClearError = useCallback(clearError, [clearError])
+  const memoizedSetMapInstance = useCallback(setMapInstance, [setMapInstance])
+  const memoizedShowTooltipWithData = useCallback(showTooltipWithData, [showTooltipWithData])
+  const memoizedHideTooltip = useCallback(hideTooltip, [hideTooltip])
+  const memoizedSetShowMobilePanel = useCallback(setShowMobilePanel, [setShowMobilePanel])
+
   // Helper function to safely get available interactive layers
   const getAvailableInteractiveLayers = useCallback((): string[] => {
     if (!map.current) return []
@@ -509,7 +517,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           id: 'kommune-fill',
           type: 'fill',
           source: 'kommune',
-          'source-layer': 'default',
+          'source-layer': `kommune_pfas_${selectedYear}`,
           layout: {
             visibility: shouldShowKommune ? 'visible' : 'none'
           },
@@ -532,7 +540,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           id: 'kommune-stroke',
           type: 'line',
           source: 'kommune',
-          'source-layer': 'default',
+          'source-layer': `kommune_pfas_${selectedYear}`,
           layout: {
             visibility: shouldShowKommune ? 'visible' : 'none'
           },
@@ -553,7 +561,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             id: `h3-fill-res${res}`,
             type: 'fill',
             source: 'h3',
-            'source-layer': `h3_res${res}`,
+            'source-layer': `h3_pfas_${selectedYear}_res${res}`,
             layout: {
               visibility: layerVisibility
             },
@@ -576,7 +584,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             id: `h3-stroke-res${res}`,
             type: 'line',
             source: 'h3',
-            'source-layer': `h3_res${res}`,
+            'source-layer': `h3_pfas_${selectedYear}_res${res}`,
             layout: {
               visibility: layerVisibility
             },
@@ -685,7 +693,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       ;(map.current as any).addControl(new (mapLibre as any).ScaleControl(), 'bottom-left')
       
       // Set map instance in store for external control
-      setMapInstance(map.current as any)
+      memoizedSetMapInstance(map.current as any)
 
       // Map event handlers with performance optimizations
       ;(map.current as any).on('load', () => {
@@ -697,7 +705,20 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         console.log('📊 Map style layers:', style.layers.map((l: any) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
         
         setMapLoaded(true)
-        clearError()
+        memoizedClearError()
+      })
+      
+      // Debug drag events
+      ;(map.current as any).on('dragstart', (e: any) => {
+        console.log('🖱️ Drag started:', e)
+      })
+      
+      ;(map.current as any).on('drag', (e: any) => {
+        console.log('🖱️ Dragging:', e)
+      })
+      
+      ;(map.current as any).on('dragend', (e: any) => {
+        console.log('🖱️ Drag ended:', e)
       })
 
       // Use throttled move handler for better performance
@@ -722,9 +743,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         
         if (availableLayers.length === 0) {
           // No interactive layers available, just hide tooltip
-          hideTooltip()
+          memoizedHideTooltip()
           if (isMobile) {
-            setShowMobilePanel(false)
+            memoizedSetShowMobilePanel(false)
           }
           return
         }
@@ -735,25 +756,25 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           })
           if (features && features.length > 0) {
             const feature = features[0]
-            showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+            memoizedShowTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
             
             // On mobile, also show the mobile panel
             if (isMobile) {
-              setShowMobilePanel(true)
+              memoizedSetShowMobilePanel(true)
             }
           } else {
-            hideTooltip()
+            memoizedHideTooltip()
             
             // On mobile, hide the mobile panel when clicking empty space
             if (isMobile) {
-              setShowMobilePanel(false)
+              memoizedSetShowMobilePanel(false)
             }
           }
         } catch (error) {
           console.warn('Error querying rendered features on click:', error)
-          hideTooltip()
+          memoizedHideTooltip()
           if (isMobile) {
-            setShowMobilePanel(false)
+            memoizedSetShowMobilePanel(false)
           }
         }
       })
@@ -767,7 +788,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           return
         }
         
-        hideTooltip()
+        memoizedHideTooltip()
         if (map.current) {
           (map.current as any).getCanvas().style.cursor = ''
         }
@@ -775,12 +796,12 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
       ;(map.current as any).on('error', (e: any) => {
         console.error('❌ Map error:', e)
-        setError(`Map loading error: ${e.message || 'Unknown error'}`)
+        memoizedSetError(`Map loading error: ${e.message || 'Unknown error'}`)
       })
 
     } catch (err) {
       console.error('❌ Error initializing map:', err)
-      setError('Failed to initialize map')
+      memoizedSetError('Failed to initialize map')
     }
 
     return () => {
@@ -789,9 +810,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         map.current = null
       }
       // Clear map instance from store
-      setMapInstance(null)
+      memoizedSetMapInstance(null)
     }
-  }, [mapLibre, pmtilesUrls, bearing, center, clearError, currentH3Resolution, currentPropertyName, hideTooltip, isMobile, pitch, selectedYear, setError, setMapInstance, setShowMobilePanel, showBasemap, showTooltipWithData, zoom, shouldShowH3, shouldShowKommune, throttledSetViewState, throttledMouseMove, getAvailableInteractiveLayers])
+  }, [mapLibre, pmtilesUrls, selectedYear, currentH3Resolution, currentPropertyName, showBasemap, shouldShowH3, shouldShowKommune])
 
   // Update layer visibility when zoom changes (optimized)
   useEffect(() => {
@@ -905,11 +926,20 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   
   return (
     <div className={`relative ${className}`}>
-      <div ref={mapContainer} className="w-full h-full" />
+      <div 
+        ref={mapContainer} 
+        className="w-full h-full"
+        style={{
+          position: 'relative',
+          cursor: 'grab',
+          touchAction: 'none',
+          pointerEvents: 'auto'
+        }}
+      />
       
       {/* Performance monitor (development only) */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono">
+        <div className="absolute top-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono pointer-events-none">
           <div>FPS: {metrics.frameRate}</div>
           <div>Events: {metrics.eventCount}</div>
         </div>
@@ -917,7 +947,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       
       {/* Loading overlay */}
       {!mapLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 pointer-events-none">
           <div className="text-center">
             <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
             <p className="text-white text-sm">Initializing map...</p>
@@ -927,7 +957,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       
       {/* Error overlay */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-900/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-red-900/80 pointer-events-none">
           <div className="text-center text-white p-4">
             <div className="text-4xl mb-2">⚠️</div>
             <p className="text-lg font-semibold mb-2">Map Error</p>
