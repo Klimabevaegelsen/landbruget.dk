@@ -13,7 +13,7 @@ from config.settings import get_settings
 from utils.logger import setup_logger
 
 
-def _save_attributes_to_parquet(attributes_data):
+def _save_attributes_to_parquet(attributes_data, output_dir):
     """Save attributes data to parquet using DuckDB streaming approach."""
     if not attributes_data:
         print("⚠️ No attributes data to save")
@@ -24,13 +24,13 @@ def _save_attributes_to_parquet(attributes_data):
     # Use streaming approach for large datasets
     if len(attributes_data) > 100000:
         print("🌊 Large dataset - using streaming parquet write")
-        _save_attributes_streaming(attributes_data)
+        _save_attributes_streaming(attributes_data, output_dir)
     else:
         print("📝 Small dataset - using standard parquet write")
-        _save_attributes_standard(attributes_data)
+        _save_attributes_standard(attributes_data, output_dir)
 
 
-def _save_attributes_streaming(attributes_data):
+def _save_attributes_streaming(attributes_data, output_dir):
     """Save large attributes dataset using streaming approach with better memory management."""
     import duckdb
 
@@ -43,7 +43,8 @@ def _save_attributes_streaming(attributes_data):
     )
 
     conn = duckdb.connect(":memory:")
-    parquet_file = "data/inspire_attributes.parquet"
+    output_dir.mkdir(exist_ok=True)
+    parquet_file = output_dir / "inspire_attributes.parquet"
 
     try:
         # Process first chunk to create initial parquet file
@@ -122,11 +123,13 @@ def _save_attributes_streaming(attributes_data):
         conn.close()
 
 
-def _save_attributes_standard(attributes_data):
+def _save_attributes_standard(attributes_data, output_dir):
     """Save small attributes dataset using standard approach."""
     import duckdb
 
     conn = duckdb.connect(":memory:")
+    output_dir.mkdir(exist_ok=True)
+    parquet_file = output_dir / "inspire_attributes.parquet"
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(attributes_data, f)
@@ -134,8 +137,8 @@ def _save_attributes_standard(attributes_data):
 
     try:
         conn.execute(f"CREATE TABLE buildings AS SELECT * FROM read_json('{temp_json_path}')")
-        conn.execute("COPY buildings TO 'data/inspire_attributes.parquet' (FORMAT PARQUET)")
-        print("💾 Saved INSPIRE attributes to parquet")
+        conn.execute(f"COPY buildings TO '{parquet_file}' (FORMAT PARQUET)")
+        print(f"💾 Saved INSPIRE attributes to {parquet_file}")
     finally:
         os.unlink(temp_json_path)
         conn.close()
@@ -146,23 +149,57 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
     print("🌊 Using streaming processing for large dataset...")
 
     try:
-        # Use the existing streaming functionality in InspireBBRFetcher
-        print("⚡ Processing with chunked streaming and memory optimizations...")
+        # For large datasets, we need to use a different approach since return_data=False
+        # doesn't save the building data to files. Instead, we'll process with return_data=True
+        # but immediately stream the data to files and clear from memory.
 
-        # For very large datasets, use streaming mode that processes in chunks
+        print("⚡ Processing with memory-optimized approach...")
+
         if sample_size is None or sample_size > 100000:
-            print("🔄 Large dataset detected - using chunked processing with immediate writes")
+            print("🔄 Large dataset detected - using chunked processing with immediate streaming")
 
-            # Process in streaming mode - this will save data incrementally
+            # For very large datasets, we need to process in a memory-efficient way
+            # The InspireBBRFetcher doesn't have a built-in streaming mode that saves to files
+            # So we'll use return_data=True but process and save data immediately
+
             result = inspire_fetcher.fetch_data(
                 output_dir,
                 sample_size=sample_size,
-                return_data=False,  # Don't load everything into memory
+                return_data=True,  # We need the data to save it
                 pipeline_start_time=pipeline_start_time,
             )
 
-            # Get building count from saved files
-            building_count = _get_building_count_from_files()
+            if result and "data" in result:
+                building_ids = result["data"].get("building_ids", [])
+                attributes_data = result["data"].get("attributes_df", [])
+                building_count = len(building_ids)
+
+                print(f"📊 Processing {building_count:,} buildings with streaming saves...")
+
+                # Immediately save building IDs to file
+                print("💾 Saving building IDs...")
+                output_dir.mkdir(exist_ok=True)
+                with open(output_dir / "inspire_building_ids.json", "w") as f:
+                    json.dump(building_ids, f)
+
+                # Save attributes using streaming approach for large datasets
+                if attributes_data:
+                    print(
+                        f"💾 Saving {len(attributes_data):,} building attributes with streaming..."
+                    )
+                    _save_attributes_to_parquet(attributes_data, output_dir)
+
+                # Immediately clear data from memory
+                del building_ids, attributes_data, result
+                import gc
+
+                gc.collect()
+
+                print("🧹 Cleared data from memory after saving")
+
+            else:
+                print("⚠️ No data returned from fetcher")
+                building_count = 0
 
         else:
             # Medium-sized dataset - use standard processing with memory optimizations
@@ -184,11 +221,12 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
                 attributes_data = result["data"].get("attributes_df", [])
 
                 # Save building IDs
-                with open("data/inspire_building_ids.json", "w") as f:
+                output_dir.mkdir(exist_ok=True)
+                with open(output_dir / "inspire_building_ids.json", "w") as f:
                     json.dump(building_ids, f)
 
                 # Save attributes using streaming approach
-                _save_attributes_to_parquet(attributes_data)
+                _save_attributes_to_parquet(attributes_data, output_dir)
 
                 # Clear data from memory immediately
                 del building_ids, attributes_data, result
@@ -207,15 +245,30 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
 
     except Exception as e:
         print(f"❌ Streaming processing failed: {e}")
-        raise
+        # Try to get building count from any files that might have been saved
+        building_count = _get_building_count_from_files(output_dir)
+        if building_count > 0:
+            print(f"⚠️ Partial success: Found {building_count:,} buildings in saved files")
+            return {
+                "building_count": building_count,
+                "streaming_mode": True,
+                "source": "inspire_bbr_partial",
+                "timestamp": pipeline_start_time.strftime("%Y%m%d_%H%M%S"),
+                "error": str(e),
+            }
+        else:
+            raise
 
 
-def _get_building_count_from_files():
+def _get_building_count_from_files(output_dir=None):
     """Get building count from saved files after streaming processing."""
     building_count = 0
 
+    if output_dir is None:
+        output_dir = Path("data")
+
     # Check for building IDs file
-    building_ids_file = Path("data/inspire_building_ids.json")
+    building_ids_file = output_dir / "inspire_building_ids.json"
     if building_ids_file.exists():
         try:
             with open(building_ids_file) as f:
@@ -226,7 +279,7 @@ def _get_building_count_from_files():
 
     # If no building IDs file, try to count from parquet
     if building_count == 0:
-        parquet_file = Path("data/inspire_attributes.parquet")
+        parquet_file = output_dir / "inspire_attributes.parquet"
         if parquet_file.exists():
             try:
                 import duckdb
@@ -287,11 +340,14 @@ def main():
                 print(f"🏢 Total INSPIRE BBR buildings fetched: {len(building_ids):,}")
 
                 # Save building IDs for the join job
-                with open("data/inspire_building_ids.json", "w") as f:
+                output_dir.mkdir(exist_ok=True)
+                with open(output_dir / "inspire_building_ids.json", "w") as f:
                     json.dump(building_ids, f)
 
                 # Save attributes data if available
-                _save_attributes_to_parquet(inspire_result["data"].get("attributes_df", []))
+                _save_attributes_to_parquet(
+                    inspire_result["data"].get("attributes_df", []), output_dir
+                )
 
         else:
             # Large dataset or full processing - use streaming approach
