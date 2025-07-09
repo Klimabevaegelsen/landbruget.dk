@@ -366,7 +366,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [bronze-foundation, generate-quarter-matrix]
     if: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
-    timeout-minutes: 90  # 1.5 hours per quarter (reduced from 3 hours per year)
     
     permissions:
       contents: 'read'
