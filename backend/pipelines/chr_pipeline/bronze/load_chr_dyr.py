@@ -18,6 +18,14 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
+# Import GCS access for persistent storage
+try:
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    GCSDataAccess = None
 
 # Load environment variables
 load_dotenv()
@@ -49,34 +57,25 @@ def get_fvm_credentials() -> tuple[str, str]:
 
 # --- SOAP Client Creation ---
 def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication and timeout configuration."""
+    """Create a Zeep SOAP client with WSSE authentication."""
     session = Session()
     session.verify = certifi.where()
 
-    # Configure timeouts to prevent hanging on slow/unresponsive herds
-    # Connection timeout: 30 seconds to establish connection
-    # Read timeout: Reduced to 180 seconds (3 minutes) for GitHub Actions compatibility
-    # This prevents individual herds from blocking the entire pipeline
     adapter = requests.adapters.HTTPAdapter()
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    # Set aggressive timeouts for GitHub Actions environment
-    github_actions = os.getenv("GITHUB_ACTIONS") == "true"
-    read_timeout = 180 if github_actions else 300  # 3 minutes in GH Actions, 5 minutes locally
-    session.timeout = (30, read_timeout)  # (connect_timeout, read_timeout)
-
     transport = Transport(session=session)
     try:
         client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url} with 30s connect / {read_timeout}s read timeouts")
+        logger.info(f"Successfully created SOAP client for {wsdl_url}")
         return client
     except Exception as e:
         logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
         raise
 
 
-# Global set to track problematic herds that consistently timeout
+# Global set to track problematic herds that consistently fail
 PROBLEMATIC_HERDS = set()
 PROBLEMATIC_HERDS_LOADED = False
 
@@ -92,27 +91,27 @@ def _load_problematic_herds() -> None:
     if PROBLEMATIC_HERDS_LOADED:
         return
 
-    try:
-        # Try to load from GCS using the unified pipeline's GCS access
-        from unified_pipeline.util.gcs_access import GCSDataAccess
-
-        gcs = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        problematic_herds_path = "bronze/chr/problematic_herds.json"
-        gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
-
+    if GCS_AVAILABLE:
         try:
-            data = gcs.download_json(gcs_path)
-            if data and "problematic_herds" in data:
-                PROBLEMATIC_HERDS.update(data["problematic_herds"])
-                logger.info(f"Loaded {len(PROBLEMATIC_HERDS)} problematic herds from GCS")
-            else:
-                logger.info("No problematic herds found in GCS - starting with empty set")
-        except Exception as e:
-            logger.debug(f"Could not load problematic herds from GCS: {e}")
-            # This is expected on first run or if file doesn't exist
+            gcs = GCSDataAccess()
+            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            problematic_herds_path = "bronze/chr/problematic_herds.json"
+            gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 
-    except ImportError:
+            try:
+                data = gcs.download_json(gcs_path)
+                if data and "problematic_herds" in data:
+                    PROBLEMATIC_HERDS.update(data["problematic_herds"])
+                    logger.info(f"Loaded {len(PROBLEMATIC_HERDS)} problematic herds from GCS")
+                else:
+                    logger.info("No problematic herds found in GCS - starting with empty set")
+            except Exception as e:
+                logger.debug(f"Could not load problematic herds from GCS: {e}")
+                # This is expected on first run or if file doesn't exist
+
+        except Exception as e:
+            logger.debug(f"Failed to access GCS: {e}")
+    else:
         logger.debug("GCS access not available - problematic herds will not persist across runs")
 
     PROBLEMATIC_HERDS_LOADED = True
@@ -124,23 +123,28 @@ def _load_high_volume_herds() -> None:
     if HIGH_VOLUME_HERDS is not None:
         return
 
-    try:
-        gcs_data_access = GCSDataAccess()
-        config_path = "bronze/chr/config/high_volume_herds.json"
+    if GCS_AVAILABLE:
+        try:
+            gcs_data_access = GCSDataAccess()
+            config_path = "bronze/chr/config/high_volume_herds.json"
 
-        if gcs_data_access.file_exists(config_path):
-            data = gcs_data_access.read_file(config_path, encoding="utf-8")
-            HIGH_VOLUME_HERDS = json.loads(data)
-            logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herds from GCS")
-        else:
-            logger.info("No high-volume herds config found in GCS, creating default")
+            if gcs_data_access.file_exists(config_path):
+                data = gcs_data_access.read_file(config_path, encoding="utf-8")
+                HIGH_VOLUME_HERDS = json.loads(data)
+                logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herds from GCS")
+            else:
+                logger.info("No high-volume herds config found in GCS, creating default")
+                HIGH_VOLUME_HERDS = {}
+
+            # Initialize known problematic herds if not already configured
+            _initialize_known_high_volume_herds()
+
+        except Exception as e:
+            logger.warning(f"Failed to load high-volume herds config: {e}, using empty dict")
             HIGH_VOLUME_HERDS = {}
-
-        # Initialize known problematic herds if not already configured
-        _initialize_known_high_volume_herds()
-
-    except Exception as e:
-        logger.warning(f"Failed to load high-volume herds config: {e}, using empty dict")
+            _initialize_known_high_volume_herds()
+    else:
+        logger.debug("GCS access not available - using empty high-volume herds dict")
         HIGH_VOLUME_HERDS = {}
         _initialize_known_high_volume_herds()
 
@@ -176,42 +180,46 @@ def _save_problematic_herds() -> None:
     if not PROBLEMATIC_HERDS:
         return
 
-    try:
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+    if GCS_AVAILABLE:
+        try:
+            gcs = GCSDataAccess()
+            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            problematic_herds_path = "bronze/chr/problematic_herds.json"
+            gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 
-        gcs = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        problematic_herds_path = "bronze/chr/problematic_herds.json"
-        gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
+            data = {
+                "problematic_herds": list(PROBLEMATIC_HERDS),
+                "last_updated": datetime.now().isoformat(),
+                "total_count": len(PROBLEMATIC_HERDS),
+            }
 
-        data = {
-            "problematic_herds": list(PROBLEMATIC_HERDS),
-            "last_updated": datetime.now().isoformat(),
-            "total_count": len(PROBLEMATIC_HERDS),
-        }
+            gcs.upload_json(data, gcs_path)
+            logger.info(f"Saved {len(PROBLEMATIC_HERDS)} problematic herds to GCS")
 
-        gcs.upload_json(data, gcs_path)
-        logger.info(f"Saved {len(PROBLEMATIC_HERDS)} problematic herds to GCS")
-
-    except Exception as e:
-        logger.warning(f"Could not save problematic herds to GCS: {e}")
+        except Exception as e:
+            logger.warning(f"Could not save problematic herds to GCS: {e}")
+    else:
+        logger.debug("GCS access not available - cannot save problematic herds")
 
 
 def _save_high_volume_herds() -> None:
     """Save high-volume herds configuration to GCS."""
-    try:
-        gcs_data_access = GCSDataAccess()
-        config_path = "bronze/chr/config/high_volume_herds.json"
+    if GCS_AVAILABLE:
+        try:
+            gcs_data_access = GCSDataAccess()
+            config_path = "bronze/chr/config/high_volume_herds.json"
 
-        # Save the high-volume herds dictionary directly as JSON
-        data = json.dumps(HIGH_VOLUME_HERDS, indent=2, default=str)
-        gcs_data_access.write_file(config_path, data, encoding="utf-8")
+            # Save the high-volume herds dictionary directly as JSON
+            data = json.dumps(HIGH_VOLUME_HERDS, indent=2, default=str)
+            gcs_data_access.write_file(config_path, data, encoding="utf-8")
 
-        logger.info(f"Saved {len(HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
+            logger.info(f"Saved {len(HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
 
-    except Exception as e:
-        logger.warning(f"Failed to save high-volume herds config to GCS: {e}")
-        # Continue execution - this is not critical for pipeline operation
+        except Exception as e:
+            logger.warning(f"Failed to save high-volume herds config to GCS: {e}")
+            # Continue execution - this is not critical for pipeline operation
+    else:
+        logger.debug("GCS access not available - cannot save high-volume herds config")
 
 
 def add_problematic_herd(herd_number: int) -> None:
@@ -402,7 +410,7 @@ def load_animal_movements(
             # Combine into payload
             payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
 
-            # Call the operation with timeout monitoring
+            # Call the operation
             logger.debug(f"Herd {herd_number}: Starting SOAP request...")
             request_start_time = time.time()
 
@@ -530,15 +538,6 @@ def load_animal_movements(
             # Return aggregated summaries instead of massive raw response
             return movement_summaries
 
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout error for herd {herd_number} (attempt {attempt + 1}): {e}")
-            if attempt < max_retries:
-                continue
-            else:
-                logger.error(f"Max retries exceeded for herd {herd_number} due to timeout")
-                add_problematic_herd(herd_number)  # Mark as problematic
-                return None
-
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Connection error for herd {herd_number} (attempt {attempt + 1}): {e}")
             if attempt < max_retries:
@@ -549,7 +548,7 @@ def load_animal_movements(
 
         except Fault as soap_fault:
             logger.error(f"SOAP fault for herd {herd_number} (attempt {attempt + 1}): {soap_fault}")
-            if attempt < max_retries and "timeout" in str(soap_fault).lower():
+            if attempt < max_retries:
                 continue
             else:
                 logger.error(f"Max retries exceeded for herd {herd_number} due to SOAP fault: {soap_fault}")
@@ -601,7 +600,7 @@ def load_cattle_movement_summaries(
     the storage of massive individual animal datasets.
 
     For high-volume herds, automatically splits the date range into smaller chunks
-    to prevent timeouts while still collecting all the data.
+    while still collecting all the data.
 
     Args:
         chr_dyr_client: The CHR_dyr SOAP client
@@ -732,12 +731,12 @@ def load_cattle_movement_summaries(
                 failed_chunks += 1
 
                 # If this chunk failed due to volume, try to detect and adapt
-                if "timeout" in str(chunk_error).lower() or "aggregation" in str(chunk_error).lower():
+                if "aggregation" in str(chunk_error).lower():
                     current_days = (chunk_end - chunk_start).days + 1
                     if current_days > 7:  # If chunk was larger than a week, suggest smaller chunks
                         suggested_days = max(7, current_days // 4)  # Quarter the size, but at least 7 days
                         logger.warning(
-                            f"Chunk timeout suggests herd {herd_number} needs smaller chunks (suggest {suggested_days} days)"
+                            f"Chunk processing error suggests herd {herd_number} needs smaller chunks (suggest {suggested_days} days)"
                         )
 
                         # Auto-adapt: add this herd to high-volume list with smaller chunks
@@ -780,8 +779,8 @@ def load_cattle_movement_summaries(
         logger.error(f"Error processing cattle movement summaries for herd {herd_number}: {e}")
 
         # If the error suggests volume issues, try to auto-adapt
-        if "timeout" in str(e).lower() and not is_high_volume_herd(herd_number):
-            logger.warning(f"Adding herd {herd_number} to high-volume list due to timeout")
+        if not is_high_volume_herd(herd_number):
+            logger.warning(f"Adding herd {herd_number} to high-volume list due to processing error")
             add_high_volume_herd(herd_number, max_days=30, volume_estimate=None)  # Start with 30-day chunks
 
         return None
@@ -806,9 +805,8 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
     """
     from collections import defaultdict
 
-    # Add timeout for aggregation process
+    # Track aggregation start time for performance monitoring
     aggregation_start_time = time.time()
-    MAX_AGGREGATION_TIME = 600  # 10 minutes max for aggregation
 
     movement_summaries = {
         "reporting_herd_number": reporting_herd,
@@ -879,10 +877,10 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
         logger.info(f"Herd {reporting_herd}: Processing {animals_count} individual animals...")
 
-        # Skip herds with extremely large datasets that might cause timeouts
+        # Skip herds with extremely large datasets that might cause performance issues
         if animals_count > 100000:  # 100k animals threshold
             logger.warning(
-                f"Herd {reporting_herd}: Dataset too large ({animals_count} animals) - skipping to prevent timeout"
+                f"Herd {reporting_herd}: Dataset too large ({animals_count} animals) - skipping to prevent performance issues"
             )
             return {
                 "reporting_herd_number": reporting_herd,
@@ -915,7 +913,7 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=animals_count)
                 logger.info(f"Auto-added herd {reporting_herd} to high-volume list with {suggested_days}-day chunks")
 
-            # For very large datasets, still skip this current processing to avoid timeout
+            # For very large datasets, still skip this current processing to avoid performance issues
             if animals_count > 50000:
                 return {
                     "reporting_herd_number": reporting_herd,
@@ -972,21 +970,12 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
             for i, animal in enumerate(animals):
                 try:
-                    # Progress logging for large datasets and timeout check
+                    # Progress logging for large datasets
                     if i > 0 and i % 5000 == 0:  # More frequent progress updates
                         elapsed_time = time.time() - aggregation_start_time
                         logger.info(
                             f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
                         )
-
-                        # Check if aggregation is taking too long
-                        if elapsed_time > MAX_AGGREGATION_TIME:
-                            logger.error(
-                                f"Herd {reporting_herd}: Aggregation timeout after {elapsed_time:.1f}s - stopping at animal {i}/{len(animals)}"
-                            )
-                            # Mark this herd as problematic before breaking
-                            add_problematic_herd(reporting_herd)
-                            break
 
                     # Extract key movement information (using ACTUAL field names from CHR_dyr)
                     ckr_nr = getattr(animal, "CkrNr", None)
@@ -1276,7 +1265,7 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
     """
     Proactively detect if a herd is high-volume by testing a small sample period.
 
-    This prevents timeouts by estimating volume before attempting large requests.
+    This helps estimate volume before attempting large requests.
 
     Args:
         chr_dyr_client: The CHR_dyr SOAP client
@@ -1294,7 +1283,7 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
 
         logger.info(f"Volume detection for herd {herd_number}: testing {sample_days} days ({start_date} to {end_date})")
 
-        # Set a short timeout for this test request
+        # Track timing for this test request
         start_time = time.time()
 
         # Create request structure
@@ -1308,7 +1297,7 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
 
         payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
 
-        # Make the test request with timeout
+        # Make the test request
         response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
         request_duration = time.time() - start_time
 

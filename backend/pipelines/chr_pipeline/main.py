@@ -266,12 +266,8 @@ def fetch_herds(
 
 
 def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
-    """Execute tasks in parallel using a thread pool with progress tracking and timeout handling."""
+    """Execute tasks in parallel using a thread pool with progress tracking."""
     results = []
-
-    # Set timeout based on environment - more aggressive for GitHub Actions
-    github_actions = os.getenv("GITHUB_ACTIONS") == "true"
-    task_timeout = 300 if github_actions else 600  # 5 minutes in GH Actions, 10 minutes locally
 
     with logging_redirect_tqdm():
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
@@ -291,12 +287,12 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                 bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
             )
 
-            # Track start time and running tasks for timeout debugging
+            # Track start time for performance monitoring
             start_time = time.time()
             running_tasks = {}  # future -> start_time
 
             try:
-                for future in concurrent.futures.as_completed(futures, timeout=task_timeout * len(futures)):
+                for future in concurrent.futures.as_completed(futures):
                     task_idx = future_to_index[future]
                     task_info = future_to_task[future]
 
@@ -308,8 +304,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                         task_duration = 0
 
                     try:
-                        # Add per-task timeout to prevent individual tasks from hanging
-                        result = future.result(timeout=task_timeout)
+                        result = future.result()
                         results.append(result)
 
                         # Log slow tasks for debugging
@@ -320,22 +315,6 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                             else:
                                 logger.info(f"Task {task_idx} completed in {task_duration:.1f}s")
 
-                    except concurrent.futures.TimeoutError:
-                        logger.error(f"Task {task_idx} timed out after {task_timeout} seconds")
-                        if len(task_info) >= 3:  # If task has herd number (3rd argument)
-                            herd_number = task_info[2]
-                            logger.error(f"Herd {herd_number} timed out - marking as problematic")
-                            logger.error(f"Task details: {task_info}")
-                            # Import and mark as problematic
-                            try:
-                                from bronze.load_chr_dyr import add_problematic_herd
-
-                                add_problematic_herd(herd_number)
-                            except ImportError:
-                                pass  # Not all tasks have herd numbers
-                        else:
-                            logger.error(f"Task {task_idx} details: {task_info}")
-                        results.append(None)
                     except Exception as e:
                         logger.error(f"Task {task_idx} failed: {e}")
                         if len(task_info) >= 3:  # If task has herd number
@@ -348,50 +327,6 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
 
                     completed_count += 1
                     pbar.update(1)
-
-            except concurrent.futures.TimeoutError:
-                elapsed_time = time.time() - start_time
-                logger.error(f"Overall parallel processing timed out after {elapsed_time:.1f} seconds")
-
-                # Log details about which tasks were still running when timeout occurred
-                still_running = []
-                for future in futures:
-                    if not future.done():
-                        task_idx = future_to_index[future]
-                        task_info = future_to_task[future]
-                        if len(task_info) >= 3:  # Has herd number
-                            herd_number = task_info[2]
-                            still_running.append(f"Task {task_idx} (herd {herd_number})")
-                        else:
-                            still_running.append(f"Task {task_idx}")
-
-                if still_running:
-                    logger.error(f"Tasks still running when timeout occurred: {still_running}")
-
-                    # Mark running herds as problematic
-                    for future in futures:
-                        if not future.done():
-                            task_info = future_to_task[future]
-                            if len(task_info) >= 3:  # Has herd number
-                                herd_number = task_info[2]
-                                logger.error(f"Marking herd {herd_number} as problematic due to overall timeout")
-                                try:
-                                    from bronze.load_chr_dyr import add_problematic_herd
-
-                                    add_problematic_herd(herd_number)
-                                except ImportError:
-                                    pass
-
-                # Cancel remaining futures
-                cancelled_count = 0
-                for future in futures:
-                    if not future.done():
-                        future.cancel()
-                        cancelled_count += 1
-                        results.append(None)
-                        pbar.update(1)
-
-                logger.error(f"Cancelled {cancelled_count} remaining tasks due to timeout")
 
             finally:
                 pbar.close()
@@ -690,12 +625,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 herd_numbers_in_chunk = [task[2] for task in chunk_tasks]
                 logging.info(f"Chunk {chunk_idx + 1} herd numbers: {herd_numbers_in_chunk}")
 
-            # Add timeout monitoring per chunk
+            # Track timing for performance monitoring
             chunk_start_time = time.time()
-
-            # Set maximum chunk timeout based on environment
-            github_actions = os.getenv("GITHUB_ACTIONS") == "true"
-            max_chunk_timeout = 1800 if github_actions else 3600  # 30 min in GH Actions, 60 min locally
 
             try:
                 chunk_results = process_parallel(
@@ -710,23 +641,6 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 chunk_results = [None] * len(chunk_tasks)
 
             chunk_duration = time.time() - chunk_start_time
-
-            # Check if chunk took too long
-            if chunk_duration > max_chunk_timeout:
-                logging.error(
-                    f"Chunk {chunk_idx + 1} took {chunk_duration:.1f}s (>{max_chunk_timeout}s limit) - may indicate hanging herds"
-                )
-                # Mark all herds in this chunk as potentially problematic if they failed
-                for i, result in enumerate(chunk_results):
-                    if not result or not result.get("processed_successfully", False):
-                        herd_number = chunk_tasks[i][2]
-                        logging.warning(f"Marking herd {herd_number} as problematic due to chunk timeout")
-                        try:
-                            from bronze.load_chr_dyr import add_problematic_herd
-
-                            add_problematic_herd(herd_number)
-                        except Exception as mark_error:
-                            logging.warning(f"Could not mark herd {herd_number} as problematic: {mark_error}")
 
             # Track only herd numbers for context (no result accumulation to prevent memory issues)
             # Full data is already saved to storage by load_cattle_movement_summaries
