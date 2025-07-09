@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ErrorBoundary } from 'react-error-boundary'
 import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility } from '@/stores/map-store'
@@ -12,7 +12,57 @@ import { pmtilesDiscovery } from '@/services/pmtiles-discovery'
 type MapInstance = unknown;
 type MapLibreGL = unknown;
 
-// Dynamic imports for browser-only modules
+// Performance monitoring hook for development
+const usePerformanceMonitor = () => {
+  const [metrics, setMetrics] = useState({
+    frameRate: 0,
+    eventCount: 0,
+    lastUpdate: Date.now()
+  });
+
+  const updateMetrics = useCallback(() => {
+    setMetrics(prev => ({
+      frameRate: Math.round(1000 / (Date.now() - prev.lastUpdate)),
+      eventCount: prev.eventCount + 1,
+      lastUpdate: Date.now()
+    }));
+  }, []);
+
+  return { metrics, updateMetrics };
+};
+
+// Throttle utility for performance optimization
+const throttle = (func: (...args: any[]) => void, delay: number) => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  let lastExecTime = 0;
+  
+  return (...args: any[]) => {
+    const currentTime = Date.now();
+    
+    if (currentTime - lastExecTime > delay) {
+      func(...args);
+      lastExecTime = currentTime;
+    } else {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        func(...args);
+        lastExecTime = Date.now();
+      }, delay - (currentTime - lastExecTime));
+    }
+  };
+};
+
+// Debounce utility for less frequent updates
+const debounce = (func: (...args: any[]) => void, delay: number) => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  
+  return (...args: any[]) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
+
+// Dynamic imports for browser-only modules - Next.js 15 compatible
 const loadMapLibreAndPMTiles = async () => {
   if (typeof window === 'undefined') return null
   
@@ -47,6 +97,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const [mapLibre, setMapLibre] = useState<MapLibreGL>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [pmtilesUrls, setPmtilesUrls] = useState<Record<string, string>>({})
+  
+  // Performance monitoring (development only)
+  const { metrics, updateMetrics } = usePerformanceMonitor();
   
   // Store state
   const { zoom, center, bearing, pitch } = useMapViewState()
@@ -90,7 +143,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   } = useMapStore()
 
   // Helper function to safely get available interactive layers
-  const getAvailableInteractiveLayers = (): string[] => {
+  const getAvailableInteractiveLayers = useCallback((): string[] => {
     if (!map.current) return []
     
     const layers = []
@@ -121,7 +174,67 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     }
     
     return layers
-  }
+  }, [currentH3Resolution])
+
+  // Optimized event handlers with throttling and debouncing
+  const throttledSetViewState = useMemo(
+    () => throttle((viewState: any) => {
+      setViewState(viewState);
+      updateMetrics();
+    }, 16), // ~60fps
+    [setViewState, updateMetrics]
+  );
+
+  const debouncedHideTooltip = useMemo(
+    () => debounce(() => hideTooltip(), 100),
+    [hideTooltip]
+  );
+
+  const throttledMouseMove = useMemo(
+    () => throttle((e: any) => {
+      // Skip hover behavior on mobile devices
+      if (isMobile) {
+        return
+      }
+      
+      // Get available layers before querying
+      const availableLayers = getAvailableInteractiveLayers()
+      
+      if (availableLayers.length === 0) {
+        // No interactive layers available, just hide tooltip
+        debouncedHideTooltip()
+        if (map.current) {
+          (map.current as any).getCanvas().style.cursor = ''
+        }
+        return
+      }
+      
+      try {
+        const features = (map.current as any)?.queryRenderedFeatures(e.point, {
+          layers: availableLayers
+        })
+        if (features && features.length > 0) {
+          const feature = features[0]
+          showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+          if (map.current) {
+            (map.current as any).getCanvas().style.cursor = 'pointer'
+          }
+        } else {
+          debouncedHideTooltip()
+          if (map.current) {
+            (map.current as any).getCanvas().style.cursor = ''
+          }
+        }
+      } catch (error) {
+        console.warn('Error querying rendered features on mousemove:', error)
+        debouncedHideTooltip()
+        if (map.current) {
+          (map.current as any).getCanvas().style.cursor = ''
+        }
+      }
+    }, 50), // Throttle to 20fps for mouse events
+    [isMobile, getAvailableInteractiveLayers, debouncedHideTooltip, showTooltipWithData]
+  );
 
   // Load MapLibre and PMTiles
   useEffect(() => {
@@ -151,95 +264,43 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     return () => {
       mounted = false
     }
-  }, [setError, setIsLoading, clearError])
+  }, [setError, setIsLoading])
 
   // Load PMTiles URLs
   useEffect(() => {
-    console.log('🔄 PMTiles useEffect triggered - year:', selectedYear, 'resolution:', currentH3Resolution, 'zoom:', zoom)
     let mounted = true
     
     const loadPMTilesUrls = async () => {
       try {
-        setIsLoading(true)
+        console.log('🔄 Loading PMTiles URLs...')
+        const yearUrls = await pmtilesDiscovery.getYearUrls(selectedYear)
         
-        console.log('🔍 Starting PMTiles URL discovery for:', { selectedYear, currentH3Resolution })
+        // Convert to the expected format
+        const urls: Record<string, string> = {
+          basemap: yearUrls.basemap,
+          bnbo: yearUrls.bnbo
+        }
         
-        // Discover and validate URLs
-        const validatedUrls = await pmtilesDiscovery.discoverAndValidateUrls(selectedYear, currentH3Resolution)
+        // Add H3 URL for current resolution
+        const h3Key = `${selectedYear}_${currentH3Resolution}`
+        if (yearUrls.h3[h3Key]) {
+          urls.h3 = yearUrls.h3[h3Key]
+        }
         
-        console.log('🔍 PMTiles URL discovery results:', validatedUrls)
+        // Add kommune URL
+        if (yearUrls.kommune[selectedYear.toString()]) {
+          urls.kommune = yearUrls.kommune[selectedYear.toString()]
+        }
+        
+        console.log('✅ PMTiles URLs loaded:', urls)
         
         if (mounted) {
-          // Only set URLs that are valid
-          const urls: Record<string, string> = {}
-          if (validatedUrls.basemap) urls.basemap = validatedUrls.basemap
-          if (validatedUrls.kommune) urls.kommune = validatedUrls.kommune
-          if (validatedUrls.h3) urls.h3 = validatedUrls.h3
-          if (validatedUrls.bnbo) urls.bnbo = validatedUrls.bnbo
-          
           setPmtilesUrls(urls)
-          // Remove setAvailableYears to prevent potential loop
-          // setAvailableYears(years)
-          
-          // Log what we found
-          console.log('🗺️ PMTiles URLs discovered:', {
-            basemap: validatedUrls.basemap ? '✅' : '❌',
-            kommune: validatedUrls.kommune ? '✅' : '❌',
-            h3: validatedUrls.h3 ? '✅' : '❌',
-            bnbo: validatedUrls.bnbo ? '✅' : '❌'
-          })
-          
-          // Log actual URLs for debugging
-          console.log('📍 Actual URLs:', {
-            basemap: validatedUrls.basemap,
-            kommune: validatedUrls.kommune,
-            h3: validatedUrls.h3,
-            bnbo: validatedUrls.bnbo
-          })
-          
-          // Test URL accessibility
-          if (validatedUrls.basemap) {
-            console.log('🔗 Testing basemap URL accessibility...')
-            pmtilesDiscovery.testUrl(validatedUrls.basemap).then(isAccessible => {
-              console.log('🔗 Basemap URL accessible:', isAccessible)
-            }).catch(err => {
-              console.error('🔗 Basemap URL test failed:', err)
-            })
-          }
-          
-          if (validatedUrls.h3) {
-            console.log('🔗 Testing H3 URL accessibility...')
-            pmtilesDiscovery.testUrl(validatedUrls.h3).then(isAccessible => {
-              console.log('🔗 H3 URL accessible:', isAccessible)
-            }).catch(err => {
-              console.error('🔗 H3 URL test failed:', err)
-            })
-          }
-          
-          if (validatedUrls.kommune) {
-            console.log('🔗 Testing Kommune URL accessibility...')
-            pmtilesDiscovery.testUrl(validatedUrls.kommune).then(isAccessible => {
-              console.log('🔗 Kommune URL accessible:', isAccessible)
-            }).catch(err => {
-              console.error('🔗 Kommune URL test failed:', err)
-            })
-          }
-          
-          if (!validatedUrls.basemap) {
-            console.error('❌ No basemap URL available')
-            setError('Basemap not available')
-          } else {
-            clearError()
-          }
         }
       } catch (error) {
         console.error('❌ Error loading PMTiles URLs:', error)
         if (mounted) {
           setError('Failed to load data sources')
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
         }
       }
     }
@@ -249,7 +310,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     return () => {
       mounted = false
     }
-  }, [selectedYear, currentH3Resolution, zoom, setError, setIsLoading, clearError, setPmtilesUrls])
+  }, [setError, selectedYear, currentH3Resolution])
 
   // Initialize map
   useEffect(() => {
@@ -407,9 +468,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'line-color': '#505050',
-              'line-width': 0.5,
-              'line-opacity': 0.5
+              'line-color': '#606060',
+              'line-width': 0.5
             }
           },
           {
@@ -417,21 +477,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             type: 'line',
             source: 'basemap',
             'source-layer': 'roads',
-            filter: ['in', ['get', 'kind'], ['literal', ['minor_road', 'path']]],
+            filter: ['!=', ['get', 'kind'], 'highway'],
             layout: {
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'line-color': '#3a3a3a',
-              'line-width': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                8, 0.5,
-                12, 1,
-                16, 2
-              ],
-              'line-opacity': 0.6
+              'line-color': '#333333',
+              'line-width': 1
             }
           },
           {
@@ -439,188 +491,151 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             type: 'line',
             source: 'basemap',
             'source-layer': 'roads',
-            filter: ['in', ['get', 'kind'], ['literal', ['highway', 'major_road']]],
+            filter: ['==', ['get', 'kind'], 'highway'],
             layout: {
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'line-color': '#4a4a4a',
-              'line-width': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                6, 1,
-                10, 2,
-                14, 4,
-                16, 6
-              ],
-              'line-opacity': 0.8
+              'line-color': '#444444',
+              'line-width': 2
             }
           }
         )
-        console.log('✅ Added basemap layers with buildings and roads')
       }
       
-      // Add kommune layers if available
+      // Add kommune layer if available (middle layer)
       if (sources.kommune) {
-        layers.push(
-          {
-            id: 'kommune-fill',
+        layers.push({
+          id: 'kommune-fill',
+          type: 'fill',
+          source: 'kommune',
+          'source-layer': 'default',
+          layout: {
+            visibility: shouldShowKommune ? 'visible' : 'none'
+          },
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['get', currentPropertyName],
+              0, 'rgba(255,255,255,0.1)',
+              1, 'rgba(255,100,100,0.3)',
+              10, 'rgba(255,50,50,0.5)',
+              50, 'rgba(255,0,0,0.7)',
+              100, 'rgba(150,0,0,0.8)'
+            ],
+            'fill-opacity': 0.7
+          }
+        })
+        
+        layers.push({
+          id: 'kommune-stroke',
+          type: 'line',
+          source: 'kommune',
+          'source-layer': 'default',
+          layout: {
+            visibility: shouldShowKommune ? 'visible' : 'none'
+          },
+          paint: {
+            'line-color': 'rgba(255,255,255,0.5)',
+            'line-width': 1
+          }
+        })
+      }
+      
+      // Add H3 layers if available (middle layer)
+      if (sources.h3) {
+        // Add layers for each H3 resolution
+        for (let res = 7; res <= 10; res++) {
+          const layerVisibility = res === currentH3Resolution && shouldShowH3 ? 'visible' : 'none'
+          
+          layers.push({
+            id: `h3-fill-res${res}`,
             type: 'fill',
-            source: 'kommune',
-            'source-layer': `kommune_pfas_${selectedYear}`,
+            source: 'h3',
+            'source-layer': `h3_res${res}`,
             layout: {
-              visibility: shouldShowKommune ? 'visible' : 'none'
+              visibility: layerVisibility
             },
             paint: {
               'fill-color': [
                 'interpolate',
                 ['linear'],
                 ['get', currentPropertyName],
-                0, 'transparent',
-                0.1, '#fee5d9',
-                1, '#fcbba1',
-                5, '#fc9272',
-                10, '#fb6a4a',
-                20, '#ef3b2c',
-                50, '#cb181d',
-                100, '#99000d'
+                0, 'rgba(255,255,255,0.1)',
+                1, 'rgba(255,100,100,0.3)',
+                10, 'rgba(255,50,50,0.5)',
+                50, 'rgba(255,0,0,0.7)',
+                100, 'rgba(150,0,0,0.8)'
               ],
-              'fill-opacity': 0.8
+              'fill-opacity': 0.7
             }
-          },
-          {
-            id: 'kommune-stroke',
+          })
+          
+          layers.push({
+            id: `h3-stroke-res${res}`,
             type: 'line',
-            source: 'kommune',
-            'source-layer': `kommune_pfas_${selectedYear}`,
+            source: 'h3',
+            'source-layer': `h3_res${res}`,
             layout: {
-              visibility: shouldShowKommune ? 'visible' : 'none'
+              visibility: layerVisibility
             },
             paint: {
-              'line-color': '#ffffff',
-              'line-width': 0.5,
-              'line-opacity': 0.5
+              'line-color': 'rgba(255,255,255,0.3)',
+              'line-width': 0.5
             }
-          }
-        )
-        console.log('✅ Added kommune layers')
+          })
+        }
       }
       
-      // Add H3 layers if available - CREATE ALL RESOLUTIONS TO AVOID LAYER REMOVAL
-      if (sources.h3) {
-        // Create layers for all H3 resolutions (7, 8, 9, 10) to avoid layer removal during zoom
-        const h3Resolutions = [7, 8, 9, 10]
-        
-        h3Resolutions.forEach(resolution => {
-          const isCurrentResolution = resolution === currentH3Resolution
-          const shouldShow = shouldShowH3 && isCurrentResolution
-          
-          layers.push(
-            {
-              id: `h3-fill-res${resolution}`,
-              type: 'fill',
-              source: 'h3',
-              'source-layer': `h3_pfas_${selectedYear}_res${resolution}`,
-              layout: {
-                visibility: shouldShow ? 'visible' : 'none'
-              },
-              paint: {
-                'fill-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['get', currentPropertyName],
-                  0, 'transparent',
-                  0.1, '#fee5d9',
-                  1, '#fcbba1',
-                  5, '#fc9272',
-                  10, '#fb6a4a',
-                  20, '#ef3b2c',
-                  50, '#cb181d',
-                  100, '#99000d'
-                ],
-                'fill-opacity': 0.7
-              }
-            },
-            {
-              id: `h3-stroke-res${resolution}`,
-              type: 'line',
-              source: 'h3',
-              'source-layer': `h3_pfas_${selectedYear}_res${resolution}`,
-              layout: {
-                visibility: shouldShow ? 'visible' : 'none'
-              },
-              paint: {
-                'line-color': '#ffffff',
-                'line-width': 0.2,
-                'line-opacity': 0
-              }
-            }
-          )
+      // Add BNBO layer if available (top layer)
+      if (sources.bnbo) {
+        layers.push({
+          id: 'bnbo-fill',
+          type: 'fill',
+          source: 'bnbo',
+          'source-layer': 'default',
+          layout: {
+            visibility: 'visible'
+          },
+          paint: {
+            'fill-color': [
+              'match',
+              ['get', 'status'],
+              'Action Required', '#ff6b6b',
+              'Completed', '#51cf66',
+              'Unknown', '#868e96',
+              '#868e96'
+            ],
+            'fill-opacity': 0.3
+          }
         })
         
-        console.log('✅ Added H3 layers for all resolutions (7, 8, 9, 10)')
-      }
-      
-      // Add BNBO layers if available - ALWAYS VISIBLE
-      if (sources.bnbo) {
-        layers.push(
-          {
-            id: 'bnbo-fill',
-            type: 'fill',
-            source: 'bnbo',
-            'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
-            layout: {
-              visibility: 'visible'
-            },
-            paint: {
-              'fill-color': [
-                'case',
-                ['has', 'status_category'], [
-                  'match',
-                  ['get', 'status_category'],
-                  'Action Required', '#ff6b6b',
-                  'Completed', '#51cf66',
-                  'Unknown', '#868e96',
-                  '#cccccc'
-                ],
-                ['has', 'status'], [
-                  'match',
-                  ['get', 'status'],
-                  'Action Required', '#ff6b6b',
-                  'Completed', '#51cf66',
-                  'Unknown', '#868e96',
-                  '#cccccc'
-                ],
-                '#ff00ff' // Bright magenta fallback to make any BNBO areas visible
-              ],
-              'fill-opacity': 0.8 // Increased opacity to make them more visible
-            }
+        layers.push({
+          id: 'bnbo-stroke',
+          type: 'line',
+          source: 'bnbo',
+          'source-layer': 'default',
+          layout: {
+            visibility: 'visible'
           },
-          {
-            id: 'bnbo-stroke',
-            type: 'line',
-            source: 'bnbo',
-            'source-layer': 'bnbo', // Fixed: layer name is 'bnbo', not 'bnbo_areas'
-            layout: {
-              visibility: 'visible'
-            },
-            paint: {
-              'line-color': '#ffffff',
-              'line-width': 1,
-              'line-opacity': 0
-            }
+          paint: {
+            'line-color': [
+              'match',
+              ['get', 'status'],
+              'Action Required', '#ff6b6b',
+              'Completed', '#51cf66',
+              'Unknown', '#868e96',
+              '#868e96'
+            ],
+            'line-width': 1.5
           }
-        )
-        console.log('✅ Added BNBO layers (always visible and on top)')
-        console.log('🔍 BNBO source configuration:', sources.bnbo)
-      } else {
-        console.log('❌ No BNBO source available for layers')
+        })
       }
       
       console.log('🗺️ Final layers configuration:', layers.map(l => ({ id: l.id, source: l.source })))
       
-      map.current = new (mapLibre as unknown as { Map: unknown }).Map({
+      map.current = new (mapLibre as any).Map({
         container: mapContainer.current,
         style: {
           version: 8,
@@ -637,107 +652,55 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           [7.0, 54.0], // Southwest bounds (Denmark)
           [13.0, 58.0], // Northeast bounds (Denmark)
         ],
-        // Configure zoom behavior to prevent black screen during layer updates
+        // Optimize for smooth interactions
         scrollZoom: {
           around: 'center'
         },
         doubleClickZoom: true,
         touchZoomRotate: true,
-        // Disable smooth transitions during zoom to prevent layer conflicts
-        fadeDuration: 0
+        dragPan: true,
+        dragRotate: false,
+        keyboard: true,
+        // Enable smooth transitions for better UX
+        fadeDuration: 300,
+        // Performance optimizations
+        antialias: true,
+        optimizeForTerrain: false,
+        renderWorldCopies: false,
+        // Interaction options for better performance
+        interactive: true,
+        trackResize: true,
+        cooperativeGestures: false
       }) as MapInstance
 
       // Add controls with custom options for smoother zoom
-      (map.current as unknown as Record<string, unknown>).addControl(
-        new (mapLibre as unknown as any).NavigationControl({
+      (map.current as any).addControl(
+        new (mapLibre as any).NavigationControl({
           showCompass: true,
           showZoom: true,
           visualizePitch: false
         }), 
         'top-right'
       )
-      ;(map.current as unknown as any).addControl(new (mapLibre as unknown as any).ScaleControl(), 'bottom-left')
+      ;(map.current as any).addControl(new (mapLibre as any).ScaleControl(), 'bottom-left')
       
       // Set map instance in store for external control
-      setMapInstance(map.current as unknown)
+      setMapInstance(map.current as any)
 
-      // Map event handlers
-      ;(map.current as unknown as Record<string, unknown>).on('load', () => {
+      // Map event handlers with performance optimizations
+      ;(map.current as any).on('load', () => {
         console.log('🎉 Map loaded successfully!')
         
         // Debug: Check available sources and layers
-        const style = (map.current as unknown as Record<string, unknown>).getStyle()
+        const style = (map.current as any).getStyle()
         console.log('📊 Map style sources:', Object.keys(style.sources))
-        console.log('📊 Map style layers:', style.layers.map((l: Record<string, unknown>) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
-        
-        // Debug: Try to get source data and inspect tiles
-        setTimeout(() => {
-          if (!map.current) return
-          
-          console.log(`📊 Current zoom: ${(map.current as unknown as Record<string, unknown>).getZoom()}, center:`, (map.current as unknown as Record<string, unknown>).getCenter())
-          
-          // Try to inspect each source more thoroughly
-          const sources = ['basemap', 'kommune', 'h3', 'bnbo']
-          sources.forEach(sourceId => {
-            if (!map.current) return
-            const source = (map.current as unknown as Record<string, unknown>).getSource(sourceId)
-            if (source) {
-              console.log(`📊 Source ${sourceId}:`, source)
-              
-              // Check if source has loaded tiles
-              if (source._tiles) {
-                console.log(`📊 ${sourceId} has ${Object.keys(source._tiles).length} loaded tiles`)
-              }
-              
-              // Try to query all features from this source
-              try {
-                if (!map.current) return
-                const allFeatures = (map.current as any).querySourceFeatures(sourceId)
-                console.log(`📊 ${sourceId} total features: ${allFeatures.length}`)
-                
-                if (allFeatures.length > 0) {
-                  const sampleFeature = allFeatures[0]
-                  console.log(`📊 ${sourceId} sample feature:`, sampleFeature)
-                  console.log(`📊 ${sourceId} sample properties:`, sampleFeature.properties)
-                  console.log(`📊 ${sourceId} source-layer:`, sampleFeature.sourceLayer)
-                }
-              } catch (e) {
-                console.log(`📊 Could not query ${sourceId} features:`, e)
-              }
-            }
-          })
-          
-          // Also try to get all rendered features at current view
-          try {
-            if (!map.current) return
-            const allRenderedFeatures = (map.current as any).queryRenderedFeatures()
-            console.log(`📊 Total rendered features in view: ${allRenderedFeatures.length}`)
-            
-            if (allRenderedFeatures.length > 0) {
-              const sourceLayerCounts = allRenderedFeatures.reduce((acc: Record<string, number>, f: Record<string, unknown>) => {
-                const key = `${f.source}:${f.sourceLayer}`
-                acc[key] = (acc[key] || 0) + 1
-                return acc
-              }, {} as Record<string, number>)
-              console.log(`📊 Rendered features by source:layer:`, sourceLayerCounts)
-              
-              // Check specifically for BNBO features
-              const bnboFeatures = allRenderedFeatures.filter((f: Record<string, unknown>) => f.source === 'bnbo')
-              if (bnboFeatures.length > 0) {
-                console.log(`🛡️ Found ${bnboFeatures.length} BNBO features:`, bnboFeatures.slice(0, 3))
-              } else {
-                console.log(`🛡️ No BNBO features found in rendered features`)
-              }
-            }
-          } catch (e) {
-            console.log(`📊 Could not query rendered features:`, e)
-          }
-        }, 3000)
+        console.log('📊 Map style layers:', style.layers.map((l: any) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
         
         setMapLoaded(true)
         clearError()
       })
 
+      // Use throttled move handler for better performance
       ;(map.current as any).on('move', () => {
         if (!map.current) return
         const { lng, lat } = (map.current as any).getCenter()
@@ -745,7 +708,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         const bearing = (map.current as any).getBearing()
         const pitch = (map.current as any).getPitch()
         
-        setViewState({ 
+        throttledSetViewState({ 
           center: [lng, lat], 
           zoom, 
           bearing, 
@@ -795,48 +758,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
       })
 
-      ;(map.current as any).on('mousemove', (e: any) => {
-        // Skip hover behavior on mobile devices
-        if (isMobile) {
-          return
-        }
-        
-        // Get available layers before querying
-        const availableLayers = getAvailableInteractiveLayers()
-        
-        if (availableLayers.length === 0) {
-          // No interactive layers available, just hide tooltip
-          hideTooltip()
-          if (map.current) {
-            (map.current as any).getCanvas().style.cursor = ''
-          }
-          return
-        }
-        
-        try {
-          const features = (map.current as any)?.queryRenderedFeatures(e.point, {
-            layers: availableLayers
-          })
-          if (features && features.length > 0) {
-            const feature = features[0]
-            showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
-            if (map.current) {
-              (map.current as any).getCanvas().style.cursor = 'pointer'
-            }
-          } else {
-            hideTooltip()
-            if (map.current) {
-              (map.current as any).getCanvas().style.cursor = ''
-            }
-          }
-        } catch (error) {
-          console.warn('Error querying rendered features on mousemove:', error)
-          hideTooltip()
-          if (map.current) {
-            (map.current as any).getCanvas().style.cursor = ''
-          }
-        }
-      })
+      // Use throttled mousemove handler
+      ;(map.current as any).on('mousemove', throttledMouseMove)
 
       ;(map.current as any).on('mouseleave', () => {
         // Skip hover behavior on mobile devices
@@ -852,112 +775,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
       ;(map.current as any).on('error', (e: any) => {
         console.error('❌ Map error:', e)
-        console.error('❌ Map error details:', {
-          type: e.type,
-          error: e.error,
-          sourceId: e.sourceId,
-          tile: e.tile,
-          target: e.target,
-          originalTarget: e.originalTarget,
-          message: e.message,
-          stack: e.stack
-        })
-        
-        // Safely log error properties without circular references
-        const safeErrorProps = {
-          type: e.type,
-          message: e.message,
-          sourceId: e.sourceId,
-          errorMessage: e.error?.message,
-          errorStack: e.error?.stack,
-          url: e.url
-        }
-        console.error('❌ Safe error object:', safeErrorProps)
-        
-        // Try to get more specific error information
-        let errorMessage = 'Unknown map error'
-        if (e.error && e.error.message) {
-          errorMessage = e.error.message
-        } else if (e.message) {
-          errorMessage = e.message
-        } else if (e.sourceId) {
-          errorMessage = `Source error: ${e.sourceId}`
-        }
-        
-        // Check if this is a layer query error
-        if (errorMessage.includes('kommune-fill') || errorMessage.includes('does not exist')) {
-          console.error('❌ Layer query error detected - checking available layers')
-          if (map.current) {
-            try {
-              const style = (map.current as any).getStyle()
-              const availableLayers = style.layers.map((l: any) => l.id)
-              console.error('❌ Available layers:', availableLayers)
-              console.error('❌ Available sources:', Object.keys(style.sources))
-              
-              // Check if kommune source exists
-              if (style.sources.kommune) {
-                console.error('❌ Kommune source exists:', style.sources.kommune)
-              } else {
-                console.error('❌ Kommune source NOT found in style')
-              }
-            } catch (styleError) {
-              console.error('❌ Could not check map style:', styleError)
-            }
-          }
-        }
-        
-        setError(`Map loading error: ${errorMessage}`)
-      })
-      
-      // Add more specific error handlers
-      ;(map.current as any).on('sourceerror', (e: any) => {
-        console.error('❌ Source error:', e)
-        console.error('❌ Source error details:', {
-          sourceId: e.sourceId,
-          error: e.error,
-          url: e.url,
-          message: e.message
-        })
-        setError(`Source loading error: ${e.sourceId}`)
-      })
-      
-      ;(map.current as any).on('styleerror', (e: any) => {
-        console.error('❌ Style error:', e)
-        console.error('❌ Style error details:', {
-          error: e.error,
-          message: e.message
-        })
-        setError(`Style error: ${e.error?.message || 'Unknown style error'}`)
-      })
-      
-      ;(map.current as any).on('sourcedata', (e: any) => {
-        if (e.isSourceLoaded) {
-          console.log(`📊 Source loaded: ${e.sourceId}`, e)
-        } else if (e.dataType === 'source') {
-          console.log(`📊 Source data loading: ${e.sourceId}`, e)
-        }
-      })
-      
-      ;(map.current as any).on('sourcedataloading', (e: any) => {
-        console.log(`📊 Source loading: ${e.sourceId}`, e)
-      })
-      
-      // Add data event handler to track tile loading
-      ;(map.current as any).on('data', (e: any) => {
-        if (e.dataType === 'source') {
-          console.log(`📊 Data event for source: ${e.sourceId}`, {
-            dataType: e.dataType,
-            isSourceLoaded: e.isSourceLoaded,
-            sourceDataType: e.sourceDataType
-          })
-        }
-      })
-      
-      // Add tile events to track individual tile loading
-      ;(map.current as any).on('dataloading', (e: any) => {
-        if (e.dataType === 'source') {
-          console.log(`📊 Data loading for source: ${e.sourceId}`)
-        }
+        setError(`Map loading error: ${e.message || 'Unknown error'}`)
       })
 
     } catch (err) {
@@ -973,44 +791,37 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       // Clear map instance from store
       setMapInstance(null)
     }
-  }, [mapLibre, pmtilesUrls, bearing, center, clearError, currentH3Resolution, currentPropertyName, hideTooltip, isMobile, pitch, selectedYear, setError, setMapInstance, setShowMobilePanel, setViewState, shouldShowH3, shouldShowKommune, showBasemap, showTooltipWithData, zoom])
+  }, [mapLibre, pmtilesUrls, bearing, center, clearError, currentH3Resolution, currentPropertyName, hideTooltip, isMobile, pitch, selectedYear, setError, setMapInstance, setShowMobilePanel, showBasemap, showTooltipWithData, zoom, shouldShowH3, shouldShowKommune, throttledSetViewState, throttledMouseMove, getAvailableInteractiveLayers])
 
-  // Update layer visibility based on zoom - NOW HANDLES MULTIPLE H3 RESOLUTION LAYERS
+  // Update layer visibility when zoom changes (optimized)
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
     try {
-      const layerVisibility = getComputedLayerVisibility(zoom)
+      console.log('🔄 Updating layer visibility for zoom:', zoom)
       
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
         if (map.current && (map.current as any).getLayer(layerId)) {
           (map.current as any).setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
-          console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
-        } else {
-          console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
         }
       }
       
-      // Update Kommune layer visibility
-      updateLayerVisibility('kommune-fill', layerVisibility.shouldShowKommune)
-      updateLayerVisibility('kommune-stroke', layerVisibility.shouldShowKommune)
+      // Update kommune layers
+      updateLayerVisibility('kommune-fill', shouldShowKommune)
+      updateLayerVisibility('kommune-stroke', shouldShowKommune)
       
-      // Update H3 layer visibility - NOW HANDLES ALL RESOLUTION LAYERS
-      const h3Resolutions = [7, 8, 9, 10]
-      h3Resolutions.forEach(resolution => {
-        const isCurrentResolution = resolution === layerVisibility.currentH3Resolution
-        const shouldShow = layerVisibility.shouldShowH3 && isCurrentResolution
-        
-        updateLayerVisibility(`h3-fill-res${resolution}`, shouldShow)
-        updateLayerVisibility(`h3-stroke-res${resolution}`, shouldShow)
-      })
+      // Update H3 layers - only show current resolution
+      for (let res = 7; res <= 10; res++) {
+        const shouldShow = res === currentH3Resolution && shouldShowH3
+        updateLayerVisibility(`h3-fill-res${res}`, shouldShow)
+        updateLayerVisibility(`h3-stroke-res${res}`, shouldShow)
+      }
       
-      // BNBO layers are always visible - no need to update visibility
     } catch (error) {
       console.warn('Error updating layer visibility:', error)
     }
-  }, [zoom, mapLoaded])
+  }, [zoom, shouldShowKommune, shouldShowH3, currentH3Resolution, mapLoaded])
 
   // Update basemap visibility when showBasemap changes
   useEffect(() => {
@@ -1049,115 +860,60 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     }
   }, [showBasemap, mapLoaded])
 
-  // Update paint expressions when data mode changes
+  // Update layer styling when data mode changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
     try {
-      console.log('🎨 Updating paint expressions for data mode:', selectedDataMode, 'property:', currentPropertyName)
+      console.log('🎨 Updating layer styling for data mode:', selectedDataMode)
       
-      // Update Kommune layer paint
+      // Update kommune layer styling
       if ((map.current as any).getLayer('kommune-fill')) {
-        const newPaint = [
+        (map.current as any).setPaintProperty('kommune-fill', 'fill-color', [
           'interpolate',
           ['linear'],
           ['get', currentPropertyName],
-          0, 'transparent',
-          0.1, '#fee5d9',
-          1, '#fcbba1',
-          5, '#fc9272',
-          10, '#fb6a4a',
-          20, '#ef3b2c',
-          50, '#cb181d',
-          100, '#99000d'
-        ]
-        ;(map.current as any).setPaintProperty('kommune-fill', 'fill-color', newPaint)
-        console.log('✅ Updated kommune-fill paint property')
-      } else {
-        console.log('⚠️ kommune-fill layer not found, skipping paint update')
+          0, 'rgba(255,255,255,0.1)',
+          1, 'rgba(255,100,100,0.3)',
+          10, 'rgba(255,50,50,0.5)',
+          50, 'rgba(255,0,0,0.7)',
+          100, 'rgba(150,0,0,0.8)'
+        ])
       }
       
-      // Update H3 layer paint for all resolution layers
-      const h3Resolutions = [7, 8, 9, 10]
-      h3Resolutions.forEach(resolution => {
-        const layerId = `h3-fill-res${resolution}`
+      // Update H3 layers styling
+      for (let res = 7; res <= 10; res++) {
+        const layerId = `h3-fill-res${res}`
         if ((map.current as any).getLayer(layerId)) {
-          const newPaint = [
+          (map.current as any).setPaintProperty(layerId, 'fill-color', [
             'interpolate',
             ['linear'],
             ['get', currentPropertyName],
-            0, 'transparent',
-            0.1, '#fee5d9',
-            1, '#fcbba1',
-            5, '#fc9272',
-            10, '#fb6a4a',
-            20, '#ef3b2c',
-            50, '#cb181d',
-            100, '#99000d'
-          ]
-          ;(map.current as any).setPaintProperty(layerId, 'fill-color', newPaint)
-          console.log(`✅ Updated ${layerId} paint property`)
+            0, 'rgba(255,255,255,0.1)',
+            1, 'rgba(255,100,100,0.3)',
+            10, 'rgba(255,50,50,0.5)',
+            50, 'rgba(255,0,0,0.7)',
+            100, 'rgba(150,0,0,0.8)'
+          ])
         }
-      })
-      
-      // Debug: Try to get some feature data to see what properties are available
-      setTimeout(() => {
-        try {
-          const features = (map.current as any).queryRenderedFeatures()
-          if (features.length > 0) {
-            const sampleFeature = features[0]
-            console.log('🔍 Sample feature properties:', sampleFeature.properties)
-            console.log('🔍 Current property value:', sampleFeature.properties[currentPropertyName])
-          }
-        } catch (e) {
-          console.log('🔍 Could not query features for debugging:', e)
-        }
-      }, 1000)
+      }
       
     } catch (error) {
-      console.warn('Error updating paint expressions:', error)
+      console.warn('Error updating layer styling:', error)
     }
   }, [selectedDataMode, currentPropertyName, mapLoaded])
-
-  // NO MORE LAYER REMOVAL - All H3 resolution layers are pre-created and we just toggle visibility
-  // This completely eliminates the black screen issue during zoom
-
- 
-
-  // Show loading state
-  if (!mapLibre || isLoading) {
-    return (
-      <div className={`relative flex items-center justify-center bg-gray-900 ${className}`}>
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-sm">Loading map...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <div className={`relative flex items-center justify-center bg-gray-900 ${className}`}>
-        <div className="text-center">
-          <div className="text-red-400 text-4xl mb-4">⚠️</div>
-          <p className="text-white text-sm mb-2">Map Error</p>
-          <p className="text-gray-400 text-xs">{error}</p>
-          <button
-            onClick={clearError}
-            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    )
-  }
   
   return (
     <div className={`relative ${className}`}>
       <div ref={mapContainer} className="w-full h-full" />
+      
+      {/* Performance monitor (development only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono">
+          <div>FPS: {metrics.frameRate}</div>
+          <div>Events: {metrics.eventCount}</div>
+        </div>
+      )}
       
       {/* Loading overlay */}
       {!mapLoaded && (
@@ -1169,7 +925,16 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         </div>
       )}
       
-
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-red-900/80">
+          <div className="text-center text-white p-4">
+            <div className="text-4xl mb-2">⚠️</div>
+            <p className="text-lg font-semibold mb-2">Map Error</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
+      )}
       
       {/* Tooltip - Disabled in favor of sidebar */}
       {/* <MapTooltip /> */}
@@ -1177,21 +942,22 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   )
 }
 
-// Error boundary component
 const MapErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void }> = ({ 
   error, 
   resetErrorBoundary 
 }) => (
-  <div className="flex items-center justify-center h-full bg-gray-900">
-    <div className="text-center">
-      <div className="text-red-400 text-6xl mb-4">⚠️</div>
-      <h2 className="text-white text-xl font-semibold mb-2">Map Error</h2>
-      <p className="text-gray-400 mb-4">{error.message}</p>
-      <button
+  <div className="h-full w-full bg-red-50 flex items-center justify-center">
+    <div className="text-center p-8">
+      <div className="text-6xl mb-4">⚠️</div>
+      <h2 className="text-2xl font-bold text-red-800 mb-4">Map Component Error</h2>
+      <p className="text-red-600 mb-4 max-w-md">
+        {error.message || 'An unexpected error occurred while loading the map.'}
+      </p>
+      <button 
         onClick={resetErrorBoundary}
-        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
       >
-        Reload Map
+        Try Again
       </button>
     </div>
   </div>
