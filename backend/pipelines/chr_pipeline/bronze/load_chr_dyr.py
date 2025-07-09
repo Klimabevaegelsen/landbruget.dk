@@ -126,11 +126,11 @@ def _load_high_volume_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs_data_access = GCSDataAccess()
-            config_path = "bronze/chr/config/high_volume_herds.json"
+            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             if gcs_data_access.file_exists(config_path):
-                data = gcs_data_access.read_file(config_path, encoding="utf-8")
-                HIGH_VOLUME_HERDS = json.loads(data)
+                HIGH_VOLUME_HERDS = gcs_data_access.download_json(config_path)
                 logger.info(f"Loaded {len(HIGH_VOLUME_HERDS)} high-volume herds from GCS")
             else:
                 logger.info("No high-volume herds config found in GCS, creating default")
@@ -207,11 +207,11 @@ def _save_high_volume_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs_data_access = GCSDataAccess()
-            config_path = "bronze/chr/config/high_volume_herds.json"
+            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             # Save the high-volume herds dictionary directly as JSON
-            data = json.dumps(HIGH_VOLUME_HERDS, indent=2, default=str)
-            gcs_data_access.write_file(config_path, data, encoding="utf-8")
+            gcs_data_access.upload_json(HIGH_VOLUME_HERDS, config_path)
 
             logger.info(f"Saved {len(HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
 
