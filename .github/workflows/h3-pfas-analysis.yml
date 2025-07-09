@@ -456,6 +456,7 @@ jobs:
           # Run cumulative analysis
           python main.py --verbose \
             --mode cumulative \
+            --include-kommune \
             --memory-limit ${{ github.event.inputs.memory_limit || '14GB' }} \
             --thread-count ${{ github.event.inputs.thread_count || '4' }} \
             --chunk-size ${{ github.event.inputs.chunk_size || '10000' }}
