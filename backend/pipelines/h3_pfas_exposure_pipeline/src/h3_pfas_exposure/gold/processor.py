@@ -1307,28 +1307,86 @@ class H3PFASProcessorRefactored:
             AND CompanyRegistrationNumber IS NOT NULL
         """)
 
+        # Check what columns are available in the FVM data
+        fvm_columns = self.conn.execute("PRAGMA table_info(temp_fvm_raw)").fetchall()
+        fvm_column_names = [col[1] for col in fvm_columns]
+
+        # Handle geometry column name dynamically
+        if "geometry_wkt" in fvm_column_names:
+            geometry_field_select = "f.geometry_wkt"
+            geometry_column = "f.geometry_wkt"
+        elif "geometry" in fvm_column_names:
+            geometry_field_select = "f.geometry as geometry_wkt"
+            geometry_column = "f.geometry"
+        else:
+            raise Exception("No geometry column found in FVM data")
+
+        # Handle area column name dynamically
+        if "area_ha" in fvm_column_names:
+            area_field_select = "CAST(f.area_ha AS DOUBLE) as area_ha"
+            area_condition = "CAST(f.area_ha AS DOUBLE) > 0"
+        elif "field_area_ha" in fvm_column_names:
+            area_field_select = "CAST(f.field_area_ha AS DOUBLE) as area_ha"
+            area_condition = "CAST(f.field_area_ha AS DOUBLE) > 0"
+        else:
+            area_field_select = "NULL as area_ha"
+            area_condition = "TRUE"
+
+        # Handle CVR column name dynamically
+        if "cvr_number" in fvm_column_names:
+            cvr_field_select = "f.cvr_number"
+            cvr_join_condition = "f.cvr_number = p.cvr"
+            cvr_condition = "f.cvr_number IS NOT NULL"
+        elif "company_registration_number" in fvm_column_names:
+            cvr_field_select = "f.company_registration_number as cvr_number"
+            cvr_join_condition = "f.company_registration_number = p.cvr"
+            cvr_condition = "f.company_registration_number IS NOT NULL"
+        else:
+            cvr_field_select = "NULL as cvr_number"
+            cvr_join_condition = "FALSE"
+            cvr_condition = "TRUE"
+
+        # Handle block ID column name dynamically
+        if "block_id" in fvm_column_names:
+            block_field_select = "f.block_id"
+            block_join_condition = "f.block_id = p.block_id"
+            block_condition = "f.block_id IS NOT NULL"
+        elif "block_number" in fvm_column_names:
+            block_field_select = "f.block_number as block_id"
+            block_join_condition = "f.block_number = p.block_id"
+            block_condition = "f.block_number IS NOT NULL"
+        else:
+            block_field_select = "NULL as block_id"
+            block_join_condition = "FALSE"
+            block_condition = "TRUE"
+
+        self.log.info(f"🔍 Using geometry column: {geometry_column}")
+        self.log.info(f"🔍 Using area column: {area_field_select}")
+        self.log.info(f"🔍 Using CVR column: {cvr_field_select}")
+        self.log.info(f"🔍 Using block ID column: {block_field_select}")
+
         # Process fields with geometry preparation
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE prepared_fields AS
             SELECT
                 f.field_id,
-                CAST(f.area_ha AS DOUBLE) as area_ha,
-                f.cvr_number,
-                f.block_id,
+                {area_field_select},
+                {cvr_field_select},
+                {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                f.geometry_wkt
+                {geometry_field_select}
             FROM temp_fvm_raw f
             INNER JOIN pesticide_field_lookup p ON (
-                f.cvr_number = p.cvr
+                {cvr_join_condition}
                 AND f.field_id = p.field_id
-                AND f.block_id = p.block_id
+                AND {block_join_condition}
             )
-            WHERE f.geometry_wkt IS NOT NULL
-            AND ST_IsValid(ST_GeomFromText(f.geometry_wkt))
-            AND CAST(f.area_ha AS DOUBLE) > 0
-            AND f.cvr_number IS NOT NULL
-            AND f.block_id IS NOT NULL
+            WHERE {geometry_column} IS NOT NULL
+            AND ST_IsValid(ST_GeomFromText({geometry_column}))
+            AND {area_condition}
+            AND {cvr_condition}
+            AND {block_condition}
         """)
 
         # Use coordinate transformer to prepare geometries

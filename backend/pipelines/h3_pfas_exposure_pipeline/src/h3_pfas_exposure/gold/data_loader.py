@@ -346,6 +346,19 @@ class H3DataLoader:
         else:
             block_field_select = "NULL as block_id"
 
+        # Handle geometry column name dynamically
+        if "geometry_wkt" in column_names:
+            geometry_field_select = "f.geometry_wkt"
+            geometry_column = "f.geometry_wkt"
+        elif "geometry" in column_names:
+            geometry_field_select = "f.geometry as geometry_wkt"
+            geometry_column = "f.geometry"
+        else:
+            geometry_field_select = "NULL as geometry_wkt"
+            geometry_column = "NULL"
+
+        self.log.info(f"🔍 Geometry column handling: {geometry_column}")
+
         # Process fields with geometry preparation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE prepared_fields AS
@@ -356,15 +369,15 @@ class H3DataLoader:
                 {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                f.geometry_wkt
+                {geometry_field_select}
             FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
                 {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
                 AND f.field_id = p.field_id
                 AND {"f.block_id" if "block_id" in column_names else "f.block_number"} = p.block_id
             )
-            WHERE f.geometry_wkt IS NOT NULL
-            AND ST_IsValid(ST_GeomFromText(f.geometry_wkt))
+            WHERE {geometry_column} IS NOT NULL
+            AND ST_IsValid(ST_GeomFromText({geometry_column}))
             AND {"CAST(f.area_ha AS DOUBLE)" if "area_ha" in column_names else "CAST(f.field_area_ha AS DOUBLE)"} > 0
             AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} IS NOT NULL
             AND {"f.block_id" if "block_id" in column_names else "f.block_number"} IS NOT NULL
