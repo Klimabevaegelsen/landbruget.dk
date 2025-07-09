@@ -347,15 +347,18 @@ class H3DataLoader:
             block_field_select = "NULL as block_id"
 
         # Handle geometry column name dynamically
-        if "geometry_wkt" in column_names:
-            geometry_field_select = "f.geometry_wkt"
-            geometry_column = "f.geometry_wkt"
-        elif "geometry" in column_names:
-            geometry_field_select = "f.geometry as geometry_wkt"
+        if "geometry" in column_names:
+            geometry_field_select = "f.geometry"
             geometry_column = "f.geometry"
+            geometry_validation = f"ST_IsValid({geometry_column})"
+        elif "geometry_wkt" in column_names:
+            geometry_field_select = "ST_GeomFromText(f.geometry_wkt) as geometry"
+            geometry_column = "f.geometry_wkt"
+            geometry_validation = f"ST_IsValid(ST_GeomFromText({geometry_column}))"
         else:
-            geometry_field_select = "NULL as geometry_wkt"
+            geometry_field_select = "NULL as geometry"
             geometry_column = "NULL"
+            geometry_validation = "FALSE"
 
         self.log.info(f"🔍 Geometry column handling: {geometry_column}")
 
@@ -377,7 +380,7 @@ class H3DataLoader:
                 AND {"f.block_id" if "block_id" in column_names else "f.block_number"} = p.block_id
             )
             WHERE {geometry_column} IS NOT NULL
-            AND ST_IsValid(ST_GeomFromText({geometry_column}))
+            AND {geometry_validation}
             AND {"CAST(f.area_ha AS DOUBLE)" if "area_ha" in column_names else "CAST(f.field_area_ha AS DOUBLE)"} > 0
             AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} IS NOT NULL
             AND {"f.block_id" if "block_id" in column_names else "f.block_number"} IS NOT NULL
