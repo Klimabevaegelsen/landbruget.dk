@@ -8,10 +8,22 @@ class Settings:
     """Configuration settings for BBR Buildings Pipeline."""
 
     def __init__(self):
-        # Data sources
+        # Data sources - use the original working URLs from the previous version
         self.inspire_bbr_url = os.getenv(
             "INSPIRE_BBR_URL",
             "https://ftp.dataforsyningen.dk/Bygninger_og_Adresser/Bygninger_og_Adresser_INSPIRE/DK_INSPIRE_BBR.zip",
+        )
+
+        # SDFE FTP base URL for dynamic URL parsing - restored from previous working version
+        self.sdfe_ftp_base_url = os.getenv(
+            "SDFE_FTP_BASE_URL",
+            "https://ftp.sdfe.dk/main.html?download&weblink=2c950b3aadfeedc3b136df8525234819",
+        )
+
+        # GeoDanmark WFS URL for building cross-reference - restored from previous working version
+        self.geodanmark_wfs_url = os.getenv(
+            "GEODANMARK_WFS_URL",
+            "https://wfs.datafordeler.dk/GeoDanmarkVektor/GeoDanmark60_NOHIST_GML3/1.0.0/WFS",
         )
 
         # Datafordeler credentials for GeoDanmark WFS

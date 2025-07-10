@@ -72,23 +72,23 @@ env:
   BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
 
 jobs:
-  # Job 0: Generate Quarter Matrix
-  generate-quarter-matrix:
+  # Job 0: Generate Monthly Matrix
+  generate-monthly-matrix:
     runs-on: ubuntu-latest
     outputs:
-      quarters: ${{ steps.generate-matrix.outputs.quarters }}
-      process_by_quarter: ${{ steps.generate-matrix.outputs.process_by_quarter }}
+      months: ${{ steps.generate-matrix.outputs.months }}
+      process_by_month: ${{ steps.generate-matrix.outputs.process_by_month }}
     steps:
-      - name: Generate quarter matrix
+      - name: Generate monthly matrix
         id: generate-matrix
         run: |
-          # Determine if we should process by quarter based on the step
+          # Determine if we should process by month based on the step
           STEP="${{ inputs.step || 'all' }}"
           YEAR_RANGE="${{ inputs.year_range || '2022-2024' }}"
           
-          # Only use quarter matrix for animal_movements or when processing all steps
+          # Only use monthly matrix for animal_movements or when processing all steps
           if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" ]]; then
-            PROCESS_BY_QUARTER="true"
+            PROCESS_BY_MONTH="true"
             
             # Parse year range
             if [[ "$YEAR_RANGE" == *"-"* ]]; then
@@ -99,28 +99,28 @@ jobs:
               END_YEAR="$YEAR_RANGE"
             fi
             
-            # Generate array of quarters (year-quarter format)
-            QUARTERS="["
-            FIRST_QUARTER=true
+            # Generate array of months (year-month format)
+            MONTHS="["
+            FIRST_MONTH=true
             for ((year=START_YEAR; year<=END_YEAR; year++)); do
-              for quarter in "Q1" "Q2" "Q3" "Q4"; do
-                if [[ "$FIRST_QUARTER" == "false" ]]; then
-                  QUARTERS="$QUARTERS,"
+              for month in {1..12}; do
+                if [[ "$FIRST_MONTH" == "false" ]]; then
+                  MONTHS="$MONTHS,"
                 fi
-                QUARTERS="$QUARTERS\"$year-$quarter\""
-                FIRST_QUARTER=false
+                MONTHS="$MONTHS\"$year-$(printf "%02d" $month)\""
+                FIRST_MONTH=false
               done
             done
-            QUARTERS="$QUARTERS]"
+            MONTHS="$MONTHS]"
             
-            echo "quarters=$QUARTERS" >> $GITHUB_OUTPUT
-            echo "process_by_quarter=true" >> $GITHUB_OUTPUT
-            echo "Generated quarter matrix: $QUARTERS"
+            echo "months=$MONTHS" >> $GITHUB_OUTPUT
+            echo "process_by_month=true" >> $GITHUB_OUTPUT
+            echo "Generated monthly matrix: $MONTHS"
           else
-            # For other steps, don't use quarter matrix
-            echo "quarters=[\"single\"]" >> $GITHUB_OUTPUT
-            echo "process_by_quarter=false" >> $GITHUB_OUTPUT
-            echo "Not using quarter matrix for step: $STEP"
+            # For other steps, don't use monthly matrix
+            echo "months=[\"single\"]" >> $GITHUB_OUTPUT
+            echo "process_by_month=false" >> $GITHUB_OUTPUT
+            echo "Not using monthly matrix for step: $STEP"
           fi
 
   # Job 1: Foundation Steps (stamdata, herds)
@@ -133,120 +133,120 @@ jobs:
       id-token: 'write'
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Foundation Steps
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        # Determine which foundation step to run
-        INPUT_STEP="${{ inputs.step || 'all' }}"
-        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
-          STEP="herds"  # This will run stamdata -> herds
-        elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
-          STEP="$INPUT_STEP"
-        else
-          echo "Invalid step for bronze-foundation job: $INPUT_STEP"
-          exit 1
-        fi
-        
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running foundation command: $CMD"
-        $CMD
+      - name: Run Foundation Steps
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          # Determine which foundation step to run
+          INPUT_STEP="${{ inputs.step || 'all' }}"
+          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+            STEP="herds"  # This will run stamdata -> herds
+          elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
+            STEP="$INPUT_STEP"
+          else
+            echo "Invalid step for bronze-foundation job: $INPUT_STEP"
+            exit 1
+          fi
+          
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running foundation command: $CMD"
+          $CMD
 
-    - name: Upload context artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: chr-context-data
-        path: /tmp/chr_context.json
-        retention-days: 1
+      - name: Upload context artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chr-context-data
+          path: /tmp/chr_context.json
+          retention-days: 1
 
-    - name: Create bronze timestamp file
-      run: |
-        # Create a file with the bronze timestamp for other jobs to use
-        echo "${{ env.BRONZE_EXPORT_TIMESTAMP }}" > /tmp/bronze_timestamp.txt
-        echo "Bronze timestamp: ${{ env.BRONZE_EXPORT_TIMESTAMP }}"
+      - name: Create bronze timestamp file
+        run: |
+          # Create a file with the bronze timestamp for other jobs to use
+          echo "${{ env.BRONZE_EXPORT_TIMESTAMP }}" > /tmp/bronze_timestamp.txt
+          echo "Bronze timestamp: ${{ env.BRONZE_EXPORT_TIMESTAMP }}"
 
-    - name: Upload bronze timestamp artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: bronze-timestamp
-        path: /tmp/bronze_timestamp.txt
-        retention-days: 1
+      - name: Upload bronze timestamp artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/bronze_timestamp.txt
+          retention-days: 1
 
-    - name: Upload bronze data summary
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: bronze-foundation-logs
-        path: |
-          /tmp/data/
-        retention-days: 1
+      - name: Upload bronze data summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bronze-foundation-logs
+          path: |
+            /tmp/data/
+          retention-days: 1
 
   # Job 2: Parallel Data Collection - Group 1 (diko + spf_su - only need foundation)
   bronze-parallel-group-1:
@@ -264,108 +264,108 @@ jobs:
         data_type: [diko, spf_su]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download context artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: chr-context-data
-        path: /tmp/
+      - name: Download context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-data
+          path: /tmp/
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Parallel Group 1 Step
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        # Skip if this specific step is not requested
-        INPUT_STEP="${{ inputs.step || 'all' }}"
-        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
-          echo "Skipping ${{ matrix.data_type }} step for this configuration"
-          exit 0
-        fi
-        
-        STEP="${{ matrix.data_type }}"
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        # IMPORTANT: Only run the specific step, not its dependencies
-        # Dependencies have already been satisfied by previous jobs and context import
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.start_date }}" ]]; then
-          CMD="$CMD --start-date ${{ inputs.start_date }}"
-        fi
-        if [[ -n "${{ inputs.end_date }}" ]]; then
-          CMD="$CMD --end-date ${{ inputs.end_date }}"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
-        $CMD
+      - name: Run Parallel Group 1 Step
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          # Skip if this specific step is not requested
+          INPUT_STEP="${{ inputs.step || 'all' }}"
+          if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
+            echo "Skipping ${{ matrix.data_type }} step for this configuration"
+            exit 0
+          fi
+          
+          STEP="${{ matrix.data_type }}"
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          # IMPORTANT: Only run the specific step, not its dependencies
+          # Dependencies have already been satisfied by previous jobs and context import
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.start_date }}" ]]; then
+            CMD="$CMD --start-date ${{ inputs.start_date }}"
+          fi
+          if [[ -n "${{ inputs.end_date }}" ]]; then
+            CMD="$CMD --end-date ${{ inputs.end_date }}"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running parallel group 1 command for ${{ matrix.data_type }}: $CMD"
+          $CMD
 
-  # Job 2b: Animal Movements by Quarter (QUARTERLY MATRIX PROCESSING)
-  bronze-animal-movements-by-quarter:
+  # Job 2b: Animal Movements by Month (MONTHLY MATRIX PROCESSING)
+  bronze-animal-movements-by-month:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, generate-quarter-matrix]
-    if: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
+    needs: [bronze-foundation, generate-monthly-matrix]
+    if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
     
     permissions:
       contents: 'read'
@@ -373,138 +373,137 @@ jobs:
 
     strategy:
       matrix:
-        quarter: ${{ fromJson(needs.generate-quarter-matrix.outputs.quarters) }}
-      fail-fast: false  # Continue processing other quarters even if one fails
+        month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
+      fail-fast: false  # Continue processing other months even if one fails
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download context artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: chr-context-data
-        path: /tmp/
+      - name: Download context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-data
+          path: /tmp/
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Animal Movements for Quarter ${{ matrix.quarter }}
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        QUARTER="${{ matrix.quarter }}"
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        # Parse quarter format (e.g., "2023-Q2") and set quarter-specific date range
-        YEAR=$(echo "$QUARTER" | cut -d'-' -f1)
-        Q=$(echo "$QUARTER" | cut -d'-' -f2)
-        
-        case "$Q" in
-          "Q1")
-            START_DATE="$YEAR-01-01"
-            END_DATE="$YEAR-03-31"
-            ;;
-          "Q2")
-            START_DATE="$YEAR-04-01"
-            END_DATE="$YEAR-06-30"
-            ;;
-          "Q3")
-            START_DATE="$YEAR-07-01"
-            END_DATE="$YEAR-09-30"
-            ;;
-          "Q4")
-            START_DATE="$YEAR-10-01"
-            END_DATE="$YEAR-12-31"
-            ;;
-          *)
-            echo "Invalid quarter format: $QUARTER"
+      - name: Run Animal Movements for Month ${{ matrix.month }}
+        working-directory: backend/pipelines/chr_pipeline
+        timeout-minutes: 90  # 1.5 hours per month (reduced from 3 hours per year)
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CONTEXT_IMPORT_PATH: /tmp/chr_context.json
+        run: |
+          MONTH="${{ matrix.month }}"
+          
+          # Import context from foundation job
+          
+          # Parse month format (e.g., "2023-06") and set monthly date range
+          YEAR=$(echo "$MONTH" | cut -d'-' -f1)
+          MONTH_NUM=$(echo "$MONTH" | cut -d'-' -f2)
+          
+          # Calculate first and last day of the month
+          START_DATE="$YEAR-$MONTH_NUM-01"
+          
+          # Calculate last day of month (handle leap years and different month lengths)
+          if [[ "$MONTH_NUM" == "02" ]]; then
+            # February - check for leap year
+            if [[ $((YEAR % 4)) -eq 0 && ($((YEAR % 100)) -ne 0 || $((YEAR % 400)) -eq 0) ]]; then
+              END_DATE="$YEAR-$MONTH_NUM-29"
+            else
+              END_DATE="$YEAR-$MONTH_NUM-28"
+            fi
+          elif [[ "$MONTH_NUM" == "04" || "$MONTH_NUM" == "06" || "$MONTH_NUM" == "09" || "$MONTH_NUM" == "11" ]]; then
+            # April, June, September, November - 30 days
+            END_DATE="$YEAR-$MONTH_NUM-30"
+          else
+            # All other months - 31 days
+            END_DATE="$YEAR-$MONTH_NUM-31"
+          fi
+          
+          echo "Processing animal movements for month $MONTH ($START_DATE to $END_DATE)"
+          
+          # Determine additional arguments
+          ARGS=""
+          if [[ "${{ inputs.max_herds }}" != "" ]]; then
+            ARGS="$ARGS --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ "${{ inputs.species_codes }}" != "" ]]; then
+            ARGS="$ARGS --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          if [[ "${{ inputs.limit_herds_per_species }}" != "" ]]; then
+            ARGS="$ARGS --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ "${{ inputs.show_progress }}" == "true" ]]; then
+            ARGS="$ARGS --progress"
+          fi
+          
+          # Build command
+          CMD="python main.py --steps animal_movements --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
+          
+          echo "Running animal movements command for month $MONTH: $CMD"
+          
+          # Execute command
+          $CMD
+          
+          if [[ $? -eq 0 ]]; then
+            echo "✅ Successfully processed animal movements for month ${{ matrix.month }}"
+          else
+            echo "❌ Failed to process animal movements for month ${{ matrix.month }}"
             exit 1
-            ;;
-        esac
-        
-        echo "Processing animal movements for quarter $QUARTER ($START_DATE to $END_DATE)"
-        
-        # IMPORTANT: Only run the animal_movements step, not its dependencies
-        # Dependencies have already been satisfied by previous jobs and context import
-        CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running animal movements command for quarter $QUARTER: $CMD"
-        $CMD
+          fi
 
-    - name: Report year completion
-      if: always()
-      run: |
-        if [[ ${{ job.status }} == 'success' ]]; then
-          echo "✅ Successfully processed animal movements for quarter ${{ matrix.quarter }}"
-                 else
-           echo "❌ Failed to process animal movements for quarter ${{ matrix.quarter }}"
-         fi
-
-  # Job 2c: Animal Movements Fallback (when quarter matrix is not used)
+  # Job 2c: Animal Movements Fallback (when monthly matrix is not used)
   bronze-animal-movements-fallback:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, generate-quarter-matrix]
-    if: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter == 'false' && inputs.step == 'animal_movements' }}
+    needs: [bronze-foundation, generate-monthly-matrix]
+    if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'false' && inputs.step == 'animal_movements' }}
     timeout-minutes: 360  # 6 hours timeout for fallback
     
     permissions:
@@ -512,95 +511,95 @@ jobs:
       id-token: 'write'
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download context artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: chr-context-data
-        path: /tmp/
+      - name: Download context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-data
+          path: /tmp/
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Animal Movements (Traditional Mode)
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        echo "Processing animal movements in traditional mode (not quarter-based)"
-        
-        # IMPORTANT: Only run the animal_movements step, not its dependencies
-        CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.start_date }}" ]]; then
-          CMD="$CMD --start-date ${{ inputs.start_date }}"
-        fi
-        if [[ -n "${{ inputs.end_date }}" ]]; then
-          CMD="$CMD --end-date ${{ inputs.end_date }}"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running animal movements command (traditional): $CMD"
-        $CMD
+      - name: Run Animal Movements (Traditional Mode)
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          echo "Processing animal movements in traditional mode (not month-based)"
+          
+          # IMPORTANT: Only run the animal_movements step, not its dependencies
+          CMD="python -m main --steps animal_movements --log-level $LOG_LEVEL --skip-dependencies"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.start_date }}" ]]; then
+            CMD="$CMD --start-date ${{ inputs.start_date }}"
+          fi
+          if [[ -n "${{ inputs.end_date }}" ]]; then
+            CMD="$CMD --end-date ${{ inputs.end_date }}"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running animal movements command (traditional): $CMD"
+          $CMD
 
   # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
   bronze-herd-details:
@@ -613,96 +612,96 @@ jobs:
       id-token: 'write'
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download context artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: chr-context-data
-        path: /tmp/
+      - name: Download context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-data
+          path: /tmp/
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
-        echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Herd Details Step
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        # IMPORTANT: Only run the herd_details step, not its dependencies
-        # Dependencies have already been satisfied by the foundation job and context import
-        CMD="python -m main --steps herd_details --log-level $LOG_LEVEL --skip-dependencies"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running herd details command: $CMD"
-        $CMD
+      - name: Run Herd Details Step
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          # IMPORTANT: Only run the herd_details step, not its dependencies
+          # Dependencies have already been satisfied by the foundation job and context import
+          CMD="python -m main --steps herd_details --log-level $LOG_LEVEL --skip-dependencies"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running herd details command: $CMD"
+          $CMD
 
-    - name: Upload updated context artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: chr-context-with-details
-        path: /tmp/chr_context_with_details.json
-        retention-days: 1
+      - name: Upload updated context artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chr-context-with-details
+          path: /tmp/chr_context_with_details.json
+          retention-days: 1
 
   # Job 4: Parallel Data Collection - Group 2 (ejendom + vetstat - need herd_details)
   bronze-parallel-group-2:
@@ -719,117 +718,117 @@ jobs:
         data_type: [ejendom, vetstat]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download context artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: chr-context-with-details
-        path: /tmp/
+      - name: Download context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-with-details
+          path: /tmp/
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
-        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
-        
-        # Set up VetStat credentials if provided
-        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
-          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-        fi
-        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
-          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
-        fi
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+          
+          # Set up VetStat credentials if provided
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Parallel Group 2 Step
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        # Skip if this specific step is not requested
-        INPUT_STEP="${{ inputs.step || 'all' }}"
-        if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
-          echo "Skipping ${{ matrix.data_type }} step for this configuration"
-          exit 0
-        fi
-        
-        STEP="${{ matrix.data_type }}"
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        # IMPORTANT: Only run the specific step, not its dependencies
-        # Dependencies have already been satisfied by previous jobs and context import
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.start_date }}" ]]; then
-          CMD="$CMD --start-date ${{ inputs.start_date }}"
-        fi
-        if [[ -n "${{ inputs.end_date }}" ]]; then
-          CMD="$CMD --end-date ${{ inputs.end_date }}"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running parallel group 2 command for $STEP: $CMD"
-        $CMD
+      - name: Run Parallel Group 2 Step
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          # Skip if this specific step is not requested
+          INPUT_STEP="${{ inputs.step || 'all' }}"
+          if [[ "$INPUT_STEP" != "all" && "$INPUT_STEP" != "bronze_data_collection" && "$INPUT_STEP" != "${{ matrix.data_type }}" ]]; then
+            echo "Skipping ${{ matrix.data_type }} step for this configuration"
+            exit 0
+          fi
+          
+          STEP="${{ matrix.data_type }}"
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          # IMPORTANT: Only run the specific step, not its dependencies
+          # Dependencies have already been satisfied by previous jobs and context import
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.start_date }}" ]]; then
+            CMD="$CMD --start-date ${{ inputs.start_date }}"
+          fi
+          if [[ -n "${{ inputs.end_date }}" ]]; then
+            CMD="$CMD --end-date ${{ inputs.end_date }}"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running parallel group 2 command for $STEP: $CMD"
+          $CMD
 
   # Job 5: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-quarter, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2]
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2]
     if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
     
     permissions:
@@ -837,112 +836,112 @@ jobs:
       id-token: 'write'
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download bronze timestamp artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: bronze-timestamp
-        path: /tmp/
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/
 
-    - name: Set up environment variables (NO FVM CREDENTIALS)
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        
-        # Read the bronze timestamp from artifact
-        BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-        echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
-        
-        # Set up environment WITHOUT FVM credentials (silver doesn't need them)
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        echo "BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP" >> .env
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables (NO FVM CREDENTIALS)
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          
+          # Read the bronze timestamp from artifact
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
+          
+          # Set up environment WITHOUT FVM credentials (silver doesn't need them)
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP" >> .env
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Download Bronze Data from GCS
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      run: |
-        # Read the bronze timestamp from artifact
-        BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-        echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
-        
-        # Create the target directory with the timestamp
-        mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
-        
-        # Download all files from the bronze timestamp folder
-        echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
-        gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || {
-          echo "Failed to download bronze data from timestamp folder"
-          echo "Checking what timestamp folders exist..."
-          gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
-          exit 1
-        }
-        
-        # List what we downloaded
-        echo "=== Downloaded bronze files ==="
-        ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
+      - name: Download Bronze Data from GCS
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          # Read the bronze timestamp from artifact
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
+          
+          # Create the target directory with the timestamp
+          mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
+          
+          # Download all files from the bronze timestamp folder
+          echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || {
+            echo "Failed to download bronze data from timestamp folder"
+            echo "Checking what timestamp folders exist..."
+            gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
+            exit 1
+          }
+          
+          # List what we downloaded
+          echo "=== Downloaded bronze files ==="
+          ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
 
-    - name: Run Silver Processing
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        # Determine which silver step to run
-        INPUT_STEP="${{ inputs.step || 'all' }}"
-        if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "silver_processing" ]]; then
-          STEP="silver_all"
-        else
-          STEP="$INPUT_STEP"
-        fi
-        
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        
-        echo "Running silver processing command: $CMD"
-        $CMD
+      - name: Run Silver Processing
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          # Determine which silver step to run
+          INPUT_STEP="${{ inputs.step || 'all' }}"
+          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "silver_processing" ]]; then
+            STEP="silver_all"
+          else
+            STEP="$INPUT_STEP"
+          fi
+          
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          
+          echo "Running silver processing command: $CMD"
+          $CMD
 
   # Job 6: Single Step Execution (for individual steps not covered above)
   single-step:
@@ -954,128 +953,128 @@ jobs:
       id-token: 'write'
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install CHR pipeline dependencies
-        cd ../chr_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Set up environment variables
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
-        VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/chr_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-        
-        # Set up VetStat credentials if provided
-        if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
-          echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-        fi
-        if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
-          echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
-        fi
-        
-        mkdir -p /tmp/data/bronze/chr
-        mkdir -p /tmp/data/silver/chr
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          
+          # Set up VetStat credentials if provided
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
+          
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
 
-    - name: Run Single Step
-      working-directory: backend/pipelines/chr_pipeline
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        STEP="${{ inputs.step }}"
-        LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-        SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
-        
-        # Set default 3-year date range for animal_movements step
-        if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
-          START_DATE=$(date -d "3 years ago" +%Y-01-01)
-          END_DATE=$(date +%Y-%m-%d)
-          echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
-        fi
-        
-        CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
-        if [[ "$SHOW_PROGRESS" == "true" ]]; then
-          CMD="$CMD --progress"
-        fi
-        if [[ -n "${{ inputs.start_date }}" ]]; then
-          CMD="$CMD --start-date ${{ inputs.start_date }}"
-        elif [[ -n "$START_DATE" ]]; then
-          CMD="$CMD --start-date $START_DATE"
-        fi
-        if [[ -n "${{ inputs.end_date }}" ]]; then
-          CMD="$CMD --end-date ${{ inputs.end_date }}"
-        elif [[ -n "$END_DATE" ]]; then
-          CMD="$CMD --end-date $END_DATE"
-        fi
-        if [[ -n "${{ inputs.max_herds }}" ]]; then
-          CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
-        fi
-        if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
-          CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-        fi
-        if [[ -n "${{ inputs.species_codes }}" ]]; then
-          CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-        fi
-        
-        echo "Running single step command: $CMD"
-        $CMD
+      - name: Run Single Step
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          STEP="${{ inputs.step }}"
+          LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          
+          # Set default 3-year date range for animal_movements step
+          if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
+            START_DATE=$(date -d "3 years ago" +%Y-01-01)
+            END_DATE=$(date +%Y-%m-%d)
+            echo "Auto-setting 3-year date range for animal_movements: $START_DATE to $END_DATE"
+          fi
+          
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
+          if [[ "$SHOW_PROGRESS" == "true" ]]; then
+            CMD="$CMD --progress"
+          fi
+          if [[ -n "${{ inputs.start_date }}" ]]; then
+            CMD="$CMD --start-date ${{ inputs.start_date }}"
+          elif [[ -n "$START_DATE" ]]; then
+            CMD="$CMD --start-date $START_DATE"
+          fi
+          if [[ -n "${{ inputs.end_date }}" ]]; then
+            CMD="$CMD --end-date ${{ inputs.end_date }}"
+          elif [[ -n "$END_DATE" ]]; then
+            CMD="$CMD --end-date $END_DATE"
+          fi
+          if [[ -n "${{ inputs.max_herds }}" ]]; then
+            CMD="$CMD --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ -n "${{ inputs.limit_herds_per_species }}" ]]; then
+            CMD="$CMD --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          if [[ -n "${{ inputs.species_codes }}" ]]; then
+            CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          
+          echo "Running single step command: $CMD"
+          $CMD
 
-    - name: Handle pipeline failure
-      if: failure()
-      run: |
-        echo "❌ CHR Pipeline step '${{ inputs.step }}' failed. Please check the logs above for details."
-        echo ""
-        echo "🔧 Common issues:"
-        echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
-        echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
-        echo "3. Network connectivity issues with FVM services"
-        echo "4. GCS authentication or bucket access issues"
-        echo "5. Pipeline timeout or memory issues"
-        echo ""
-        echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
-        echo "💡 For animal_movements, consider using year_range parameter (e.g., '2023' or '2022-2023') to process smaller chunks"
-        exit 1
+      - name: Handle pipeline failure
+        if: failure()
+        run: |
+          echo "❌ CHR Pipeline step '${{ inputs.step }}' failed. Please check the logs above for details."
+          echo ""
+          echo "🔧 Common issues:"
+          echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
+          echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
+          echo "3. Network connectivity issues with FVM services"
+          echo "4. GCS authentication or bucket access issues"
+          echo "5. Pipeline timeout or memory issues"
+          echo ""
+          echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
+          echo "💡 For animal_movements, consider using year_range parameter (e.g., '2023' or '2022-2023') to process smaller chunks"
+          exit 1
 
   # Job 7: Pipeline Summary and Optimization Report
   pipeline-summary:
     runs-on: ubuntu-latest
-    needs: [generate-quarter-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-quarter, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
+    needs: [generate-monthly-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
     if: always() && !cancelled()
     
     steps:
@@ -1086,7 +1085,7 @@ jobs:
           echo "## 🔧 Configuration Used"
           echo "- **Step**: ${{ inputs.step || 'all' }}"
           echo "- **Year Range**: ${{ inputs.year_range || '2022-2024' }}"
-          echo "- **Quarter-based Processing**: ${{ needs.generate-quarter-matrix.outputs.process_by_quarter }}"
+          echo "- **Monthly Processing**: ${{ needs.generate-monthly-matrix.outputs.process_by_month }}"
           echo "- **Log Level**: ${{ inputs.log_level || 'WARNING' }}"
           echo "- **Max Herds**: ${{ inputs.max_herds || 'unlimited' }}"
           echo "- **Species Codes**: ${{ inputs.species_codes || 'all' }}"
@@ -1094,19 +1093,19 @@ jobs:
           
           echo "## 🚀 Performance Optimizations Applied"
           echo ""
-          echo "### ✅ Quarter-based Matrix Processing"
-          if [[ "${{ needs.generate-quarter-matrix.outputs.process_by_quarter }}" == "true" ]]; then
+          echo "### ✅ Monthly Matrix Processing"
+          if [[ "${{ needs.generate-monthly-matrix.outputs.process_by_month }}" == "true" ]]; then
             echo "- **Status**: ENABLED ✅"
-            echo "- **Quarters Processed**: ${{ needs.generate-quarter-matrix.outputs.quarters }}"
+            echo "- **Months Processed**: ${{ needs.generate-monthly-matrix.outputs.months }}"
             echo "- **Benefits**:"
-            echo "  - Prevents timeout issues by processing smaller date ranges (3 months vs 12 months)"
-            echo "  - Allows parallel processing of different quarters (4x more parallelization)"
-            echo "  - Enables faster failure recovery (failed quarter doesn't block others)"
+            echo "  - Prevents timeout issues by processing smaller date ranges (1 month vs 12 months)"
+            echo "  - Allows parallel processing of different months (12x more parallelization)"
+            echo "  - Enables faster failure recovery (failed month doesn't block others)"
             echo "  - Reduces memory usage per job (1.5 hours vs 3 hours timeout)"
-            echo "  - Improved performance: ~21,000 animals per quarter vs ~87,000 per year"
+            echo "  - Improved performance: ~7,000 animals per month vs ~87,000 per year"
           else
             echo "- **Status**: DISABLED (using traditional mode)"
-            echo "- **Reason**: Step '${{ inputs.step }}' doesn't require quarter-based processing"
+            echo "- **Reason**: Step '${{ inputs.step }}' doesn't require monthly processing"
           fi
           echo ""
           
@@ -1120,7 +1119,7 @@ jobs:
           
           echo "### ✅ Timeout Optimizations"
           echo "- **Individual Task Timeout**: 5 minutes (GitHub Actions) vs 10 minutes (local)"
-          echo "- **Quarter Processing Timeout**: 1.5 hours per quarter (reduced from 3 hours per year)"
+          echo "- **Monthly Processing Timeout**: 1.5 hours per month (reduced from 3 hours per year)"
           echo "- **SOAP Request Timeout**: 3 minutes (GitHub Actions) vs 5 minutes (local)"
           echo "- **Aggregation Timeout**: 10 minutes maximum per herd"
           echo ""
@@ -1130,7 +1129,7 @@ jobs:
           echo "|-----|--------|"
           echo "| Foundation | ${{ needs.bronze-foundation.result || 'skipped' }} |"
           echo "| Group 1 (diko, spf_su) | ${{ needs.bronze-parallel-group-1.result || 'skipped' }} |"
-          echo "| Animal Movements (Quarter-based) | ${{ needs.bronze-animal-movements-by-quarter.result || 'skipped' }} |"
+          echo "| Animal Movements (Monthly) | ${{ needs.bronze-animal-movements-by-month.result || 'skipped' }} |"
           echo "| Animal Movements (Fallback) | ${{ needs.bronze-animal-movements-fallback.result || 'skipped' }} |"
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
           echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
@@ -1145,8 +1144,8 @@ jobs:
           if [[ "${{ needs.bronze-parallel-group-1.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS group-1"
           fi
-          if [[ "${{ needs.bronze-animal-movements-by-quarter.result }}" == "failure" ]]; then
-            FAILED_JOBS="$FAILED_JOBS animal-movements-quarter"
+          if [[ "${{ needs.bronze-animal-movements-by-month.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS animal-movements-monthly"
           fi
           if [[ "${{ needs.bronze-animal-movements-fallback.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS animal-movements-fallback"
@@ -1171,7 +1170,7 @@ jobs:
             echo "3. **For memory issues**: Reduce max_herds or limit_herds_per_species"
             echo "4. **For credential issues**: Verify FVM_USERNAME/FVM_PASSWORD secrets"
             echo "5. **For high-volume herds**: Check if automatic chunking was applied"
-            echo "6. **Quarter-based processing**: Automatically divides workload into 3-month chunks for better performance"
+            echo "6. **Monthly processing**: Automatically divides workload into monthly chunks for better performance"
           else
             echo "## ✅ Pipeline Completed Successfully"
             echo "All jobs completed without critical failures."
