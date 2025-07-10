@@ -154,9 +154,10 @@ def _initialize_known_high_volume_herds() -> None:
     global HIGH_VOLUME_HERDS
 
     # Known problematic herds from production logs
+    # UPDATED: Use larger chunks to reduce request volume and improve performance
     known_high_volume = {
-        "112389": {"max_days": 7, "reason": "known_high_volume", "volume_estimate": None},
-        "104641": {"max_days": 7, "reason": "known_high_volume", "volume_estimate": None},
+        "112389": {"max_days": 30, "reason": "known_high_volume", "volume_estimate": None},  # Monthly chunks
+        "104641": {"max_days": 30, "reason": "known_high_volume", "volume_estimate": None},  # Monthly chunks
     }
 
     for herd_str, config in known_high_volume.items():
@@ -238,14 +239,15 @@ def add_high_volume_herd(herd_number: int, max_days: int, volume_estimate: int =
     _load_high_volume_herds()
 
     # Auto-optimize chunk size based on herd number and known patterns
+    # UPDATED: Use larger chunks to reduce request volume and improve performance
     if herd_number in [112389, 104641]:  # Known problematic herds from logs
-        max_days = min(max_days, 7)  # Force weekly chunks for these herds
-        logger.warning(f"Herd {herd_number} is a known high-volume herd - using aggressive 7-day chunking")
+        max_days = min(max_days, 30)  # Monthly chunks instead of weekly for these herds
+        logger.warning(f"Herd {herd_number} is a known high-volume herd - using monthly 30-day chunking")
     elif volume_estimate and volume_estimate > 100000:
-        max_days = min(max_days, 3)  # Very aggressive for massive herds
-        logger.warning(f"Herd {herd_number} has massive volume estimate ({volume_estimate}) - using 3-day chunking")
+        max_days = min(max_days, 14)  # Bi-weekly chunks instead of 3-day for massive herds
+        logger.warning(f"Herd {herd_number} has massive volume estimate ({volume_estimate}) - using 14-day chunking")
     elif volume_estimate and volume_estimate > 50000:
-        max_days = min(max_days, 7)  # Weekly chunks for large herds
+        max_days = min(max_days, 30)  # Monthly chunks instead of weekly for large herds
 
     HIGH_VOLUME_HERDS[str(herd_number)] = {
         "max_days": max_days,
@@ -270,10 +272,11 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
 
     herd_str = str(herd_number)
 
-    # Pre-configure known problematic herds with aggressive chunking
+    # Pre-configure known problematic herds with reasonable chunking
+    # UPDATED: Use larger chunks to reduce request volume and improve performance
     if herd_number in [112389, 104641] and herd_str not in HIGH_VOLUME_HERDS:
-        logger.warning(f"Auto-configuring known problematic herd {herd_number} with 7-day chunks")
-        add_high_volume_herd(herd_number, max_days=7, volume_estimate=None)
+        logger.warning(f"Auto-configuring known problematic herd {herd_number} with 30-day chunks")
+        add_high_volume_herd(herd_number, max_days=30, volume_estimate=None)
 
     if herd_str in HIGH_VOLUME_HERDS:
         max_days = HIGH_VOLUME_HERDS[herd_str]["max_days"]
@@ -285,7 +288,7 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
 
         # For very large date ranges, add extra safety by limiting total chunks
         total_days = (requested_end - requested_start).days + 1
-        max_chunks = 100  # Prevent excessive chunking
+        max_chunks = 50  # Reduced from 100 to prevent excessive chunking
 
         if total_days / max_days > max_chunks:
             logger.warning(
@@ -733,8 +736,8 @@ def load_cattle_movement_summaries(
                 # If this chunk failed due to volume, try to detect and adapt
                 if "aggregation" in str(chunk_error).lower():
                     current_days = (chunk_end - chunk_start).days + 1
-                    if current_days > 7:  # If chunk was larger than a week, suggest smaller chunks
-                        suggested_days = max(7, current_days // 4)  # Quarter the size, but at least 7 days
+                    if current_days > 30:  # If chunk was larger than a month, suggest smaller chunks
+                        suggested_days = max(30, current_days // 2)  # Half the size, but at least 30 days
                         logger.warning(
                             f"Chunk processing error suggests herd {herd_number} needs smaller chunks (suggest {suggested_days} days)"
                         )
@@ -781,7 +784,7 @@ def load_cattle_movement_summaries(
         # If the error suggests volume issues, try to auto-adapt
         if not is_high_volume_herd(herd_number):
             logger.warning(f"Adding herd {herd_number} to high-volume list due to processing error")
-            add_high_volume_herd(herd_number, max_days=30, volume_estimate=None)  # Start with 30-day chunks
+            add_high_volume_herd(herd_number, max_days=60, volume_estimate=None)  # Start with bi-monthly chunks
 
         return None
 
@@ -895,14 +898,15 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             }
 
         # Detect high-volume herds and suggest chunking instead of processing
-        if animals_count > 20000:  # 20k animals threshold for chunking suggestion
+        # UPDATED: Use more reasonable thresholds and larger chunks
+        if animals_count > 50000:  # 50k animals threshold for chunking suggestion (increased from 20k)
             # Calculate suggested chunk size based on volume
-            if animals_count > 50000:
-                suggested_days = 7  # Very high volume: weekly chunks
-            elif animals_count > 30000:
-                suggested_days = 14  # High volume: bi-weekly chunks
+            if animals_count > 100000:
+                suggested_days = 30  # Very high volume: monthly chunks (increased from 7)
+            elif animals_count > 75000:
+                suggested_days = 60  # High volume: bi-monthly chunks (increased from 14)
             else:
-                suggested_days = 30  # Moderate high volume: monthly chunks
+                suggested_days = 90  # Moderate high volume: quarterly chunks (increased from 30)
 
             logger.warning(
                 f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - suggesting {suggested_days}-day chunks for future processing"
@@ -914,7 +918,7 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 logger.info(f"Auto-added herd {reporting_herd} to high-volume list with {suggested_days}-day chunks")
 
             # For very large datasets, still skip this current processing to avoid performance issues
-            if animals_count > 50000:
+            if animals_count > 100000:  # Increased threshold from 50k to 100k
                 return {
                     "reporting_herd_number": reporting_herd,
                     "movements": [],
@@ -1316,17 +1320,18 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
             estimated_5_year = estimated_yearly * 5
 
             # Determine volume category and recommended chunk size
+            # UPDATED: Use larger chunks to reduce request volume and improve performance
             if estimated_5_year > 200000:  # Very high volume (like slaughterhouses)
                 volume_category = "very_high"
-                recommended_chunk_days = 7
+                recommended_chunk_days = 30  # Monthly chunks instead of weekly
                 risk_level = "extreme"
             elif estimated_5_year > 100000:  # High volume
                 volume_category = "high"
-                recommended_chunk_days = 14
+                recommended_chunk_days = 60  # Bi-monthly chunks instead of bi-weekly
                 risk_level = "high"
             elif estimated_5_year > 50000:  # Moderate high volume
                 volume_category = "moderate_high"
-                recommended_chunk_days = 30
+                recommended_chunk_days = 90  # Quarterly chunks instead of monthly
                 risk_level = "moderate"
             else:  # Normal volume
                 volume_category = "normal"
