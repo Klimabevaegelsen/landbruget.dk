@@ -334,7 +334,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: inspire-bbr-data-${{ github.run_id }}
-        path: .
+        path: backend/pipelines/bbr_buildings/
 
     - name: Process Bronze Layer - Spatial Join
       id: process-bronze
@@ -354,79 +354,21 @@ jobs:
         echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GOOGLE_CLOUD_PROJECT }}" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
         
-        # Perform spatial join
-        python -c "
-        import duckdb
-        import json
-        from pathlib import Path
-        from datetime import datetime
-        import pandas as pd
-        import os
+        # Install psutil for memory monitoring
+        uv pip install --system psutil
         
-        # Load building IDs
-        with open('data/inspire_building_ids.json', 'r') as f:
-            building_ids = json.load(f)
-        
-        print(f'🔍 Joining {len(building_ids):,} INSPIRE BBR buildings with GeoDanmark data...')
-        
-        # Connect to DuckDB
-        conn = duckdb.connect()
-        conn.execute('INSTALL spatial')
-        conn.execute('LOAD spatial')
-        
-        # Load GeoDanmark data
-        geodanmark_path = 'data/geodanmark_buildings_complete.geoparquet'
-        
-        if len(building_ids) > 0:
-            # Convert building_ids to SQL-compatible format
-            uuid_list = \"', '\".join(building_ids)
-            
-            join_query = f'''
-            SELECT 
-                g.*,
-                \"matched\" as join_status
-            FROM read_parquet(\"{geodanmark_path}\") g
-            WHERE g.BBRUUID IN (\"{uuid_list}\")
-            '''
-            
-            try:
-                joined_buildings = conn.execute(join_query).fetchdf()
-                print(f'✅ Successfully joined {len(joined_buildings):,} buildings')
-                
-                # Create output directory with timestamp
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_dir = Path(f'data/bronze/{timestamp}')
-                output_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Save joined results
-                output_file = output_dir / 'joined_buildings.geoparquet'
-                joined_buildings.to_parquet(output_file)
-                print(f'💾 Saved joined results to {output_file}')
-                
-                # Copy INSPIRE attributes if available
-                inspire_attrs_path = Path('data/inspire_attributes.parquet')
-                if inspire_attrs_path.exists():
-                    inspire_attrs = pd.read_parquet(inspire_attrs_path)
-                    inspire_attrs.to_parquet(output_dir / 'inspire_attributes.parquet')
-                    print('💾 Saved INSPIRE attributes')
-                
-                # Output for next job
-                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    f.write(f'bronze-output-dir={output_dir}\n')
-                    f.write(f'joined-buildings-count={len(joined_buildings)}\n')
-                
-            except Exception as e:
-                print(f'❌ Join failed: {e}')
-                exit(1)
-        else:
-            print('⚠️ No building IDs to join')
-            exit(1)
-        
-        conn.close()
-        print('🎉 Bronze layer processing completed successfully!')
-        "
+        # Run bronze layer spatial join
+        python run_bronze_spatial_join.py
         
         echo "✅ Bronze layer spatial join completed!"
+        
+        # Aggressive cleanup to manage disk space
+        echo "🧹 Cleaning up large files to manage disk space..."
+        rm -f data/geodanmark_buildings_complete.geoparquet
+        rm -f data/inspire_building_ids.json
+        rm -f data/inspire_attributes.parquet
+        ls -lah data/
+        df -h
 
     - name: Upload Bronze Results to GCS
       working-directory: backend/pipelines/bbr_buildings
