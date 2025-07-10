@@ -57,6 +57,7 @@ def mere_bedre_stoerre_natur():
             '4. prioritet': {'biodiversity': 0.2, 'climate': 0.4, 'nitrogen': 0.4, 'recreation': 0.4}
         },
         category_column='Prioritet',
+        area_column='Areal_ha',
         geometry_column='geometry'
     )
    
@@ -85,8 +86,9 @@ def prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_l
     response = make_request(wfs_url, params)
     gdf = gdp_read_file(response.content)
     gdf = gdf.to_crs('EPSG:4326')
+    gdf['shape_area'] = gdf['shape_area'] / 10000
     save_gpkg_file(gdf, gpkg_file)
-    #upload_to_gcs(gpkg_file)
+    upload_to_gcs(gpkg_file)
 
     upload_nature_report_data(
         report_name='Prioritering af biodiversitet ved udtagning og genopretning af kulstofrige lavbundsjorder',
@@ -106,13 +108,14 @@ def prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_l
             12: {'biodiversity': 0.0, 'climate': 0.1, 'nitrogen': 0.1, 'recreation': 0.2}
         },
         category_column='kategori',
+        area_column='shape_area',
         geometry_column='geometry'
     )
 
 
 
 def main():
-    #mere_bedre_stoerre_natur()
+    mere_bedre_stoerre_natur()
     prioritering_af_biodiversitet_ved_udtagning_og_genopretning_af_kulstofrige_lavbundsjorde()
 
 
