@@ -1,196 +1,163 @@
-"""
-Configuration settings for the BBR Buildings Pipeline.
-"""
+"""BBR Buildings Pipeline Configuration"""
 
 import os
-from enum import Enum
 from pathlib import Path
 
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field, validator
 
-# Load environment variables from .env file (local development only)
-# Try multiple possible locations for .env file
-possible_env_paths = [
-    # Current pipeline directory (where GitHub Actions creates it)
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
-    # Backend directory (original location)
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
-    ),
-    # Project root
-    os.path.join(
-        os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        ),
-        ".env",
-    ),
-]
+class Settings:
+    """Configuration settings for BBR Buildings Pipeline."""
 
-for env_path in possible_env_paths:
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        break
+    def __init__(self):
+        # Data sources
+        self.inspire_bbr_url = os.getenv(
+            "INSPIRE_BBR_URL",
+            "https://ftp.dataforsyningen.dk/Bygninger_og_Adresser/Bygninger_og_Adresser_INSPIRE/DK_INSPIRE_BBR.zip",
+        )
 
+        # Datafordeler credentials for GeoDanmark WFS
+        self.datafordeler_username = os.getenv("DATAFORDELER_USERNAME")
+        self.datafordeler_password = os.getenv("DATAFORDELER_PASSWORD")
 
-class StorageType(str, Enum):
-    """Available storage types for the pipeline."""
+        # Google Cloud Storage
+        self.gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        self.gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
-    LOCAL = "local"
-    GCS = "gcs"
+        # Output directories
+        self.output_dir = Path(os.getenv("OUTPUT_DIR", "data"))
 
+        # Processing settings
+        self.sample_size = self._get_int_env("SAMPLE_SIZE", None)
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
 
-class LogLevel(str, Enum):
-    """Available log levels for the pipeline."""
+        # Spatial optimization settings (from field analysis learnings)
+        self.spatial_chunk_size = self._get_int_env("SPATIAL_CHUNK_SIZE", 25000)
+        self.memory_cleanup_frequency = self._get_int_env("MEMORY_CLEANUP_FREQUENCY", 5)
+        self.min_building_area_m2 = self._get_float_env("MIN_BUILDING_AREA_M2", 5.0)
+        self.min_geometry_area_m2 = self._get_float_env("MIN_GEOMETRY_AREA_M2", 1.0)
+        self.duckdb_memory_limit = os.getenv("DUCKDB_MEMORY_LIMIT", "12GB")
 
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
+        # GitHub Actions optimization
+        self.github_actions_mode = os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
+        self.enable_st_dump_optimization = (
+            os.getenv("ENABLE_ST_DUMP_OPTIMIZATION", "true").lower() == "true"
+        )
 
+        # DuckDB Spatial v1.2.2 SPATIAL_JOIN operator settings
+        self.enable_spatial_join_operator = (
+            os.getenv("ENABLE_SPATIAL_JOIN_OPERATOR", "true").lower() == "true"
+        )
+        self.spatial_join_fallback_enabled = (
+            os.getenv("SPATIAL_JOIN_FALLBACK_ENABLED", "true").lower() == "true"
+        )
+        self.enable_duckdb_optimizer = (
+            os.getenv("ENABLE_DUCKDB_OPTIMIZER", "true").lower() == "true"
+        )
 
-class Settings(BaseModel):
-    """Configuration settings for the BBR Buildings Pipeline."""
+        # Spatial join performance settings
+        self.spatial_join_build_side_memory_limit = os.getenv(
+            "SPATIAL_JOIN_BUILD_SIDE_MEMORY_LIMIT", "8GB"
+        )
+        self.spatial_index_type = os.getenv(
+            "SPATIAL_INDEX_TYPE", "rtree"
+        )  # Future: support different index types
 
-    # Data Source Configuration
-    sdfe_ftp_base_url: str = Field(
-        default="https://ftp.sdfe.dk/main.html?download&weblink=2c950b3aadfeedc3b136df8525234819",
-        description="SDFE FTP URL for DK_INSPIRE_BBR.zip",
-    )
-    geodanmark_wfs_url: str = Field(
-        default="https://wfs.datafordeler.dk/GeoDanmarkVektor/GeoDanmark60_NOHIST_GML3/1.0.0/WFS",
-        description="GeoDanmark WFS endpoint",
-    )
+        # GraphQL API settings
+        self.graphql_endpoint = os.getenv(
+            "GRAPHQL_ENDPOINT", "https://api.dataforsyningen.dk/graphql"
+        )
+        self.graphql_batch_size = self._get_int_env("GRAPHQL_BATCH_SIZE", 1000)
+        self.graphql_max_retries = self._get_int_env("GRAPHQL_MAX_RETRIES", 3)
 
-    # Datafordeleren API credentials
-    datafordeler_username: str | None = Field(None, description="Datafordeleren username")
-    datafordeler_password: str | None = Field(None, description="Datafordeleren password")
-    datafordeler_graphql_api_key: str | None = Field(
-        None, description="Datafordeleren GraphQL API key for BBR queries"
-    )
+        # Building category filters
+        self.target_building_categories = ["residential", "agriculture", "education", "daycare"]
 
-    # Storage Configuration
-    storage_type: StorageType = Field(StorageType.LOCAL, description="Storage type (local or gcs)")
-    gcs_bucket: str | None = Field(None, description="GCS bucket name (if using GCS)")
-    environment: str = Field("dev", description="Environment (dev, prod)")
+        # BBR usage codes of interest
+        self.agricultural_bbr_codes = [
+            210
+        ]  # Bygning til landbrug, gartneri, råstofudvinding o.lign.
+        self.residential_bbr_codes = [110, 120, 130, 140, 150, 160, 190, 510, 540]
+        self.education_bbr_codes = [420, 421, 422, 429]  # Schools
+        self.daycare_bbr_codes = [440, 441]  # Daycare centers
 
-    # Processing Configuration
-    max_workers: int = Field(4, description="Number of workers for parallel processing")
-    chunk_size: int = Field(50000, description="Chunk size for data processing")
+        # INSPIRE currentUse values
+        self.residential_current_use = [
+            "individualResidence",
+            "collectiveResidence",
+            "twoDwellings",
+        ]
+        self.agricultural_current_use = ["agriculture"]
+        self.public_services_current_use = ["publicServices"]
 
-    # Geometry Fetching Configuration
-    max_geometries_to_fetch: int | None = Field(
-        None, description="Maximum number of geometries to fetch (None = fetch all)"
-    )
-    geometry_batch_size: int = Field(
-        25, description="Initial batch size for geometry fetching (will be adapted)"
-    )
-    geometry_max_workers: int = Field(
-        8, description="Number of parallel workers for geometry fetching"
-    )
+    def _get_int_env(self, key: str, default: int | None) -> int | None:
+        """Get integer environment variable."""
+        value = os.getenv(key)
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except ValueError:
+            return default
 
-    # Logging settings
-    log_level: LogLevel = Field(LogLevel.INFO, description="Logging level")
-
-    # Data paths
-    base_path: Path = Field(default_factory=lambda: Path("data"))
-    bronze_path: Path = Field(default_factory=lambda: Path("data/bronze"))
-    silver_path: Path = Field(default_factory=lambda: Path("data/silver"))
-
-    # Building Usage Codes
-    agricultural_usage_codes: tuple = Field(
-        default=(210,), description="BBR agricultural usage codes"
-    )
-    residential_usage_codes: tuple = Field(
-        default=(110, 120, 130, 140, 150, 160, 190, 510, 540),
-        description="BBR residential usage codes",
-    )
-    educational_usage_codes: tuple = Field(
-        default=(420, 421, 422, 429, 440, 441),
-        description="BBR educational usage codes (includes both old and new codes: 420/421 schools, 422 university, 429 other education, 440/441 daycare)",
-    )
-
-    # INSPIRE Current Use Values
-    agricultural_current_use: tuple = Field(
-        default=("agriculture",), description="INSPIRE agricultural current use values"
-    )
-    residential_current_use: tuple = Field(
-        default=("individualResidence", "collectiveResidence", "twoDwellings"),
-        description="INSPIRE residential current use values",
-    )
-    public_services_current_use: tuple = Field(
-        default=("publicServices",), description="INSPIRE public services current use values"
-    )
-
-    # Other construction types to include
-    other_construction_current_use: tuple = Field(
-        default=("agriculture", "industrial", "publicServices", "transport"),
-        description="INSPIRE current use values for other constructions relevant to analysis",
-    )
-
-    class Config:
-        """Pydantic model configuration."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
-    @validator("gcs_bucket")
-    def validate_gcs_bucket(cls, v: str | None, values: dict) -> str | None:
-        """Validate that GCS bucket is provided when using GCS storage."""
-        if values.get("storage_type") == StorageType.GCS and not v:
-            raise ValueError("GCS bucket must be specified when using GCS storage")
-        return v
+    def _get_float_env(self, key: str, default: float | None) -> float | None:
+        """Get float environment variable."""
+        value = os.getenv(key)
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except ValueError:
+            return default
 
     @property
     def has_datafordeler_credentials(self) -> bool:
-        """Check if Datafordeleren credentials are available."""
-        return self.datafordeler_username is not None and self.datafordeler_password is not None
+        """Check if Datafordeler credentials are available."""
+        return bool(self.datafordeler_username and self.datafordeler_password)
 
     @property
-    def use_cloud_storage(self) -> bool:
-        """Check if cloud storage should be used."""
-        return self.gcs_bucket is not None and self.environment != "dev"
+    def has_gcs_credentials(self) -> bool:
+        """Check if GCS credentials are available."""
+        return bool(self.gcs_credentials_path and Path(self.gcs_credentials_path).exists())
 
-    def get_bronze_path_for_run(self, timestamp: str) -> Path:
-        """Get the Bronze layer path for a specific run."""
-        return self.bronze_path / timestamp
+    @property
+    def spatial_optimization_config(self) -> dict:
+        """Get spatial optimization configuration."""
+        return {
+            "chunk_size": self.spatial_chunk_size,
+            "memory_cleanup_frequency": self.memory_cleanup_frequency,
+            "min_building_area_m2": self.min_building_area_m2,
+            "min_geometry_area_m2": self.min_geometry_area_m2,
+            "duckdb_memory_limit": self.duckdb_memory_limit,
+            "enable_st_dump": self.enable_st_dump_optimization,
+            "github_actions_mode": self.github_actions_mode,
+            # DuckDB Spatial v1.2.2 SPATIAL_JOIN operator
+            "enable_spatial_join_operator": self.enable_spatial_join_operator,
+            "spatial_join_fallback_enabled": self.spatial_join_fallback_enabled,
+            "enable_duckdb_optimizer": self.enable_duckdb_optimizer,
+            "spatial_join_build_side_memory_limit": self.spatial_join_build_side_memory_limit,
+            "spatial_index_type": self.spatial_index_type,
+            "reference": "https://github.com/duckdb/duckdb-spatial/pull/545",
+        }
 
-    def get_silver_path_for_run(self, timestamp: str) -> Path:
-        """Get the Silver layer path for a specific run."""
-        return self.silver_path / timestamp
+    def get_bbr_codes_for_category(self, category: str) -> list:
+        """Get BBR codes for a specific building category."""
+        category_mapping = {
+            "agricultural": self.agricultural_bbr_codes,
+            "residential": self.residential_bbr_codes,
+            "education": self.education_bbr_codes,
+            "daycare": self.daycare_bbr_codes,
+        }
+        return category_mapping.get(category, [])
+
+    def get_current_use_for_category(self, category: str) -> list:
+        """Get INSPIRE currentUse values for a specific building category."""
+        category_mapping = {
+            "residential": self.residential_current_use,
+            "agricultural": self.agricultural_current_use,
+            "public_services": self.public_services_current_use,
+        }
+        return category_mapping.get(category, [])
 
 
 def get_settings() -> Settings:
-    """Get application settings."""
-    # Detect environment and set appropriate storage defaults
-    environment = os.getenv("ENVIRONMENT", "dev")
-
-    # Auto-configure storage type based on environment
-    if environment.lower() in ("production", "container"):
-        default_storage_type = "gcs"
-        default_gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-    else:
-        default_storage_type = "local"
-        default_gcs_bucket = None
-
-    # Load values from environment variables
-    return Settings(
-        sdfe_ftp_base_url=os.getenv(
-            "SDFE_FTP_BASE_URL",
-            "https://ftp.sdfe.dk/main.html?download&weblink=2c950b3aadfeedc3b136df8525234819",
-        ),
-        geodanmark_wfs_url=os.getenv(
-            "GEODANMARK_WFS_URL",
-            "https://wfs.datafordeler.dk/GeoDanmarkVektor/GeoDanmark60_NOHIST_GML3/1.0.0/WFS",
-        ),
-        datafordeler_username=os.getenv("DATAFORDELER_USERNAME"),
-        datafordeler_password=os.getenv("DATAFORDELER_PASSWORD"),
-        datafordeler_graphql_api_key=os.getenv("DATAFORDELER_GRAPHQL_API_KEY"),
-        storage_type=os.getenv("STORAGE_TYPE", default_storage_type),
-        gcs_bucket=os.getenv("GCS_BUCKET", default_gcs_bucket),
-        environment=environment,
-        max_workers=int(os.getenv("MAX_WORKERS", "4")),
-        chunk_size=int(os.getenv("CHUNK_SIZE", "50000")),
-        log_level=os.getenv("LOG_LEVEL", "INFO"),
-    )
+    """Get settings instance."""
+    return Settings()
