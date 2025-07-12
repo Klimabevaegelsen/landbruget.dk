@@ -43,12 +43,8 @@ except ImportError as e:
     save_pipeline_cvr_numbers = None
     GCSDataAccess = None
 
-# Try to import schema documentation
-try:
-    from backend.common.schema_documentation import SchemaDocumentationManager
-except ImportError as e:
-    logging.warning(f"Schema documentation not available: {e}")
-    SchemaDocumentationManager = None
+# Try to import schema documentation (after sys.path setup)
+SchemaDocumentationManager = None
 
 # Configure logging
 log_file_path = Path(__file__).resolve().parent / "silver_processing.log"
@@ -77,6 +73,13 @@ for parent in current_file.parents:
 
 if project_root and str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# Try to import schema documentation (after sys.path setup)
+try:
+    from backend.common.schema_documentation import SchemaDocumentationManager
+except ImportError as e:
+    logging.warning(f"Schema documentation not available: {e}")
+    SchemaDocumentationManager = None
 
 logging.info("--- Script execution started ---")
 
@@ -345,10 +348,7 @@ def process_chr_data(
     }
 
     for table_name, source_info in sources_to_load.items():
-        logging.warning(f"=== LOADING TABLE: {table_name} ===")
-        logging.warning(f"Source info: {source_info}")
-        logging.warning(f"Load from memory: {load_from_memory}")
-        logging.warning(f"Load from files fallback: {load_from_files_fallback}")
+        logging.info(f"Loading table: {table_name}")
 
         input_source = None
         source_desc = "unknown"
@@ -421,8 +421,6 @@ def process_chr_data(
                         f"in-memory buffer via temp JSONL ({temp_jsonl_path.name}) for '{source_info['mem_key']}'"
                     )
                     logging.info(f"Successfully loaded {source_desc} into table '{table_name}' using read_json_auto.")
-                    schema = raw_tables[table_name].schema()
-                    logging.info(f"Schema for {table_name} (from read_json_auto): {schema}")
 
                 except Exception as e_mem_jsonl:
                     logging.error(
@@ -464,53 +462,42 @@ def process_chr_data(
 
         # --- Attempt 2: Load from File using Ibis (Fallback) --- #
         if not successfully_loaded and load_from_files_fallback:
-            logging.warning(f"Attempting to load '{table_name}' from file (fallback mode)...")
+            logging.info(f"Attempting to load '{table_name}' from file (fallback mode)...")
             # Check if bronze_dir already contains the timestamp directory
             if bronze_dir.name == export_timestamp:
                 # bronze_dir already points to the timestamped directory
                 timestamped_bronze_dir = bronze_dir
-                logging.warning(f"Bronze dir already contains timestamp: {timestamped_bronze_dir}")
             else:
                 # bronze_dir is the base directory, add timestamp
                 timestamped_bronze_dir = bronze_dir / export_timestamp
-                logging.warning(f"Adding timestamp to bronze dir: {timestamped_bronze_dir}")
 
             path = timestamped_bronze_dir / source_info["file_key"]
-            logging.warning(f"Looking for file: {path}")
-            logging.warning(f"File exists: {path.exists()}")
 
             if path.exists():
                 input_source = str(path)
                 source_desc = f"file '{path.relative_to(bronze_dir.parent)}' (fallback)"
 
-                logging.warning(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
+                logging.info(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
                 try:
                     con.con.sql(f"DROP TABLE IF EXISTS {table_name};")  # Ensure clean slate
 
                     # Try regular JSON array format first (CHR pipeline exports as JSON arrays)
                     try:
-                        logging.warning(f"Trying JSON array format for {table_name}...")
                         raw_tables[table_name] = con.read_json(input_source, format="array", auto_detect=True)
                         successfully_loaded = True
-                        logging.warning(
+                        logging.info(
                             f"Successfully loaded {source_desc} into table '{table_name}' (using JSON array format)."
                         )
                     except Exception as e_array:
-                        logging.warning(
-                            f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}"
-                        )
+                        logging.info(f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}")
                         # Fallback to newline_delimited format
                         raw_tables[table_name] = con.read_json(
                             input_source, format="newline_delimited", auto_detect=True
                         )
                         successfully_loaded = True
-                        logging.warning(
+                        logging.info(
                             f"Successfully loaded {source_desc} into table '{table_name}' (using newline_delimited format)."
                         )
-
-                    # Log schema for debugging
-                    schema = raw_tables[table_name].schema()
-                    logging.warning(f"Schema for {table_name}: {schema}")
 
                 except Exception as e_file:
                     logging.error(
@@ -533,53 +520,43 @@ def process_chr_data(
         if not successfully_loaded:
             logging.error(f"Failed to load table '{table_name}' from all available sources.")
         else:
-            logging.warning(f"Successfully loaded table '{table_name}'")
+            logging.info(f"Successfully loaded table '{table_name}'")
             # Register the table in DuckDB so SQL queries can reference it by name
             try:
                 # Use Ibis create_table to register the table in DuckDB
                 con.create_table(table_name, raw_tables[table_name], overwrite=True)
-                logging.warning(f"Registered table '{table_name}' in DuckDB catalog")
+                logging.info(f"Registered table '{table_name}' in DuckDB catalog")
             except Exception as e:
                 logging.error(f"Failed to register table '{table_name}' in DuckDB: {e}")
-
-        logging.warning(f"=== FINISHED LOADING TABLE: {table_name} ===")
 
     # Handle VetStat separately (reading from the pre-processed JSONL file in silver)
     # Construct path within the silver directory
     vetstat_antibiotics_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
     if vetstat_antibiotics_jsonl_path.exists():  # Check if it exists in silver
-        logging.warning(f"Loading pre-processed VetStat data from {vetstat_antibiotics_jsonl_path.name}...")
+        logging.info(f"Loading pre-processed VetStat data from {vetstat_antibiotics_jsonl_path.name}...")
         try:
             raw_tables["vetstat"] = con.read_json(str(vetstat_antibiotics_jsonl_path), format="newline_delimited")
-            logging.warning("Successfully loaded vetstat data.")
-            schema = raw_tables["vetstat"].schema()
-            logging.warning(f"Schema for vetstat: {schema}")
+            logging.info("Successfully loaded vetstat data.")
             # Register the vetstat table in DuckDB catalog
             try:
                 con.create_table("vetstat", raw_tables["vetstat"], overwrite=True)
-                logging.warning("Registered vetstat table in DuckDB catalog")
+                logging.info("Registered vetstat table in DuckDB catalog")
             except Exception as e:
                 logging.error(f"Failed to register vetstat table in DuckDB: {e}")
         except Exception as e:
             logging.error(f"Error loading vetstat JSONL data: {e}")
-            logging.error(f"DEBUG(Added): Vetstat JSONL load failed from path: {vetstat_antibiotics_jsonl_path}")
     else:
         logging.warning(
             f"Skipping VetStat table loading as pre-processed file {vetstat_antibiotics_jsonl_path} is not available."
         )
 
-    # --- DEBUG: Show loading results before essential table check ---
-    logging.warning("=== DATA LOADING SUMMARY ===")
-    logging.warning(f"Successfully loaded tables: {list(raw_tables.keys())}")
-    logging.warning(f"Total tables loaded: {len(raw_tables)}")
-
-    # Show which essential tables are missing
+    # Check essential tables
     essential_tables = ["bes_details", "ejendom_oplys"]
     missing_essential = [table for table in essential_tables if table not in raw_tables]
     if missing_essential:
         logging.error(f"Missing essential tables: {missing_essential}")
     else:
-        logging.warning("All essential tables loaded successfully")
+        logging.info("All essential tables loaded successfully")
 
     # --- Check if essential tables were loaded ---
     if "bes_details" not in raw_tables:
@@ -832,13 +809,13 @@ def process_chr_data(
     except Exception as e:
         logging.warning(f"Error during comprehensive cleanup: {e}")
 
-    logging.info(f"Silver data processing finished. Output located in: {silver_dir}")
-
-    # --- 15. CVR Collection ---
+    # --- 15. CVR Collection (before connection cleanup) ---
     if CVR_COLLECTION_AVAILABLE:
         _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
     else:
         logging.warning("CVR collection disabled due to import error")
+
+    logging.info(f"Silver data processing finished. Output located in: {silver_dir}")
 
 
 if __name__ == "__main__":
