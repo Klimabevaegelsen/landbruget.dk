@@ -29,21 +29,21 @@ def create_properties_table(
         # Extract property information using SQL
         properties_base = con.sql("""
             SELECT
-                CAST(Response.ChrNummer AS STRING) AS chr_number_raw,
-                Response.EjendomsOplysninger.Adresse AS address_raw,
-                Response.EjendomsOplysninger.PostNummer AS postal_code_raw,
-                Response.EjendomsOplysninger.PostDistrikt AS postal_district_raw,
-                Response.EjendomsOplysninger.By AS city_raw,
-                Response.EjendomsOplysninger.KommuneKode AS municipality_code_raw,
-                Response.EjendomsOplysninger.KommuneNavn AS municipality_name_raw,
-                Response.EjendomsOplysninger.Land AS country_raw,
-                Response.EjendomsOplysninger.Telefon AS phone_raw,
-                Response.EjendomsOplysninger.Mobil AS mobile_raw,
-                Response.EjendomsOplysninger.Email AS email_raw,
-                Response.EjendomsOplysninger.GeoKoordXKilde AS geo_coord_x_source_raw,
-                Response.EjendomsOplysninger.GeoKoordYKilde AS geo_coord_y_source_raw,
-                Response.EjendomsOplysninger.GeoKoordXMaalte AS geo_coord_x_measured_raw,
-                Response.EjendomsOplysninger.GeoKoordYMaalte AS geo_coord_y_measured_raw
+                CAST(Response.EjendomsOplysninger.ChrNummer AS STRING) AS chr_number_raw,
+                Response.EjendomsOplysninger.Ejendom.Adresse AS address_raw,
+                Response.EjendomsOplysninger.Ejendom.PostNummer AS postal_code_raw,
+                Response.EjendomsOplysninger.Ejendom.PostDistrikt AS postal_district_raw,
+                Response.EjendomsOplysninger.Ejendom.ByNavn AS city_raw,
+                Response.EjendomsOplysninger.Ejendom.KommuneNummer AS municipality_code_raw,
+                Response.EjendomsOplysninger.Ejendom.KommuneNavn AS municipality_name_raw,
+                'Danmark' AS country_raw,  -- Default to Danmark since it's not in the structure
+                NULL AS phone_raw,  -- Not available at property level
+                NULL AS mobile_raw,  -- Not available at property level
+                NULL AS email_raw,  -- Not available at property level
+                Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatX AS geo_coord_x_source_raw,
+                Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatY AS geo_coord_y_source_raw,
+                NULL AS geo_coord_x_measured_raw,  -- Not available in this structure
+                NULL AS geo_coord_y_measured_raw   -- Not available in this structure
             FROM ejendom_oplys_raw
             WHERE Response.EjendomsOplysninger IS NOT NULL
         """)
@@ -175,25 +175,32 @@ def create_property_owners_table(
 
         # Extract property owner information using SQL
         property_owners_base = con.sql("""
-            SELECT
-                CAST(Response.ChrNummer AS STRING) AS chr_number_raw,
-                Response.EjendomsOplysninger.Ejer.CVR AS owner_cvr_raw,
-                Response.EjendomsOplysninger.Ejer.CPR AS owner_cpr_raw,
-                Response.EjendomsOplysninger.Ejer.Navn AS owner_name_raw,
-                Response.EjendomsOplysninger.Ejer.Adresse AS owner_address_raw,
-                Response.EjendomsOplysninger.Ejer.PostNummer AS owner_postal_code_raw,
-                Response.EjendomsOplysninger.Ejer.PostDistrikt AS owner_postal_district_raw,
-                Response.EjendomsOplysninger.Ejer.By AS owner_city_raw,
-                Response.EjendomsOplysninger.Ejer.KommuneKode AS owner_municipality_code_raw,
-                Response.EjendomsOplysninger.Ejer.KommuneNavn AS owner_municipality_name_raw,
-                Response.EjendomsOplysninger.Ejer.Land AS owner_country_raw,
-                Response.EjendomsOplysninger.Ejer.Telefon AS owner_phone_raw,
-                Response.EjendomsOplysninger.Ejer.Mobil AS owner_mobile_raw,
-                Response.EjendomsOplysninger.Ejer.Email AS owner_email_raw,
-                Response.EjendomsOplysninger.Ejer.AdresseBeskyttelse AS owner_address_protection_raw,
-                Response.EjendomsOplysninger.Ejer.ReklameBeskyttelse AS owner_advertising_protection_raw
-            FROM ejendom_oplys_raw
-            WHERE Response.EjendomsOplysninger.Ejer IS NOT NULL
+            WITH unnested_besaetninger AS (
+                SELECT 
+                    Response.EjendomsOplysninger.ChrNummer AS chr_number,
+                    UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
+                FROM ejendom_oplys_raw
+                WHERE Response.EjendomsOplysninger.Besaetninger.Besaetning IS NOT NULL
+            )
+            SELECT DISTINCT
+                CAST(chr_number AS STRING) AS chr_number_raw,
+                besaetning.Ejer.CvrNummer AS owner_cvr_raw,
+                besaetning.Ejer.CprNummer AS owner_cpr_raw,
+                besaetning.Ejer.Navn AS owner_name_raw,
+                besaetning.Ejer.Adresse AS owner_address_raw,
+                besaetning.Ejer.PostNummer AS owner_postal_code_raw,
+                besaetning.Ejer.PostDistrikt AS owner_postal_district_raw,
+                besaetning.Ejer.ByNavn AS owner_city_raw,
+                besaetning.Ejer.KommuneNummer AS owner_municipality_code_raw,
+                besaetning.Ejer.KommuneNavn AS owner_municipality_name_raw,
+                besaetning.Ejer.Land AS owner_country_raw,
+                besaetning.Ejer.TelefonNummer AS owner_phone_raw,
+                besaetning.Ejer.MobilNummer AS owner_mobile_raw,
+                besaetning.Ejer.Email AS owner_email_raw,
+                besaetning.Ejer.Adressebeskyttelse AS owner_address_protection_raw,
+                besaetning.Ejer.Reklamebeskyttelse AS owner_advertising_protection_raw
+            FROM unnested_besaetninger
+            WHERE besaetning.Ejer IS NOT NULL
         """)
 
         # Generate UUID and clean/cast columns
@@ -301,25 +308,32 @@ def create_property_users_table(
 
         # Extract property user information using SQL
         property_users_base = con.sql("""
-            SELECT
-                CAST(Response.ChrNummer AS STRING) AS chr_number_raw,
-                Response.EjendomsOplysninger.Bruger.CVR AS user_cvr_raw,
-                Response.EjendomsOplysninger.Bruger.CPR AS user_cpr_raw,
-                Response.EjendomsOplysninger.Bruger.Navn AS user_name_raw,
-                Response.EjendomsOplysninger.Bruger.Adresse AS user_address_raw,
-                Response.EjendomsOplysninger.Bruger.PostNummer AS user_postal_code_raw,
-                Response.EjendomsOplysninger.Bruger.PostDistrikt AS user_postal_district_raw,
-                Response.EjendomsOplysninger.Bruger.By AS user_city_raw,
-                Response.EjendomsOplysninger.Bruger.KommuneKode AS user_municipality_code_raw,
-                Response.EjendomsOplysninger.Bruger.KommuneNavn AS user_municipality_name_raw,
-                Response.EjendomsOplysninger.Bruger.Land AS user_country_raw,
-                Response.EjendomsOplysninger.Bruger.Telefon AS user_phone_raw,
-                Response.EjendomsOplysninger.Bruger.Mobil AS user_mobile_raw,
-                Response.EjendomsOplysninger.Bruger.Email AS user_email_raw,
-                Response.EjendomsOplysninger.Bruger.AdresseBeskyttelse AS user_address_protection_raw,
-                Response.EjendomsOplysninger.Bruger.ReklameBeskyttelse AS user_advertising_protection_raw
-            FROM ejendom_oplys_raw
-            WHERE Response.EjendomsOplysninger.Bruger IS NOT NULL
+            WITH unnested_besaetninger AS (
+                SELECT 
+                    Response.EjendomsOplysninger.ChrNummer AS chr_number,
+                    UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
+                FROM ejendom_oplys_raw
+                WHERE Response.EjendomsOplysninger.Besaetninger.Besaetning IS NOT NULL
+            )
+            SELECT DISTINCT
+                CAST(chr_number AS STRING) AS chr_number_raw,
+                besaetning.Bruger.CvrNummer AS user_cvr_raw,
+                besaetning.Bruger.CprNummer AS user_cpr_raw,
+                besaetning.Bruger.Navn AS user_name_raw,
+                besaetning.Bruger.Adresse AS user_address_raw,
+                besaetning.Bruger.PostNummer AS user_postal_code_raw,
+                besaetning.Bruger.PostDistrikt AS user_postal_district_raw,
+                besaetning.Bruger.ByNavn AS user_city_raw,
+                besaetning.Bruger.KommuneNummer AS user_municipality_code_raw,
+                besaetning.Bruger.KommuneNavn AS user_municipality_name_raw,
+                besaetning.Bruger.Land AS user_country_raw,
+                besaetning.Bruger.TelefonNummer AS user_phone_raw,
+                besaetning.Bruger.MobilNummer AS user_mobile_raw,
+                besaetning.Bruger.Email AS user_email_raw,
+                besaetning.Bruger.Adressebeskyttelse AS user_address_protection_raw,
+                besaetning.Bruger.Reklamebeskyttelse AS user_advertising_protection_raw
+            FROM unnested_besaetninger
+            WHERE besaetning.Bruger IS NOT NULL
         """)
 
         # Generate UUID and clean/cast columns
