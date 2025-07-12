@@ -538,9 +538,20 @@ def process_chr_data(
             f"Skipping VetStat table loading as pre-processed file {vetstat_antibiotics_jsonl_path} is not available."
         )
 
-    # --- Check if essential tables were loaded ---
+    # --- DEBUG: Show loading results before essential table check ---
+    logging.info("=== DATA LOADING SUMMARY ===")
     logging.info(f"Successfully loaded tables: {list(raw_tables.keys())}")
+    logging.info(f"Total tables loaded: {len(raw_tables)}")
 
+    # Show which essential tables are missing
+    essential_tables = ["bes_details", "ejendom_oplys"]
+    missing_essential = [table for table in essential_tables if table not in raw_tables]
+    if missing_essential:
+        logging.error(f"Missing essential tables: {missing_essential}")
+    else:
+        logging.info("All essential tables loaded successfully")
+
+    # --- Check if essential tables were loaded ---
     if "bes_details" not in raw_tables:
         logging.error("Essential table 'bes_details' could not be loaded. Aborting processing.")
         sys.exit(1)
