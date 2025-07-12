@@ -446,7 +446,13 @@ def process_chr_data(
         # --- Attempt 2: Load from File using Ibis (Fallback) --- #
         if not successfully_loaded and load_from_files_fallback:
             logging.info(f"Attempting to load '{table_name}' from file (fallback mode)...")
-            timestamped_bronze_dir = bronze_dir / export_timestamp
+            # Check if bronze_dir already contains the timestamp directory
+            if bronze_dir.name == export_timestamp:
+                # bronze_dir already points to the timestamped directory
+                timestamped_bronze_dir = bronze_dir
+            else:
+                # bronze_dir is the base directory, add timestamp
+                timestamped_bronze_dir = bronze_dir / export_timestamp
             path = timestamped_bronze_dir / source_info["file_key"]
 
             if path.exists():
@@ -513,56 +519,6 @@ def process_chr_data(
     if "ejendom_oplys" not in raw_tables:
         logging.error("Essential table 'ejendom_oplys' could not be loaded. Aborting processing.")
         sys.exit(1)
-
-    # --- DEBUG(Added): Directly print DESCRIBE output for bes_details ---
-    if "bes_details" in raw_tables:
-        logging.info("DEBUG(Added): Attempting to print DESCRIBE bes_details output...")
-        print("\\n--- DEBUG: DESCRIBE bes_details TABLE ---", flush=True)
-        try:
-            con.con.sql("DESCRIBE bes_details;").show()
-            print("--- END DEBUG: DESCRIBE bes_details TABLE ---\\n", flush=True)
-        except Exception as e_describe:
-            logging.error(
-                f"DEBUG(Added): Error executing DESCRIBE bes_details: {e_describe}",
-                exc_info=True,
-            )
-            print(
-                f"--- DEBUG: ERROR DESCRIBING bes_details: {e_describe} ---\\n",
-                flush=True,
-            )
-    else:
-        logging.warning("DEBUG(Added): 'bes_details' table not found in raw_tables for DESCRIBE.")
-        print("--- DEBUG: bes_details TABLE NOT FOUND ---\\n", flush=True)
-    # --- END DEBUG ---
-
-    # --- START DEBUG (Added): Describe unnested BesStr structure ---
-
-    if "bes_details" in raw_tables:
-        logging.info("DEBUG(Added): Attempting to describe unnested BesStr structure...")
-        print("\\n--- DEBUG: DESCRIBE UNNESTED BesStr STRUCT ---", flush=True)
-        try:
-            # Query to get the structure of the items within the BesStr list
-            # We only need one sample, hence LIMIT 1 after the first unnest
-            describe_query = """ \
-            DESCRIBE SELECT size_info \
-            FROM ( \
-                SELECT UNNEST(Response) AS r \
-                FROM bes_details LIMIT 1 \
-            ), UNNEST(r.Besaetning.BesStr) AS size_info; \
-            """
-            con.con.sql(describe_query).show()
-            print("--- END DEBUG: DESCRIBE UNNESTED BesStr STRUCT ---\\n", flush=True)
-        except Exception as e_describe_besstr:
-            # Log potential errors, e.g., if BesStr is empty in the first record
-            logging.error(
-                f"DEBUG(Added): Error executing DESCRIBE on unnested BesStr: {e_describe_besstr}",
-                exc_info=False,
-            )  # Don't need full traceback here
-            print(
-                f"--- DEBUG: ERROR DESCRIBING UNNESTED BesStr: {e_describe_besstr} ---\\n",
-                flush=True,
-            )
-    # --- END DEBUG (Added) ---
 
     # --- 4. Create & Populate Lookup Tables ---
     logging.info("Creating and saving lookup tables...")
