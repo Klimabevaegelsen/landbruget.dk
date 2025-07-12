@@ -22,7 +22,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load wetlands and water projects datasets."""
-        # Load full wetlands dataset
+        # Load full wetlands dataset (original version with attributes)
         self.log.info("Loading complete wetlands dataset...")
         self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
 
@@ -38,6 +38,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE water_projects AS
             SELECT 
                 project_id,
+                project_type,  -- Include project_type for intersection results
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
         """)
@@ -46,7 +47,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT 
-                id as wetland_id,
+                toerv_pct,  -- Keep wetland type for analysis
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM wetlands_raw
         """)
@@ -81,19 +82,16 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             f"Creating wetland-water project foundation data from {total_wetlands:,} wetlands in {num_batches} batches"
         )
 
-        # Initialize foundation data table
+        # Create intersection results table
         self.conn.execute("""
-            CREATE OR REPLACE TABLE wetland_water_intersections AS
-            SELECT 
-                CAST(NULL AS VARCHAR) as project_id,
-                CAST(NULL AS VARCHAR) as wetland_id,
-                CAST(NULL AS GEOMETRY) as water_project_geometry,
-                CAST(NULL AS GEOMETRY) as intersection_geometry,
-                CAST(NULL AS DOUBLE) as intersection_area_m2,
-                CAST(NULL AS DOUBLE) as wetland_area_m2,
-                CAST(NULL AS DOUBLE) as water_project_area_m2,
-                CAST(NULL AS DOUBLE) as wp_coverage_percentage
-            WHERE FALSE
+            CREATE OR REPLACE TABLE wetland_water_intersections (
+                toerv_pct VARCHAR,  -- Wetland type for analysis
+                project_id VARCHAR,
+                project_type VARCHAR,
+                intersection_area_m2 DOUBLE,
+                wetland_area_m2 DOUBLE,
+                project_area_m2 DOUBLE
+            )
         """)
 
         # Create timestamp directory for batch files
@@ -117,7 +115,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
-                    id as wetland_id,
+                    toerv_pct,  -- Keep wetland type for analysis
                     UNNEST(ST_Dump(geometry)).geom as geometry,
                     ST_Area_Spheroid(geometry) as wetland_area_m2
                 FROM wetlands_raw
@@ -134,18 +132,15 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
             SELECT 
+                wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
-                w.wetland_id,
-                wp.geometry as water_project_geometry,
-                ST_Intersection(w.geometry, wp.geometry) as intersection_geometry,
-                ST_Area_Spheroid(ST_Intersection(w.geometry, wp.geometry)) as intersection_area_m2,
-                w.wetland_area_m2,
-                ST_Area_Spheroid(wp.geometry) as water_project_area_m2,
-                (ST_Area_Spheroid(ST_Intersection(w.geometry, wp.geometry)) / ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
-                
-            FROM water_projects wp
-            JOIN wetlands_batch w ON ST_Intersects(wp.geometry, w.geometry)
-            WHERE ST_Area_Spheroid(ST_Intersection(w.geometry, wp.geometry)) > 10  -- Filter tiny intersections
+                wp.project_type,
+                ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) as intersection_area_m2,
+                wb.wetland_area_m2,
+                ST_Area_Spheroid(wp.geometry) as project_area_m2
+            FROM wetlands_batch wb
+            JOIN water_projects_raw wp ON ST_Intersects(wb.geometry, wp.geometry)
+            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 1.0  -- Filter tiny intersections
             """
 
             self.conn.execute(batch_query)
@@ -166,16 +161,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             batch_stats = self.conn.execute("""
                 SELECT 
                     SUM(w.wetland_area_m2) / 1000000 as total_area_km2,
-                    COUNT(DISTINCT w.wetland_id) as wetlands_processed,
-                    COUNT(DISTINCT bi.wetland_id) as wetlands_with_projects
+                    COUNT(*) as wetland_pieces_processed
                 FROM wetlands_batch w
-                LEFT JOIN batch_intersections bi ON w.wetland_id = bi.wetland_id
             """).fetchone()
 
             if batch_stats:
-                area_km2, processed_count, covered_count = batch_stats
+                area_km2, processed_count = batch_stats
                 self.log.info(
-                    f"  ✅ Batch {batch_num + 1}: {area_km2:.1f} km², {covered_count:,}/{processed_count:,} wetlands with projects, {batch_intersections:,} intersections"
+                    f"  ✅ Batch {batch_num + 1}: {area_km2:.1f} km², {processed_count:,} wetland pieces, {batch_intersections:,} intersections"
                 )
 
             total_intersections += batch_intersections
@@ -197,10 +190,28 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Find all batch files in the current timestamp directory
         batch_pattern = f"{batch_base_path}/batch_*_intersections.parquet"
 
-        # Load all batch files into final table
-        self.gcs_access.query_multiple_direct(
-            batch_pattern, "wetland_water_intersections", "SELECT *"
-        )
+        # Check if any batch files exist before trying to load them
+        try:
+            # Load all batch files into final table
+            self.gcs_access.query_multiple_direct(
+                batch_pattern, "wetland_water_intersections", "SELECT *"
+            )
+            self.log.info("✅ Successfully consolidated batch intersection files")
+        except FileNotFoundError:
+            # No intersection files found - create empty table with correct schema
+            self.log.info("No intersection files found - creating empty intersection table")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE wetland_water_intersections AS
+                SELECT 
+                    CAST(NULL AS VARCHAR) as toerv_pct,
+                    CAST(NULL AS VARCHAR) as project_id,
+                    CAST(NULL AS VARCHAR) as project_type,
+                    CAST(NULL AS DOUBLE) as intersection_area_m2,
+                    CAST(NULL AS DOUBLE) as wetland_area_m2,
+                    CAST(NULL AS DOUBLE) as project_area_m2
+                WHERE FALSE
+            """)
+            self.log.info("✅ Created empty intersection table (no intersections found)")
 
         # Create summary statistics for reporting (but keep detailed intersections as foundation data)
         self.log.info("Creating summary statistics...")
@@ -212,29 +223,22 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             NULL as total_wetland_geom,  -- Don't store large geometries
             NULL as wetland_covered_by_water_projects_geom,
             
-            -- Calculate totals from intersection records
+            -- Calculate totals from intersection records and remaining wetlands
             (SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
-            (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-             WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)
-            ) as total_wetland_area_m2,
+            (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw) as total_wetland_area_m2,
             
             SUM(intersection_area_m2) as wetland_covered_area_m2,
             
             -- Calculate coverage percentage
             CASE 
-                WHEN (SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
-                     (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-                      WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)) > 0
-                THEN (SUM(intersection_area_m2) / 
-                     ((SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
-                      (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-                       WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)))) * 100
+                WHEN (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw) > 0
+                THEN (SUM(intersection_area_m2) / (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw)) * 100
                 ELSE 0 
             END as coverage_percentage,
             
             -- Count statistics
-            (SELECT COUNT(*) FROM wetlands_raw) as total_wetlands,
-            COUNT(DISTINCT wetland_id) as wetlands_with_water_projects
+            (SELECT COUNT(*) FROM wetlands_raw) as total_wetland_polygons,
+            COUNT(DISTINCT project_id) as water_projects_with_wetlands
             
         FROM wetland_water_intersections
         GROUP BY 'All Wetlands'

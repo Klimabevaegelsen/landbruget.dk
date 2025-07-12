@@ -176,8 +176,9 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             if bnbo_features_count > 0:
                 # SINGLE SPATIAL JOIN: Property intersections × BNBO features (PR #545 compliant)
                 self.log.info("  Performing spatial join: Property intersections × BNBO features")
+                # Step 1: Pure spatial join with SINGLE predicate (PR #545 compliant)
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
+                    CREATE OR REPLACE TABLE batch_spatial_raw AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -185,15 +186,34 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         p.year,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
+                        p.intersection_geometry,
                         b.bnbo_id,
                         b.status_category,
+                        b.bnbo_geometry,
                         ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, b.bnbo_geometry)) as property_bnbo_area_m2
                     FROM batch_property_intersections p
-                    JOIN batch_bnbo_features b ON p.field_id = b.field_id 
-                        AND p.block_id = b.block_id 
-                        AND p.cvr_number = b.cvr_number
-                        AND ST_Intersects(p.intersection_geometry, b.bnbo_geometry)
+                    JOIN batch_bnbo_features b ON ST_Intersects(p.intersection_geometry, b.bnbo_geometry)
                     WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, b.bnbo_geometry)) > 10
+                """)
+
+                # Step 2: Filter to matching fields (equality constraints applied after spatial join)
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        bfe_number,
+                        property_intersection_area_m2,
+                        bnbo_id,
+                        status_category,
+                        property_bnbo_area_m2
+                    FROM batch_spatial_raw
+                    WHERE (field_id, block_id, cvr_number, year) IN (
+                        SELECT field_id, block_id, cvr_number, year 
+                        FROM batch_bnbo_features
+                    )
                 """)
 
                 spatial_intersections = self.conn.execute(
@@ -281,6 +301,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
             self.conn.execute("DROP TABLE IF EXISTS batch_bnbo_features")
+            self.conn.execute("DROP TABLE IF EXISTS batch_spatial_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_spatial")
 
             # Memory cleanup
