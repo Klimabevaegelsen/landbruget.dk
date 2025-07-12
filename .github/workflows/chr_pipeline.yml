@@ -68,8 +68,9 @@ on:
 
 env:
   # Set a shared timestamp for all bronze jobs in this workflow run
-  # Use run_number and run_id to create a unique but shared timestamp
-  BRONZE_EXPORT_TIMESTAMP: "run_${{ github.run_number }}_${{ github.run_id }}"
+  # Use proper timestamp format like other pipelines (YYYYMMDD_HHMMSS)
+  # Format: date +%Y%m%d_%H%M%S (but GitHub Actions doesn't support this in env)
+  # So we'll generate it in the first job and pass it as artifact
 
 jobs:
   # Job 0: Generate Monthly Matrix
@@ -179,6 +180,11 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
           
+          # Generate proper timestamp in YYYYMMDD_HHMMSS format like other pipelines
+          BRONZE_TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Bronze timestamp: $BRONZE_TIMESTAMP"
+          
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
@@ -228,9 +234,10 @@ jobs:
 
       - name: Create bronze timestamp file
         run: |
-          # Create a file with the bronze timestamp for other jobs to use
-          echo "${{ env.BRONZE_EXPORT_TIMESTAMP }}" > /tmp/bronze_timestamp.txt
-          echo "Bronze timestamp: ${{ env.BRONZE_EXPORT_TIMESTAMP }}"
+          # Read the timestamp from the .env file created earlier
+          BRONZE_TIMESTAMP=$(grep "BRONZE_EXPORT_TIMESTAMP=" backend/pipelines/chr_pipeline/.env | cut -d'=' -f2)
+          echo "$BRONZE_TIMESTAMP" > /tmp/bronze_timestamp.txt
+          echo "Bronze timestamp: $BRONZE_TIMESTAMP"
 
       - name: Upload bronze timestamp artifact
         uses: actions/upload-artifact@v4
