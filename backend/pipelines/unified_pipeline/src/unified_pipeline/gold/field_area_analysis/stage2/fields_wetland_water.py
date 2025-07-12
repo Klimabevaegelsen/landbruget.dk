@@ -107,8 +107,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS DOUBLE) as total_wetland_area_m2,
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_m2,
-                CAST(NULL AS VARCHAR) as dominant_wetland_type,
-                CAST(NULL AS INTEGER) as wetland_type_count,
+
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct
@@ -190,9 +189,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                         field_id, block_id, cvr_number, year, geometry, 
                         ST_Area_Spheroid(geometry) as field_area_m2,
                         0 as total_wetland_area_m2, 
-                        0 as wetland_covered_by_water_projects_m2, 
-                        NULL as dominant_wetland_type, 
-                        0 as wetland_type_count,
+                        0 as wetland_covered_by_water_projects_m2,
                         0 as wetland_covered_by_water_projects_pct,
                         0 as wetland_not_covered_by_water_projects_pct, 
                         0 as field_wetland_coverage_pct
@@ -218,18 +215,6 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     
                     -- Wetland area covered by water projects within field
                     COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as wetland_covered_by_water_projects_m2,
-                    
-                    -- Dominant wetland type (largest area)
-                    (
-                        SELECT toerv_pct 
-                        FROM batch_field_wetland_total t2 
-                        WHERE t2.field_id = t.field_id AND t2.block_id = t.block_id AND t2.cvr_number = t.cvr_number
-                        ORDER BY t2.field_wetland_area_m2 DESC
-                        LIMIT 1
-                    ) as dominant_wetland_type,
-                    
-                    -- Count distinct wetland types
-                    COUNT(DISTINCT t.toerv_pct) as wetland_type_count,
                     
                     -- Calculate percentages
                     CASE 
@@ -274,51 +259,12 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
                 gc.collect()
 
-        # Final statistics
+        # Final count
         final_count = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
-        coverage_stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_fields,
-                COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN field_wetland_coverage_pct END) as avg_wetland_coverage,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct END) as avg_water_project_coverage,
-                SUM(total_wetland_area_m2) / 1000000 as total_wetland_km2,
-                SUM(wetland_covered_by_water_projects_m2) / 1000000 as total_covered_km2
-            FROM fields_wetland_water
-        """).fetchone()
-
-        (
-            total_fields,
-            fields_with_wetlands,
-            avg_wetland_coverage,
-            avg_water_project_coverage,
-            total_wetland_km2,
-            total_covered_km2,
-        ) = coverage_stats
-
-        self.log.info("✅ Field-level wetland water coverage analysis completed:")
-        self.log.info(f"   Total fields processed: {total_fields:,}")
-        self.log.info(
-            f"   Fields with wetlands: {fields_with_wetlands:,} ({(fields_with_wetlands / total_fields) * 100:.1f}%)"
-        )
-        if avg_wetland_coverage:
-            self.log.info(f"   Average wetland coverage per field: {avg_wetland_coverage:.1f}%")
-        if avg_water_project_coverage:
-            self.log.info(
-                f"   Average water project coverage of wetlands: {avg_water_project_coverage:.1f}%"
-            )
-        self.log.info(f"   Total wetland area: {total_wetland_km2:.1f} km²")
-        self.log.info(
-            f"   Total wetland area covered by water projects: {total_covered_km2:.1f} km²"
-        )
+        self.log.info(f"✅ Processed {final_count:,} fields for wetland water coverage analysis")
 
         return {
-            "total_fields": total_fields,
-            "fields_with_wetlands": fields_with_wetlands,
-            "avg_wetland_coverage": avg_wetland_coverage,
-            "avg_water_project_coverage": avg_water_project_coverage,
-            "total_wetland_km2": total_wetland_km2,
-            "total_covered_km2": total_covered_km2,
+            "total_fields": final_count,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

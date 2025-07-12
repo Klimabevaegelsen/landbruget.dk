@@ -68,8 +68,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(w.wetland_covered_by_water_projects_pct, 0) as wetland_covered_by_water_projects_pct,
             COALESCE(w.wetland_not_covered_by_water_projects_pct, 0) as wetland_not_covered_by_water_projects_pct,
             COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
-            COALESCE(w.dominant_wetland_gridcode, 0) as dominant_wetland_gridcode,
-            COALESCE(w.wetland_polygon_count, 0) as wetland_polygon_count,
+
             
             -- Property ownership analysis (use BNBO data as primary, fallback to wetland)
             COALESCE(b.property_count, w.property_count, 0) as property_count,

@@ -95,8 +95,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct,
-                CAST(NULL AS VARCHAR) as dominant_wetland_type,
-                CAST(NULL AS INTEGER) as wetland_type_count,
+
                 
                 -- Property ownership analysis
                 CAST(NULL AS INTEGER) as property_count,
@@ -174,7 +173,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         field_id, block_id, cvr_number, year, geometry, field_area_m2,
                         total_wetland_area_m2, wetland_covered_by_water_projects_m2, 
                         wetland_covered_by_water_projects_pct, wetland_not_covered_by_water_projects_pct,
-                        field_wetland_coverage_pct, dominant_wetland_type, wetland_type_count,
+                        field_wetland_coverage_pct,
                         0 as property_count, 0 as total_property_intersection_area_m2,
                         0 as avg_property_area_share_pct, 0 as max_property_area_share_pct,
                         NULL as primary_bfe_number,
@@ -344,8 +343,6 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.wetland_covered_by_water_projects_pct,
                     b.wetland_not_covered_by_water_projects_pct,
                     b.field_wetland_coverage_pct,
-                    b.dominant_wetland_type,
-                    b.wetland_type_count,
                     
                     -- Property information (aggregated per field)
                     COALESCE(p.property_count, 0) as property_count,
@@ -444,105 +441,12 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
                 gc.collect()
 
-        # Final statistics
+        # Final count
         final_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
-
-        # Get comprehensive statistics including property-wetland spatial analysis
-        stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_fields,
-                COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                COUNT(CASE WHEN property_count > 0 THEN 1 END) as fields_with_properties,
-                COUNT(CASE WHEN properties_with_wetland_count > 0 THEN 1 END) as fields_with_wetland_properties,
-                COUNT(CASE WHEN properties_with_covered_wetland_count > 0 THEN 1 END) as fields_with_covered_wetland_properties,
-                COUNT(CASE WHEN properties_with_uncovered_wetland_count > 0 THEN 1 END) as fields_with_uncovered_wetland_properties,
-                AVG(property_count) as avg_properties_per_field,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct END) as avg_wetland_water_coverage,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN field_wetland_coverage_pct END) as avg_field_wetland_coverage,
-                AVG(CASE WHEN property_count > 0 THEN property_wetland_coverage_pct END) as avg_property_wetland_coverage,
-                AVG(CASE WHEN properties_with_wetland_count > 0 THEN property_wetland_water_coverage_pct END) as avg_property_wetland_water_coverage,
-                AVG(wetland_polygon_count) as avg_wetland_polygons_per_field,
-                SUM(properties_with_wetland_count) as total_property_wetland_relationships,
-                SUM(properties_with_covered_wetland_count) as total_properties_with_covered_wetlands,
-                SUM(properties_with_uncovered_wetland_count) as total_properties_with_uncovered_wetlands,
-                SUM(property_wetland_covered_by_water_m2) as total_property_wetland_covered_area,
-                SUM(property_wetland_not_covered_by_water_m2) as total_property_wetland_uncovered_area
-            FROM final_wetland_analysis
-        """).fetchone()
-
-        (
-            total_fields,
-            fields_with_wetlands,
-            fields_with_props,
-            fields_with_wetland_props,
-            fields_with_covered_wetland_props,
-            fields_with_uncovered_wetland_props,
-            avg_props,
-            avg_wetland_water,
-            avg_field_wetland,
-            avg_property_wetland,
-            avg_property_wetland_water,
-            avg_polygons,
-            total_relationships,
-            total_covered_props,
-            total_uncovered_props,
-            total_covered_area,
-            total_uncovered_area,
-        ) = stats
-
-        self.log.info("✅ Wetland-Property spatial analysis completed:")
-        self.log.info(f"   Total fields: {total_fields:,}")
-        self.log.info(
-            f"   Fields with wetlands: {fields_with_wetlands:,} ({(fields_with_wetlands / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with properties: {fields_with_props:,} ({(fields_with_props / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with wetland-property relationships: {fields_with_wetland_props:,}"
-        )
-        self.log.info(f"   Average properties per field: {avg_props:.1f}")
-        self.log.info(f"   Average wetland water coverage: {avg_wetland_water:.1f}%")
-        self.log.info(f"   Average property wetland coverage: {avg_property_wetland:.1f}%")
-        self.log.info(
-            f"   Average property wetland water coverage: {avg_property_wetland_water:.1f}%"
-        )
-        self.log.info(f"   Average wetland polygons per field: {avg_polygons:.1f}")
-        self.log.info(f"   Total property-wetland spatial relationships: {total_relationships:,}")
-        self.log.info("🌊 Property-level wetland water project coverage:")
-        self.log.info(
-            f"   Fields with properties owning covered wetlands: {fields_with_covered_wetland_props:,}"
-        )
-        self.log.info(
-            f"   Fields with properties owning uncovered wetlands: {fields_with_uncovered_wetland_props:,}"
-        )
-        self.log.info(f"   Total properties with covered wetlands: {total_covered_props:,}")
-        self.log.info(f"   Total properties with uncovered wetlands: {total_uncovered_props:,}")
-        self.log.info(
-            f"   Total property wetland area covered by water projects: {total_covered_area:,.0f} m²"
-        )
-        self.log.info(
-            f"   Total property wetland area NOT covered by water projects: {total_uncovered_area:,.0f} m²"
-        )
+        self.log.info(f"✅ Processed {final_count:,} fields for final wetland analysis")
 
         return {
-            "total_fields": total_fields,
-            "fields_with_wetlands": fields_with_wetlands,
-            "fields_with_properties": fields_with_props,
-            "fields_with_wetland_properties": fields_with_wetland_props,
-            "fields_with_covered_wetland_properties": fields_with_covered_wetland_props,
-            "fields_with_uncovered_wetland_properties": fields_with_uncovered_wetland_props,
-            "avg_properties_per_field": avg_props,
-            "avg_wetland_water_coverage": avg_wetland_water,
-            "avg_field_wetland_coverage": avg_field_wetland,
-            "avg_property_wetland_coverage": avg_property_wetland,
-            "avg_property_wetland_water_coverage": avg_property_wetland_water,
-            "avg_polygons_per_field": avg_polygons,
-            "total_property_wetland_relationships": total_relationships,
-            "total_properties_with_covered_wetlands": total_covered_props,
-            "total_properties_with_uncovered_wetlands": total_uncovered_props,
-            "total_property_wetland_covered_area_m2": total_covered_area,
-            "total_property_wetland_uncovered_area_m2": total_uncovered_area,
+            "total_fields": final_count,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

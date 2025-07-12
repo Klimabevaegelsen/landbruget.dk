@@ -504,60 +504,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
 
                 gc.collect()
 
-        # Final statistics
+        # Final count
         final_count = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
-
-        # Get comprehensive statistics including property-BNBO spatial analysis
-        stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_fields,
-                COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
-                COUNT(CASE WHEN property_count > 0 THEN 1 END) as fields_with_properties,
-                COUNT(CASE WHEN properties_with_bnbo_count > 0 THEN 1 END) as fields_with_bnbo_properties,
-                AVG(property_count) as avg_properties_per_field,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_bnbo_water_coverage,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN field_bnbo_coverage_pct END) as avg_field_bnbo_coverage,
-                AVG(CASE WHEN property_count > 0 THEN property_bnbo_coverage_pct END) as avg_property_bnbo_coverage,
-                SUM(properties_with_bnbo_count) as total_property_bnbo_relationships
-            FROM final_bnbo_analysis
-        """).fetchone()
-
-        (
-            total_fields,
-            fields_with_bnbo,
-            fields_with_props,
-            fields_with_bnbo_props,
-            avg_props,
-            avg_bnbo_water,
-            avg_field_bnbo,
-            avg_property_bnbo,
-            total_relationships,
-        ) = stats
-
-        self.log.info("✅ BNBO-Property spatial analysis completed:")
-        self.log.info(f"   Total fields: {total_fields:,}")
-        self.log.info(
-            f"   Fields with BNBO: {fields_with_bnbo:,} ({(fields_with_bnbo / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with properties: {fields_with_props:,} ({(fields_with_props / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(f"   Fields with BNBO-property relationships: {fields_with_bnbo_props:,}")
-        self.log.info(f"   Average properties per field: {avg_props:.1f}")
-        self.log.info(f"   Average BNBO water coverage: {avg_bnbo_water:.1f}%")
-        self.log.info(f"   Average property BNBO coverage: {avg_property_bnbo:.1f}%")
-        self.log.info(f"   Total property-BNBO spatial relationships: {total_relationships:,}")
+        self.log.info(f"✅ Processed {final_count:,} fields for final BNBO analysis")
 
         return {
-            "total_fields": total_fields,
-            "fields_with_bnbo": fields_with_bnbo,
-            "fields_with_properties": fields_with_props,
-            "fields_with_bnbo_properties": fields_with_bnbo_props,
-            "avg_properties_per_field": avg_props,
-            "avg_bnbo_water_coverage": avg_bnbo_water,
-            "avg_field_bnbo_coverage": avg_field_bnbo,
-            "avg_property_bnbo_coverage": avg_property_bnbo,
-            "total_property_bnbo_relationships": total_relationships,
+            "total_fields": final_count,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
