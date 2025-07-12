@@ -404,7 +404,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 self.log.info(f"Inserted {i + batch_size:,} features into temp table")
 
         # Create spatial table with proper geometry column
-        # ✅ COORDINATE FIX: Don't transform here - let the geometry validator handle it
+        # ✅ COORDINATE FIX: Create separate geometry column like BNBO does (which works correctly)
         table_name = "wetlands_processed"
         conn.execute(f"""
             CREATE TABLE {table_name} AS
@@ -412,19 +412,22 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 id,
                 gridcode,
                 toerv_pct,
-                ST_GeomFromText(geometry_wkt) as geometry
+                ST_GeomFromText(geometry_wkt) as geometry,
+                geometry_wkt as geometry_original
             FROM temp_features
             WHERE geometry_wkt IS NOT NULL
         """)
 
         self.log.info(f"Created DuckDB table '{table_name}' with {len(features):,} features")
 
-        # ✅ COORDINATE FIX: Apply geometry validation and transformation to ensure proper WGS84 coordinates
+        # ✅ COORDINATE FIX: Apply geometry validation and transformation using separate column like BNBO
         from unified_pipeline.common.geometry_validator import (
             validate_and_transform_geometries_duckdb,
         )
 
-        validate_and_transform_geometries_duckdb(conn, table_name, f"silver.{self.config.dataset}")
+        validate_and_transform_geometries_duckdb(
+            conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
+        )
 
         return table_name
 
@@ -460,7 +463,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 CREATE TABLE wetlands_spatial AS
                 SELECT 
                     ROW_NUMBER() OVER () as wetland_id,
-                    *
+                    id,
+                    gridcode,
+                    toerv_pct,
+                    geometry  -- Use the transformed geometry column
                 FROM {input_table_name}
             """)
 
