@@ -21,7 +21,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         super().__init__(config, "Stage 3A: Final BNBO Analysis")
 
     def _load_input_data(self):
-        """Load BNBO analysis from Stage 2A and pre-filtered properties from Stage 1C."""
+        """Load BNBO analysis from Stage 2A and foundation data for 3-way spatial analysis."""
         # Load BNBO water coverage from Stage 2A
         stage2a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['fields_bnbo_water']}/{CONFIG.stage_outputs['fields_bnbo_water']}.parquet"
         self.gcs_access.query_parquet_direct(stage2a_path, "SELECT *", "fields_bnbo_water")
@@ -31,6 +31,15 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
+
+        # Load water project × BNBO intersections from Stage 1A for 3-way spatial analysis
+        stage1a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}.parquet"
+        self.gcs_access.query_parquet_direct(
+            stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
+        )
+
+        # Load original BNBO data for spatial analysis (needed for property-BNBO intersections)
+        self._load_silver_dataset(CONFIG.bnbo_dataset, "bnbo_for_fields")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -85,7 +94,16 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as property_bnbo_intersection_area_m2,
                 CAST(NULL AS DOUBLE) as property_bnbo_coverage_pct,
                 CAST(NULL AS INTEGER) as properties_with_bnbo_count,
-                CAST(NULL AS VARCHAR) as bnbo_property_owners
+                CAST(NULL AS VARCHAR) as bnbo_property_owners,
+                
+                -- Property-level BNBO water project coverage analysis
+                CAST(NULL AS DOUBLE) as property_bnbo_covered_by_water_m2,
+                CAST(NULL AS DOUBLE) as property_bnbo_not_covered_by_water_m2,
+                CAST(NULL AS DOUBLE) as property_bnbo_water_coverage_pct,
+                CAST(NULL AS INTEGER) as properties_with_covered_bnbo_count,
+                CAST(NULL AS INTEGER) as properties_with_uncovered_bnbo_count,
+                CAST(NULL AS VARCHAR) as covered_bnbo_property_owners,
+                CAST(NULL AS VARCHAR) as uncovered_bnbo_property_owners
             WHERE FALSE
         """)
 
@@ -146,7 +164,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         0 as avg_property_area_share_pct, 0 as max_property_area_share_pct,
                         NULL as primary_bfe_number,
                         0 as property_bnbo_intersection_area_m2, 0 as property_bnbo_coverage_pct,
-                        0 as properties_with_bnbo_count, NULL as bnbo_property_owners
+                        0 as properties_with_bnbo_count, NULL as bnbo_property_owners,
+                        0 as property_bnbo_covered_by_water_m2, 0 as property_bnbo_not_covered_by_water_m2,
+                        0 as property_bnbo_water_coverage_pct, 0 as properties_with_covered_bnbo_count,
+                        0 as properties_with_uncovered_bnbo_count, NULL as covered_bnbo_property_owners,
+                        NULL as uncovered_bnbo_property_owners
                     FROM fields_batch
                 """)
                 continue
@@ -174,11 +196,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.log.info(f"  Found {bnbo_features_count:,} BNBO features for spatial analysis")
 
             if bnbo_features_count > 0:
-                # SINGLE SPATIAL JOIN: Property intersections × BNBO features (PR #545 compliant)
-                self.log.info("  Performing spatial join: Property intersections × BNBO features")
-                # Step 1: Pure spatial join with SINGLE predicate (PR #545 compliant)
+                # STEP 1: Property × BNBO spatial intersections (PR #545 compliant)
+                self.log.info("  Step 1: Property intersections × BNBO features")
+                # Pure spatial join with SINGLE predicate (PR #545 compliant)
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_spatial_raw AS
+                    CREATE OR REPLACE TABLE batch_property_bnbo_raw AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -196,7 +218,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, b.bnbo_geometry)) > 10
                 """)
 
-                # Step 2: Filter to matching fields (equality constraints applied after spatial join)
+                # Filter to matching fields (equality constraints applied after spatial join)
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
                     SELECT 
@@ -208,8 +230,9 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         property_intersection_area_m2,
                         bnbo_id,
                         status_category,
-                        property_bnbo_area_m2
-                    FROM batch_spatial_raw
+                        property_bnbo_area_m2,
+                        ST_Intersection(intersection_geometry, bnbo_geometry) as property_bnbo_geometry
+                    FROM batch_property_bnbo_raw
                     WHERE (field_id, block_id, cvr_number, year) IN (
                         SELECT field_id, block_id, cvr_number, year 
                         FROM batch_bnbo_features
@@ -222,6 +245,146 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 self.log.info(
                     f"  Found {spatial_intersections:,} property-BNBO spatial intersections"
                 )
+
+                # STEP 2: 3-way analysis - Property × BNBO × Water Projects (PR #545 compliant)
+                self.log.info("  Step 2: Property-BNBO × Water projects (3-way spatial analysis)")
+
+                # Get water project intersections for this batch's BNBO features
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_water_bnbo_intersections AS
+                    SELECT 
+                        w.project_id,
+                        w.bnbo_id,
+                        w.status_category,
+                        w.intersection_area_m2 as water_bnbo_area_m2,
+                        w.intersection_geometry as water_bnbo_geometry
+                    FROM water_projects_bnbo_intersections w
+                    WHERE w.bnbo_id IN (
+                        SELECT DISTINCT bnbo_id FROM batch_property_bnbo_spatial
+                    )
+                """)
+
+                water_bnbo_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM batch_water_bnbo_intersections"
+                ).fetchone()[0]
+                self.log.info(
+                    f"  Found {water_bnbo_count:,} water-BNBO intersections for 3-way analysis"
+                )
+
+                if water_bnbo_count > 0:
+                    # Pure spatial join with SINGLE predicate (PR #545 compliant)
+                    self.conn.execute("""
+                        CREATE OR REPLACE TABLE batch_3way_raw AS
+                        SELECT 
+                            pb.field_id,
+                            pb.block_id,
+                            pb.cvr_number,
+                            pb.year,
+                            pb.bfe_number,
+                            pb.bnbo_id,
+                            pb.status_category,
+                            pb.property_bnbo_area_m2,
+                            wb.project_id,
+                            ST_Area_Spheroid(ST_Intersection(pb.property_bnbo_geometry, wb.water_bnbo_geometry)) as property_bnbo_water_area_m2
+                        FROM batch_property_bnbo_spatial pb
+                        JOIN batch_water_bnbo_intersections wb ON ST_Intersects(pb.property_bnbo_geometry, wb.water_bnbo_geometry)
+                        WHERE ST_Area_Spheroid(ST_Intersection(pb.property_bnbo_geometry, wb.water_bnbo_geometry)) > 10
+                    """)
+
+                    # Filter to matching BNBO features (equality constraints applied after spatial join)
+                    self.conn.execute("""
+                        CREATE OR REPLACE TABLE batch_property_bnbo_water_analysis AS
+                        SELECT 
+                            field_id,
+                            block_id,
+                            cvr_number,
+                            year,
+                            bfe_number,
+                            bnbo_id,
+                            status_category,
+                            property_bnbo_area_m2,
+                            SUM(property_bnbo_water_area_m2) as property_bnbo_covered_by_water_m2,
+                            property_bnbo_area_m2 - SUM(property_bnbo_water_area_m2) as property_bnbo_not_covered_by_water_m2
+                        FROM batch_3way_raw
+                        WHERE bnbo_id IN (SELECT DISTINCT bnbo_id FROM batch_property_bnbo_spatial)
+                        GROUP BY field_id, block_id, cvr_number, year, bfe_number, bnbo_id, status_category, property_bnbo_area_m2
+                    """)
+
+                    three_way_count = self.conn.execute(
+                        "SELECT COUNT(*) FROM batch_property_bnbo_water_analysis"
+                    ).fetchone()[0]
+                    self.log.info(
+                        f"  Created {three_way_count:,} property-BNBO-water analysis records"
+                    )
+
+                    # Handle property-BNBO areas NOT covered by water projects
+                    self.conn.execute("""
+                        INSERT INTO batch_property_bnbo_water_analysis
+                        SELECT 
+                            field_id,
+                            block_id,
+                            cvr_number,
+                            year,
+                            bfe_number,
+                            bnbo_id,
+                            status_category,
+                            property_bnbo_area_m2,
+                            0 as property_bnbo_covered_by_water_m2,
+                            property_bnbo_area_m2 as property_bnbo_not_covered_by_water_m2
+                        FROM batch_property_bnbo_spatial
+                        WHERE bnbo_id NOT IN (
+                            SELECT DISTINCT bnbo_id FROM batch_property_bnbo_water_analysis
+                        )
+                    """)
+                else:
+                    # No water project intersections - all property BNBO is uncovered
+                    self.conn.execute("""
+                        CREATE OR REPLACE TABLE batch_property_bnbo_water_analysis AS
+                        SELECT 
+                            field_id,
+                            block_id,
+                            cvr_number,
+                            year,
+                            bfe_number,
+                            bnbo_id,
+                            status_category,
+                            property_bnbo_area_m2,
+                            0 as property_bnbo_covered_by_water_m2,
+                            property_bnbo_area_m2 as property_bnbo_not_covered_by_water_m2
+                        FROM batch_property_bnbo_spatial
+                    """)
+            else:
+                # No BNBO features for spatial analysis, create empty tables for consistency
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
+                    SELECT 
+                        CAST(NULL AS VARCHAR) as field_id,
+                        CAST(NULL AS VARCHAR) as block_id,
+                        CAST(NULL AS VARCHAR) as cvr_number,
+                        CAST(NULL AS INTEGER) as year,
+                        CAST(NULL AS VARCHAR) as bfe_number,
+                        CAST(NULL AS DOUBLE) as property_intersection_area_m2,
+                        CAST(NULL AS VARCHAR) as bnbo_id,
+                        CAST(NULL AS VARCHAR) as status_category,
+                        CAST(NULL AS DOUBLE) as property_bnbo_area_m2
+                    WHERE FALSE
+                """)
+
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_bnbo_water_analysis AS
+                    SELECT 
+                        CAST(NULL AS VARCHAR) as field_id,
+                        CAST(NULL AS VARCHAR) as block_id,
+                        CAST(NULL AS VARCHAR) as cvr_number,
+                        CAST(NULL AS INTEGER) as year,
+                        CAST(NULL AS VARCHAR) as bfe_number,
+                        CAST(NULL AS VARCHAR) as bnbo_id,
+                        CAST(NULL AS VARCHAR) as status_category,
+                        CAST(NULL AS DOUBLE) as property_bnbo_area_m2,
+                        CAST(NULL AS DOUBLE) as property_bnbo_covered_by_water_m2,
+                        CAST(NULL AS DOUBLE) as property_bnbo_not_covered_by_water_m2
+                    WHERE FALSE
+                """)
 
             # Aggregate results per field
             self.log.info("  Aggregating property-BNBO analysis per field")
@@ -258,7 +421,20 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         ELSE 0 
                     END as property_bnbo_coverage_pct,
                     COALESCE(ps.properties_with_bnbo_count, 0) as properties_with_bnbo_count,
-                    COALESCE(ps.bnbo_property_owners, NULL) as bnbo_property_owners
+                    COALESCE(ps.bnbo_property_owners, NULL) as bnbo_property_owners,
+                    
+                    -- Property-level BNBO water project coverage analysis
+                    COALESCE(pwa.property_bnbo_covered_by_water_m2, 0) as property_bnbo_covered_by_water_m2,
+                    COALESCE(pwa.property_bnbo_not_covered_by_water_m2, 0) as property_bnbo_not_covered_by_water_m2,
+                    CASE 
+                        WHEN COALESCE(ps.property_bnbo_intersection_area_m2, 0) > 0 
+                        THEN (COALESCE(pwa.property_bnbo_covered_by_water_m2, 0) / ps.property_bnbo_intersection_area_m2) * 100
+                        ELSE 0 
+                    END as property_bnbo_water_coverage_pct,
+                    COALESCE(pwa.properties_with_covered_bnbo_count, 0) as properties_with_covered_bnbo_count,
+                    COALESCE(pwa.properties_with_uncovered_bnbo_count, 0) as properties_with_uncovered_bnbo_count,
+                    COALESCE(pwa.covered_bnbo_property_owners, NULL) as covered_bnbo_property_owners,
+                    COALESCE(pwa.uncovered_bnbo_property_owners, NULL) as uncovered_bnbo_property_owners
                     
                 FROM fields_batch b
                 LEFT JOIN (
@@ -295,14 +471,32 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     AND b.block_id = ps.block_id 
                     AND b.cvr_number = ps.cvr_number 
                     AND b.year = ps.year
+                LEFT JOIN (
+                    SELECT 
+                        field_id, block_id, cvr_number, year,
+                        SUM(property_bnbo_covered_by_water_m2) as property_bnbo_covered_by_water_m2,
+                        SUM(property_bnbo_not_covered_by_water_m2) as property_bnbo_not_covered_by_water_m2,
+                        COUNT(DISTINCT CASE WHEN property_bnbo_covered_by_water_m2 > 0 THEN bfe_number END) as properties_with_covered_bnbo_count,
+                        COUNT(DISTINCT CASE WHEN property_bnbo_not_covered_by_water_m2 > 0 THEN bfe_number END) as properties_with_uncovered_bnbo_count,
+                        STRING_AGG(DISTINCT CASE WHEN property_bnbo_covered_by_water_m2 > 0 THEN bfe_number END, ', ') as covered_bnbo_property_owners,
+                        STRING_AGG(DISTINCT CASE WHEN property_bnbo_not_covered_by_water_m2 > 0 THEN bfe_number END, ', ') as uncovered_bnbo_property_owners
+                    FROM batch_property_bnbo_water_analysis
+                    GROUP BY field_id, block_id, cvr_number, year
+                ) pwa ON b.field_id = pwa.field_id 
+                    AND b.block_id = pwa.block_id 
+                    AND b.cvr_number = pwa.cvr_number 
+                    AND b.year = pwa.year
             """)
 
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
             self.conn.execute("DROP TABLE IF EXISTS batch_bnbo_features")
-            self.conn.execute("DROP TABLE IF EXISTS batch_spatial_raw")
+            self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_spatial")
+            self.conn.execute("DROP TABLE IF EXISTS batch_water_bnbo_intersections")
+            self.conn.execute("DROP TABLE IF EXISTS batch_3way_raw")
+            self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_water_analysis")
 
             # Memory cleanup
             if (batch_num + 1) % CONFIG.memory_cleanup_frequency == 0:

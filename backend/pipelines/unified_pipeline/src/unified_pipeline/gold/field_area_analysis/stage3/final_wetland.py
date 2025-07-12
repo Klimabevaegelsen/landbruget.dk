@@ -189,7 +189,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 continue
 
             # SPATIAL ANALYSIS: Property intersections × Wetland features
-            # Load wetland data for spatial analysis
+            # Load wetland data for spatial analysis (with IDs from Stage 1B)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE batch_wetland_features AS
                 SELECT 
@@ -197,6 +197,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.block_id,
                     b.cvr_number,
                     b.year,
+                    ROW_NUMBER() OVER (ORDER BY w.toerv_pct, ST_X(ST_Centroid(w.geometry)), ST_Y(ST_Centroid(w.geometry))) as wetland_id,  -- Generate consistent IDs
                     w.toerv_pct,  -- Only keep meaningful wetland classification
                     w.geometry as wetland_geometry,
                     ST_Area_Spheroid(w.geometry) as wetland_area_m2
@@ -247,7 +248,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         bfe_number,
                         property_intersection_area_m2,
                         toerv_pct,
-                        property_wetland_area_m2
+                        property_wetland_area_m2,
+                        ST_Intersection(intersection_geometry, wetland_geometry) as property_wetland_geometry
                     FROM batch_spatial_raw
                     WHERE (field_id, block_id, cvr_number, year) IN (
                         SELECT field_id, block_id, cvr_number, year 
@@ -262,8 +264,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     f"  Found {spatial_intersections:,} property-wetland spatial intersections"
                 )
 
-                # ENHANCED ANALYSIS: Property × Wetland × Water Project Coverage
-                self.log.info("  Analyzing wetland water project coverage at property level")
+                # STEP 2: Use existing wetland-water intersections from Stage 1B (efficient!)
+                self.log.info("  Step 2: Using existing wetland-water intersections from Stage 1B")
+
+                # Match property-wetland areas with existing water project coverage by wetland_id
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE batch_property_wetland_water_analysis AS
                     SELECT 
@@ -272,31 +276,37 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.cvr_number,
                         pw.year,
                         pw.bfe_number,
-                        pw.property_intersection_area_m2,
-                        pw.toerv_pct,  -- Only keep meaningful wetland classification
+                        pw.toerv_pct,
                         pw.property_wetland_area_m2,
                         
-                        -- Estimate coverage based on wetland type from foundation data
-                        pw.property_wetland_area_m2 * COALESCE(
-                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
-                             FROM water_projects_wetlands_intersections wwi 
-                             WHERE wwi.toerv_pct = pw.toerv_pct), 0
+                        -- Calculate covered area using existing intersection data
+                        COALESCE(
+                            pw.property_wetland_area_m2 * (
+                                SELECT SUM(wwi.intersection_area_m2) / SUM(wwi.wetland_area_m2)
+                                FROM water_projects_wetlands_intersections wwi 
+                                WHERE wwi.wetland_id = bw.wetland_id
+                            ), 0
                         ) as property_wetland_covered_by_water_m2,
                         
-                        pw.property_wetland_area_m2 * (1 - COALESCE(
-                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
-                             FROM water_projects_wetlands_intersections wwi 
-                             WHERE wwi.toerv_pct = pw.toerv_pct), 0
-                        )) as property_wetland_not_covered_by_water_m2
+                        -- Calculate uncovered area
+                        pw.property_wetland_area_m2 - COALESCE(
+                            pw.property_wetland_area_m2 * (
+                                SELECT SUM(wwi.intersection_area_m2) / SUM(wwi.wetland_area_m2)
+                                FROM water_projects_wetlands_intersections wwi 
+                                WHERE wwi.wetland_id = bw.wetland_id
+                            ), 0
+                        ) as property_wetland_not_covered_by_water_m2
                         
                     FROM batch_property_wetland_spatial pw
+                    JOIN batch_wetland_features bw ON ST_Intersects(pw.property_wetland_geometry, bw.wetland_geometry)
                 """)
 
+                # Analysis already completed using existing foundation data
                 water_analysis_count = self.conn.execute(
                     "SELECT COUNT(*) FROM batch_property_wetland_water_analysis"
                 ).fetchone()[0]
                 self.log.info(
-                    f"  Created {water_analysis_count:,} property-wetland-water analysis records"
+                    f"  Created {water_analysis_count:,} property-wetland-water analysis records using existing foundation data"
                 )
             else:
                 # No wetland features for spatial analysis, create empty table for consistency
@@ -425,6 +435,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.conn.execute("DROP TABLE IF EXISTS batch_wetland_features")
             self.conn.execute("DROP TABLE IF EXISTS batch_spatial_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_spatial")
+
             self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_water_analysis")
 
             # Memory cleanup
