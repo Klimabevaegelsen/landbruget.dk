@@ -518,7 +518,14 @@ def process_chr_data(
                 logging.warning(f"Fallback file not found: {path}. Cannot load table '{table_name}'.")
 
         if not successfully_loaded:
-            logging.error(f"Failed to load table '{table_name}' from all available sources.")
+            # Check if this is an optional table that can be skipped
+            optional_tables = ["cattle_movements", "spf_su_herds"]
+            if table_name in optional_tables:
+                logging.warning(
+                    f"Optional table '{table_name}' not found - skipping (this is normal if the corresponding bronze step wasn't run)"
+                )
+            else:
+                logging.error(f"Failed to load table '{table_name}' from all available sources.")
         else:
             logging.info(f"Successfully loaded table '{table_name}'")
             # Register the table in DuckDB so SQL queries can reference it by name
@@ -590,6 +597,7 @@ def process_chr_data(
     context = {
         "bes_details_table": raw_tables.get("bes_details"),
         "diko_flyt_table": raw_tables.get("diko_flyt"),
+        "cattle_movements_table": raw_tables.get("cattle_movements"),  # May be None if animal_movements step wasn't run
         "ejendom_oplys_table": raw_tables.get("ejendom_oplys"),
         "ejendom_vet_table": raw_tables.get("ejendom_vet"),
         "vetstat_table": raw_tables.get("vetstat"),
@@ -663,9 +671,20 @@ def process_chr_data(
                 herd_sizes_table = herds.create_herd_sizes_table(con, context.get("bes_details_table"), silver_dir)
 
             elif step == "silver_animal_movements":
+                # Process DIKO movements (always available)
                 animal_movements_table = animal_movements.create_animal_movements_table(
                     con, context.get("diko_flyt_table"), silver_dir
                 )
+
+                # Process CHR_dyr cattle movements (optional - only if animal_movements bronze step was run)
+                if context.get("cattle_movements_table") is not None:
+                    chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                        con, context.get("cattle_movements_table"), silver_dir
+                    )
+                else:
+                    logging.info(
+                        "CHR_dyr cattle movements not available - skipping (animal_movements bronze step not run)"
+                    )
 
             elif step == "silver_property_vet_events":
                 property_vet_events_table = property_vet_events.create_property_vet_events_table(
@@ -684,77 +703,97 @@ def process_chr_data(
                 )
 
             elif step == "silver_spf_su_herds":
-                from . import spf_su
+                if context.get("spf_su_table") is not None:
+                    from . import spf_su
 
-                spf_su_herds_table = spf_su.create_spf_su_herds_table(con, context.get("spf_su_table"), silver_dir)
+                    spf_su_herds_table = spf_su.create_spf_su_herds_table(con, context.get("spf_su_table"), silver_dir)
+                else:
+                    logging.warning("Cannot create SPF-SU herds table: spf_su_raw is None")
 
             elif step == "silver_spf_su_health_controls":
-                from . import spf_su
+                if context.get("spf_su_table") is not None:
+                    from . import spf_su
 
-                spf_su_health_controls_table = spf_su.create_spf_su_health_controls_table(
-                    con, context.get("spf_su_table"), silver_dir
-                )
+                    spf_su_health_controls_table = spf_su.create_spf_su_health_controls_table(
+                        con, context.get("spf_su_table"), silver_dir
+                    )
+                else:
+                    logging.warning("Cannot create SPF-SU health controls table: spf_su_raw is None")
 
             elif step == "silver_spf_su_salmonella_data":
-                from . import spf_su
+                if context.get("spf_su_table") is not None:
+                    from . import spf_su
 
-                spf_su_salmonella_data_table = spf_su.create_spf_su_salmonella_data_table(
-                    con, context.get("spf_su_table"), silver_dir
-                )
+                    spf_su_salmonella_data_table = spf_su.create_spf_su_salmonella_data_table(
+                        con, context.get("spf_su_table"), silver_dir
+                    )
+                else:
+                    logging.warning("Cannot create SPF-SU salmonella data table: spf_su_raw is None")
 
         except Exception as e:
             logging.error(f"Error in silver step {step}: {e}", exc_info=True)
             # Continue with next step instead of failing completely
             continue
 
-    # --- 13. Generate Schema Documentation ---
-    if SchemaDocumentationManager is not None:
-        logging.info("Generating schema documentation for CHR silver tables...")
-        try:
-            # Get the pipeline start time from the silver_dir timestamp
-            dir_name = silver_dir.name
-            if len(dir_name) == 15 and dir_name[8] == "_":  # Format: YYYYMMDD_HHMMSS
-                pipeline_start_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
-            else:
-                pipeline_start_time = datetime.now()
+            # --- 13. Generate Schema Documentation ---
+        if SchemaDocumentationManager is not None:
+            logging.info("Generating schema documentation for CHR silver tables...")
+            try:
+                # Get the pipeline start time from the silver_dir timestamp
+                dir_name = silver_dir.name
+                if len(dir_name) == 15 and dir_name[8] == "_":  # Format: YYYYMMDD_HHMMSS
+                    pipeline_start_time = datetime.strptime(dir_name, "%Y%m%d_%H%M%S")
+                else:
+                    pipeline_start_time = datetime.now()
 
-            # Initialize schema documentation manager
-            schema_manager = SchemaDocumentationManager(
-                connection=con.con,  # Use the DuckDB connection
-                pipeline_name="chr_pipeline",
-                pipeline_start_time=pipeline_start_time,
-                logger=logging.getLogger(__name__),
-            )
-
-            # Get list of tables that were actually created
-            tables_query = "SHOW TABLES"
-            tables_result = con.con.execute(tables_query).fetchall()
-            silver_tables = [
-                table[0]
-                for table in tables_result
-                if table[0] not in ["bes_details", "diko_flyt", "ejendom_oplys", "ejendom_vet", "vetstat"]
-            ]
-
-            if silver_tables:
-                # Generate documentation for all silver tables
-                schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
-                logging.info(
-                    f"Generated schema documentation for {len(silver_tables)} tables: {', '.join(silver_tables)}"
+                # Initialize schema documentation manager
+                schema_manager = SchemaDocumentationManager(
+                    connection=con.con,  # Use the DuckDB connection
+                    pipeline_name="chr_pipeline",
+                    pipeline_start_time=pipeline_start_time,
+                    logger=logging.getLogger(__name__),
                 )
 
-                # Commit to GitHub
-                schema_manager.commit_to_github()
-                logging.info("Schema documentation committed to GitHub")
-            else:
-                logging.warning("No silver tables found for schema documentation")
+                # Get list of tables that were actually created
+                tables_query = "SHOW TABLES"
+                tables_result = con.con.execute(tables_query).fetchall()
+                silver_tables = [
+                    table[0]
+                    for table in tables_result
+                    if table[0]
+                    not in ["bes_details", "diko_flyt", "ejendom_oplys", "ejendom_vet", "vetstat", "cattle_movements"]
+                ]
 
-        except Exception as e:
-            logging.error(f"Failed to generate schema documentation: {e}", exc_info=True)
-            # Don't fail the pipeline if schema documentation fails
+                if silver_tables:
+                    # Generate documentation for all silver tables
+                    schema_files = schema_manager.generate_all_documentation(silver_tables, stage="silver")
+                    logging.info(
+                        f"Generated schema documentation for {len(silver_tables)} tables: {', '.join(silver_tables)}"
+                    )
+
+                    # Commit to GitHub - but handle the permission error gracefully
+                    try:
+                        schema_manager.commit_to_github()
+                        logging.info("Schema documentation committed to GitHub")
+                    except Exception as git_error:
+                        logging.warning(f"Failed to commit to GitHub: {git_error}")
+                        logging.info("Schema documentation generated locally but not committed to GitHub")
+                else:
+                    logging.warning("No silver tables found for schema documentation")
+
+            except Exception as e:
+                logging.error(f"Failed to generate schema documentation: {e}", exc_info=True)
+                # Don't fail the pipeline if schema documentation fails
+        else:
+            logging.warning("Schema documentation disabled due to import error")
+
+    # --- 14. CVR Collection (BEFORE connection cleanup) ---
+    if CVR_COLLECTION_AVAILABLE:
+        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
     else:
-        logging.warning("Schema documentation disabled due to import error")
+        logging.warning("CVR collection disabled due to import error")
 
-    # --- 14. Cleanup Intermediate Files ---
+    # --- 15. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():
         try:
             vetstat_antibiotics_jsonl_path.unlink()
@@ -808,12 +847,6 @@ def process_chr_data(
 
     except Exception as e:
         logging.warning(f"Error during comprehensive cleanup: {e}")
-
-    # --- 15. CVR Collection (before connection cleanup) ---
-    if CVR_COLLECTION_AVAILABLE:
-        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
-    else:
-        logging.warning("CVR collection disabled due to import error")
 
     logging.info(f"Silver data processing finished. Output located in: {silver_dir}")
 

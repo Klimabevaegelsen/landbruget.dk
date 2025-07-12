@@ -24,13 +24,12 @@ from bronze.load_stamdata import ENDPOINTS as STAMDATA_ENDPOINTS
 from bronze.load_stamdata import create_soap_client as create_stamdata_client
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
-
 from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
+from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -1088,7 +1087,12 @@ def main():
 
         # Run comprehensive cleanup
         try:
-            from .cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
+            # Try to import cleanup module with absolute import
+            try:
+                from backend.pipelines.chr_pipeline.cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
+            except ImportError:
+                # Fallback to relative import
+                from cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
 
             logger.info("Running final cleanup of temporary files...")
             monitor_disk_usage()
@@ -1096,6 +1100,8 @@ def main():
             if cleaned_files > 0:
                 logger.info(f"Final cleanup: {cleaned_files} files removed, {total_size / (1024 * 1024):.2f} MB freed")
             monitor_disk_usage()
+        except ImportError as import_error:
+            logger.warning(f"Cleanup module not available: {import_error}")
         except Exception as e:
             logger.warning(f"Error during final cleanup: {e}")
 
