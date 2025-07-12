@@ -30,10 +30,10 @@ class PMTilesDiscoveryService {
     }
     
     try {
-      // For now, return known structure - in practice, this would query GCS API
+      // For now, return known structure - simplified to only res8 and res10
       const availability: DataAvailability = {
         years: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
-        resolutions: [7, 8, 9, 10],
+        resolutions: [8, 10], // Only res8 and res10 for H3
         latestYear: 2023,
         latestResolution: 10
       };
@@ -45,7 +45,7 @@ class PMTilesDiscoveryService {
       // Fallback to known structure
       const fallback: DataAvailability = {
         years: [2023],
-        resolutions: [7, 8, 9, 10],
+        resolutions: [8, 10], // Only res8 and res10 for H3
         latestYear: 2023,
         latestResolution: 10
       };
