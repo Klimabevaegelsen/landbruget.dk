@@ -22,6 +22,9 @@ from . import (
     vet_practices,
 )
 
+# Import export functions
+from .export import upload_silver_data_to_gcs
+
 # Import helpers
 from .helpers import (
     _create_and_save_lookup,
@@ -98,10 +101,11 @@ def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export
 
         # Define CVR tables and their CVR columns
         cvr_tables = {
-            "chr_property_owners": "owner_cvr",
-            "chr_property_users": "user_cvr",
-            "chr_herd_owners": "owner_cvr",
-            "chr_antibiotic_usage": "cvr_number",
+            "property_owners": "owner_cvr",
+            "property_users": "user_cvr",
+            "herd_owners": "owner_cvr",
+            "herd_users": "user_cvr",
+            "antibiotic_usage": "cvr_number",
         }
 
         all_cvr_numbers = []
@@ -171,6 +175,13 @@ def process_chr_data(
     logging.info("--- Starting CHR Silver Processing --- ")
     # Create silver directory if it doesn't exist
     silver_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure we have an export timestamp for GCS upload
+    if export_timestamp is None:
+        from datetime import datetime
+
+        export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        logging.info(f"Generated export timestamp: {export_timestamp}")
 
     # Determine data source mode (prefer memory)
     load_from_memory = in_memory_data is not None
@@ -344,6 +355,7 @@ def process_chr_data(
             "mem_key": "ejendom_vet_events",
             "file_key": "ejendom_vet_events.json",
         },
+        "spf_su_herds": {"mem_key": "spf_su_herds", "file_key": "spf_su_herds.json"},
         # Vetstat is handled separately due to XML -> JSONL preprocessing
     }
 
@@ -793,7 +805,17 @@ def process_chr_data(
     else:
         logging.warning("CVR collection disabled due to import error")
 
-    # --- 15. Cleanup Intermediate Files ---
+    # --- 15. Upload Silver Data to GCS ---
+    try:
+        upload_success = upload_silver_data_to_gcs(silver_dir, export_timestamp)
+        if upload_success:
+            logging.info("✅ Silver data uploaded to GCS successfully")
+        else:
+            logging.warning("⚠️ Silver data upload to GCS failed or was skipped")
+    except Exception as e:
+        logging.error(f"❌ Error during silver data upload to GCS: {e}")
+
+    # --- 16. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():
         try:
             vetstat_antibiotics_jsonl_path.unlink()
