@@ -487,7 +487,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 "wetland_adjacency",
                 "wetland_groups",
                 "wetland_groups_final",
-                "wetlands_dissolved",
+                "wetlands_dissolved_temp",
             ]
             for table in tables_to_cleanup:
                 conn.execute(f"DROP TABLE IF EXISTS {table}")
@@ -666,9 +666,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     )
 
                     # Create empty result table
-                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
                     conn.execute("""
-                        CREATE TABLE wetlands_dissolved (
+                        CREATE TABLE wetlands_dissolved_temp (
                             wetland_id INTEGER,
                             final_group_id INTEGER,
                             merged_count INTEGER,
@@ -685,7 +685,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         )
 
                         conn.execute(f"""
-                            INSERT INTO wetlands_dissolved
+                            INSERT INTO wetlands_dissolved_temp
                             SELECT 
                                 ROW_NUMBER() OVER () + {offset} as wetland_id,
                                 final_group_id,
@@ -698,9 +698,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         """)
                 else:
                     # Process all at once for smaller datasets
-                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
                     conn.execute("""
-                        CREATE TABLE wetlands_dissolved AS
+                        CREATE TABLE wetlands_dissolved_temp AS
                         SELECT 
                             ROW_NUMBER() OVER () as wetland_id,
                             final_group_id,
@@ -713,9 +713,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             else:
                 # No adjacent wetlands found, keep original geometries
                 self.log.info("No adjacent wetlands found, keeping original geometries...")
-                conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
+                conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
                 conn.execute("""
-                    CREATE TABLE wetlands_dissolved AS
+                    CREATE TABLE wetlands_dissolved_temp AS
                     SELECT 
                         wetland_id,
                         wetland_id as final_group_id,
@@ -726,12 +726,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             # Create final dissolved table
             dissolved_table_name = f"{dataset}_dissolved"
+            conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
             conn.execute(f"""
                 CREATE TABLE {dissolved_table_name} AS
                 SELECT 
                     wetland_id,
                     geometry
-                FROM wetlands_dissolved
+                FROM wetlands_dissolved_temp
                 ORDER BY wetland_id
             """)
 
