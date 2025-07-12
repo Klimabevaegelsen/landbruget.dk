@@ -653,17 +653,31 @@ def process_chr_data(
                 property_owners_table = properties.create_property_owners_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
-                # Register table in DuckDB for CVR collection
+                # Register table in DuckDB for CVR collection (load from saved parquet to avoid reference issues)
                 if property_owners_table is not None:
-                    con.create_table("property_owners", property_owners_table, overwrite=True)
+                    try:
+                        parquet_path = silver_dir / "property_owners.parquet"
+                        if parquet_path.exists():
+                            con.con.execute(
+                                f"CREATE OR REPLACE TABLE property_owners AS SELECT * FROM read_parquet('{parquet_path}')"
+                            )
+                    except Exception as e:
+                        logging.warning(f"Failed to register property_owners table for CVR collection: {e}")
 
             elif step == "silver_property_users":
                 property_users_table = properties.create_property_users_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
-                # Register table in DuckDB for CVR collection
+                # Register table in DuckDB for CVR collection (load from saved parquet to avoid reference issues)
                 if property_users_table is not None:
-                    con.create_table("property_users", property_users_table, overwrite=True)
+                    try:
+                        parquet_path = silver_dir / "property_users.parquet"
+                        if parquet_path.exists():
+                            con.con.execute(
+                                f"CREATE OR REPLACE TABLE property_users AS SELECT * FROM read_parquet('{parquet_path}')"
+                            )
+                    except Exception as e:
+                        logging.warning(f"Failed to register property_users table for CVR collection: {e}")
 
             elif step == "silver_herds":
                 herds_table = herds.create_herds_table(
