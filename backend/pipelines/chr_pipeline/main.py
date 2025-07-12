@@ -1040,18 +1040,22 @@ def main():
                 if buffer_data:
                     # Use in-memory data
                     logging.warning("Using in-memory buffer data for silver processing")
-                    run_silver_processing(in_memory_data=buffer_data, silver_dir=silver_dir)
+                    run_silver_processing(
+                        in_memory_data=buffer_data, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
+                    )
                 elif bronze_dir_override:
                     # Use bronze files
                     bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
                     logging.warning(f"Using bronze files from {bronze_path} for silver processing")
                     run_silver_processing(
-                        bronze_dir=bronze_path, silver_dir=silver_dir, export_timestamp=bronze_dir_override
+                        bronze_dir=bronze_path, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
                     )
                 else:
                     # Fallback to buffer (might be empty, but let silver processing handle it)
                     logging.warning("No specific bronze data source found, using buffer")
-                    run_silver_processing(in_memory_data=buffer_data, silver_dir=silver_dir)
+                    run_silver_processing(
+                        in_memory_data=buffer_data, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
+                    )
 
                 logging.warning(f"Silver processing completed. Output in: {silver_dir}")
             except Exception as e:
