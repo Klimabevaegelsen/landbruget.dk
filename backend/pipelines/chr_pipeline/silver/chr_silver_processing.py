@@ -534,6 +534,12 @@ def process_chr_data(
             logging.error(f"Failed to load table '{table_name}' from all available sources.")
         else:
             logging.warning(f"Successfully loaded table '{table_name}'")
+            # Register the table in DuckDB so SQL queries can reference it by name
+            try:
+                con.register(raw_tables[table_name], table_name)
+                logging.warning(f"Registered table '{table_name}' in DuckDB catalog")
+            except Exception as e:
+                logging.error(f"Failed to register table '{table_name}' in DuckDB: {e}")
 
         logging.warning(f"=== FINISHED LOADING TABLE: {table_name} ===")
 
@@ -547,6 +553,12 @@ def process_chr_data(
             logging.warning("Successfully loaded vetstat data.")
             schema = raw_tables["vetstat"].schema()
             logging.warning(f"Schema for vetstat: {schema}")
+            # Register the vetstat table in DuckDB catalog
+            try:
+                con.register(raw_tables["vetstat"], "vetstat")
+                logging.warning("Registered vetstat table in DuckDB catalog")
+            except Exception as e:
+                logging.error(f"Failed to register vetstat table in DuckDB: {e}")
         except Exception as e:
             logging.error(f"Error loading vetstat JSONL data: {e}")
             logging.error(f"DEBUG(Added): Vetstat JSONL load failed from path: {vetstat_antibiotics_jsonl_path}")
