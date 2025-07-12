@@ -486,19 +486,14 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             # ✅ OPTIMIZED: Single-condition SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
             # Based on PR #545: SPATIAL_JOIN operator only supports a single join condition
             # Use ONLY the spatial predicate in JOIN, filter duplicates afterwards
+            # IMPORTANT: Removed CTE structure to ensure SPATIAL_JOIN operator detection
             adjacency_query = """
-                WITH spatial_touches AS (
-                    SELECT 
-                        w1.wetland_id as id1,
-                        w2.wetland_id as id2
-                    FROM wetlands_spatial w1
-                    INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
-                )
                 SELECT DISTINCT
-                    LEAST(id1, id2) as id1,
-                    GREATEST(id1, id2) as id2
-                FROM spatial_touches
-                WHERE id1 != id2
+                    LEAST(w1.wetland_id, w2.wetland_id) as id1,
+                    GREATEST(w1.wetland_id, w2.wetland_id) as id2
+                FROM wetlands_spatial w1
+                INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
+                WHERE w1.wetland_id != w2.wetland_id
             """
 
             # Verify SPATIAL_JOIN is being used
