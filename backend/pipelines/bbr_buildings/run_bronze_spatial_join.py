@@ -25,22 +25,60 @@ def main():
     # Check initial memory usage
     check_memory_usage()
 
-    # Load building IDs
-    building_ids_file = Path("data/inspire_building_ids.json")
-    if not building_ids_file.exists():
-        print(f"❌ Error: {building_ids_file} not found")
+    # Load building IDs - check multiple possible locations
+    possible_paths = [
+        Path("data/inspire_building_ids.json"),
+        Path("inspire_building_ids.json"),
+        Path("data/bronze/inspire_building_ids.json"),
+    ]
+
+    building_ids_file = None
+    for path in possible_paths:
+        if path.exists():
+            building_ids_file = path
+            break
+
+    if building_ids_file is None:
+        print("❌ Error: inspire_building_ids.json not found in any of these locations:")
+        for path in possible_paths:
+            print(f"  - {path}")
+        print("\nCurrent directory contents:")
+        for item in Path(".").iterdir():
+            print(f"  {item}")
+        print("\nData directory contents:")
+        data_dir = Path("data")
+        if data_dir.exists():
+            for item in data_dir.iterdir():
+                print(f"  {item}")
         sys.exit(1)
 
+    print(f"📋 Loading building IDs from: {building_ids_file}")
     with open(building_ids_file) as f:
         building_ids = json.load(f)
 
     print(f"🔍 Processing {len(building_ids):,} INSPIRE BBR buildings with GeoDanmark data...")
 
-    # Check GeoDanmark data exists
-    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
-    if not Path(geodanmark_path).exists():
-        print(f"❌ Error: {geodanmark_path} not found")
+    # Check GeoDanmark data exists - check multiple possible locations
+    geodanmark_paths = [
+        "data/geodanmark_buildings_complete.geoparquet",
+        "geodanmark_buildings_complete.geoparquet",
+    ]
+
+    geodanmark_path = None
+    for path in geodanmark_paths:
+        if Path(path).exists():
+            geodanmark_path = path
+            break
+
+    if geodanmark_path is None:
+        print(
+            "❌ Error: geodanmark_buildings_complete.geoparquet not found in any of these locations:"
+        )
+        for path in geodanmark_paths:
+            print(f"  - {path}")
         sys.exit(1)
+
+    print(f"📊 Using GeoDanmark data from: {geodanmark_path}")
 
     # Create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,8 +137,19 @@ def main():
         print(f"✅ Successfully processed {join_result['joined_buildings_count']:,} buildings")
 
         # Copy INSPIRE attributes if available
-        inspire_attrs_path = Path("data/inspire_attributes.parquet")
-        if inspire_attrs_path.exists():
+        inspire_attrs_paths = [
+            Path("data/inspire_attributes.parquet"),
+            Path("inspire_attributes.parquet"),
+            Path("data/bronze/inspire_attributes.parquet"),
+        ]
+
+        inspire_attrs_path = None
+        for path in inspire_attrs_paths:
+            if path.exists():
+                inspire_attrs_path = path
+                break
+
+        if inspire_attrs_path:
             import pandas as pd
 
             inspire_attrs = pd.read_parquet(inspire_attrs_path)

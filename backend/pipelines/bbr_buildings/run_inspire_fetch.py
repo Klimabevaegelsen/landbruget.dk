@@ -29,6 +29,16 @@ def _save_attributes_to_parquet(attributes_data, output_dir):
         print("📝 Small dataset - using standard parquet write")
         _save_attributes_standard(attributes_data, output_dir)
 
+    # Also save a copy in the data root for GitHub Actions compatibility
+    data_root = Path("data")
+    data_root.mkdir(exist_ok=True)
+    parquet_file = output_dir / "inspire_attributes.parquet"
+    if parquet_file.exists():
+        import shutil
+
+        shutil.copy2(parquet_file, data_root / "inspire_attributes.parquet")
+        print("💾 Copied attributes to data root for GitHub Actions compatibility")
+
 
 def _save_attributes_streaming(attributes_data, output_dir):
     """Save large attributes dataset using streaming approach with better memory management."""
@@ -182,6 +192,12 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
                 with open(output_dir / "inspire_building_ids.json", "w") as f:
                     json.dump(building_ids, f)
 
+                # Also save a copy in the data root for GitHub Actions compatibility
+                data_root = Path("data")
+                data_root.mkdir(exist_ok=True)
+                with open(data_root / "inspire_building_ids.json", "w") as f:
+                    json.dump(building_ids, f)
+
                 # Save attributes using streaming approach for large datasets
                 if attributes_data:
                     print(
@@ -223,6 +239,12 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
                 # Save building IDs
                 output_dir.mkdir(exist_ok=True)
                 with open(output_dir / "inspire_building_ids.json", "w") as f:
+                    json.dump(building_ids, f)
+
+                # Also save a copy in the data root for GitHub Actions compatibility
+                data_root = Path("data")
+                data_root.mkdir(exist_ok=True)
+                with open(data_root / "inspire_building_ids.json", "w") as f:
                     json.dump(building_ids, f)
 
                 # Save attributes using streaming approach
@@ -342,6 +364,12 @@ def main():
                 # Save building IDs for the join job
                 output_dir.mkdir(exist_ok=True)
                 with open(output_dir / "inspire_building_ids.json", "w") as f:
+                    json.dump(building_ids, f)
+
+                # Also save a copy in the data root for GitHub Actions compatibility
+                data_root = Path("data")
+                data_root.mkdir(exist_ok=True)
+                with open(data_root / "inspire_building_ids.json", "w") as f:
                     json.dump(building_ids, f)
 
                 # Save attributes data if available
