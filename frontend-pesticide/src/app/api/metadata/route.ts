@@ -54,9 +54,9 @@ interface PMTilesMetadata {
 export async function GET() {
   try {
     // Create static metadata based on known file structure
-    // Years: 2015-2023, Resolutions: 7-10
+    // Years: 2015-2023, Resolutions: 8, 10 (simplified)
     const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
-    const resolutions = [7, 8, 9, 10]
+    const resolutions = [8, 10] // Only res8 and res10 for H3
     
     const pmtilesFiles: PMTilesFile[] = []
     

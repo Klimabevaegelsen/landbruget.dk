@@ -41,6 +41,13 @@ export interface MapState {
   showTooltip: boolean;
   tooltipData: Record<string, unknown> | null;
   tooltipPosition: { x: number; y: number };
+  
+  // Selected cell state
+  selectedCell: {
+    id: string;
+    layer: string;
+    properties: Record<string, unknown>;
+  } | null;
 }
 
 export interface MapActions {
@@ -85,6 +92,10 @@ export interface MapActions {
   showTooltipWithData: (data: Record<string, unknown>, position: { x: number; y: number }) => void;
   hideTooltip: () => void;
   
+  // Selected cell actions
+  setSelectedCell: (cell: { id: string; layer: string; properties: Record<string, unknown> } | null) => void;
+  clearSelectedCell: () => void;
+  
   // Utility actions
   resetToDefaults: () => void;
 }
@@ -94,16 +105,14 @@ const DEFAULT_ZOOM = 7;
 const DEFAULT_YEAR: YearSelection = 2023;
 const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
 
-// Zoom thresholds for layer switching - minimal overlap to prevent gaps
-const KOMMUNE_MAX_ZOOM = 8.2;
-const H3_MIN_ZOOM = 8.1;
+// Zoom thresholds for layer switching - simplified for 3 levels
+const KOMMUNE_TO_H3_ZOOM = 9.0; // Switch from kommune to H3 at this zoom
+const H3_RES8_TO_RES10_ZOOM = 12.0; // Switch from res8 to res10 at this zoom
 
-// H3 resolution based on zoom level
+// H3 resolution based on zoom level - simplified to only res8 and res10
 const getH3ResolutionForZoom = (zoom: number): number => {
-  if (zoom >= 14) return 10;
-  if (zoom >= 12) return 9;
-  if (zoom >= 10) return 8;
-  return 7;
+  if (zoom >= H3_RES8_TO_RES10_ZOOM) return 10;
+  return 8;
 };
 
 export const useMapStore = create<MapState & MapActions>()(
@@ -131,12 +140,14 @@ export const useMapStore = create<MapState & MapActions>()(
       
       availableYears: [],
       availableYearOptions: [],
-      availableResolutions: [7, 8, 9, 10],
+      availableResolutions: [8, 10], // Only res8 and res10 for H3
       
       showControls: true,
       showTooltip: false,
       tooltipData: null,
       tooltipPosition: { x: 0, y: 0 },
+      
+      selectedCell: null,
       
       // Map view actions
       setZoom: (zoom) => set({ zoom }),
@@ -224,6 +235,10 @@ export const useMapStore = create<MapState & MapActions>()(
         });
       },
       
+      // Selected cell actions
+      setSelectedCell: (selectedCell) => set({ selectedCell }),
+      clearSelectedCell: () => set({ selectedCell: null }),
+      
       // Utility actions
       resetToDefaults: () => {
         set({
@@ -244,6 +259,7 @@ export const useMapStore = create<MapState & MapActions>()(
           showTooltip: false,
           tooltipData: null,
           tooltipPosition: { x: 0, y: 0 },
+          selectedCell: null,
         });
       },
     }),
@@ -263,11 +279,16 @@ export const useMapStore = create<MapState & MapActions>()(
 );
 
 // Computed selectors (these are truly computed and don't cause updates)
-export const getComputedLayerVisibility = (zoom: number) => ({
-  shouldShowKommune: zoom <= KOMMUNE_MAX_ZOOM,
-  shouldShowH3: zoom >= H3_MIN_ZOOM,
-  currentH3Resolution: getH3ResolutionForZoom(zoom),
-});
+export const getComputedLayerVisibility = (zoom: number) => {
+  const shouldShowH3 = zoom >= KOMMUNE_TO_H3_ZOOM;
+  const shouldShowKommune = zoom < KOMMUNE_TO_H3_ZOOM;
+  
+  return {
+    shouldShowKommune,
+    shouldShowH3,
+    currentH3Resolution: getH3ResolutionForZoom(zoom),
+  };
+};
 
 // Data mode configuration
 export const DATA_MODE_CONFIG = {
@@ -400,6 +421,14 @@ export const useTooltipState = () => {
   const tooltipPosition = useTooltipPosition();
   
   return { showTooltip, tooltipData, tooltipPosition };
+};
+
+export const useSelectedCellState = () => {
+  const selectedCell = useMapStore((state) => state.selectedCell);
+  const setSelectedCell = useMapStore((state) => state.setSelectedCell);
+  const clearSelectedCell = useMapStore((state) => state.clearSelectedCell);
+  
+  return { selectedCell, setSelectedCell, clearSelectedCell };
 };
 
 // Navigation actions

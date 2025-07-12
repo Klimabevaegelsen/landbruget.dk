@@ -2,29 +2,29 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 interface ResolutionState {
-  // Current resolution
-  currentResolution: number
+  // Current resolution - 'kommune' | 8 | 10
+  currentResolution: 'kommune' | 8 | 10
   
   // Auto-resolution settings
   autoResolution: boolean
   
   // Resolution history for smooth transitions
-  previousResolution: number | null
+  previousResolution: 'kommune' | 8 | 10 | null
   
   // Zoom level tracking
   currentZoom: number
   
   // Actions
-  setResolution: (resolution: number) => void
+  setResolution: (resolution: 'kommune' | 8 | 10) => void
   setAutoResolution: (auto: boolean) => void
   setZoom: (zoom: number) => void
   
   // Utility functions
-  getResolutionForZoom: (zoom: number) => number
+  getResolutionForZoom: (zoom: number) => 'kommune' | 8 | 10
   shouldUpdateResolution: (newZoom: number) => boolean
   
   // Resolution info
-  getResolutionInfo: (resolution: number) => {
+  getResolutionInfo: (resolution: 'kommune' | 8 | 10) => {
     name: string
     description: string
     zoomRange: [number, number]
@@ -35,8 +35,8 @@ interface ResolutionState {
 export const useResolutionStore = create<ResolutionState>()(
   persist(
     (set, get) => ({
-      // Initial state
-      currentResolution: 10, // Start with field-level detail
+      // Initial state - start with kommune
+      currentResolution: 'kommune',
       autoResolution: true,
       previousResolution: null,
       currentZoom: 7,
@@ -66,11 +66,10 @@ export const useResolutionStore = create<ResolutionState>()(
       
       // Utility functions
       getResolutionForZoom: (zoom) => {
-        // Map zoom levels to H3 resolutions - higher zoom = higher resolution
-        if (zoom >= 12) return 10  // Field-level detail
-        if (zoom >= 10) return 9   // Municipal detail
-        if (zoom >= 8) return 8    // Sub-regional
-        return 7                   // Regional overview
+        // Simplified zoom-to-resolution mapping
+        if (zoom >= 12) return 10    // High zoom = field-level detail (res10)
+        if (zoom >= 9) return 8      // Medium zoom = sub-regional detail (res8)
+        return 'kommune'             // Low zoom = municipal boundaries
       },
       
       shouldUpdateResolution: (newZoom) => {
@@ -83,23 +82,17 @@ export const useResolutionStore = create<ResolutionState>()(
       
       getResolutionInfo: (resolution) => {
         const resolutionInfo = {
-          7: {
-            name: 'Regional',
-            description: 'County/regional overview',
-            zoomRange: [4, 7] as [number, number],
-            cellSize: '~5,000 ha',
+          'kommune': {
+            name: 'Municipal',
+            description: 'Municipal boundaries with aggregated data',
+            zoomRange: [4, 8] as [number, number],
+            cellSize: '~Municipal area',
           },
           8: {
             name: 'Sub-regional',
-            description: 'Large municipal areas',
-            zoomRange: [8, 9] as [number, number],
+            description: 'Large areas for regional analysis',
+            zoomRange: [9, 11] as [number, number],
             cellSize: '~700 ha',
-          },
-          9: {
-            name: 'Municipal',
-            description: 'Municipal/city detail',
-            zoomRange: [10, 11] as [number, number],
-            cellSize: '~100 ha',
           },
           10: {
             name: 'Field-level',
@@ -109,7 +102,7 @@ export const useResolutionStore = create<ResolutionState>()(
           },
         }
         
-        return resolutionInfo[resolution as keyof typeof resolutionInfo] || {
+        return resolutionInfo[resolution] || {
           name: 'Unknown',
           description: 'Unknown resolution',
           zoomRange: [0, 15] as [number, number],

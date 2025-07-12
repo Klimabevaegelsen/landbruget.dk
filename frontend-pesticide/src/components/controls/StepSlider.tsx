@@ -1,6 +1,7 @@
 'use client';
 
 import { useMapStore, useAvailableYearOptions, useSelectedYear, type YearSelection } from '@/stores/map-store';
+import { useUIStore } from '@/stores/ui-store';
 import { ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -12,6 +13,7 @@ export function StepSlider({ className = '' }: StepSliderProps) {
   const selectedYear = useSelectedYear();
   const availableYearOptions = useAvailableYearOptions();
   const { setSelectedYear } = useMapStore();
+  const { isMobile } = useUIStore();
   
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
@@ -80,6 +82,78 @@ export function StepSlider({ className = '' }: StepSliderProps) {
     );
   }
 
+  // Mobile-optimized version
+  if (isMobile) {
+    return (
+      <div className={`${className} space-y-3`}>
+        {/* Navigation Controls - Mobile */}
+        <div className="flex items-center justify-center space-x-3">
+          {/* Previous Button */}
+          <button
+            onClick={goToPrevious}
+            disabled={!canGoPrevious || isAnimating}
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Play/Pause Button */}
+          <button
+            onClick={isAnimating ? stopAnimation : startAnimation}
+            disabled={numericYears.length <= 1}
+            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
+          >
+            {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </button>
+
+          {/* Next Button */}
+          <button
+            onClick={goToNext}
+            disabled={!canGoNext || isAnimating}
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Year Buttons - Mobile Grid */}
+        <div className="flex flex-wrap gap-2 justify-center">
+          {/* Year Buttons */}
+          {numericYears.map((year) => (
+            <button
+              key={year}
+              onClick={() => setSelectedYear(year)}
+              disabled={isAnimating}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
+                selectedYear === year
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+            >
+              {year}
+            </button>
+          ))}
+          
+          {/* Total Button */}
+          {hasTotal && (
+            <button
+              onClick={() => setSelectedYear('total')}
+              disabled={isAnimating}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
+                selectedYear === 'total'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+            >
+              Total
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop version
   return (
     <div className={`${className} flex items-center space-x-2`}>
       {/* Previous Button */}

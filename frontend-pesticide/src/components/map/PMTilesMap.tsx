@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ErrorBoundary } from 'react-error-boundary'
-import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility } from '@/stores/map-store'
+import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility, useSelectedCellState } from '@/stores/map-store'
 import { useUIStore } from '@/stores/ui-store'
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery'
 
@@ -107,6 +107,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const showBasemap = useMapStore((state) => state.showBasemap)
   const { isLoading, error } = useLoadingState()
   const { isMobile, setShowMobilePanel } = useUIStore()
+  const { selectedCell, setSelectedCell, clearSelectedCell } = useSelectedCellState()
   
   // Compute layer visibility based on zoom (stable) - use centralized function
   const layerVisibility = getComputedLayerVisibility(zoom)
@@ -149,6 +150,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const memoizedShowTooltipWithData = useCallback(showTooltipWithData, [showTooltipWithData])
   const memoizedHideTooltip = useCallback(hideTooltip, [hideTooltip])
   const memoizedSetShowMobilePanel = useCallback(setShowMobilePanel, [setShowMobilePanel])
+  const memoizedSetSelectedCell = useCallback(setSelectedCell, [setSelectedCell])
+  const memoizedClearSelectedCell = useCallback(clearSelectedCell, [clearSelectedCell])
 
   // Helper function to safely get available interactive layers
   const getAvailableInteractiveLayers = useCallback((): string[] => {
@@ -198,9 +201,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     [hideTooltip]
   );
 
+  // Mobile-optimized mouse move handler
   const throttledMouseMove = useMemo(
     () => throttle((e: any) => {
-      // Skip hover behavior on mobile devices
+      // Skip hover behavior on mobile devices - mobile uses tap-to-show
       if (isMobile) {
         return
       }
@@ -243,6 +247,62 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     }, 50), // Throttle to 20fps for mouse events
     [isMobile, getAvailableInteractiveLayers, debouncedHideTooltip, showTooltipWithData]
   );
+
+  // Mobile-optimized touch handlers
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (!isMobile) return;
+    
+    // Store touch start time for tap detection
+    const touchStartTime = Date.now();
+    (e.target as any)._touchStartTime = touchStartTime;
+  }, [isMobile]);
+
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
+    if (!isMobile) return;
+    
+    const touchEndTime = Date.now();
+    const touchStartTime = (e.target as any)._touchStartTime || 0;
+    const touchDuration = touchEndTime - touchStartTime;
+    
+    // Only treat as tap if touch duration is short (< 300ms)
+    if (touchDuration < 300 && touchDuration > 0) {
+      // Convert touch to map coordinates
+      const touch = e.changedTouches[0];
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      const point = {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+      };
+      
+      // Query features at touch point
+      const availableLayers = getAvailableInteractiveLayers();
+      
+      if (availableLayers.length === 0) {
+        memoizedHideTooltip();
+        memoizedSetShowMobilePanel(false);
+        return;
+      }
+      
+      try {
+        const features = (map.current as any)?.queryRenderedFeatures(point, {
+          layers: availableLayers
+        });
+        
+        if (features && features.length > 0) {
+          const feature = features[0];
+          memoizedShowTooltipWithData(feature.properties, point);
+          memoizedSetShowMobilePanel(true);
+        } else {
+          memoizedHideTooltip();
+          memoizedSetShowMobilePanel(false);
+        }
+      } catch (error) {
+        console.warn('Error querying rendered features on touch:', error);
+        memoizedHideTooltip();
+        memoizedSetShowMobilePanel(false);
+      }
+    }
+  }, [isMobile, getAvailableInteractiveLayers, memoizedShowTooltipWithData, memoizedHideTooltip, memoizedSetShowMobilePanel]);
 
   // Load MapLibre and PMTiles
   useEffect(() => {
@@ -289,10 +349,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           bnbo: yearUrls.bnbo
         }
         
-        // Add H3 URL for current resolution
-        const h3Key = `${selectedYear}_${currentH3Resolution}`
-        if (yearUrls.h3[h3Key]) {
-          urls.h3 = yearUrls.h3[h3Key]
+        // Add H3 URLs for both resolutions
+        const h3Key8 = `${selectedYear}_8`
+        const h3Key10 = `${selectedYear}_10`
+        if (yearUrls.h3[h3Key8]) {
+          urls.h3_res8 = yearUrls.h3[h3Key8]
+        }
+        if (yearUrls.h3[h3Key10]) {
+          urls.h3_res10 = yearUrls.h3[h3Key10]
         }
         
         // Add kommune URL
@@ -318,47 +382,30 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     return () => {
       mounted = false
     }
-  }, [setError, selectedYear, currentH3Resolution])
+  }, [setError, selectedYear]) // Remove currentH3Resolution dependency to prevent recreation
 
-  // Initialize map
+  // Create map when PMTiles URLs are available
   useEffect(() => {
-    console.log('🔍 Map initialization check:', {
-      mapLibre: !!mapLibre,
-      mapContainer: !!mapContainer.current,
-      basemapUrl: pmtilesUrls.basemap,
-      pmtilesUrls: pmtilesUrls
-    })
-    
     if (!mapLibre || !mapContainer.current || !pmtilesUrls.basemap) {
-      console.log('⏳ Map initialization skipped - missing dependencies:', {
+      console.log('⏳ Map creation skipped - missing dependencies:', {
         mapLibre: !!mapLibre,
         mapContainer: !!mapContainer.current,
-        basemapUrl: !!pmtilesUrls.basemap,
-        allUrls: Object.keys(pmtilesUrls)
+        basemapUrl: !!pmtilesUrls.basemap
       })
       return
     }
 
+    // Clean up existing map
+    if (map.current) {
+      (map.current as any).remove()
+      map.current = null
+      setMapLoaded(false)
+    }
+
     try {
-      console.log('🚀 Creating map with URLs:', pmtilesUrls)
+      console.log('🔄 Creating map with PMTiles URLs:', pmtilesUrls)
       
-      // Validate URLs before creating map
-      const requiredSources = ['basemap']
-      const optionalSources = ['kommune', 'h3', 'bnbo']
-      
-      console.log('🔍 Validating required sources:', requiredSources.map(src => ({
-        source: src,
-        hasUrl: !!pmtilesUrls[src as keyof typeof pmtilesUrls],
-        url: pmtilesUrls[src as keyof typeof pmtilesUrls]
-      })))
-      
-      console.log('🔍 Validating optional sources:', optionalSources.map(src => ({
-        source: src,
-        hasUrl: !!pmtilesUrls[src as keyof typeof pmtilesUrls],
-        url: pmtilesUrls[src as keyof typeof pmtilesUrls]
-      })))
-      
-      // Create sources object with only available URLs
+      // Create sources object with available URLs
       const sources: Record<string, { type: string; url: string }> = {}
       
       if (pmtilesUrls.basemap) {
@@ -377,12 +424,20 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         console.log('✅ Added kommune source')
       }
       
-      if (pmtilesUrls.h3) {
-        sources.h3 = {
+      if (pmtilesUrls.h3_res8) {
+        sources.h3_res8 = {
           type: 'vector',
-          url: `pmtiles://${pmtilesUrls.h3}`,
+          url: `pmtiles://${pmtilesUrls.h3_res8}`,
         }
-        console.log('✅ Added h3 source')
+        console.log('✅ Added h3_res8 source')
+      }
+      
+      if (pmtilesUrls.h3_res10) {
+        sources.h3_res10 = {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.h3_res10}`,
+        }
+        console.log('✅ Added h3_res10 source')
       }
       
       if (pmtilesUrls.bnbo) {
@@ -390,9 +445,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           type: 'vector',
           url: `pmtiles://${pmtilesUrls.bnbo}`,
         }
-        console.log('✅ Added bnbo source:', pmtilesUrls.bnbo)
-      } else {
-        console.log('❌ No BNBO URL found in pmtilesUrls:', pmtilesUrls)
+        console.log('✅ Added bnbo source')
       }
       
       console.log('🗺️ Final sources configuration:', sources)
@@ -447,11 +500,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
                 'forest', '#1a2f1a',
                 'residential', '#2a2a2a',
                 'commercial', '#2d2d2d',
-                'industrial', '#262626',
-                'farmland', '#1e2a1e',
-                '#222222'
+                'industrial', '#2f2f2f',
+                'farmland', '#2a2a1a',
+                '#1a1a1a'
               ],
-              'fill-opacity': 0.6
+              'fill-opacity': 0.8
             }
           },
           {
@@ -463,7 +516,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'fill-color': '#404040',
+              'fill-color': '#333333',
               'fill-opacity': 0.8
             }
           },
@@ -476,41 +529,32 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'line-color': '#606060',
+              'line-color': '#444444',
               'line-width': 0.5
             }
           },
           {
-            id: 'basemap-roads-minor',
+            id: 'basemap-roads',
             type: 'line',
             source: 'basemap',
             'source-layer': 'roads',
-            filter: ['!=', ['get', 'kind'], 'highway'],
             layout: {
               visibility: showBasemap ? 'visible' : 'none'
             },
             paint: {
-              'line-color': '#333333',
-              'line-width': 1
-            }
-          },
-          {
-            id: 'basemap-roads-major',
-            type: 'line',
-            source: 'basemap',
-            'source-layer': 'roads',
-            filter: ['==', ['get', 'kind'], 'highway'],
-            layout: {
-              visibility: showBasemap ? 'visible' : 'none'
-            },
-            paint: {
-              'line-color': '#444444',
-              'line-width': 2
+              'line-color': '#555555',
+              'line-width': [
+                'case',
+                ['==', ['get', 'kind'], 'highway'], 2,
+                ['==', ['get', 'kind'], 'major_road'], 1.5,
+                ['==', ['get', 'kind'], 'minor_road'], 1,
+                0.5
+              ]
             }
           }
         )
       }
-      
+
       // Add kommune layer if available (middle layer)
       if (sources.kommune) {
         layers.push({
@@ -519,7 +563,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           source: 'kommune',
           'source-layer': `kommune_pfas_${selectedYear}`,
           layout: {
-            visibility: shouldShowKommune ? 'visible' : 'none'
+            visibility: 'visible' // Will be updated by layer visibility effect
           },
           paint: {
             'fill-color': [
@@ -530,7 +574,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               1, 'rgba(255,100,100,0.3)',
               10, 'rgba(255,50,50,0.5)',
               50, 'rgba(255,0,0,0.7)',
-              100, 'rgba(150,0,0,0.8)'
+              100, 'rgba(139,0,0,0.8)'
             ],
             'fill-opacity': 0.7
           }
@@ -542,61 +586,98 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           source: 'kommune',
           'source-layer': `kommune_pfas_${selectedYear}`,
           layout: {
-            visibility: shouldShowKommune ? 'visible' : 'none'
+            visibility: 'visible' // Will be updated by layer visibility effect
           },
           paint: {
-            'line-color': 'rgba(255,255,255,0.5)',
-            'line-width': 1
+            'line-color': '#ffffff',
+            'line-width': 1,
+            'line-opacity': 0.8
+          }
+        })
+      }
+
+      // Add H3 layers for both resolutions
+      if (sources.h3_res8) {
+        layers.push({
+          id: 'h3-fill-res8',
+          type: 'fill',
+          source: 'h3_res8',
+          'source-layer': `h3_pfas_${selectedYear}_res8`,
+          layout: {
+            visibility: 'none' // Will be updated by layer visibility effect
+          },
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['get', currentPropertyName],
+              0, 'rgba(255,255,255,0.1)',
+              1, 'rgba(255,100,100,0.3)',
+              10, 'rgba(255,50,50,0.5)',
+              50, 'rgba(255,0,0,0.7)',
+              100, 'rgba(139,0,0,0.8)'
+            ],
+            'fill-opacity': 0.6
+          }
+        })
+        
+        layers.push({
+          id: 'h3-stroke-res8',
+          type: 'line',
+          source: 'h3_res8',
+          'source-layer': `h3_pfas_${selectedYear}_res8`,
+          layout: {
+            visibility: 'none' // Will be updated by layer visibility effect
+          },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': 0.5,
+            'line-opacity': 0.8
           }
         })
       }
       
-      // Add H3 layers if available (middle layer)
-      if (sources.h3) {
-        // Add layers for each H3 resolution
-        for (let res = 7; res <= 10; res++) {
-          const layerVisibility = res === currentH3Resolution && shouldShowH3 ? 'visible' : 'none'
-          
-          layers.push({
-            id: `h3-fill-res${res}`,
-            type: 'fill',
-            source: 'h3',
-            'source-layer': `h3_pfas_${selectedYear}_res${res}`,
-            layout: {
-              visibility: layerVisibility
-            },
-            paint: {
-              'fill-color': [
-                'interpolate',
-                ['linear'],
-                ['get', currentPropertyName],
-                0, 'rgba(255,255,255,0.1)',
-                1, 'rgba(255,100,100,0.3)',
-                10, 'rgba(255,50,50,0.5)',
-                50, 'rgba(255,0,0,0.7)',
-                100, 'rgba(150,0,0,0.8)'
-              ],
-              'fill-opacity': 0.7
-            }
-          })
-          
-          layers.push({
-            id: `h3-stroke-res${res}`,
-            type: 'line',
-            source: 'h3',
-            'source-layer': `h3_pfas_${selectedYear}_res${res}`,
-            layout: {
-              visibility: layerVisibility
-            },
-            paint: {
-              'line-color': 'rgba(255,255,255,0.3)',
-              'line-width': 0.5
-            }
-          })
-        }
+      if (sources.h3_res10) {
+        layers.push({
+          id: 'h3-fill-res10',
+          type: 'fill',
+          source: 'h3_res10',
+          'source-layer': `h3_pfas_${selectedYear}_res10`,
+          layout: {
+            visibility: 'none' // Will be updated by layer visibility effect
+          },
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['get', currentPropertyName],
+              0, 'rgba(255,255,255,0.1)',
+              1, 'rgba(255,100,100,0.3)',
+              10, 'rgba(255,50,50,0.5)',
+              50, 'rgba(255,0,0,0.7)',
+              100, 'rgba(139,0,0,0.8)'
+            ],
+            'fill-opacity': 0.6
+          }
+        })
+        
+        layers.push({
+          id: 'h3-stroke-res10',
+          type: 'line',
+          source: 'h3_res10',
+          'source-layer': `h3_pfas_${selectedYear}_res10`,
+          layout: {
+            visibility: 'none' // Will be updated by layer visibility effect
+          },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': 0.5,
+            'line-opacity': 0.8
+          }
+        })
       }
-      
-      // Add BNBO layer if available (top layer)
+
+      // Add BNBO layer if available (top overlay)
       if (sources.bnbo) {
         layers.push({
           id: 'bnbo-fill',
@@ -641,34 +722,107 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         })
       }
       
-      console.log('🗺️ Final layers configuration:', layers.map(l => ({ id: l.id, source: l.source })))
+      // Add highlight layers for selected cells (on top of all other layers)
+      if (sources.kommune) {
+        layers.push({
+          id: 'kommune-highlight',
+          type: 'line',
+          source: 'kommune',
+          'source-layer': `kommune_pfas_${selectedYear}`,
+          layout: {
+            visibility: 'none' // Initially hidden
+          },
+          paint: {
+            'line-color': '#00ff00', // Bright green highlight
+            'line-width': 4,
+            'line-opacity': 1
+          },
+          filter: ['==', ['get', 'kommune_code'], ''] // Initially no features match
+        })
+      }
       
+      if (sources.h3_res8) {
+        layers.push({
+          id: 'h3-highlight-res8',
+          type: 'line',
+          source: 'h3_res8',
+          'source-layer': `h3_pfas_${selectedYear}_res8`,
+          layout: {
+            visibility: 'none' // Initially hidden
+          },
+          paint: {
+            'line-color': '#00ff00', // Bright green highlight
+            'line-width': 4,
+            'line-opacity': 1
+          },
+          filter: ['==', ['get', 'h3_id'], ''] // Initially no features match
+        })
+      }
+      
+      if (sources.h3_res10) {
+        layers.push({
+          id: 'h3-highlight-res10',
+          type: 'line',
+          source: 'h3_res10',
+          'source-layer': `h3_pfas_${selectedYear}_res10`,
+          layout: {
+            visibility: 'none' // Initially hidden
+          },
+          paint: {
+            'line-color': '#00ff00', // Bright green highlight
+            'line-width': 4,
+            'line-opacity': 1
+          },
+          filter: ['==', ['get', 'h3_id'], ''] // Initially no features match
+        })
+      }
+      
+      if (sources.bnbo) {
+        layers.push({
+          id: 'bnbo-highlight',
+          type: 'line',
+          source: 'bnbo',
+          'source-layer': 'default',
+          layout: {
+            visibility: 'none' // Initially hidden
+          },
+          paint: {
+            'line-color': '#00ff00', // Bright green highlight
+            'line-width': 4,
+            'line-opacity': 1
+          },
+          filter: ['==', ['get', 'id'], ''] // Initially no features match
+        })
+      }
+      
+      // Create the map with sources and layers
       map.current = new (mapLibre as any).Map({
         container: mapContainer.current,
         style: {
           version: 8,
           sources: sources,
-          layers: layers,
+          layers: layers
         },
-        center: center,
-        zoom: zoom,
-        bearing: bearing,
-        pitch: pitch,
+        center: [10.5, 56.0], // Default center for Denmark
+        zoom: 7, // Default zoom
+        bearing: 0, // Default bearing
+        pitch: 0, // Default pitch
         maxZoom: 15,
         minZoom: 4,
         maxBounds: [
           [7.0, 54.0], // Southwest bounds (Denmark)
           [13.0, 58.0], // Northeast bounds (Denmark)
         ],
-        // Optimize for smooth interactions
+        // Mobile-optimized interaction options
         scrollZoom: {
           around: 'center'
         },
         doubleClickZoom: true,
         touchZoomRotate: true,
+        touchPitch: isMobile ? false : true, // Disable pitch on mobile
         dragPan: true,
         dragRotate: false,
-        keyboard: true,
+        keyboard: !isMobile, // Disable keyboard on mobile
         // Enable smooth transitions for better UX
         fadeDuration: 300,
         // Performance optimizations
@@ -678,34 +832,31 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         // Interaction options for better performance
         interactive: true,
         trackResize: true,
-        cooperativeGestures: false
+        cooperativeGestures: false // Disable cooperative gestures for better mobile UX
       }) as MapInstance
 
-      // Add controls with custom options for smoother zoom
-      (map.current as any).addControl(
-        new (mapLibre as any).NavigationControl({
-          showCompass: true,
-          showZoom: true,
-          visualizePitch: false
-        }), 
-        'top-right'
-      )
-      ;(map.current as any).addControl(new (mapLibre as any).ScaleControl(), 'bottom-left')
+      // Add controls with mobile-optimized options
+      const navigationControl = new (mapLibre as any).NavigationControl({
+        showCompass: !isMobile, // Hide compass on mobile
+        showZoom: true,
+        visualizePitch: false
+      });
+      
+      (map.current as any).addControl(navigationControl, 'top-right');
+      
+      // Only add scale control on desktop
+      if (!isMobile) {
+        (map.current as any).addControl(new (mapLibre as any).ScaleControl(), 'bottom-left');
+      }
       
       // Set map instance in store for external control
-      memoizedSetMapInstance(map.current as any)
+      setMapInstance(map.current as any)
 
       // Map event handlers with performance optimizations
       ;(map.current as any).on('load', () => {
         console.log('🎉 Map loaded successfully!')
-        
-        // Debug: Check available sources and layers
-        const style = (map.current as any).getStyle()
-        console.log('📊 Map style sources:', Object.keys(style.sources))
-        console.log('📊 Map style layers:', style.layers.map((l: any) => ({ id: l.id, type: l.type, source: l.source, 'source-layer': l['source-layer'] })))
-        
         setMapLoaded(true)
-        memoizedClearError()
+        clearError()
       })
       
       // Debug drag events
@@ -729,6 +880,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         const bearing = (map.current as any).getBearing()
         const pitch = (map.current as any).getPitch()
         
+        // Use throttled function for performance
         throttledSetViewState({ 
           center: [lng, lat], 
           zoom, 
@@ -741,14 +893,15 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         // Get available layers before querying
         const availableLayers = getAvailableInteractiveLayers()
         
-        if (availableLayers.length === 0) {
-          // No interactive layers available, just hide tooltip
-          memoizedHideTooltip()
-          if (isMobile) {
-            memoizedSetShowMobilePanel(false)
+                  if (availableLayers.length === 0) {
+            // No interactive layers available, clear selection and hide tooltip
+            clearSelectedCell()
+            hideTooltip()
+            if (isMobile) {
+              setShowMobilePanel(false)
+            }
+            return
           }
-          return
-        }
         
         try {
           const features = (map.current as any)?.queryRenderedFeatures(e.point, {
@@ -756,25 +909,39 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           })
           if (features && features.length > 0) {
             const feature = features[0]
-            memoizedShowTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
+            
+            // Set selected cell for highlighting
+            const cellId = feature.properties.h3_id || feature.properties.kommune_code || feature.properties.id || 'unknown'
+            const layerName = feature.layer.id
+            
+            setSelectedCell({
+              id: String(cellId),
+              layer: layerName,
+              properties: feature.properties
+            })
+            
+            showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
             
             // On mobile, also show the mobile panel
             if (isMobile) {
-              memoizedSetShowMobilePanel(true)
+              setShowMobilePanel(true)
             }
-          } else {
-            memoizedHideTooltip()
-            
-            // On mobile, hide the mobile panel when clicking empty space
-            if (isMobile) {
-              memoizedSetShowMobilePanel(false)
+                      } else {
+              // Clear selection when clicking empty space
+              clearSelectedCell()
+              hideTooltip()
+              
+              // On mobile, hide the mobile panel when clicking empty space
+              if (isMobile) {
+                setShowMobilePanel(false)
+              }
             }
-          }
         } catch (error) {
           console.warn('Error querying rendered features on click:', error)
-          memoizedHideTooltip()
+          clearSelectedCell()
+          hideTooltip()
           if (isMobile) {
-            memoizedSetShowMobilePanel(false)
+            setShowMobilePanel(false)
           }
         }
       })
@@ -788,7 +955,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           return
         }
         
-        memoizedHideTooltip()
+        hideTooltip()
         if (map.current) {
           (map.current as any).getCanvas().style.cursor = ''
         }
@@ -796,12 +963,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
       ;(map.current as any).on('error', (e: any) => {
         console.error('❌ Map error:', e)
-        memoizedSetError(`Map loading error: ${e.message || 'Unknown error'}`)
+        setError(`Map loading error: ${e.message || 'Unknown error'}`)
       })
-
+      
+      console.log('🗺️ Created layers:', layers.map(l => ({ id: l.id, source: l.source })))
+      
     } catch (err) {
-      console.error('❌ Error initializing map:', err)
-      memoizedSetError('Failed to initialize map')
+      console.error('❌ Error creating map:', err)
+      memoizedSetError('Failed to create map')
     }
 
     return () => {
@@ -809,22 +978,26 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         (map.current as any).remove()
         map.current = null
       }
-      // Clear map instance from store
-      memoizedSetMapInstance(null)
+      setMapInstance(null)
     }
-  }, [mapLibre, pmtilesUrls, selectedYear, currentH3Resolution, currentPropertyName, showBasemap, shouldShowH3, shouldShowKommune])
+  }, [mapLibre, pmtilesUrls, selectedYear, currentPropertyName, showBasemap, isMobile])
+
+  // No longer need dynamic H3 source updates - both sources are loaded initially
 
   // Update layer visibility when zoom changes (optimized)
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
     try {
-      console.log('🔄 Updating layer visibility for zoom:', zoom)
+      console.log('🔄 Updating layer visibility for zoom:', zoom, 'shouldShowKommune:', shouldShowKommune, 'shouldShowH3:', shouldShowH3, 'currentH3Resolution:', currentH3Resolution)
       
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
         if (map.current && (map.current as any).getLayer(layerId)) {
           (map.current as any).setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+          console.log(`✅ Updated ${layerId} visibility to ${visible ? 'visible' : 'none'}`)
+        } else {
+          console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
         }
       }
       
@@ -832,12 +1005,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       updateLayerVisibility('kommune-fill', shouldShowKommune)
       updateLayerVisibility('kommune-stroke', shouldShowKommune)
       
-      // Update H3 layers - only show current resolution
-      for (let res = 7; res <= 10; res++) {
-        const shouldShow = res === currentH3Resolution && shouldShowH3
-        updateLayerVisibility(`h3-fill-res${res}`, shouldShow)
-        updateLayerVisibility(`h3-stroke-res${res}`, shouldShow)
-      }
+      // Update H3 layers - check both res8 and res10, but only show current resolution
+      updateLayerVisibility('h3-fill-res8', shouldShowH3 && currentH3Resolution === 8)
+      updateLayerVisibility('h3-stroke-res8', shouldShowH3 && currentH3Resolution === 8)
+      updateLayerVisibility('h3-fill-res10', shouldShowH3 && currentH3Resolution === 10)
+      updateLayerVisibility('h3-stroke-res10', shouldShowH3 && currentH3Resolution === 10)
       
     } catch (error) {
       console.warn('Error updating layer visibility:', error)
@@ -868,8 +1040,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         'basemap-landuse',
         'basemap-buildings',
         'basemap-buildings-stroke',
-        'basemap-roads-minor',
-        'basemap-roads-major'
+        'basemap-roads'
       ]
       
       basemapLayers.forEach(layerId => {
@@ -898,13 +1069,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           1, 'rgba(255,100,100,0.3)',
           10, 'rgba(255,50,50,0.5)',
           50, 'rgba(255,0,0,0.7)',
-          100, 'rgba(150,0,0,0.8)'
+          100, 'rgba(139,0,0,0.8)'
         ])
       }
       
-      // Update H3 layers styling
-      for (let res = 7; res <= 10; res++) {
-        const layerId = `h3-fill-res${res}`
+      // Update H3 layer styling for both resolutions
+      const h3Layers = ['h3-fill-res8', 'h3-fill-res10']
+      h3Layers.forEach(layerId => {
         if ((map.current as any).getLayer(layerId)) {
           (map.current as any).setPaintProperty(layerId, 'fill-color', [
             'interpolate',
@@ -914,15 +1085,81 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             1, 'rgba(255,100,100,0.3)',
             10, 'rgba(255,50,50,0.5)',
             50, 'rgba(255,0,0,0.7)',
-            100, 'rgba(150,0,0,0.8)'
+            100, 'rgba(139,0,0,0.8)'
           ])
         }
-      }
+      })
       
     } catch (error) {
       console.warn('Error updating layer styling:', error)
     }
-  }, [selectedDataMode, currentPropertyName, mapLoaded])
+  }, [selectedDataMode, currentPropertyName, currentH3Resolution, mapLoaded])
+  
+  // Update cell highlighting when selected cell changes
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return
+
+    try {
+      console.log('🎯 Updating cell highlighting:', selectedCell)
+      
+      // Helper function to clear all highlight layers
+      const clearHighlights = () => {
+        // Clear kommune highlight
+        if ((map.current as any).getLayer('kommune-highlight')) {
+          (map.current as any).setLayoutProperty('kommune-highlight', 'visibility', 'none')
+        }
+        
+        // Clear H3 highlights - only res8 and res10
+        for (const res of [8, 10]) {
+          const highlightId = `h3-highlight-res${res}`
+          if ((map.current as any).getLayer(highlightId)) {
+            (map.current as any).setLayoutProperty(highlightId, 'visibility', 'none')
+          }
+        }
+        
+        // Clear BNBO highlight
+        if ((map.current as any).getLayer('bnbo-highlight')) {
+          (map.current as any).setLayoutProperty('bnbo-highlight', 'visibility', 'none')
+        }
+      }
+      
+      // Clear all highlights first
+      clearHighlights()
+      
+      // If a cell is selected, highlight it
+      if (selectedCell) {
+        const { id, layer } = selectedCell
+        
+        if (layer.includes('kommune')) {
+          // Highlight kommune
+          if ((map.current as any).getLayer('kommune-highlight')) {
+            (map.current as any).setFilter('kommune-highlight', ['==', ['get', 'kommune_code'], Number(id)])
+            (map.current as any).setLayoutProperty('kommune-highlight', 'visibility', 'visible')
+          }
+        } else if (layer.includes('h3')) {
+          // Highlight H3 cell - determine resolution from layer name
+          const resMatch = layer.match(/res(\d+)/)
+          if (resMatch) {
+            const res = parseInt(resMatch[1])
+            const highlightId = `h3-highlight-res${res}`
+            if ((map.current as any).getLayer(highlightId)) {
+              (map.current as any).setFilter(highlightId, ['==', ['get', 'h3_id'], id])
+              (map.current as any).setLayoutProperty(highlightId, 'visibility', 'visible')
+            }
+          }
+        } else if (layer.includes('bnbo')) {
+          // Highlight BNBO area
+          if ((map.current as any).getLayer('bnbo-highlight')) {
+            (map.current as any).setFilter('bnbo-highlight', ['==', ['get', 'id'], id])
+            (map.current as any).setLayoutProperty('bnbo-highlight', 'visibility', 'visible')
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.warn('Error updating cell highlighting:', error)
+    }
+  }, [selectedCell, mapLoaded])
   
   return (
     <div className={`relative ${className}`}>
@@ -931,8 +1168,8 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         className="w-full h-full"
         style={{
           position: 'relative',
-          cursor: 'grab',
-          touchAction: 'none',
+          cursor: isMobile ? 'default' : 'grab',
+          touchAction: isMobile ? 'pan-x pan-y' : 'none',
           pointerEvents: 'auto'
         }}
       />
@@ -942,6 +1179,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         <div className="absolute top-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono pointer-events-none">
           <div>FPS: {metrics.frameRate}</div>
           <div>Events: {metrics.eventCount}</div>
+          <div>Mobile: {isMobile ? 'Yes' : 'No'}</div>
         </div>
       )}
       
@@ -963,6 +1201,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             <p className="text-lg font-semibold mb-2">Map Error</p>
             <p className="text-sm">{error}</p>
           </div>
+        </div>
+      )}
+      
+      {/* Mobile tap hint - only show on first load */}
+      {isMobile && mapLoaded && (
+        <div className="absolute bottom-4 left-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg pointer-events-none opacity-75">
+          <p className="text-center">Tap areas to view details • Pinch to zoom • Drag to pan</p>
         </div>
       )}
       
