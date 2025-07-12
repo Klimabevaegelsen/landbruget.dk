@@ -13,7 +13,6 @@ on:
           - 'stage2'
           - 'stage3'
           - 'stage4'
-          - 'stage5'
         default: 'all'
       job:
         description: 'Specific job within stage (optional)'
@@ -187,10 +186,10 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=1 --job=fields_soil_types
 
-  # Stage 3: Environmental Coverage (Parallel)
-  stage3-fields-bnbo-water:
+  # Stage 2: Environmental Coverage (Parallel)
+  stage2-fields-bnbo-water:
     needs: [stage1-water-projects-bnbo, stage1-fields-soil-types]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -220,11 +219,11 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m unified_pipeline.gold.field_area_analysis.cli \
-            --stage=3 --job=fields_bnbo_water
+            --stage=2 --job=fields_bnbo_water
 
-  stage3-fields-wetland-water:
+  stage2-fields-wetland-water:
     needs: [stage1-water-projects-wetlands, stage1-fields-soil-types]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -254,12 +253,12 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m unified_pipeline.gold.field_area_analysis.cli \
-            --stage=3 --job=fields_wetland_water
+            --stage=2 --job=fields_wetland_water
 
-  # Stage 4: Final Assembly (Parallel)
-  stage4-final-bnbo:
-    needs: [stage3-fields-bnbo-water, stage1-fields-properties]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
+  # Stage 3: Final Analysis (Parallel)
+  stage3-final-bnbo:
+    needs: [stage2-fields-bnbo-water, stage1-fields-properties]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -289,11 +288,11 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m unified_pipeline.gold.field_area_analysis.cli \
-            --stage=4 --job=final_bnbo
+            --stage=3 --job=final_bnbo
 
-  stage4-final-wetland:
-    needs: [stage3-fields-wetland-water, stage1-fields-properties]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
+  stage3-final-wetland:
+    needs: [stage2-fields-wetland-water, stage1-fields-properties]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -323,12 +322,12 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m unified_pipeline.gold.field_area_analysis.cli \
-            --stage=4 --job=final_wetland
+            --stage=3 --job=final_wetland
 
-  # Stage 5: Consolidation
-  stage5-consolidate:
-    needs: [stage4-final-bnbo, stage4-final-wetland]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage5' || github.event.inputs.stage == '' }}
+  # Stage 4: Consolidation
+  stage4-consolidate:
+    needs: [stage3-final-bnbo, stage3-final-wetland]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -358,7 +357,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m unified_pipeline.gold.field_area_analysis.cli \
-            --stage=5 --job=consolidate
+            --stage=4 --job=consolidate
 
       - name: Pipeline Summary
         if: always()
