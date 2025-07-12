@@ -345,6 +345,11 @@ def process_chr_data(
     }
 
     for table_name, source_info in sources_to_load.items():
+        logging.info(f"=== LOADING TABLE: {table_name} ===")
+        logging.info(f"Source info: {source_info}")
+        logging.info(f"Load from memory: {load_from_memory}")
+        logging.info(f"Load from files fallback: {load_from_files_fallback}")
+
         input_source = None
         source_desc = "unknown"
         json_data_str = None  # To hold data for logging if needed
@@ -464,10 +469,15 @@ def process_chr_data(
             if bronze_dir.name == export_timestamp:
                 # bronze_dir already points to the timestamped directory
                 timestamped_bronze_dir = bronze_dir
+                logging.info(f"Bronze dir already contains timestamp: {timestamped_bronze_dir}")
             else:
                 # bronze_dir is the base directory, add timestamp
                 timestamped_bronze_dir = bronze_dir / export_timestamp
+                logging.info(f"Adding timestamp to bronze dir: {timestamped_bronze_dir}")
+
             path = timestamped_bronze_dir / source_info["file_key"]
+            logging.info(f"Looking for file: {path}")
+            logging.info(f"File exists: {path.exists()}")
 
             if path.exists():
                 input_source = str(path)
@@ -479,6 +489,7 @@ def process_chr_data(
 
                     # Try regular JSON array format first (CHR pipeline exports as JSON arrays)
                     try:
+                        logging.info(f"Trying JSON array format for {table_name}...")
                         raw_tables[table_name] = con.read_json(input_source, format="array", auto_detect=True)
                         successfully_loaded = True
                         logging.info(
@@ -519,6 +530,10 @@ def process_chr_data(
 
         if not successfully_loaded:
             logging.error(f"Failed to load table '{table_name}' from all available sources.")
+        else:
+            logging.info(f"Successfully loaded table '{table_name}'")
+
+        logging.info(f"=== FINISHED LOADING TABLE: {table_name} ===")
 
     # Handle VetStat separately (reading from the pre-processed JSONL file in silver)
     # Construct path within the silver directory
