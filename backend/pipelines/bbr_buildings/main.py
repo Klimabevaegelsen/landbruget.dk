@@ -93,7 +93,6 @@ def perform_spatial_join_optimized(
     # Enable spatial optimization settings for v1.2.2
     conn.execute("SET enable_progress_bar = false")
     conn.execute('SET memory_limit = "12GB"')
-    conn.execute("SET enable_optimizer = true")  # Ensure optimizer is enabled for SPATIAL_JOIN
 
     try:
         # Load and optimize GeoDanmark data with ST_Dump
@@ -108,15 +107,15 @@ def perform_spatial_join_optimized(
             CREATE OR REPLACE TABLE geodanmark_buildings AS
             SELECT 
                 BBRUUID,
-                UNNEST(ST_Dump(geometry)).geom as geometry,
+                UNNEST(ST_Dump(geometri)).geom as geometry,
                 bygningstype,
                 opfoerelsesaar,
                 etagetal,
                 bygningsanvendelse,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as building_area_m2
+                ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) as building_area_m2
             FROM geodanmark_buildings_raw
-            WHERE ST_IsValid(geometry)
-            AND ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) > 1  -- Minimum 1m² building area
+            WHERE ST_IsValid(geometri)
+            AND ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) > 1  -- Minimum 1m² building area
         """)
 
         # Create INSPIRE building IDs table for spatial join
@@ -279,7 +278,6 @@ def perform_true_spatial_join_example(
     conn = duckdb.connect()
     conn.execute("INSTALL spatial")
     conn.execute("LOAD spatial")
-    conn.execute("SET enable_optimizer = true")
 
     try:
         # This query structure will trigger the SPATIAL_JOIN operator
@@ -365,16 +363,16 @@ def perform_chunked_spatial_join(
         CREATE OR REPLACE TABLE geodanmark_buildings AS
         SELECT 
             BBRUUID,
-            UNNEST(ST_Dump(geometry)).geom as geometry,
+            UNNEST(ST_Dump(geometri)).geom as geometry,
             -- Keep other important attributes
             bygningstype,
             opfoerelsesaar,
             etagetal,
             bygningsanvendelse,
-            ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as building_area_m2
+            ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) as building_area_m2
         FROM geodanmark_buildings_raw
-        WHERE ST_IsValid(geometry)
-        AND ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) > 1  -- Minimum 1m² building area
+        WHERE ST_IsValid(geometri)
+        AND ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) > 1  -- Minimum 1m² building area
     """)
 
     # Get optimized building count
