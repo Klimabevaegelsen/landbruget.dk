@@ -21,7 +21,10 @@ class FieldAreaAnalysisConfig(BaseModel):
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Processing parameters optimized for GitHub Actions (16GB RAM, 4 CPU)
-    batch_size: int = 250000
+    batch_size: int = 250000  # Stage 1C: Large datasets (fields × properties)
+    stage3_batch_size: int = (
+        25000  # Stage 3: Complex spatial joins (fields × env features × water projects)
+    )
     max_memory_gb: int = 14  # Leave 2GB for system overhead
     max_threads: int = 4
     max_temp_directory_size: str = "12GB"  # Leave space for downloads
@@ -31,6 +34,10 @@ class FieldAreaAnalysisConfig(BaseModel):
     preserve_insertion_order: bool = False  # Faster processing
     enable_object_cache: bool = True
 
+    # GitHub Actions memory management settings
+    memory_cleanup_frequency: int = 3  # Clean up every N batches for Stage 3
+    stage1_memory_cleanup_frequency: int = 5  # Less frequent for Stage 1 (simpler queries)
+
     # Output dataset names for intermediate stages
     stage_outputs: Dict[str, str] = {
         # Stage 1 outputs
@@ -39,16 +46,14 @@ class FieldAreaAnalysisConfig(BaseModel):
         "wetland_water_coverage": "field_analysis_wetland_water_coverage",
         "water_projects_wetlands_intersections": "field_analysis_water_projects_wetlands_intersections",
         "field_property_intersections": "field_analysis_property_intersections",
-        # Stage 2 outputs
-        "fields_with_soil": "field_analysis_fields_soil",
-        # Stage 3 outputs
+        # Stage 2 outputs (formerly Stage 3)
         "fields_bnbo_water": "field_analysis_fields_bnbo_water",
         "fields_wetland_water": "field_analysis_fields_wetland_water",
-        # Stage 4 outputs
+        # Stage 3 outputs (formerly Stage 4)
         "final_bnbo": "field_analysis_final_bnbo",
         "final_wetland": "field_analysis_final_wetland",
-        # Final output
-        "consolidated": "field_area_analysis_final",
+        # Stage 4 outputs (formerly Stage 5)
+        "consolidated": "field_analysis_final",
     }
 
     # Parquet export settings for optimal performance

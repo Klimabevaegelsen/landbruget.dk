@@ -18,16 +18,16 @@ from unified_pipeline.util.log_util import Logger
 
 from .base import FieldAnalysisStageConfig
 from .stage1.fields_properties import FieldsPropertiesIntersection
-from .stage1.fields_soil_types import FieldsSoilTypesIntersection
 
 # Import all stage classes
+from .stage1.fields_soil_types import FieldsSoilTypesIntersection
 from .stage1.water_projects_bnbo import WaterProjectsBNBOIntersection
 from .stage1.water_projects_wetlands import WaterProjectsWetlandsIntersection
-from .stage3.fields_bnbo_water import FieldsBNBOWaterCoverage
-from .stage3.fields_wetland_water import FieldsWetlandWaterCoverage
-from .stage4.final_bnbo import FinalBNBOAnalysis
-from .stage4.final_wetland import FinalWetlandAnalysis
-from .stage5.consolidate import ConsolidateResults
+from .stage2.fields_bnbo_water import FieldsBNBOWaterCoverage
+from .stage2.fields_wetland_water import FieldsWetlandWaterCoverage
+from .stage3.final_bnbo import FinalBNBOAnalysis
+from .stage3.final_wetland import FinalWetlandAnalysis
+from .stage4.consolidate import ConsolidateResults
 
 # Configure logging
 logger = Logger.get_logger()
@@ -38,18 +38,20 @@ STAGE_JOBS = {
         "water_projects_bnbo": WaterProjectsBNBOIntersection,
         "water_projects_wetlands": WaterProjectsWetlandsIntersection,
         "fields_properties": FieldsPropertiesIntersection,
-        "fields_soil_types": FieldsSoilTypesIntersection,  # Moved from Stage 2 to Stage 1
+        "fields_soil_types": FieldsSoilTypesIntersection,
     },
-    # Stage 2 is now empty - environmental coverage moved to Stage 3
-    3: {
+    # Stage 2 (formerly Stage 3)
+    2: {
         "fields_bnbo_water": FieldsBNBOWaterCoverage,
         "fields_wetland_water": FieldsWetlandWaterCoverage,
     },
-    4: {
+    # Stage 3 (formerly Stage 4)
+    3: {
         "final_bnbo": FinalBNBOAnalysis,
         "final_wetland": FinalWetlandAnalysis,
     },
-    5: {
+    # Stage 4 (formerly Stage 5)
+    4: {
         "consolidate": ConsolidateResults,
     },
 }
@@ -121,7 +123,7 @@ async def run_all_stages(config: FieldAnalysisStageConfig) -> Dict[str, Any]:
 
     # Run stages sequentially (dependencies handled by stage ordering)
     # Note: Stage 2 is empty in the current architecture
-    for stage in [1, 2, 3, 4, 5]:
+    for stage in [1, 2, 3, 4]:
         try:
             stage_result = await run_stage_all_jobs(stage, config)
             all_results[f"stage_{stage}"] = stage_result
@@ -129,7 +131,7 @@ async def run_all_stages(config: FieldAnalysisStageConfig) -> Dict[str, Any]:
             # Log progress
             elapsed = time.time() - pipeline_start_time
             logger.info(
-                f"📊 Pipeline progress: Stage {stage}/5 completed in {elapsed:.1f} seconds total"
+                f"📊 Pipeline progress: Stage {stage}/4 completed in {elapsed:.1f} seconds total"
             )
 
         except Exception as e:
@@ -164,9 +166,9 @@ Examples:
 
 Stage/Job combinations:
   Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, fields_soil_types
-  Stage 3: fields_bnbo_water, fields_wetland_water (uses Stage 1 foundation data)
-  Stage 4: final_bnbo, final_wetland
-  Stage 5: consolidate
+  Stage 2: fields_bnbo_water, fields_wetland_water (uses Stage 1 foundation data)
+  Stage 3: final_bnbo, final_wetland
+  Stage 4: consolidate
         """,
     )
 
