@@ -178,8 +178,6 @@ def process_chr_data(
 
     # Ensure we have an export timestamp for GCS upload
     if export_timestamp is None:
-        from datetime import datetime
-
         export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         logging.info(f"Generated export timestamp: {export_timestamp}")
 

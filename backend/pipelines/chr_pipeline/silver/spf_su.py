@@ -229,6 +229,9 @@ def create_spf_su_health_controls_table(
               AND len(healthStatus.healthControlInfo) > 0
         """)
 
+        # Register the intermediate table for the next query
+        con.create_table("health_controls", health_controls, overwrite=True)
+
         # Extract disease information from the unnested health control data
         health_controls_expanded = con.sql("""
             SELECT
