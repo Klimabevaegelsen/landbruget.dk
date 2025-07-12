@@ -308,6 +308,20 @@ def process_chr_data(
 
     # --- 3. Load Bronze Data into Ibis Tables ---
     logging.info("Loading bronze data into Ibis tables...")
+
+    # Debug: List available bronze files
+    if load_from_files_fallback:
+        if bronze_dir.name == export_timestamp:
+            files_dir = bronze_dir
+        else:
+            files_dir = bronze_dir / export_timestamp
+
+        if files_dir.exists():
+            available_files = list(files_dir.glob("*.json"))
+            logging.info(f"Available bronze files in {files_dir}: {[f.name for f in available_files]}")
+        else:
+            logging.warning(f"Bronze files directory does not exist: {files_dir}")
+
     raw_tables = {}
 
     # Define sources and their corresponding keys/paths
@@ -525,6 +539,8 @@ def process_chr_data(
         )
 
     # --- Check if essential tables were loaded ---
+    logging.info(f"Successfully loaded tables: {list(raw_tables.keys())}")
+
     if "bes_details" not in raw_tables:
         logging.error("Essential table 'bes_details' could not be loaded. Aborting processing.")
         sys.exit(1)
