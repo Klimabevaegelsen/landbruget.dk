@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { useMapStore, useDataState, DataMode, DATA_MODE_CONFIG } from '@/stores/map-store';
+import { useUIStore } from '@/stores/ui-store';
 
 interface DataModeSelectorProps {
   className?: string;
-  variant?: 'sidebar' | 'topbar';
+  variant?: 'sidebar' | 'topbar' | 'mobile';
 }
 
 const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
@@ -54,45 +55,72 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   );
 };
 
+// Define modes with mobile-friendly labels
+const modes: { key: DataMode; label: string; shortLabel: string; mobileLabel: string; description: string; color: string }[] = [
+  {
+    key: 'pesticide_total',
+    label: 'Total Pesticide',
+    shortLabel: 'Total',
+    mobileLabel: 'Total',
+    description: 'All pesticide applications combined',
+    color: 'text-gray-700',
+  },
+  {
+    key: 'pfas',
+    label: 'PFAS',
+    shortLabel: 'PFAS',
+    mobileLabel: 'PFAS',
+    description: 'PFAS-containing pesticides only',
+    color: 'text-red-600',
+  },
+  {
+    key: 'diquat',
+    label: 'Diquat',
+    shortLabel: 'Diquat',
+    mobileLabel: 'Diquat',
+    description: 'Diquat-containing pesticides only',
+    color: 'text-blue-600',
+  },
+  {
+    key: 'glyphosate',
+    label: 'Glyphosate',
+    shortLabel: 'Glyphosate',
+    mobileLabel: 'Glyphosate',
+    description: 'Glyphosate-containing pesticides only',
+    color: 'text-green-600',
+  },
+];
+
 export const DataModeSelector: React.FC<DataModeSelectorProps> = ({ 
   className = '', 
   variant = 'sidebar' 
 }) => {
   const { selectedDataMode } = useDataState();
   const { setSelectedDataMode } = useMapStore();
+  const { isMobile } = useUIStore();
 
-  const modes: { key: DataMode; label: string; shortLabel: string; description: string; color: string }[] = [
-    {
-      key: 'pesticide_total',
-      label: 'Total Pesticide',
-      shortLabel: 'Total',
-      description: 'All pesticide applications combined',
-      color: 'text-gray-700',
-    },
-    {
-      key: 'pfas',
-      label: 'PFAS',
-      shortLabel: 'PFAS',
-      description: 'PFAS-containing pesticides only',
-      color: 'text-red-600',
-    },
-    {
-      key: 'diquat',
-      label: 'Diquat',
-      shortLabel: 'Diquat',
-      description: 'Diquat-containing pesticides only',
-      color: 'text-blue-600',
-    },
-    {
-      key: 'glyphosate',
-      label: 'Glyphosate',
-      shortLabel: 'Glyphosate',
-      description: 'Glyphosate-containing pesticides only',
-      color: 'text-green-600',
-    },
-  ];
+  // Mobile-optimized topbar version
+  if (variant === 'topbar' && isMobile) {
+    return (
+      <div className={`flex flex-wrap gap-2 ${className}`}>
+        {modes.map((mode) => (
+          <button
+            key={mode.key}
+            onClick={() => setSelectedDataMode(mode.key)}
+            className={`px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 border touch-manipulation min-w-0 ${
+              selectedDataMode === mode.key
+                ? 'bg-white/20 text-white border-white/30 shadow-sm'
+                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+            }`}
+          >
+            {mode.mobileLabel}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
-  // Minimal top bar version inspired by London Underground Live
+  // Desktop topbar version
   if (variant === 'topbar') {
     return (
       <div className={`flex items-center space-x-1 ${className}`}>
@@ -113,57 +141,55 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
     );
   }
 
-  // Original sidebar version
-  return (
-    <div className={`bg-white rounded-lg shadow-lg border border-gray-200 p-4 ${className}`}>
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Mode</h3>
-      
-      <div className="space-y-2">
+  // Mobile-specific variant
+  if (variant === 'mobile') {
+    return (
+      <div className={`space-y-2 ${className}`}>
         {modes.map((mode) => (
           <button
             key={mode.key}
             onClick={() => setSelectedDataMode(mode.key)}
-            className={`w-full text-left p-3 rounded-lg border transition-all duration-200 ${
+            className={`w-full flex items-center justify-between p-4 rounded-lg transition-all duration-200 border touch-manipulation ${
               selectedDataMode === mode.key
-                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                ? 'bg-white/20 text-white border-white/30 shadow-sm'
+                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className={`font-medium ${mode.color} ${
-                  selectedDataMode === mode.key ? 'text-blue-700' : ''
-                }`}>
-                  {mode.label}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {mode.description}
-                </div>
-              </div>
-              
-              {selectedDataMode === mode.key && (
-                <div className="ml-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                </div>
-              )}
+            <div className="flex flex-col items-start">
+              <span className="font-medium">{mode.label}</span>
+              <span className="text-xs text-white/50">{mode.description}</span>
             </div>
+            {selectedDataMode === mode.key && (
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+            )}
           </button>
         ))}
       </div>
+    );
+  }
 
-      {/* Color scale legend for selected mode */}
-      <ColorScaleLegend mode={selectedDataMode} />
-
-      {/* Additional info */}
-      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <div className="text-sm text-yellow-800">
-          <div className="font-medium mb-1">Note:</div>
-          <div>
-            Data visualization switches automatically between Kommune (low zoom) and H3 cell (high zoom) layers. 
-            Zoom in for detailed field-level analysis.
+  // Default sidebar version
+  return (
+    <div className={`space-y-2 ${className}`}>
+      {modes.map((mode) => (
+        <button
+          key={mode.key}
+          onClick={() => setSelectedDataMode(mode.key)}
+          className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 border ${
+            selectedDataMode === mode.key
+              ? 'bg-white/20 text-white border-white/30 shadow-sm'
+              : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+          }`}
+        >
+          <div className="flex flex-col items-start">
+            <span className="font-medium text-sm">{mode.label}</span>
+            <span className="text-xs text-white/50">{mode.description}</span>
           </div>
-        </div>
-      </div>
+          {selectedDataMode === mode.key && (
+            <div className="w-2 h-2 bg-white rounded-full"></div>
+          )}
+        </button>
+      ))}
     </div>
   );
 };

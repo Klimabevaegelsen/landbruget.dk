@@ -17,7 +17,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     properties_dataset: str = "property_cadastral_merged"
     soil_types_dataset: str = "soil_types"
     bnbo_status_dataset: str = "bnbo_status_dissolved"
-    wetlands_dataset: str = "wetlands_dissolved"
+    wetlands_dataset: str = "wetlands"
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Processing parameters optimized for GitHub Actions (16GB RAM, 4 CPU)

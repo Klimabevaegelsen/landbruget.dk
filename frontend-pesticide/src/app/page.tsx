@@ -38,24 +38,30 @@ export default function Home() {
     flyToLocation
   } = useMapStore();
 
-  // Detect mobile viewport
+  // Detect mobile viewport with improved handling
   useEffect(() => {
     const checkMobile = () => {
       const isMobileViewport = window.innerWidth < 768;
+      const wasAlreadyMobile = isMobile;
+      
       setIsMobile(isMobileViewport);
       
-      // Close sidebar on mobile, close mobile panel on desktop
-      if (isMobileViewport) {
-        setShowSidebar(false);
-      } else {
-        setShowMobilePanel(false);
+      // Only adjust panels if mobile state actually changed
+      if (isMobileViewport !== wasAlreadyMobile) {
+        if (isMobileViewport) {
+          setShowSidebar(false);
+          setShowMobilePanel(false); // Start with mobile panel closed
+        } else {
+          setShowMobilePanel(false);
+          setShowSidebar(true); // Show sidebar on desktop
+        }
       }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [setIsMobile, setShowMobilePanel]);
+  }, []); // Remove dependencies to prevent infinite loops
 
   // Initialize the application
   useEffect(() => {
@@ -85,7 +91,7 @@ export default function Home() {
     };
 
     initialize();
-  }, [setAvailableYearOptions, mapSetError, mapClearError]);
+  }, []); // Empty dependency array - only run once on mount
 
   // Convert tooltip data to HoverInfo format for sidebar
   const convertToHoverInfo = (tooltipData: Record<string, unknown>, position: { x: number; y: number }): HoverInfo | null => {
@@ -134,36 +140,36 @@ export default function Home() {
     });
   };
 
-  // Loading state
+  // Loading state with mobile-optimized layout
   if (isInitializing || !isInitialized) {
     console.log('🔄 Still loading - isInitializing:', isInitializing, 'isInitialized:', isInitialized);
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
           <div className="w-8 h-8 border-2 border-white/40 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg font-medium">Loading PMTiles Map...</p>
+          <p className="text-white text-base sm:text-lg font-medium">Loading PMTiles Map...</p>
           <p className="text-white/60 text-sm mt-2">Discovering latest data from GCS bucket</p>
         </div>
       </div>
     );
   }
 
-  // Error state
+  // Error state with mobile-optimized layout
   if (error) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
           <div className="text-red-400 text-4xl mb-4">⚠️</div>
-          <p className="text-white text-lg font-medium">Error Loading Map</p>
-          <p className="text-white/60 text-sm mt-2">{error}</p>
+          <p className="text-white text-base sm:text-lg font-medium">Error Loading Map</p>
+          <p className="text-white/60 text-sm mt-2 break-words">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
-      {/* Top Bar - London Underground Style */}
+    <div className="min-h-screen bg-black flex flex-col overflow-hidden">
+      {/* Top Bar - Mobile Optimized */}
       <TopBar
         showControls={showControls}
         setShowControls={setShowControls}
@@ -174,10 +180,11 @@ export default function Home() {
         onLocationSelect={handleLocationSelect}
       />
 
-      <div className="flex-1 flex relative">
-        {/* Left Sidebar - Advanced Controls (hidden by default) */}
-        {showControls && (
-          <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto">
+      {/* Main Content Area - Mobile Optimized */}
+      <div className="flex-1 flex relative min-h-0">
+        {/* Left Sidebar - Advanced Controls (hidden by default, desktop only) */}
+        {showControls && !isMobile && (
+          <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto flex-shrink-0">
             <div className="p-4 space-y-6">
               <h3 className="text-lg font-semibold text-white mb-4">Advanced Controls</h3>
               
@@ -199,11 +206,11 @@ export default function Home() {
           </div>
         )}
         
-        {/* Map Container */}
-        <div className={`flex-1 relative transition-all duration-300 ease-in-out ${
-          !isMobile && showSidebar ? 'mr-96' : 'mr-0'
-        }`}>
-          <PMTilesMap className="w-full h-full" />
+        {/* Map Container - Mobile Optimized */}
+        <div className="flex-1 relative transition-all duration-300 ease-in-out min-h-0">
+          <div className="w-full h-full relative">
+            <PMTilesMap className="w-full h-full" />
+          </div>
         </div>
 
         {/* Right Sidebar - Data Details (Desktop Only) */}
@@ -216,7 +223,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Mobile Bottom Panel */}
+      {/* Mobile Bottom Panel - Mobile Only */}
       {isMobile && (
         <MobileBottomPanel 
           hoverInfo={hoverInfo}
