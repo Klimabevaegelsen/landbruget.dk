@@ -345,10 +345,10 @@ def process_chr_data(
     }
 
     for table_name, source_info in sources_to_load.items():
-        logging.info(f"=== LOADING TABLE: {table_name} ===")
-        logging.info(f"Source info: {source_info}")
-        logging.info(f"Load from memory: {load_from_memory}")
-        logging.info(f"Load from files fallback: {load_from_files_fallback}")
+        logging.warning(f"=== LOADING TABLE: {table_name} ===")
+        logging.warning(f"Source info: {source_info}")
+        logging.warning(f"Load from memory: {load_from_memory}")
+        logging.warning(f"Load from files fallback: {load_from_files_fallback}")
 
         input_source = None
         source_desc = "unknown"
@@ -464,51 +464,53 @@ def process_chr_data(
 
         # --- Attempt 2: Load from File using Ibis (Fallback) --- #
         if not successfully_loaded and load_from_files_fallback:
-            logging.info(f"Attempting to load '{table_name}' from file (fallback mode)...")
+            logging.warning(f"Attempting to load '{table_name}' from file (fallback mode)...")
             # Check if bronze_dir already contains the timestamp directory
             if bronze_dir.name == export_timestamp:
                 # bronze_dir already points to the timestamped directory
                 timestamped_bronze_dir = bronze_dir
-                logging.info(f"Bronze dir already contains timestamp: {timestamped_bronze_dir}")
+                logging.warning(f"Bronze dir already contains timestamp: {timestamped_bronze_dir}")
             else:
                 # bronze_dir is the base directory, add timestamp
                 timestamped_bronze_dir = bronze_dir / export_timestamp
-                logging.info(f"Adding timestamp to bronze dir: {timestamped_bronze_dir}")
+                logging.warning(f"Adding timestamp to bronze dir: {timestamped_bronze_dir}")
 
             path = timestamped_bronze_dir / source_info["file_key"]
-            logging.info(f"Looking for file: {path}")
-            logging.info(f"File exists: {path.exists()}")
+            logging.warning(f"Looking for file: {path}")
+            logging.warning(f"File exists: {path.exists()}")
 
             if path.exists():
                 input_source = str(path)
                 source_desc = f"file '{path.relative_to(bronze_dir.parent)}' (fallback)"
 
-                logging.info(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
+                logging.warning(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
                 try:
                     con.con.sql(f"DROP TABLE IF EXISTS {table_name};")  # Ensure clean slate
 
                     # Try regular JSON array format first (CHR pipeline exports as JSON arrays)
                     try:
-                        logging.info(f"Trying JSON array format for {table_name}...")
+                        logging.warning(f"Trying JSON array format for {table_name}...")
                         raw_tables[table_name] = con.read_json(input_source, format="array", auto_detect=True)
                         successfully_loaded = True
-                        logging.info(
+                        logging.warning(
                             f"Successfully loaded {source_desc} into table '{table_name}' (using JSON array format)."
                         )
                     except Exception as e_array:
-                        logging.info(f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}")
+                        logging.warning(
+                            f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}"
+                        )
                         # Fallback to newline_delimited format
                         raw_tables[table_name] = con.read_json(
                             input_source, format="newline_delimited", auto_detect=True
                         )
                         successfully_loaded = True
-                        logging.info(
+                        logging.warning(
                             f"Successfully loaded {source_desc} into table '{table_name}' (using newline_delimited format)."
                         )
 
                     # Log schema for debugging
                     schema = raw_tables[table_name].schema()
-                    logging.info(f"Schema for {table_name}: {schema}")
+                    logging.warning(f"Schema for {table_name}: {schema}")
 
                 except Exception as e_file:
                     logging.error(
@@ -531,20 +533,20 @@ def process_chr_data(
         if not successfully_loaded:
             logging.error(f"Failed to load table '{table_name}' from all available sources.")
         else:
-            logging.info(f"Successfully loaded table '{table_name}'")
+            logging.warning(f"Successfully loaded table '{table_name}'")
 
-        logging.info(f"=== FINISHED LOADING TABLE: {table_name} ===")
+        logging.warning(f"=== FINISHED LOADING TABLE: {table_name} ===")
 
     # Handle VetStat separately (reading from the pre-processed JSONL file in silver)
     # Construct path within the silver directory
     vetstat_antibiotics_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
     if vetstat_antibiotics_jsonl_path.exists():  # Check if it exists in silver
-        logging.info(f"Loading pre-processed VetStat data from {vetstat_antibiotics_jsonl_path.name}...")
+        logging.warning(f"Loading pre-processed VetStat data from {vetstat_antibiotics_jsonl_path.name}...")
         try:
             raw_tables["vetstat"] = con.read_json(str(vetstat_antibiotics_jsonl_path), format="newline_delimited")
-            logging.info("Successfully loaded vetstat data.")
+            logging.warning("Successfully loaded vetstat data.")
             schema = raw_tables["vetstat"].schema()
-            logging.info(f"Schema for vetstat: {schema}")
+            logging.warning(f"Schema for vetstat: {schema}")
         except Exception as e:
             logging.error(f"Error loading vetstat JSONL data: {e}")
             logging.error(f"DEBUG(Added): Vetstat JSONL load failed from path: {vetstat_antibiotics_jsonl_path}")
@@ -554,9 +556,9 @@ def process_chr_data(
         )
 
     # --- DEBUG: Show loading results before essential table check ---
-    logging.info("=== DATA LOADING SUMMARY ===")
-    logging.info(f"Successfully loaded tables: {list(raw_tables.keys())}")
-    logging.info(f"Total tables loaded: {len(raw_tables)}")
+    logging.warning("=== DATA LOADING SUMMARY ===")
+    logging.warning(f"Successfully loaded tables: {list(raw_tables.keys())}")
+    logging.warning(f"Total tables loaded: {len(raw_tables)}")
 
     # Show which essential tables are missing
     essential_tables = ["bes_details", "ejendom_oplys"]
@@ -564,7 +566,7 @@ def process_chr_data(
     if missing_essential:
         logging.error(f"Missing essential tables: {missing_essential}")
     else:
-        logging.info("All essential tables loaded successfully")
+        logging.warning("All essential tables loaded successfully")
 
     # --- Check if essential tables were loaded ---
     if "bes_details" not in raw_tables:
