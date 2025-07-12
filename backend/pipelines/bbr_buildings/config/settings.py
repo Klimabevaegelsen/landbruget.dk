@@ -30,6 +30,14 @@ class Settings:
         self.datafordeler_username = os.getenv("DATAFORDELER_USERNAME")
         self.datafordeler_password = os.getenv("DATAFORDELER_PASSWORD")
 
+        # GraphQL API settings
+        self.datafordeler_graphql_api_key = os.getenv("DATAFORDELER_GRAPHQL_API_KEY")
+        self.graphql_endpoint = os.getenv(
+            "GRAPHQL_ENDPOINT", "https://api.dataforsyningen.dk/graphql"
+        )
+        self.graphql_batch_size = self._get_int_env("GRAPHQL_BATCH_SIZE", 1000)
+        self.graphql_max_retries = self._get_int_env("GRAPHQL_MAX_RETRIES", 3)
+
         # Google Cloud Storage
         self.gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
         self.gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -72,13 +80,6 @@ class Settings:
         self.spatial_index_type = os.getenv(
             "SPATIAL_INDEX_TYPE", "rtree"
         )  # Future: support different index types
-
-        # GraphQL API settings
-        self.graphql_endpoint = os.getenv(
-            "GRAPHQL_ENDPOINT", "https://api.dataforsyningen.dk/graphql"
-        )
-        self.graphql_batch_size = self._get_int_env("GRAPHQL_BATCH_SIZE", 1000)
-        self.graphql_max_retries = self._get_int_env("GRAPHQL_MAX_RETRIES", 3)
 
         # Building category filters
         self.target_building_categories = ["residential", "agriculture", "education", "daycare"]
