@@ -189,113 +189,74 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info(f"   Meaningful intersections: {detailed_count:,}")
         self.log.info(f"   Noise filtered: {filtered_out:,}")
 
-        self.log.info("Step 2: Creating fields with dominant soil types...")
+        self.log.info("Step 2: Creating simplified soil areas per field...")
 
-        # Create final table with dominant soil type per field
+        # Create simplified table with just area per soil type per field
         final_query = """
-        CREATE OR REPLACE TABLE fields_with_soil AS
-        WITH dominant_soil AS (
-            SELECT 
-                field_id,
-                block_id,
-                cvr_number,
-                year,
-                field_geometry,
-                field_area_m2,
-                soil_code,
-                soil_description,
-                soil_type_category,
-                soil_intersection_area_m2,
-                soil_area_share_pct,
-                -- Rank by intersection area to find dominant soil type
-                ROW_NUMBER() OVER (
-                    PARTITION BY field_id, block_id, cvr_number 
-                    ORDER BY soil_intersection_area_m2 DESC
-                ) as soil_rank
-            FROM field_soil_detailed
-        ),
-        -- Also include fields with no soil data
-        all_fields AS (
-            SELECT 
-                field_id,
-                block_id,
-                cvr_number,
-                year,
-                geometry as field_geometry,
-                ST_Area_Spheroid(geometry) as field_area_m2
-            FROM agricultural_fields
-        )
+        CREATE OR REPLACE TABLE field_soil_areas AS
         SELECT 
-            af.field_id,
-            af.block_id,
-            af.cvr_number,
-            af.year,
-            af.field_geometry as geometry,
-            af.field_area_m2,
-            COALESCE(ds.soil_code, 'Unknown') as dominant_soil_code,
-            COALESCE(ds.soil_description, 'Unknown soil type') as dominant_soil_description,
-            COALESCE(ds.soil_type_category, 'Unknown') as dominant_soil_category,
-            COALESCE(ds.soil_area_share_pct, 0) as dominant_soil_share_pct
-        FROM all_fields af
-        LEFT JOIN dominant_soil ds ON (
-            af.field_id = ds.field_id 
-            AND af.block_id = ds.block_id 
-            AND af.cvr_number = ds.cvr_number
-            AND ds.soil_rank = 1
-        )
+            field_id,
+            block_id,
+            cvr_number,
+            year,
+            soil_code,
+            soil_description,
+            soil_type_category,
+            soil_intersection_area_m2 as soil_area_m2,
+            soil_area_share_pct,
+            field_area_m2
+        FROM field_soil_detailed
+        ORDER BY field_id, block_id, cvr_number, soil_intersection_area_m2 DESC
         """
 
         self.conn.execute(final_query)
 
         # Get comprehensive statistics
-        final_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_soil").fetchone()[0]
+        final_count = self.conn.execute("SELECT COUNT(*) FROM field_soil_areas").fetchone()[0]
 
         # Get soil type statistics
         soil_stats = self.conn.execute("""
             SELECT 
-                dominant_soil_category,
-                COUNT(*) as field_count,
-                SUM(field_area_m2) / 1000000 as total_area_km2,
-                AVG(dominant_soil_share_pct) as avg_coverage_pct
-            FROM fields_with_soil
-            WHERE dominant_soil_code != 'Unknown'
-            GROUP BY dominant_soil_category
+                soil_type_category,
+                COUNT(*) as intersection_count,
+                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as field_count,
+                SUM(soil_area_m2) / 1000000 as total_area_km2,
+                AVG(soil_area_share_pct) as avg_coverage_pct
+            FROM field_soil_areas
+            GROUP BY soil_type_category
             ORDER BY field_count DESC
         """).fetchall()
 
         # Get coverage statistics
         coverage_stats = self.conn.execute("""
             SELECT 
-                COUNT(*) as total_fields,
-                COUNT(CASE WHEN dominant_soil_code != 'Unknown' THEN 1 END) as fields_with_soil,
-                AVG(CASE WHEN dominant_soil_code != 'Unknown' THEN dominant_soil_share_pct END) as avg_soil_coverage,
-                COUNT(DISTINCT dominant_soil_code) as unique_soil_types
-            FROM fields_with_soil
+                COUNT(*) as total_intersections,
+                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as fields_with_soil,
+                AVG(soil_area_share_pct) as avg_soil_coverage,
+                COUNT(DISTINCT soil_code) as unique_soil_types
+            FROM field_soil_areas
         """).fetchone()
 
-        total_fields, fields_with_soil, avg_coverage, unique_soil_types = coverage_stats
+        total_intersections, fields_with_soil, avg_coverage, unique_soil_types = coverage_stats
 
-        self.log.info("✅ Created field-soil analysis:")
-        self.log.info(f"   Total fields: {total_fields:,}")
-        self.log.info(
-            f"   Fields with soil data: {fields_with_soil:,} ({(fields_with_soil / total_fields) * 100:.1f}%)"
-        )
+        self.log.info("✅ Created simplified field soil areas:")
+        self.log.info(f"   Total field-soil intersections: {total_intersections:,}")
+        self.log.info(f"   Fields with soil data: {fields_with_soil:,}")
         self.log.info(f"   Average soil coverage: {avg_coverage:.1f}%")
         self.log.info(f"   Unique soil types: {unique_soil_types}")
 
         self.log.info("   Top soil categories by field count:")
-        for soil_category, field_count, area_km2, avg_pct in soil_stats[:5]:
+        for soil_category, intersection_count, field_count, area_km2, avg_pct in soil_stats[:5]:
             self.log.info(
-                f"     {soil_category}: {field_count:,} fields, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
+                f"     {soil_category}: {field_count:,} fields, {intersection_count:,} intersections, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
             )
 
         # Clean up intermediate table to save memory
         self.conn.execute("DROP TABLE IF EXISTS field_soil_detailed")
 
         return {
-            "total_fields": total_fields,
+            "total_intersections": total_intersections,
             "fields_with_soil": fields_with_soil,
-            "soil_coverage_pct": (fields_with_soil / total_fields) * 100,
             "avg_soil_coverage": avg_coverage,
             "unique_soil_types": unique_soil_types,
             "soil_category_stats": soil_stats,
@@ -305,5 +266,47 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save fields with soil analysis to GCS."""
-        self._save_stage_output("fields_with_soil", "fields_with_soil")
+        """Save field soil areas directly to GCS as parquet file."""
+        import os
+        import tempfile
+        from datetime import datetime
+
+        try:
+            # Create timestamp and GCS path following the standard pattern
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dataset_name = "field_soil_areas"
+            filename = f"{dataset_name}.parquet"
+            gcs_path = f"gold/{dataset_name}/{timestamp}/{filename}"
+
+            # Create temporary file for export
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+                temp_path = tmp_file.name
+
+            # Export table to temporary file using DuckDB COPY
+            self.conn.execute(f"""
+                COPY field_soil_areas TO '{temp_path}' 
+                (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
+            """)
+
+            # Upload to GCS using gcs_access
+            full_gcs_path = f"gs://{CONFIG.bucket}/{gcs_path}"
+
+            # Use gcs_access fs to upload
+            with open(temp_path, "rb") as src:
+                with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
+                    import shutil
+
+                    shutil.copyfileobj(src, dst)
+
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+            self.log.info(f"✅ Saved field soil areas to {full_gcs_path}")
+
+        except Exception as e:
+            self.log.error(f"❌ Failed to save field soil areas: {e}")
+            # Clean up temp file on error
+            if "temp_path" in locals() and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise

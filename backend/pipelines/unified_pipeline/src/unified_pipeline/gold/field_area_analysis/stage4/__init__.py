@@ -1,6 +1,5 @@
-"""Stage 4: Final Assembly (Parallel Processing)
+"""Stage 5: Consolidation
 
-- Final BNBO Analysis (combines Stage 3A with properties)
-- Final Wetland Analysis (combines Stage 3B with properties)
-- Uses pre-filtered properties from Stage 1C
+- Consolidate BNBO and Wetland analyses into final comprehensive table
+- Create the final field_area_analysis_final dataset
 """
