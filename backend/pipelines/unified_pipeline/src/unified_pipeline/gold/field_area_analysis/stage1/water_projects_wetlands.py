@@ -274,81 +274,22 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             """)
             self.log.info("✅ Created empty intersection table (no intersections found)")
 
-        # Create summary statistics for reporting (but keep detailed intersections as foundation data)
-        self.log.info("Creating summary statistics...")
-
-        summary_query = """
-        CREATE OR REPLACE TABLE wetland_water_coverage AS
-        SELECT 
-            'All Wetlands' as wetland_category,
-            NULL as total_wetland_geom,  -- Don't store large geometries
-            NULL as wetland_covered_by_water_projects_geom,
-            
-            -- Calculate totals from intersection records and remaining wetlands
-            (SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
-            (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw) as total_wetland_area_m2,
-            
-            SUM(intersection_area_m2) as wetland_covered_area_m2,
-            
-            -- Calculate coverage percentage
-            CASE 
-                WHEN (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw) > 0
-                THEN (SUM(intersection_area_m2) / (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw)) * 100
-                ELSE 0 
-            END as coverage_percentage,
-            
-            -- Count statistics
-            (SELECT COUNT(*) FROM wetlands_raw) as total_wetland_polygons,
-            COUNT(DISTINCT project_id) as water_projects_with_wetlands
-            
-        FROM wetland_water_intersections
-        GROUP BY 'All Wetlands'
-        """
-
-        self.conn.execute(summary_query)
-
-        # Log final results
-        stats = self.conn.execute("""
-            SELECT 
-                wetland_category,
-                total_wetland_area_m2 / 1000000 as total_area_km2,
-                COALESCE(wetland_covered_area_m2, 0) / 1000000 as covered_area_km2,
-                COALESCE(coverage_percentage, 0) as coverage_pct,
-                total_wetlands,
-                COALESCE(wetlands_with_water_projects, 0) as wetlands_with_projects
-            FROM wetland_water_coverage
-        """).fetchall()
-
+        # Log intersection results
         intersection_count = self.conn.execute(
             "SELECT COUNT(*) FROM wetland_water_intersections"
         ).fetchone()[0]
 
-        self.log.info("✅ Created wetland-water project foundation data:")
-        for stat in stats:
-            category, total_km2, covered_km2, coverage_pct, total_count, covered_count = stat
-            self.log.info(
-                f"   {category}: {total_km2:.1f} km² total, {covered_km2:.1f} km² covered ({coverage_pct:.1f}%)"
-            )
-            self.log.info(
-                f"   Wetlands: {total_count:,} total, {covered_count:,} with water projects"
-            )
-
         self.log.info(
-            f"   Foundation data: {intersection_count:,} wetland-water project intersection records"
+            f"✅ Created {intersection_count:,} wetland-water project intersection records"
         )
 
         return {
-            "wetland_categories": 1,
-            "coverage_stats": stats,
             "intersection_records": intersection_count,
             "batches_processed": num_batches,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save both summary and detailed foundation data to GCS."""
-        # Save summary for backward compatibility
-        self._save_stage_output("wetland_water_coverage", "wetland_water_coverage")
-
+        """Save intersection records for later stages to use."""
         # Save detailed intersection records for Stage 3B to use
         self._save_stage_output(
             "wetland_water_intersections", "water_projects_wetlands_intersections"

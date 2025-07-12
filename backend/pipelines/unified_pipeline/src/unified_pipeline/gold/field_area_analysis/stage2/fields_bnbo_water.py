@@ -267,49 +267,12 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
                 gc.collect()
 
-        # Final statistics
+        # Final count
         final_count = self.conn.execute("SELECT COUNT(*) FROM fields_bnbo_water").fetchone()[0]
-        coverage_stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_fields,
-                COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN field_bnbo_coverage_pct END) as avg_bnbo_coverage,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_water_project_coverage,
-                SUM(total_bnbo_area_m2) / 1000000 as total_bnbo_km2,
-                SUM(bnbo_covered_by_water_projects_m2) / 1000000 as total_covered_km2
-            FROM fields_bnbo_water
-        """).fetchone()
-
-        (
-            total_fields,
-            fields_with_bnbo,
-            avg_bnbo_coverage,
-            avg_water_project_coverage,
-            total_bnbo_km2,
-            total_covered_km2,
-        ) = coverage_stats
-
-        self.log.info("✅ Field-level BNBO water coverage analysis completed:")
-        self.log.info(f"   Total fields processed: {total_fields:,}")
-        self.log.info(
-            f"   Fields with BNBO: {fields_with_bnbo:,} ({(fields_with_bnbo / total_fields) * 100:.1f}%)"
-        )
-        if avg_bnbo_coverage:
-            self.log.info(f"   Average BNBO coverage per field: {avg_bnbo_coverage:.1f}%")
-        if avg_water_project_coverage:
-            self.log.info(
-                f"   Average water project coverage of BNBO: {avg_water_project_coverage:.1f}%"
-            )
-        self.log.info(f"   Total BNBO area: {total_bnbo_km2:.1f} km²")
-        self.log.info(f"   Total BNBO area covered by water projects: {total_covered_km2:.1f} km²")
+        self.log.info(f"✅ Processed {final_count:,} fields for BNBO water coverage analysis")
 
         return {
-            "total_fields": total_fields,
-            "fields_with_bnbo": fields_with_bnbo,
-            "avg_bnbo_coverage": avg_bnbo_coverage,
-            "avg_water_project_coverage": avg_water_project_coverage,
-            "total_bnbo_km2": total_bnbo_km2,
-            "total_covered_km2": total_covered_km2,
+            "total_fields": final_count,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
