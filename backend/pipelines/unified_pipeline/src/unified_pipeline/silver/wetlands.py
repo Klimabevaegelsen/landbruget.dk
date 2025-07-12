@@ -131,11 +131,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
     def log_geometry_statistics(self, table_name: str) -> None:
         """
-        Analyze and log statistics about the geometries in a DuckDB table.
+        Log detailed geometry statistics for a DuckDB table.
 
-        This method calculates and logs various statistics about the geometries,
-        including total features, dimensions, grid alignment, and area coverage.
-        The statistics help understand the nature and quality of the dataset.
+        This method analyzes geometry properties including dimensions, area,
+        vertex count, and grid alignment for data quality assessment.
 
         Args:
             table_name (str): Name of the DuckDB table containing geometries to analyze
@@ -145,21 +144,33 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         """
         conn = self.conn
 
+        # Check which geometry column exists in the table
+        columns = conn.execute(f"DESCRIBE {table_name}").fetchall()
+        column_names = [col[0] for col in columns]
+
+        if "geometry_original" in column_names:
+            geometry_col = "geometry_original"
+        elif "geometry" in column_names:
+            geometry_col = "geometry"
+        else:
+            self.log.error(f"No geometry column found in table {table_name}")
+            return
+
         # Get geometry statistics using DuckDB-spatial
         stats_data = conn.execute(f"""
             SELECT 
-                (ST_XMax(geometry) - ST_XMin(geometry)) * (ST_YMax(geometry) - ST_YMin(geometry)) as area,
-                ST_NPoints(geometry) as vertices,
-                ST_XMax(geometry) - ST_XMin(geometry) as width,
-                ST_YMax(geometry) - ST_YMin(geometry) as height,
+                (ST_XMax({geometry_col}) - ST_XMin({geometry_col})) * (ST_YMax({geometry_col}) - ST_YMin({geometry_col})) as area,
+                ST_NPoints({geometry_col}) as vertices,
+                ST_XMax({geometry_col}) - ST_XMin({geometry_col}) as width,
+                ST_YMax({geometry_col}) - ST_YMin({geometry_col}) as height,
                 CASE 
-                    WHEN ABS(ROUND((ST_XMax(geometry) - ST_XMin(geometry)) / 10) * 10 - (ST_XMax(geometry) - ST_XMin(geometry))) < 0.01
-                         AND ABS(ROUND((ST_YMax(geometry) - ST_YMin(geometry)) / 10) * 10 - (ST_YMax(geometry) - ST_YMin(geometry))) < 0.01
+                    WHEN ABS(ROUND((ST_XMax({geometry_col}) - ST_XMin({geometry_col})) / 10) * 10 - (ST_XMax({geometry_col}) - ST_XMin({geometry_col}))) < 0.01
+                         AND ABS(ROUND((ST_YMax({geometry_col}) - ST_YMin({geometry_col})) / 10) * 10 - (ST_YMax({geometry_col}) - ST_YMin({geometry_col}))) < 0.01
                     THEN true 
                     ELSE false 
                 END as grid_aligned
             FROM {table_name}
-            WHERE geometry IS NOT NULL
+            WHERE {geometry_col} IS NOT NULL
         """).fetchall()
 
         # Unique dimensions analysis
