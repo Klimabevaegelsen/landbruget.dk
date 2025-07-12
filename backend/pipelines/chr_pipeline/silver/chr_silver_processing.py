@@ -653,13 +653,17 @@ def process_chr_data(
                 property_owners_table = properties.create_property_owners_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
-                # Optionally add to context if needed: context['property_owners_table'] = property_owners_table
+                # Register table in DuckDB for CVR collection
+                if property_owners_table is not None:
+                    con.create_table("property_owners", property_owners_table, overwrite=True)
 
             elif step == "silver_property_users":
                 property_users_table = properties.create_property_users_table(
                     con, context.get("ejendom_oplys_table"), silver_dir
                 )
-                # Optionally add to context if needed: context['property_users_table'] = property_users_table
+                # Register table in DuckDB for CVR collection
+                if property_users_table is not None:
+                    con.create_table("property_users", property_users_table, overwrite=True)
 
             elif step == "silver_herds":
                 herds_table = herds.create_herds_table(
@@ -671,11 +675,15 @@ def process_chr_data(
 
             elif step == "silver_herd_owners":
                 herd_owners_table = herds.create_herd_owners_table(con, context.get("bes_details_table"), silver_dir)
-                # Optionally add to context if needed: context['herd_owners_table'] = herd_owners_table
+                # Register table in DuckDB for CVR collection
+                if herd_owners_table is not None:
+                    con.create_table("herd_owners", herd_owners_table, overwrite=True)
 
             elif step == "silver_herd_users":
                 herd_users_table = herds.create_herd_users_table(con, context.get("bes_details_table"), silver_dir)
-                # Optionally add to context if needed: context['herd_users_table'] = herd_users_table
+                # Register table in DuckDB for CVR collection
+                if herd_users_table is not None:
+                    con.create_table("herd_users", herd_users_table, overwrite=True)
 
             elif step == "silver_herd_sizes":
                 herd_sizes_table = herds.create_herd_sizes_table(con, context.get("bes_details_table"), silver_dir)
@@ -711,6 +719,9 @@ def process_chr_data(
                     context.get("lookup_tables", {}),
                     silver_dir,
                 )
+                # Register table in DuckDB for CVR collection
+                if antibiotic_usage_table is not None:
+                    con.create_table("antibiotic_usage", antibiotic_usage_table, overwrite=True)
 
             elif step == "silver_spf_su_herds":
                 if context.get("spf_su_table") is not None:
@@ -745,7 +756,13 @@ def process_chr_data(
             # Continue with next step instead of failing completely
             continue
 
-            # --- 13. Generate Schema Documentation ---
+    # --- 12. CVR Collection (Right after silver processing, before cleanup) ---
+    if CVR_COLLECTION_AVAILABLE:
+        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
+    else:
+        logging.warning("CVR collection disabled due to import error")
+
+        # --- 13. Generate Schema Documentation ---
         if SchemaDocumentationManager is not None:
             logging.info("Generating schema documentation for CHR silver tables...")
             try:
@@ -797,13 +814,7 @@ def process_chr_data(
         else:
             logging.warning("Schema documentation disabled due to import error")
 
-    # --- 14. CVR Collection (BEFORE connection cleanup) ---
-    if CVR_COLLECTION_AVAILABLE:
-        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
-    else:
-        logging.warning("CVR collection disabled due to import error")
-
-    # --- 15. Upload Silver Data to GCS ---
+    # --- 14. Upload Silver Data to GCS ---
     try:
         upload_success = upload_silver_data_to_gcs(silver_dir, export_timestamp)
         if upload_success:
@@ -813,7 +824,7 @@ def process_chr_data(
     except Exception as e:
         logging.error(f"❌ Error during silver data upload to GCS: {e}")
 
-    # --- 16. Cleanup Intermediate Files ---
+    # --- 15. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():
         try:
             vetstat_antibiotics_jsonl_path.unlink()
