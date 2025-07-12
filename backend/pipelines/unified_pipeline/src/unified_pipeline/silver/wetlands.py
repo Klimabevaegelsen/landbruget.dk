@@ -423,7 +423,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 id,
                 gridcode,
                 toerv_pct,
-                ST_GeomFromText(geometry_wkt) as geometry_original,
+                ST_GeomFromText(geometry_wkt) as geometry,
                 geometry_wkt as geometry_wkt_original
             FROM temp_features
             WHERE geometry_wkt IS NOT NULL
@@ -445,7 +445,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
         # Transform the original non-dissolved table
         validate_and_transform_geometries_duckdb(
-            conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry_original"
+            conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
         )
 
         # Transform the dissolved table
@@ -508,7 +508,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     id,
                     gridcode,
                     toerv_pct,
-                    geometry_original as geometry  -- Use original geometry to preserve grid adjacency
+                    geometry  -- Use geometry before transformation to preserve grid adjacency
                 FROM {input_table_name}
             """)
 
