@@ -13,7 +13,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Dataset names - using consistent naming from silver layer
-    agricultural_fields_dataset: str = "fvm_marker_2024"
+    agricultural_fields_dataset: str = "fvm_marker_2025"
     properties_dataset: str = "property_cadastral_merged"
     soil_types_dataset: str = "soil_types"
     bnbo_status_dataset: str = "bnbo_status_dissolved"
