@@ -462,12 +462,24 @@ def process_chr_data(
                 logging.info(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
                 try:
                     con.con.sql(f"DROP TABLE IF EXISTS {table_name};")  # Ensure clean slate
-                    # Use newline_delimited format and auto_detect
-                    raw_tables[table_name] = con.read_json(input_source, format="newline_delimited", auto_detect=True)
-                    successfully_loaded = True
-                    logging.info(
-                        f"Successfully loaded {source_desc} into table '{table_name}' (using newline_delimited and auto_detect)."
-                    )
+
+                    # Try regular JSON array format first (CHR pipeline exports as JSON arrays)
+                    try:
+                        raw_tables[table_name] = con.read_json(input_source, format="array", auto_detect=True)
+                        successfully_loaded = True
+                        logging.info(
+                            f"Successfully loaded {source_desc} into table '{table_name}' (using JSON array format)."
+                        )
+                    except Exception as e_array:
+                        logging.info(f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}")
+                        # Fallback to newline_delimited format
+                        raw_tables[table_name] = con.read_json(
+                            input_source, format="newline_delimited", auto_detect=True
+                        )
+                        successfully_loaded = True
+                        logging.info(
+                            f"Successfully loaded {source_desc} into table '{table_name}' (using newline_delimited format)."
+                        )
 
                     # Log schema for debugging
                     schema = raw_tables[table_name].schema()
