@@ -504,19 +504,18 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             # for SPATIAL_JOIN operations when query structure is optimized
             self.log.info("✅ DuckDB spatial table created - automatic indexing will be used")
 
-            # ✅ OPTIMIZED: Simplest possible SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
+            # ✅ OPTIMIZED: Absolute simplest SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
             # Based on PR #545: SPATIAL_JOIN operator requires:
             # 1. Direct table joins (no CTEs)
             # 2. ONLY ONE spatial predicate in JOIN condition
-            # 3. Simple SELECT without complex calculations
-            # 4. Additional filters in WHERE clause only
+            # 3. Simple SELECT without ANY calculations or complex WHERE conditions
+            # 4. Deduplication handled separately AFTER spatial join
             adjacency_query = """
                 SELECT 
                     w1.wetland_id as id1,
                     w2.wetland_id as id2
                 FROM wetlands_spatial w1
                 INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
-                WHERE w1.wetland_id < w2.wetland_id
             """
 
             # Verify SPATIAL_JOIN is being used
@@ -540,7 +539,28 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             raw_adjacency_count = conn.execute(
                 "SELECT COUNT(*) FROM wetland_adjacency_raw"
             ).fetchone()[0]
-            self.log.info(f"Found {raw_adjacency_count:,} touching wetland pairs")
+            self.log.info(
+                f"Found {raw_adjacency_count:,} touching wetland pairs (including self-joins)"
+            )
+
+            # Deduplicate and remove self-joins AFTER spatial join to maintain SPATIAL_JOIN compliance
+            self.log.info("Removing self-joins and deduplicating pairs...")
+            conn.execute("""
+                CREATE TABLE wetland_adjacency_dedup AS
+                SELECT DISTINCT
+                    LEAST(id1, id2) as id1,
+                    GREATEST(id1, id2) as id2
+                FROM wetland_adjacency_raw
+                WHERE id1 != id2
+            """)
+
+            conn.execute("DROP TABLE wetland_adjacency_raw")
+            conn.execute("ALTER TABLE wetland_adjacency_dedup RENAME TO wetland_adjacency_raw")
+
+            dedup_adjacency_count = conn.execute(
+                "SELECT COUNT(*) FROM wetland_adjacency_raw"
+            ).fetchone()[0]
+            self.log.info(f"After deduplication: {dedup_adjacency_count:,} unique adjacent pairs")
 
             # Apply edge length filter AFTER spatial join to maintain SPATIAL_JOIN operator usage
             self.log.info("Filtering for meaningful shared edges (length >= 10m)...")
