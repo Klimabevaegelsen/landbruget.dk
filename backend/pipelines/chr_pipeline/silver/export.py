@@ -1,10 +1,20 @@
 """CHR Export functionality using DuckDB."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Union
 
 import ibis
+
+# Try to import GCS utilities
+try:
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    GCSDataAccess = None
 
 
 def save_table(output_path: Path, data: Union[ibis.Table, str], is_geo: bool = False) -> Optional[Path]:
@@ -106,6 +116,69 @@ def save_table_with_connection(
     except Exception as e:
         logging.error(f"Error saving table '{table_name}' to {output_path}: {str(e)}")
         return None
+
+
+def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
+    """
+    Upload all silver parquet files to GCS.
+
+    Args:
+        silver_dir: Local directory containing silver parquet files
+        export_timestamp: Timestamp string for the export (YYYYMMDD_HHMMSS)
+
+    Returns:
+        True if upload successful, False otherwise
+    """
+    if not GCS_AVAILABLE:
+        logging.warning("GCS utilities not available - skipping silver data upload")
+        return False
+
+    bucket_name = os.getenv("GCS_BUCKET")
+    if not bucket_name:
+        logging.warning("GCS_BUCKET not set - skipping silver data upload")
+        return False
+
+    try:
+        gcs_access = GCSDataAccess()
+
+        # Find all parquet files in the silver directory
+        parquet_files = list(silver_dir.glob("*.parquet"))
+
+        if not parquet_files:
+            logging.warning(f"No parquet files found in {silver_dir}")
+            return False
+
+        logging.info(f"Uploading {len(parquet_files)} silver files to GCS bucket '{bucket_name}'")
+
+        uploaded_count = 0
+        for parquet_file in parquet_files:
+            try:
+                # Create GCS path: silver/chr/{timestamp}/{filename}
+                gcs_path = f"gs://{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
+
+                # Upload file using streaming
+                with open(parquet_file, "rb") as src:
+                    with gcs_access.fs.open(gcs_path, "wb") as dst:
+                        import shutil
+
+                        shutil.copyfileobj(src, dst)
+
+                logging.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")
+                uploaded_count += 1
+
+            except Exception as e:
+                logging.error(f"❌ Failed to upload {parquet_file.name}: {e}")
+
+        if uploaded_count == len(parquet_files):
+            logging.info(f"✅ Successfully uploaded all {uploaded_count} silver files to GCS")
+            return True
+        else:
+            logging.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
+            return False
+
+    except Exception as e:
+        logging.error(f"❌ Error uploading silver data to GCS: {e}")
+        return False
 
 
 class CHRExporter:
