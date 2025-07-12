@@ -85,51 +85,15 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         self.log.info("Executing Water Projects × BNBO spatial intersection...")
         self.conn.execute(intersection_query)
 
-        # Create summary statistics for logging
-        summary_query = """
-        CREATE OR REPLACE TABLE bnbo_coverage_summary AS
-        SELECT 
-            status_category,
-            COUNT(DISTINCT project_id) as water_projects_count,
-            SUM(intersection_area_m2) / 1000000 as total_intersection_km2,
-            AVG(wp_coverage_percentage) as avg_wp_coverage_pct
-        FROM water_projects_bnbo_intersections
-        GROUP BY status_category
-        ORDER BY total_intersection_km2 DESC
-        """
-
-        self.conn.execute(summary_query)
-
         # Log results
         result_count = self.conn.execute(
             "SELECT COUNT(*) FROM water_projects_bnbo_intersections"
         ).fetchone()[0]
-        unique_projects = self.conn.execute(
-            "SELECT COUNT(DISTINCT project_id) FROM water_projects_bnbo_intersections"
-        ).fetchone()[0]
 
-        # Get coverage statistics
-        stats = self.conn.execute("""
-            SELECT 
-                status_category,
-                water_projects_count,
-                total_intersection_km2,
-                avg_wp_coverage_pct
-            FROM bnbo_coverage_summary
-        """).fetchall()
-
-        self.log.info(f"✅ Created {result_count} water project-BNBO intersection records:")
-        self.log.info(f"   {unique_projects} unique water projects intersect with BNBO areas")
-        for stat in stats:
-            status, wp_count, intersection_km2, avg_coverage = stat
-            self.log.info(
-                f"   {status}: {wp_count} projects, {intersection_km2:.1f} km² intersection, {avg_coverage:.1f}% avg coverage"
-            )
+        self.log.info(f"✅ Created {result_count:,} water project-BNBO intersection records")
 
         return {
             "intersection_records": result_count,
-            "unique_projects": unique_projects,
-            "coverage_stats": stats,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
