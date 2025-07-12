@@ -8,6 +8,8 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from tqdm import tqdm
+
 from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config.settings import get_settings
 from utils.logger import setup_logger
@@ -74,21 +76,13 @@ def _save_attributes_streaming(attributes_data, output_dir):
                 os.unlink(temp_json_path)
 
         # Process remaining chunks and append
-        for chunk_idx in range(1, total_chunks):
+        for chunk_idx in tqdm(range(1, total_chunks), desc="Processing chunks"):
             start_idx = chunk_idx * chunk_size
             end_idx = min(start_idx + chunk_size, len(attributes_data))
             chunk = attributes_data[start_idx:end_idx]
 
             if not chunk:
                 break
-
-            # Log progress every 10 chunks or for large datasets every 5 chunks
-            log_interval = 5 if total_chunks > 50 else 10
-            if chunk_idx % log_interval == 0:
-                progress_pct = (chunk_idx / total_chunks) * 100
-                print(
-                    f"   🔄 Processing chunk {chunk_idx + 1}/{total_chunks} ({progress_pct:.1f}%)"
-                )
 
             # Write chunk to temp file
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
