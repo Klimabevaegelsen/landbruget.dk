@@ -22,56 +22,73 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         super().__init__(config, "Stage 2A: Fields × BNBO Water Coverage")
 
     def _load_input_data(self):
-        """Load agricultural fields and pre-computed foundation data from Stage 1."""
-        # Load agricultural fields directly from silver
+        """Load field data and water project BNBO intersections from Stage 1."""
+        # Load agricultural fields
         self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields")
 
-        # Load pre-computed water project-BNBO intersections from Stage 1A (foundation data)
+        # Load BNBO status data for field intersections
+        self._load_silver_dataset(CONFIG.bnbo_status_dataset, "bnbo_for_fields")
+
+        # Load water project × BNBO intersections from Stage 1A
+        # This contains the actual intersection data we need
         stage1a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}.parquet"
         self.gcs_access.query_parquet_direct(
             stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
         )
 
-        # Load BNBO data only for field intersections (minimal data needed)
-        self._load_silver_dataset(CONFIG.bnbo_dataset, "bnbo_raw")
+        # We need the actual BNBO areas covered by water projects
+        # But Stage 1A only saved statistics, not geometries. We need to recreate the covered BNBO areas.
+        # Load water projects to recreate intersection geometries
+        self._load_silver_dataset(CONFIG.water_projects_dataset, "water_projects_raw")
+
+        # Create the actual BNBO areas covered by water projects
+        self.log.info("Creating BNBO areas covered by water projects...")
         self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_for_fields AS
+            CREATE OR REPLACE TABLE bnbo_covered_by_water AS
             SELECT 
-                id as bnbo_id,
-                status_category,
-                geometry
-            FROM bnbo_raw
+                b.status_category,
+                ST_Intersection(b.geometry, wp.geometry) as covered_bnbo_geometry,
+                ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) as covered_area_m2
+            FROM bnbo_for_fields b
+            JOIN water_projects_raw wp ON ST_Intersects(b.geometry, wp.geometry)
+            WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 100
         """)
 
         # Log loaded data
         fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_for_fields").fetchone()[0]
+        covered_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_covered_by_water").fetchone()[
+            0
+        ]
         intersections_count = self.conn.execute(
             "SELECT COUNT(*) FROM water_projects_bnbo_intersections"
         ).fetchone()[0]
-        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_for_fields").fetchone()[0]
 
-        self.log.info("✅ Loaded foundation data:")
+        self.log.info("✅ Loaded data for field-level analysis:")
         self.log.info(f"   Agricultural fields: {fields_count:,}")
-        self.log.info(f"   Water project-BNBO intersections (foundation): {intersections_count:,}")
         self.log.info(f"   BNBO polygons: {bnbo_count:,}")
+        self.log.info(f"   BNBO areas covered by water projects: {covered_count:,}")
+        self.log.info(f"   Intersection records (for validation): {intersections_count:,}")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
-        Calculate BNBO coverage by water projects for each field using foundation data.
+        Calculate BNBO coverage by water projects for each field.
 
-        FOUNDATION DATA APPROACH (PR #545 compliant):
-        1. Single spatial join: Fields × BNBO (single predicate: ST_Intersects)
-        2. Use pre-computed water project coverage from Stage 1A
-        3. Scale coverage proportionally to field intersection area
+        CORRECT APPROACH:
+        1. Fields × BNBO: Get total BNBO area within each field
+        2. Fields × (BNBO covered by water projects): Get covered BNBO area within each field
+        3. Calculate field-level percentages: % BNBO in field, % of those covered by water projects
+
+        We only care about water projects that intersect with BNBO areas.
         """
 
-        self.log.info("🎯 FOUNDATION DATA APPROACH: Field-level BNBO water coverage")
-        self.log.info("🔧 Using pre-computed intersections from Stage 1A")
+        self.log.info("🎯 FIELD-LEVEL BNBO WATER COVERAGE ANALYSIS")
+        self.log.info("🔧 Using BNBO-water project intersection geometries")
         self.log.info("✅ Following DuckDB Spatial PR #545: Single spatial predicate joins")
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        batch_size = CONFIG.stage3_batch_size
+        batch_size = CONFIG.stage2_batch_size
         num_batches = (total_fields + batch_size - 1) // batch_size
 
         self.log.info(
@@ -99,7 +116,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         total_processed = 0
 
-        # Process each batch using foundation data approach
+        # Process each batch
         for batch_num in range(num_batches):
             offset = batch_num * batch_size
             progress_pct = ((batch_num + 1) / num_batches) * 100
@@ -116,10 +133,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             if batch_count == 0:
                 break
 
-            # SINGLE SPATIAL JOIN: Fields × BNBO (PR #545 compliant)
-            self.log.info(f"  Single spatial join: {batch_count:,} fields × BNBO")
+            # Step 1: Fields × BNBO (total BNBO area within each field)
+            self.log.info(f"  Step 1: {batch_count:,} fields × BNBO (total area)")
             self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_bnbo AS
+                CREATE OR REPLACE TABLE batch_field_bnbo_total AS
                 SELECT 
                     f.field_id,
                     f.block_id,
@@ -127,7 +144,6 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.year,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
-                    b.bnbo_id,
                     b.status_category,
                     ST_Area_Spheroid(ST_Intersection(f.geometry, b.geometry)) as field_bnbo_area_m2
                 FROM fields_batch f
@@ -135,12 +151,35 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, b.geometry)) > 100
             """)
 
-            field_bnbo_count = self.conn.execute(
-                "SELECT COUNT(*) FROM batch_field_bnbo"
-            ).fetchone()[0]
-            self.log.info(f"  Found {field_bnbo_count:,} field-BNBO intersections")
+            # Step 2: Fields × (BNBO covered by water projects)
+            self.log.info(f"  Step 2: {batch_count:,} fields × covered BNBO")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_field_bnbo_covered AS
+                SELECT 
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.year,
+                    bc.status_category,
+                    ST_Area_Spheroid(ST_Intersection(f.geometry, bc.covered_bnbo_geometry)) as field_covered_bnbo_area_m2
+                FROM fields_batch f
+                JOIN bnbo_covered_by_water bc ON ST_Intersects(f.geometry, bc.covered_bnbo_geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, bc.covered_bnbo_geometry)) > 100
+            """)
 
-            if field_bnbo_count == 0:
+            total_bnbo_intersections = self.conn.execute(
+                "SELECT COUNT(*) FROM batch_field_bnbo_total"
+            ).fetchone()[0]
+            covered_bnbo_intersections = self.conn.execute(
+                "SELECT COUNT(*) FROM batch_field_bnbo_covered"
+            ).fetchone()[0]
+
+            self.log.info(f"  Found {total_bnbo_intersections:,} total field-BNBO intersections")
+            self.log.info(
+                f"  Found {covered_bnbo_intersections:,} field-covered BNBO intersections"
+            )
+
+            if total_bnbo_intersections == 0:
                 # Handle fields with no BNBO
                 self.conn.execute("""
                     INSERT INTO fields_bnbo_water
@@ -158,53 +197,56 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 total_processed += batch_count
                 continue
 
-            # Apply foundation data to calculate water project coverage
-            self.log.info("  Applying foundation data for water project coverage")
+            # Step 3: Aggregate per field and calculate percentages
+            self.log.info("  Step 3: Aggregating and calculating field-level percentages")
             self.conn.execute("""
                 INSERT INTO fields_bnbo_water
                 SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
-                    field_geometry as geometry,
-                    field_area_m2,
+                    t.field_id,
+                    t.block_id,
+                    t.cvr_number,
+                    t.year,
+                    t.field_geometry as geometry,
+                    t.field_area_m2,
                     
                     -- Total BNBO area within field
-                    SUM(field_bnbo_area_m2) as total_bnbo_area_m2,
+                    SUM(t.field_bnbo_area_m2) as total_bnbo_area_m2,
                     
-                    -- BNBO area covered by water projects (using foundation data)
-                    SUM(COALESCE(wpi.intersection_area_m2, 0)) as bnbo_covered_by_water_projects_m2,
+                    -- BNBO area covered by water projects within field
+                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as bnbo_covered_by_water_projects_m2,
                     
                     -- Dominant BNBO status (largest area)
                     (
                         SELECT status_category 
-                        FROM batch_field_bnbo fb2 
-                        WHERE fb2.field_id = fb.field_id AND fb2.block_id = fb.block_id AND fb2.cvr_number = fb.cvr_number
-                        ORDER BY fb2.field_bnbo_area_m2 DESC
+                        FROM batch_field_bnbo_total t2 
+                        WHERE t2.field_id = t.field_id AND t2.block_id = t.block_id AND t2.cvr_number = t.cvr_number
+                        ORDER BY t2.field_bnbo_area_m2 DESC
                         LIMIT 1
                     ) as dominant_bnbo_status,
                     
                     -- Calculate percentages
                     CASE 
-                        WHEN SUM(field_bnbo_area_m2) > 0 
-                        THEN (SUM(COALESCE(wpi.intersection_area_m2, 0)) / SUM(field_bnbo_area_m2)) * 100
+                        WHEN SUM(t.field_bnbo_area_m2) > 0 
+                        THEN (COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) / SUM(t.field_bnbo_area_m2)) * 100
                         ELSE 0 
                     END as bnbo_covered_by_water_projects_pct,
                     
                     CASE 
-                        WHEN SUM(field_bnbo_area_m2) > 0 
-                        THEN ((SUM(field_bnbo_area_m2) - SUM(COALESCE(wpi.intersection_area_m2, 0))) / SUM(field_bnbo_area_m2)) * 100
+                        WHEN SUM(t.field_bnbo_area_m2) > 0 
+                        THEN (100 - (COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) / SUM(t.field_bnbo_area_m2)) * 100)
                         ELSE 0 
                     END as bnbo_not_covered_by_water_projects_pct,
                     
-                    (SUM(field_bnbo_area_m2) / field_area_m2) * 100 as field_bnbo_coverage_pct
+                    (SUM(t.field_bnbo_area_m2) / t.field_area_m2) * 100 as field_bnbo_coverage_pct
                     
-                FROM batch_field_bnbo fb
-                LEFT JOIN water_projects_bnbo_intersections wpi 
-                    ON fb.status_category = wpi.status_category
+                FROM batch_field_bnbo_total t
+                LEFT JOIN batch_field_bnbo_covered c 
+                    ON t.field_id = c.field_id 
+                    AND t.block_id = c.block_id 
+                    AND t.cvr_number = c.cvr_number
+                    AND t.status_category = c.status_category
                 GROUP BY 
-                    field_id, block_id, cvr_number, year, field_geometry, field_area_m2
+                    t.field_id, t.block_id, t.cvr_number, t.year, t.field_geometry, t.field_area_m2
             """)
 
             batch_processed = self.conn.execute(
@@ -216,7 +258,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo")
+            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_total")
+            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_covered")
 
             # Memory cleanup every few batches
             if (batch_num + 1) % CONFIG.memory_cleanup_frequency == 0:
@@ -231,29 +274,42 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 COUNT(*) as total_fields,
                 COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN field_bnbo_coverage_pct END) as avg_bnbo_coverage,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_water_project_coverage
+                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_water_project_coverage,
+                SUM(total_bnbo_area_m2) / 1000000 as total_bnbo_km2,
+                SUM(bnbo_covered_by_water_projects_m2) / 1000000 as total_covered_km2
             FROM fields_bnbo_water
         """).fetchone()
 
-        total_fields, fields_with_bnbo, avg_bnbo_coverage, avg_water_project_coverage = (
-            coverage_stats
-        )
+        (
+            total_fields,
+            fields_with_bnbo,
+            avg_bnbo_coverage,
+            avg_water_project_coverage,
+            total_bnbo_km2,
+            total_covered_km2,
+        ) = coverage_stats
 
-        self.log.info("✅ BNBO water coverage analysis completed:")
+        self.log.info("✅ Field-level BNBO water coverage analysis completed:")
         self.log.info(f"   Total fields processed: {total_fields:,}")
         self.log.info(
             f"   Fields with BNBO: {fields_with_bnbo:,} ({(fields_with_bnbo / total_fields) * 100:.1f}%)"
         )
         if avg_bnbo_coverage:
-            self.log.info(f"   Average BNBO coverage: {avg_bnbo_coverage:.1f}%")
+            self.log.info(f"   Average BNBO coverage per field: {avg_bnbo_coverage:.1f}%")
         if avg_water_project_coverage:
-            self.log.info(f"   Average water project coverage: {avg_water_project_coverage:.1f}%")
+            self.log.info(
+                f"   Average water project coverage of BNBO: {avg_water_project_coverage:.1f}%"
+            )
+        self.log.info(f"   Total BNBO area: {total_bnbo_km2:.1f} km²")
+        self.log.info(f"   Total BNBO area covered by water projects: {total_covered_km2:.1f} km²")
 
         return {
             "total_fields": total_fields,
             "fields_with_bnbo": fields_with_bnbo,
             "avg_bnbo_coverage": avg_bnbo_coverage,
             "avg_water_project_coverage": avg_water_project_coverage,
+            "total_bnbo_km2": total_bnbo_km2,
+            "total_covered_km2": total_covered_km2,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

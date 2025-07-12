@@ -38,15 +38,15 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE water_projects AS
             SELECT 
                 project_id,
-                project_type,  -- Include project_type for intersection results
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
         """)
 
-        self.log.info("Decomposing ALL wetlands with ST_Dump for comprehensive analysis...")
+        self.log.info("Decomposing ALL wetlands with ST_Dump and adding unique IDs...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT 
+                ROW_NUMBER() OVER () as wetland_id,  -- Add unique wetland ID
                 toerv_pct,  -- Keep wetland type for analysis
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM wetlands_raw
@@ -85,9 +85,9 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Create intersection results table
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_water_intersections (
+                wetland_id BIGINT,  -- Unique wetland identifier for efficient joins
                 toerv_pct VARCHAR,  -- Wetland type for analysis
                 project_id VARCHAR,
-                project_type VARCHAR,
                 intersection_area_m2 DOUBLE,
                 wetland_area_m2 DOUBLE,
                 project_area_m2 DOUBLE
@@ -111,10 +111,11 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             offset = batch_num * batch_size
             self.log.info(f"Processing batch {batch_num + 1}/{num_batches} (offset: {offset:,})")
 
-            # Create wetlands batch with ST_Dump
+            # Create wetlands batch with ST_Dump and unique IDs
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
+                    ROW_NUMBER() OVER () + {offset} as wetland_id,  -- Ensure unique IDs across batches
                     toerv_pct,  -- Keep wetland type for analysis
                     UNNEST(ST_Dump(geometry)).geom as geometry,
                     ST_Area_Spheroid(geometry) as wetland_area_m2
@@ -132,14 +133,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
             SELECT 
+                wb.wetland_id,  -- Unique wetland identifier for efficient joins
                 wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
-                wp.project_type,
                 ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) as intersection_area_m2,
                 wb.wetland_area_m2,
                 ST_Area_Spheroid(wp.geometry) as project_area_m2
             FROM wetlands_batch wb
-            JOIN water_projects_raw wp ON ST_Intersects(wb.geometry, wp.geometry)
+            JOIN water_projects wp ON ST_Intersects(wb.geometry, wp.geometry)
             WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 1.0  -- Filter tiny intersections
             """
 
@@ -205,7 +206,6 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 SELECT 
                     CAST(NULL AS VARCHAR) as toerv_pct,
                     CAST(NULL AS VARCHAR) as project_id,
-                    CAST(NULL AS VARCHAR) as project_type,
                     CAST(NULL AS DOUBLE) as intersection_area_m2,
                     CAST(NULL AS DOUBLE) as wetland_area_m2,
                     CAST(NULL AS DOUBLE) as project_area_m2
