@@ -22,34 +22,25 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         super().__init__(config, "Stage 2B: Fields × Wetland Water Coverage")
 
     def _load_input_data(self):
-        """Load agricultural fields and pre-computed foundation data from Stage 1."""
-        # Load agricultural fields directly from silver
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields")
+        """Load field data and water project wetland intersections from Stage 1."""
+        # Load agricultural fields
+        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "fields_raw")
 
-        # Load pre-computed water project-wetland intersections from Stage 1B (foundation data)
+        # Load water project × wetland intersections from Stage 1B (includes toerv_pct)
         stage1b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}.parquet"
         self.gcs_access.query_parquet_direct(
             stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
         )
 
-        # Load wetlands data only for field intersections (minimal data needed)
+        # Load original wetlands data only for field intersections (we need geometry for spatial joins)
         self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE wetlands_for_fields AS
-            SELECT 
-                id as wetland_id,
-                gridcode,
-                toerv_pct,
-                geometry
-            FROM wetlands_raw
-        """)
 
         # Log loaded data
-        fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        fields_count = self.conn.execute("SELECT COUNT(*) FROM fields_raw").fetchone()[0]
         intersections_count = self.conn.execute(
             "SELECT COUNT(*) FROM water_projects_wetlands_intersections"
         ).fetchone()[0]
-        wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_for_fields").fetchone()[0]
+        wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
 
         self.log.info("✅ Loaded foundation data:")
         self.log.info(f"   Agricultural fields: {fields_count:,}")
@@ -73,7 +64,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("✅ Following DuckDB Spatial PR #545: Single spatial predicate joins")
 
         # Get total field count for batching
-        total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        total_fields = self.conn.execute("SELECT COUNT(*) FROM fields_raw").fetchone()[0]
         batch_size = CONFIG.stage3_batch_size
         num_batches = (total_fields + batch_size - 1) // batch_size
 
@@ -93,8 +84,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS DOUBLE) as total_wetland_area_m2,
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_m2,
-                CAST(NULL AS INTEGER) as dominant_wetland_gridcode,
-                CAST(NULL AS INTEGER) as wetland_polygon_count,
+                CAST(NULL AS VARCHAR) as dominant_wetland_type,
+                CAST(NULL AS INTEGER) as wetland_type_count,
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct
@@ -112,7 +103,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             # Create field batch
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
-                SELECT * FROM agricultural_fields
+                SELECT * FROM fields_raw
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
@@ -131,12 +122,10 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.year,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
-                    w.wetland_id,
-                    w.gridcode,
-                    w.toerv_pct,
+                    w.toerv_pct,  -- Only keep the meaningful wetland classification
                     ST_Area_Spheroid(ST_Intersection(f.geometry, w.geometry)) as field_wetland_area_m2
                 FROM fields_batch f
-                JOIN wetlands_for_fields w ON ST_Intersects(f.geometry, w.geometry)
+                JOIN wetlands_raw w ON ST_Intersects(f.geometry, w.geometry)
                 WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, w.geometry)) > 100
             """)
 
@@ -154,8 +143,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                         ST_Area_Spheroid(geometry) as field_area_m2,
                         0 as total_wetland_area_m2, 
                         0 as wetland_covered_by_water_projects_m2, 
-                        NULL as dominant_wetland_gridcode, 
-                        0 as wetland_polygon_count,
+                        NULL as dominant_wetland_type, 
+                        0 as wetland_type_count,
                         0 as wetland_covered_by_water_projects_pct,
                         0 as wetland_not_covered_by_water_projects_pct, 
                         0 as field_wetland_coverage_pct
@@ -179,39 +168,50 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     -- Total wetland area within field
                     SUM(field_wetland_area_m2) as total_wetland_area_m2,
                     
-                    -- Wetland area covered by water projects (using foundation data)
-                    SUM(COALESCE(wwi.intersection_area_m2, 0)) as wetland_covered_by_water_projects_m2,
+                    -- Estimate wetland area covered by water projects based on field coverage
+                    -- This is a simplified approach without individual wetland tracking
+                    SUM(field_wetland_area_m2 * COALESCE(
+                        (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
+                         FROM water_projects_wetlands_intersections wwi 
+                         WHERE wwi.toerv_pct = fw.toerv_pct), 0)
+                    ) as wetland_covered_by_water_projects_m2,
                     
-                    -- Dominant wetland gridcode (largest area)
+                    -- Dominant wetland type (largest area)
                     (
-                        SELECT gridcode 
+                        SELECT toerv_pct 
                         FROM batch_field_wetland fw2 
                         WHERE fw2.field_id = fw.field_id AND fw2.block_id = fw.block_id AND fw2.cvr_number = fw.cvr_number
                         ORDER BY fw2.field_wetland_area_m2 DESC
                         LIMIT 1
-                    ) as dominant_wetland_gridcode,
+                    ) as dominant_wetland_type,
                     
-                    -- Count distinct wetland polygons
-                    COUNT(DISTINCT wetland_id) as wetland_polygon_count,
+                    -- Count distinct wetland types
+                    COUNT(DISTINCT toerv_pct) as wetland_type_count,
                     
                     -- Calculate percentages
                     CASE 
                         WHEN SUM(field_wetland_area_m2) > 0 
-                        THEN (SUM(COALESCE(wwi.intersection_area_m2, 0)) / SUM(field_wetland_area_m2)) * 100
+                        THEN (SUM(field_wetland_area_m2 * COALESCE(
+                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
+                             FROM water_projects_wetlands_intersections wwi 
+                             WHERE wwi.toerv_pct = fw.toerv_pct), 0)
+                        ) / SUM(field_wetland_area_m2)) * 100
                         ELSE 0 
                     END as wetland_covered_by_water_projects_pct,
                     
                     CASE 
                         WHEN SUM(field_wetland_area_m2) > 0 
-                        THEN ((SUM(field_wetland_area_m2) - SUM(COALESCE(wwi.intersection_area_m2, 0))) / SUM(field_wetland_area_m2)) * 100
+                        THEN (100 - (SUM(field_wetland_area_m2 * COALESCE(
+                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
+                             FROM water_projects_wetlands_intersections wwi 
+                             WHERE wwi.toerv_pct = fw.toerv_pct), 0)
+                        ) / SUM(field_wetland_area_m2)) * 100)
                         ELSE 0 
                     END as wetland_not_covered_by_water_projects_pct,
                     
                     (SUM(field_wetland_area_m2) / field_area_m2) * 100 as field_wetland_coverage_pct
                     
                 FROM batch_field_wetland fw
-                LEFT JOIN water_projects_wetlands_intersections wwi 
-                    ON fw.wetland_id = wwi.wetland_id
                 GROUP BY 
                     field_id, block_id, cvr_number, year, field_geometry, field_area_m2
             """)

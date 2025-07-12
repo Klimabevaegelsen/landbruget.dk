@@ -27,7 +27,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         super().__init__(config, "Stage 3B: Final Wetland Analysis")
 
     def _load_input_data(self):
-        """Load wetland analysis from Stage 2B and pre-filtered properties from Stage 1C."""
+        """Load wetland analysis from Stage 2B and water project intersections from Stage 1B."""
         # Load wetland water coverage from Stage 2B
         stage2b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['fields_wetland_water']}/{CONFIG.stage_outputs['fields_wetland_water']}.parquet"
         self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
@@ -38,9 +38,14 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             stage1c_path, "SELECT *", "field_property_intersections"
         )
 
-        # Load water project × wetland foundation data from Stage 1B for property-level analysis
-        stage1b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_wetlands']}/{CONFIG.stage_outputs['water_projects_wetlands']}.parquet"
-        self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "water_projects_wetlands")
+        # Load water project × wetland intersections from Stage 1B (includes toerv_pct)
+        stage1b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}.parquet"
+        self.gcs_access.query_parquet_direct(
+            stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
+        )
+
+        # Load original wetlands data for spatial analysis (needed for property-wetland intersections)
+        self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -90,8 +95,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct,
-                CAST(NULL AS INTEGER) as dominant_wetland_gridcode,
-                CAST(NULL AS INTEGER) as wetland_polygon_count,
+                CAST(NULL AS VARCHAR) as dominant_wetland_type,
+                CAST(NULL AS INTEGER) as wetland_type_count,
                 
                 -- Property ownership analysis
                 CAST(NULL AS INTEGER) as property_count,
@@ -169,7 +174,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         field_id, block_id, cvr_number, year, geometry, field_area_m2,
                         total_wetland_area_m2, wetland_covered_by_water_projects_m2, 
                         wetland_covered_by_water_projects_pct, wetland_not_covered_by_water_projects_pct,
-                        field_wetland_coverage_pct, dominant_wetland_gridcode, wetland_polygon_count,
+                        field_wetland_coverage_pct, dominant_wetland_type, wetland_type_count,
                         0 as property_count, 0 as total_property_intersection_area_m2,
                         0 as avg_property_area_share_pct, 0 as max_property_area_share_pct,
                         NULL as primary_bfe_number,
@@ -192,12 +197,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.block_id,
                     b.cvr_number,
                     b.year,
-                    w.wetland_id,
-                    w.gridcode,
-                    w.toerv_pct,
-                    w.geometry as wetland_geometry
+                    w.toerv_pct,  -- Only keep meaningful wetland classification
+                    w.geometry as wetland_geometry,
+                    ST_Area_Spheroid(w.geometry) as wetland_area_m2
                 FROM fields_batch b
-                JOIN wetlands_for_fields w ON ST_Intersects(b.geometry, w.geometry)
+                JOIN wetlands_raw w ON ST_Intersects(b.geometry, w.geometry)
                 WHERE b.total_wetland_area_m2 > 0
             """)
 
@@ -213,8 +217,9 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 self.log.info(
                     "  Performing spatial join: Property intersections × Wetland features"
                 )
+                # Step 1: Pure spatial join with SINGLE predicate (PR #545 compliant)
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
+                    CREATE OR REPLACE TABLE batch_spatial_raw AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -222,16 +227,32 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         p.year,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
-                        w.wetland_id,
-                        w.gridcode,
+                        p.intersection_geometry,
                         w.toerv_pct,
+                        w.wetland_geometry,
                         ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, w.wetland_geometry)) as property_wetland_area_m2
                     FROM batch_property_intersections p
-                    JOIN batch_wetland_features w ON p.field_id = w.field_id 
-                        AND p.block_id = w.block_id 
-                        AND p.cvr_number = w.cvr_number
-                        AND ST_Intersects(p.intersection_geometry, w.wetland_geometry)
+                    JOIN batch_wetland_features w ON ST_Intersects(p.intersection_geometry, w.wetland_geometry)
                     WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, w.wetland_geometry)) > 10
+                """)
+
+                # Step 2: Filter to matching fields (equality constraints applied after spatial join)
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        bfe_number,
+                        property_intersection_area_m2,
+                        toerv_pct,
+                        property_wetland_area_m2
+                    FROM batch_spatial_raw
+                    WHERE (field_id, block_id, cvr_number, year) IN (
+                        SELECT field_id, block_id, cvr_number, year 
+                        FROM batch_wetland_features
+                    )
                 """)
 
                 spatial_intersections = self.conn.execute(
@@ -252,27 +273,23 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.year,
                         pw.bfe_number,
                         pw.property_intersection_area_m2,
-                        pw.wetland_id,
-                        pw.gridcode,
-                        pw.toerv_pct,
+                        pw.toerv_pct,  -- Only keep meaningful wetland classification
                         pw.property_wetland_area_m2,
                         
-                        -- Check if this wetland area is covered by water projects
-                        CASE 
-                            WHEN wpw.wetland_id IS NOT NULL THEN pw.property_wetland_area_m2
-                            ELSE 0 
-                        END as property_wetland_covered_by_water_m2,
+                        -- Estimate coverage based on wetland type from foundation data
+                        pw.property_wetland_area_m2 * COALESCE(
+                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
+                             FROM water_projects_wetlands_intersections wwi 
+                             WHERE wwi.toerv_pct = pw.toerv_pct), 0
+                        ) as property_wetland_covered_by_water_m2,
                         
-                        CASE 
-                            WHEN wpw.wetland_id IS NULL THEN pw.property_wetland_area_m2
-                            ELSE 0 
-                        END as property_wetland_not_covered_by_water_m2,
-                        
-                        wpw.water_project_id,
-                        wpw.water_project_coverage_area_m2
+                        pw.property_wetland_area_m2 * (1 - COALESCE(
+                            (SELECT AVG(intersection_area_m2 / wetland_area_m2) 
+                             FROM water_projects_wetlands_intersections wwi 
+                             WHERE wwi.toerv_pct = pw.toerv_pct), 0
+                        )) as property_wetland_not_covered_by_water_m2
                         
                     FROM batch_property_wetland_spatial pw
-                    LEFT JOIN water_projects_wetlands wpw ON pw.wetland_id = wpw.wetland_id
                 """)
 
                 water_analysis_count = self.conn.execute(
@@ -292,14 +309,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         CAST(NULL AS INTEGER) as year,
                         CAST(NULL AS VARCHAR) as bfe_number,
                         CAST(NULL AS DOUBLE) as property_intersection_area_m2,
-                        CAST(NULL AS VARCHAR) as wetland_id,
-                        CAST(NULL AS INTEGER) as gridcode,
-                        CAST(NULL AS DOUBLE) as toerv_pct,
+                        CAST(NULL AS VARCHAR) as toerv_pct,
                         CAST(NULL AS DOUBLE) as property_wetland_area_m2,
                         CAST(NULL AS DOUBLE) as property_wetland_covered_by_water_m2,
-                        CAST(NULL AS DOUBLE) as property_wetland_not_covered_by_water_m2,
-                        CAST(NULL AS VARCHAR) as water_project_id,
-                        CAST(NULL AS DOUBLE) as water_project_coverage_area_m2
+                        CAST(NULL AS DOUBLE) as property_wetland_not_covered_by_water_m2
                     WHERE FALSE
                 """)
 
@@ -321,8 +334,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.wetland_covered_by_water_projects_pct,
                     b.wetland_not_covered_by_water_projects_pct,
                     b.field_wetland_coverage_pct,
-                    b.dominant_wetland_gridcode,
-                    b.wetland_polygon_count,
+                    b.dominant_wetland_type,
+                    b.wetland_type_count,
                     
                     -- Property information (aggregated per field)
                     COALESCE(p.property_count, 0) as property_count,
@@ -410,6 +423,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
             self.conn.execute("DROP TABLE IF EXISTS batch_wetland_features")
+            self.conn.execute("DROP TABLE IF EXISTS batch_spatial_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_spatial")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_water_analysis")
 
