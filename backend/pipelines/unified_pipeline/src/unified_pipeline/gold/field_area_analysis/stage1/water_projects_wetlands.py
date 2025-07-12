@@ -8,6 +8,8 @@ Optimized for DuckDB Spatial v1.2.2 with ST_Dump for multipolygon decomposition.
 
 from typing import Any, Dict
 
+import duckdb
+
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
 
