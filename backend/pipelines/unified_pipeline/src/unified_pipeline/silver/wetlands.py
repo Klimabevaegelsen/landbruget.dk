@@ -478,10 +478,23 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             Exception: If there are errors during the dissolve operation
         """
         try:
+            # Clean up any existing tables from previous runs
+            conn = self.conn
+            tables_to_cleanup = [
+                "wetlands_spatial",
+                "wetland_adjacency_raw",
+                "wetland_adjacency_dedup",
+                "wetland_adjacency",
+                "wetland_groups",
+                "wetland_groups_final",
+                "wetlands_dissolved",
+            ]
+            for table in tables_to_cleanup:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+
             # Log statistics of input table
             self.log_geometry_statistics(input_table_name)
 
-            conn = self.conn
             feature_count = conn.execute(f"SELECT COUNT(*) FROM {input_table_name}").fetchone()[0]
             self.log.info(
                 f"Starting DuckDB-spatial merge of {feature_count:,} features in original coordinates..."
