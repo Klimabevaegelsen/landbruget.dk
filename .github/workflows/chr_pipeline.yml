@@ -434,7 +434,6 @@ jobs:
 
       - name: Run Animal Movements for Month ${{ matrix.month }}
         working-directory: backend/pipelines/chr_pipeline
-        timeout-minutes: 90  # 1.5 hours per month (reduced from 3 hours per year)
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
