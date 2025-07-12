@@ -73,6 +73,9 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         4. Avoid recalculating intersections in later stages
         """
 
+        # Enhanced CRS and area debugging
+        self._debug_crs_and_areas(self.conn)
+
         # Get total wetland count for batching
         total_wetlands = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
         batch_size = 100000  # Smaller batches for foundation data creation
@@ -113,19 +116,23 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             # Create wetlands batch with ST_Dump and unique IDs
             self.conn.execute(f"""
+                CREATE OR REPLACE TABLE wetlands_batch_raw AS
+                SELECT 
+                    toerv_pct,
+                    UNNEST(ST_Dump(geometry)).geom as geometry
+                FROM wetlands_raw
+                LIMIT {batch_size} OFFSET {offset}
+            """)
+
+            # Add IDs and calculate areas in separate step to avoid subquery issues
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
                     ROW_NUMBER() OVER () + {offset} as wetland_id,  -- Ensure unique IDs across batches
                     toerv_pct,  -- Keep wetland type for analysis
-                    dumped_geom as geometry,
-                    ST_Area_Spheroid(dumped_geom) as wetland_area_m2
-                FROM (
-                    SELECT 
-                        toerv_pct,
-                        UNNEST(ST_Dump(geometry)).geom as dumped_geom
-                    FROM wetlands_raw
-                    LIMIT {batch_size} OFFSET {offset}
-                ) t
+                    geometry,
+                    ST_Area_Spheroid(geometry) as wetland_area_m2
+                FROM wetlands_batch_raw
             """)
 
             batch_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_batch").fetchone()[0]
@@ -142,27 +149,41 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 self.log.warning("  ⚠️  No water projects found! Cannot create intersections.")
                 continue
 
-            # Sample a few geometries to check validity
+                # Sample a few geometries to check validity and CRS
             sample_wetland = self.conn.execute("""
-                SELECT ST_IsValid(geometry), ST_Area_Spheroid(geometry) 
+                SELECT 
+                    ST_IsValid(geometry), 
+                    ST_Area_Spheroid(geometry),
+                    ST_SRID(geometry),
+                    ST_GeomType(geometry),
+                    ST_X(ST_Centroid(geometry)),
+                    ST_Y(ST_Centroid(geometry))
                 FROM wetlands_batch 
                 LIMIT 1
             """).fetchone()
 
             sample_water = self.conn.execute("""
-                SELECT ST_IsValid(geometry), ST_Area_Spheroid(geometry) 
+                SELECT 
+                    ST_IsValid(geometry), 
+                    ST_Area_Spheroid(geometry),
+                    ST_SRID(geometry),
+                    ST_GeomType(geometry),
+                    ST_X(ST_Centroid(geometry)),
+                    ST_Y(ST_Centroid(geometry))
                 FROM water_projects 
                 LIMIT 1
             """).fetchone()
 
             if sample_wetland and sample_water:
-                wetland_valid, wetland_area = sample_wetland
-                water_valid, water_area = sample_water
+                wetland_valid, wetland_area, wetland_srid, wetland_type, wetland_x, wetland_y = (
+                    sample_wetland
+                )
+                water_valid, water_area, water_srid, water_type, water_x, water_y = sample_water
                 self.log.info(
-                    f"  🔍 Sample check - Wetland: valid={wetland_valid}, area={wetland_area:.1f}m²"
+                    f"  🔍 Wetland - valid={wetland_valid}, area={wetland_area}, SRID={wetland_srid}, type={wetland_type}, center=({wetland_x:.2f}, {wetland_y:.2f})"
                 )
                 self.log.info(
-                    f"  🔍 Sample check - Water project: valid={water_valid}, area={water_area:.1f}m²"
+                    f"  🔍 Water project - valid={water_valid}, area={water_area:.1f}m², SRID={water_srid}, type={water_type}, center=({water_x:.2f}, {water_y:.2f})"
                 )
 
             # Create intersection records for this batch
@@ -211,6 +232,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             total_intersections += batch_intersections
 
             # Clean up batch tables immediately
+            self.conn.execute("DROP TABLE IF EXISTS wetlands_batch_raw")
             self.conn.execute("DROP TABLE IF EXISTS wetlands_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_intersections")
 
@@ -329,3 +351,123 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self._save_stage_output(
             "wetland_water_intersections", "water_projects_wetlands_intersections"
         )
+
+    def _debug_crs_and_areas(self, conn: duckdb.DuckDBPyConnection) -> None:
+        """Debug coordinate systems and area calculations."""
+        self.log.info("🔍 Enhanced CRS and Area Debugging:")
+
+        try:
+            # Check water projects CRS and area
+            wp_sample = conn.execute("""
+                SELECT 
+                    ST_XMin(geometry) as min_x,
+                    ST_XMax(geometry) as max_x,
+                    ST_YMin(geometry) as min_y,
+                    ST_YMax(geometry) as max_y,
+                    ST_Area_Spheroid(geometry) as area_spheroid,
+                    ST_Area(geometry) as area_planar,
+                    ST_IsValid(geometry) as is_valid,
+                    ST_GeometryType(geometry) as geom_type
+                FROM water_projects 
+                WHERE geometry IS NOT NULL 
+                LIMIT 1
+            """).fetchone()
+
+            if wp_sample:
+                self.log.info(
+                    f"Water Projects - X: {wp_sample[0]:.6f} to {wp_sample[1]:.6f}, Y: {wp_sample[2]:.6f} to {wp_sample[3]:.6f}"
+                )
+                self.log.info(
+                    f"Water Projects - Area (spheroid): {wp_sample[4]:.2f}m², Area (planar): {wp_sample[5]:.2f}m²"
+                )
+                self.log.info(f"Water Projects - Valid: {wp_sample[6]}, Type: {wp_sample[7]}")
+
+                # Check if coordinates look like WGS84 (longitude 7-16, latitude 54-58 for Denmark)
+                x_looks_like_lon = 7 <= wp_sample[0] <= 16 and 7 <= wp_sample[1] <= 16
+                y_looks_like_lat = 54 <= wp_sample[2] <= 58 and 54 <= wp_sample[3] <= 58
+                self.log.info(
+                    f"Water Projects - Coordinates look like WGS84: {x_looks_like_lon and y_looks_like_lat}"
+                )
+
+            # Check wetlands CRS and area
+            w_sample = conn.execute("""
+                SELECT 
+                    ST_XMin(geometry) as min_x,
+                    ST_XMax(geometry) as max_x,
+                    ST_YMin(geometry) as min_y,
+                    ST_YMax(geometry) as max_y,
+                    ST_Area_Spheroid(geometry) as area_spheroid,
+                    ST_Area(geometry) as area_planar,
+                    ST_IsValid(geometry) as is_valid,
+                    ST_GeometryType(geometry) as geom_type
+                FROM wetlands_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 1
+            """).fetchone()
+
+            if w_sample:
+                self.log.info(
+                    f"Wetlands - X: {w_sample[0]:.6f} to {w_sample[1]:.6f}, Y: {w_sample[2]:.6f} to {w_sample[3]:.6f}"
+                )
+                self.log.info(
+                    f"Wetlands - Area (spheroid): {w_sample[4]:.2f}m², Area (planar): {w_sample[5]:.2f}m²"
+                )
+                self.log.info(f"Wetlands - Valid: {w_sample[6]}, Type: {w_sample[7]}")
+
+                # Check if coordinates look like WGS84 vs UTM
+                x_looks_like_lon = 7 <= w_sample[0] <= 16 and 7 <= w_sample[1] <= 16
+                y_looks_like_lat = 54 <= w_sample[2] <= 58 and 54 <= w_sample[3] <= 58
+                x_looks_like_utm = (
+                    400000 <= w_sample[0] <= 900000 and 400000 <= w_sample[1] <= 900000
+                )
+                y_looks_like_utm = (
+                    6000000 <= w_sample[2] <= 6500000 and 6000000 <= w_sample[3] <= 6500000
+                )
+
+                self.log.info(
+                    f"Wetlands - Coordinates look like WGS84: {x_looks_like_lon and y_looks_like_lat}"
+                )
+                self.log.info(
+                    f"Wetlands - Coordinates look like UTM (EPSG:25832): {x_looks_like_utm and y_looks_like_utm}"
+                )
+
+                if x_looks_like_utm and y_looks_like_utm:
+                    self.log.error(
+                        "🚨 PROBLEM: Wetlands still in UTM coordinates! Geometry validator failed to transform to WGS84"
+                    )
+                    self.log.error(
+                        "   ST_Area_Spheroid() expects WGS84 coordinates, but got UTM → returns NaN"
+                    )
+                elif x_looks_like_lon and y_looks_like_lat:
+                    self.log.info("✅ Wetlands correctly in WGS84 coordinates")
+                else:
+                    self.log.warning(
+                        "⚠️ Wetlands coordinates don't match expected WGS84 or UTM patterns"
+                    )
+
+            # Test coordinate transformation manually
+            self.log.info("🧪 Testing manual coordinate transformation:")
+            try:
+                test_result = conn.execute("""
+                    SELECT 
+                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326') as transformed_point,
+                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lon,
+                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lat
+                """).fetchone()
+
+                if test_result:
+                    self.log.info(
+                        f"UTM (500000, 6200000) → WGS84 ({test_result[1]:.6f}, {test_result[2]:.6f})"
+                    )
+                    if 7 <= test_result[1] <= 16 and 54 <= test_result[2] <= 58:
+                        self.log.info("✅ Manual transformation working correctly")
+                    else:
+                        self.log.error(
+                            "🚨 Manual transformation produced invalid WGS84 coordinates"
+                        )
+
+            except Exception as transform_e:
+                self.log.error(f"🚨 Manual coordinate transformation failed: {transform_e}")
+
+        except Exception as e:
+            self.log.error(f"CRS debugging failed: {e}")
