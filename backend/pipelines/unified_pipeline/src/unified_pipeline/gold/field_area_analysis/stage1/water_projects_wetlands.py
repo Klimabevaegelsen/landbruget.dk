@@ -157,7 +157,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_IsValid(geometry), 
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
-                    ST_GeomType(geometry),
+                    ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
                 FROM wetlands_batch 
@@ -169,7 +169,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_IsValid(geometry), 
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
-                    ST_GeomType(geometry),
+                    ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
                 FROM water_projects 
