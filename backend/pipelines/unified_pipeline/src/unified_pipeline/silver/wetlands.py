@@ -666,6 +666,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     )
 
                     # Create empty result table
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
                     conn.execute("""
                         CREATE TABLE wetlands_dissolved (
                             wetland_id INTEGER,
@@ -697,6 +698,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         """)
                 else:
                     # Process all at once for smaller datasets
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
                     conn.execute("""
                         CREATE TABLE wetlands_dissolved AS
                         SELECT 
@@ -711,6 +713,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             else:
                 # No adjacent wetlands found, keep original geometries
                 self.log.info("No adjacent wetlands found, keeping original geometries...")
+                conn.execute("DROP TABLE IF EXISTS wetlands_dissolved")
                 conn.execute("""
                     CREATE TABLE wetlands_dissolved AS
                     SELECT 
