@@ -117,10 +117,15 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 SELECT 
                     ROW_NUMBER() OVER () + {offset} as wetland_id,  -- Ensure unique IDs across batches
                     toerv_pct,  -- Keep wetland type for analysis
-                    UNNEST(ST_Dump(geometry)).geom as geometry,
-                    ST_Area_Spheroid(geometry) as wetland_area_m2
-                FROM wetlands_raw
-                LIMIT {batch_size} OFFSET {offset}
+                    dumped_geom as geometry,
+                    ST_Area_Spheroid(dumped_geom) as wetland_area_m2
+                FROM (
+                    SELECT 
+                        toerv_pct,
+                        UNNEST(ST_Dump(geometry)).geom as dumped_geom
+                    FROM wetlands_raw
+                    LIMIT {batch_size} OFFSET {offset}
+                ) t
             """)
 
             batch_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_batch").fetchone()[0]
@@ -128,6 +133,37 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 break
 
             self.log.info(f"  Processing {batch_count:,} wetlands in batch {batch_num + 1}")
+
+            # Debug: Check if we have water projects and sample geometries
+            water_projects_count = self.conn.execute(
+                "SELECT COUNT(*) FROM water_projects"
+            ).fetchone()[0]
+            if water_projects_count == 0:
+                self.log.warning("  ⚠️  No water projects found! Cannot create intersections.")
+                continue
+
+            # Sample a few geometries to check validity
+            sample_wetland = self.conn.execute("""
+                SELECT ST_IsValid(geometry), ST_Area_Spheroid(geometry) 
+                FROM wetlands_batch 
+                LIMIT 1
+            """).fetchone()
+
+            sample_water = self.conn.execute("""
+                SELECT ST_IsValid(geometry), ST_Area_Spheroid(geometry) 
+                FROM water_projects 
+                LIMIT 1
+            """).fetchone()
+
+            if sample_wetland and sample_water:
+                wetland_valid, wetland_area = sample_wetland
+                water_valid, water_area = sample_water
+                self.log.info(
+                    f"  🔍 Sample check - Wetland: valid={wetland_valid}, area={wetland_area:.1f}m²"
+                )
+                self.log.info(
+                    f"  🔍 Sample check - Water project: valid={water_valid}, area={water_area:.1f}m²"
+                )
 
             # Create intersection records for this batch
             batch_query = """
@@ -204,6 +240,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetland_water_intersections AS
                 SELECT 
+                    CAST(NULL AS BIGINT) as wetland_id,
                     CAST(NULL AS VARCHAR) as toerv_pct,
                     CAST(NULL AS VARCHAR) as project_id,
                     CAST(NULL AS DOUBLE) as intersection_area_m2,
