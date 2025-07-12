@@ -536,7 +536,8 @@ def process_chr_data(
             logging.warning(f"Successfully loaded table '{table_name}'")
             # Register the table in DuckDB so SQL queries can reference it by name
             try:
-                con.register(raw_tables[table_name], table_name)
+                # Use Ibis create_table to register the table in DuckDB
+                con.create_table(table_name, raw_tables[table_name], overwrite=True)
                 logging.warning(f"Registered table '{table_name}' in DuckDB catalog")
             except Exception as e:
                 logging.error(f"Failed to register table '{table_name}' in DuckDB: {e}")
@@ -555,7 +556,7 @@ def process_chr_data(
             logging.warning(f"Schema for vetstat: {schema}")
             # Register the vetstat table in DuckDB catalog
             try:
-                con.register(raw_tables["vetstat"], "vetstat")
+                con.create_table("vetstat", raw_tables["vetstat"], overwrite=True)
                 logging.warning("Registered vetstat table in DuckDB catalog")
             except Exception as e:
                 logging.error(f"Failed to register vetstat table in DuckDB: {e}")
