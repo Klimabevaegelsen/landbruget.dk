@@ -46,7 +46,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT 
-                wetland_id,
+                id as wetland_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM wetlands_raw
         """)
@@ -117,7 +117,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
-                    wetland_id,
+                    id as wetland_id,
                     UNNEST(ST_Dump(geometry)).geom as geometry,
                     ST_Area_Spheroid(geometry) as wetland_area_m2
                 FROM wetlands_raw
@@ -215,7 +215,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             -- Calculate totals from intersection records
             (SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
             (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-             WHERE wr.wetland_id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)
+             WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)
             ) as total_wetland_area_m2,
             
             SUM(intersection_area_m2) as wetland_covered_area_m2,
@@ -224,11 +224,11 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             CASE 
                 WHEN (SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
                      (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-                      WHERE wr.wetland_id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)) > 0
+                      WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)) > 0
                 THEN (SUM(intersection_area_m2) / 
                      ((SELECT SUM(DISTINCT wetland_area_m2) FROM wetland_water_intersections) +
                       (SELECT SUM(ST_Area_Spheroid(geometry)) FROM wetlands_raw wr 
-                       WHERE wr.wetland_id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)))) * 100
+                       WHERE wr.id NOT IN (SELECT DISTINCT wetland_id FROM wetland_water_intersections)))) * 100
                 ELSE 0 
             END as coverage_percentage,
             

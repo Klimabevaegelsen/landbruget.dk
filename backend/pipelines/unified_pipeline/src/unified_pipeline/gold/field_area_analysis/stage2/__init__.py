@@ -1,5 +1,7 @@
-"""Stage 2: Environmental Coverage Analysis (TBD)
+"""Stage 2: Environmental Coverage Analysis
 
-This stage will contain environmental coverage calculations that depend on Stage 1 outputs.
-Currently being redesigned based on Stage 1 architecture success.
+- Fields × BNBO water coverage analysis
+- Fields × Wetland water coverage analysis
+
+Uses foundation data from Stage 1 for optimized processing.
 """

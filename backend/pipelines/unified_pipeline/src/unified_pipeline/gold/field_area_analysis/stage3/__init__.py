@@ -1,6 +1,6 @@
-"""Stage 3: Environmental Coverage Analysis (Parallel Processing)
+"""Stage 4: Final Assembly (Parallel Processing)
 
-- Fields × BNBO Water Coverage calculations
-- Fields × Wetland Water Coverage calculations
-- Uses pre-computed water project intersections from Stage 1
+- Final BNBO Analysis (combines Stage 3A with properties)
+- Final Wetland Analysis (combines Stage 3B with properties)
+- Uses pre-filtered properties from Stage 1C
 """
