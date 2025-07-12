@@ -66,11 +66,8 @@ on:
         type: string
         default: ''
 
-env:
-  # Set a shared timestamp for all bronze jobs in this workflow run
-  # Use proper timestamp format like other pipelines (YYYYMMDD_HHMMSS)
-  # Format: date +%Y%m%d_%H%M%S (but GitHub Actions doesn't support this in env)
-  # So we'll generate it in the first job and pass it as artifact
+# Environment variables are set in individual jobs as needed
+# Bronze timestamp is generated in the bronze-foundation job and shared via artifacts
 
 jobs:
   # Job 0: Generate Monthly Matrix
