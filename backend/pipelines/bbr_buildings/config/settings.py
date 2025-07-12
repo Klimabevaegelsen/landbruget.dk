@@ -69,17 +69,11 @@ class Settings:
         self.spatial_join_fallback_enabled = (
             os.getenv("SPATIAL_JOIN_FALLBACK_ENABLED", "true").lower() == "true"
         )
-        self.enable_duckdb_optimizer = (
-            os.getenv("ENABLE_DUCKDB_OPTIMIZER", "true").lower() == "true"
-        )
 
         # Spatial join performance settings
         self.spatial_join_build_side_memory_limit = os.getenv(
             "SPATIAL_JOIN_BUILD_SIDE_MEMORY_LIMIT", "8GB"
         )
-        self.spatial_index_type = os.getenv(
-            "SPATIAL_INDEX_TYPE", "rtree"
-        )  # Future: support different index types
 
         # Building category filters
         self.target_building_categories = ["residential", "agriculture", "education", "daycare"]
@@ -145,9 +139,7 @@ class Settings:
             # DuckDB Spatial v1.2.2 SPATIAL_JOIN operator
             "enable_spatial_join_operator": self.enable_spatial_join_operator,
             "spatial_join_fallback_enabled": self.spatial_join_fallback_enabled,
-            "enable_duckdb_optimizer": self.enable_duckdb_optimizer,
             "spatial_join_build_side_memory_limit": self.spatial_join_build_side_memory_limit,
-            "spatial_index_type": self.spatial_index_type,
             "reference": "https://github.com/duckdb/duckdb-spatial/pull/545",
         }
 

@@ -80,9 +80,6 @@ def demonstrate_spatial_join_operator():
 
     conn = create_sample_data()
 
-    # Enable optimizer to ensure SPATIAL_JOIN operator is used
-    conn.execute("SET enable_optimizer = true")
-
     # Query that will trigger SPATIAL_JOIN operator
     spatial_join_query = """
     SELECT 
@@ -152,7 +149,6 @@ def demonstrate_query_patterns():
     print("\n🌟 Demonstrating different SPATIAL_JOIN patterns...")
 
     conn = create_sample_data()
-    conn.execute("SET enable_optimizer = true")
 
     # Test different spatial predicates
     spatial_predicates = [
@@ -214,9 +210,8 @@ def demonstrate_performance_comparison():
     print(f"   Fields: {fields_count:,}")
     print(f"   Potential comparisons: {large_buildings_count * fields_count:,}")
 
-    # Test with SPATIAL_JOIN operator
-    print("\n⚡ Testing with SPATIAL_JOIN operator enabled...")
-    conn.execute("SET enable_optimizer = true")
+    # Test with optimizers enabled (default behavior)
+    print("\n⚡ Testing with DuckDB optimizers (default)...")
 
     import time
 
