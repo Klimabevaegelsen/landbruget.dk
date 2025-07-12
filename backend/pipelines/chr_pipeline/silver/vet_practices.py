@@ -16,24 +16,23 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
 
     # Extract vet practice information
     vet_practices = con.sql("""
-        WITH BesPraksisInfo AS (
-            SELECT DISTINCT
-                Response[1].Besaetning.BesPraksis AS PraksisInfo
+        WITH unnested_response AS (
+            SELECT UNNEST(Response) AS response_item
             FROM bes_details
-            WHERE Response[1].Besaetning.BesPraksis IS NOT NULL
+            WHERE Response IS NOT NULL
         )
         SELECT DISTINCT -- Ensure final distinctness
-            PraksisInfo.PraksisNavn AS practice_name,
-            PraksisInfo.PraksisAdresse AS address,
-            CAST(PraksisInfo.PraksisPostNummer AS STRING) AS postal_code, -- Cast PostNummer to string
-            PraksisInfo.PraksisPostDistrikt AS postal_district,
-            PraksisInfo.PraksisTelefonNummer AS phone,
-            PraksisInfo.PraksisMobilNummer AS mobile,
-            PraksisInfo.PraksisEmail AS email,
-            PraksisInfo.PraksisNr AS practice_number, -- Adding PraksisNr as it might be useful
-            PraksisInfo.PraksisByNavn AS city -- Adding City Name
-        FROM BesPraksisInfo
-        WHERE PraksisInfo.PraksisNr IS NOT NULL -- Filter out null practice numbers after extraction
+            response_item.Besaetning.BesPraksis.PraksisNavn AS practice_name,
+            response_item.Besaetning.BesPraksis.PraksisAdresse AS address,
+            CAST(response_item.Besaetning.BesPraksis.PraksisPostNummer AS STRING) AS postal_code, -- Cast PostNummer to string
+            response_item.Besaetning.BesPraksis.PraksisPostDistrikt AS postal_district,
+            response_item.Besaetning.BesPraksis.PraksisTelefonNummer AS phone,
+            response_item.Besaetning.BesPraksis.PraksisMobilNummer AS mobile,
+            response_item.Besaetning.BesPraksis.PraksisEmail AS email,
+            response_item.Besaetning.BesPraksis.PraksisNr AS practice_number, -- Adding PraksisNr as it might be useful
+            response_item.Besaetning.BesPraksis.PraksisByNavn AS city -- Adding City Name
+        FROM unnested_response
+        WHERE response_item.Besaetning.BesPraksis.PraksisNr IS NOT NULL -- Filter out null practice numbers after extraction
     """)
 
     # Add cleaning/casting using mutate
