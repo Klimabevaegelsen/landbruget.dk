@@ -869,14 +869,11 @@ def main():
             # Check if we have bronze data files available locally
             bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
 
-            # If no override set, try to read from GitHub Actions artifact file
+            # In GitHub Actions, read bronze timestamp from artifact file
             if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
-                try:
-                    with open("/tmp/bronze_timestamp.txt", "r") as f:
-                        bronze_dir_override = f.read().strip()
-                    logging.warning(f"Read bronze timestamp from artifact file: {bronze_dir_override}")
-                except Exception as e:
-                    logging.warning(f"Failed to read bronze timestamp from artifact file: {e}")
+                with open("/tmp/bronze_timestamp.txt", "r") as f:
+                    bronze_dir_override = f.read().strip()
+                logging.warning(f"Using bronze timestamp from artifact: {bronze_dir_override}")
 
             has_bronze_files = False
 
@@ -1042,16 +1039,11 @@ def main():
                 buffer_data = get_data_buffer()
                 bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
 
-                # If no override set, try to read from GitHub Actions artifact file
+                # In GitHub Actions, read bronze timestamp from artifact file
                 if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
-                    try:
-                        with open("/tmp/bronze_timestamp.txt", "r") as f:
-                            bronze_dir_override = f.read().strip()
-                        logging.warning(
-                            f"Read bronze timestamp from artifact file for streaming: {bronze_dir_override}"
-                        )
-                    except Exception as e:
-                        logging.warning(f"Failed to read bronze timestamp from artifact file: {e}")
+                    with open("/tmp/bronze_timestamp.txt", "r") as f:
+                        bronze_dir_override = f.read().strip()
+                    logging.warning(f"Using bronze timestamp from artifact for streaming: {bronze_dir_override}")
 
                 # Determine bronze timestamp for streaming mode
                 bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
