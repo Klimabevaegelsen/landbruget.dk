@@ -421,4 +421,4 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save final wetland analysis with nested property structure."""
-        self._save_stage_output("final_wetland_analysis", "final_wetland_analysis")
+        self._save_stage_output("final_wetland_analysis", "final_wetland")
