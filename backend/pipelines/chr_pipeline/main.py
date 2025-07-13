@@ -868,6 +868,16 @@ def main():
 
             # Check if we have bronze data files available locally
             bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
+
+            # If no override set, try to read from GitHub Actions artifact file
+            if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
+                try:
+                    with open("/tmp/bronze_timestamp.txt", "r") as f:
+                        bronze_dir_override = f.read().strip()
+                    logging.warning(f"Read bronze timestamp from artifact file: {bronze_dir_override}")
+                except Exception as e:
+                    logging.warning(f"Failed to read bronze timestamp from artifact file: {e}")
+
             has_bronze_files = False
 
             # PRIORITY 1: Check override directory first (most reliable)
@@ -1031,6 +1041,17 @@ def main():
                 # For silver processing, check if we need to use files or buffer
                 buffer_data = get_data_buffer()
                 bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
+
+                # If no override set, try to read from GitHub Actions artifact file
+                if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
+                    try:
+                        with open("/tmp/bronze_timestamp.txt", "r") as f:
+                            bronze_dir_override = f.read().strip()
+                        logging.warning(
+                            f"Read bronze timestamp from artifact file for streaming: {bronze_dir_override}"
+                        )
+                    except Exception as e:
+                        logging.warning(f"Failed to read bronze timestamp from artifact file: {e}")
 
                 # Determine bronze timestamp for streaming mode
                 bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
