@@ -13,7 +13,7 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
-from .export import save_raw_data
+from .export import save_data_immediately
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
@@ -114,7 +114,7 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_oplysninger", identifier=f"{chr_number}")
+        save_data_immediately(data_type="ejendom_oplysninger", data=response, identifier=f"{chr_number}")
     return response
 
 
@@ -134,7 +134,7 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_vet_events", identifier=f"{chr_number}")
+        save_data_immediately(data_type="ejendom_vet_events", data=response, identifier=f"{chr_number}")
     return response
 
 

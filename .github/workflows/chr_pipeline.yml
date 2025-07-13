@@ -858,6 +858,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           
+          # Add VetStat credentials if provided
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
+          
           # Read the bronze timestamp from the artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env

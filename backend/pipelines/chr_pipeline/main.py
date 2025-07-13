@@ -10,7 +10,13 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from bronze.export import EXPORT_TIMESTAMP, export_context_data, finalize_export, get_data_buffer, import_context_data
+from bronze.export import (
+    EXPORT_TIMESTAMP,
+    export_context_data,
+    get_data_buffer,
+    import_context_data,
+    save_data_immediately,
+)
 from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
 from bronze.load_besaetning import create_soap_client as create_bes_client
 from bronze.load_besaetning import get_fvm_credentials, load_herd_details, load_herd_list
@@ -142,9 +148,7 @@ def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List
         return []
 
     # Save the raw response to the export buffer
-    from bronze.export import save_raw_data
-
-    save_raw_data(raw_response=response, data_type="stamdata_species_usage", identifier="all")
+    save_data_immediately(data_type="stamdata_species_usage", data=response, identifier="all")
 
     combinations = []
     for combo in response.Response if isinstance(response.Response, list) else [response.Response]:
@@ -1059,14 +1063,14 @@ def main():
                 logging.error(f"Silver processing failed: {e}", exc_info=True)
                 raise  # Re-raise to indicate pipeline failure
 
-        # Finalize bronze export (only if we have bronze data to export)
-        if unique_bronze_steps or get_data_buffer():
+        # Finalize bronze export (if we have bronze data to export)
+        buffer_data = get_data_buffer()
+        if unique_bronze_steps or buffer_data:
             # But don't clear buffer if we're exporting context (dependent jobs might need the data)
             clear_buffer_after_export = not bool(context_export_path)
             logging.warning("Finalizing bronze export...")
 
             # Add debugging info about buffer size before export
-            buffer_data = get_data_buffer()
             if buffer_data:
                 total_records = sum(
                     len(data.get("json", [])) + len(data.get("xml", [])) for data in buffer_data.values()
@@ -1076,9 +1080,10 @@ def main():
                     json_count = len(data.get("json", []))
                     xml_count = len(data.get("xml", []))
                     logging.warning(f"  {key}: {json_count} JSON records, {xml_count} XML records")
+            else:
+                logging.warning("No buffer data found, but finalizing export anyway due to bronze steps run")
 
-            finalize_export(clear_buffer=clear_buffer_after_export)
-            logging.warning("Bronze export finalization completed.")
+            logging.warning("Bronze export finalization completed - data saved immediately during bronze steps.")
         else:
             logging.warning("No bronze data to export - skipping bronze export finalization.")
 
