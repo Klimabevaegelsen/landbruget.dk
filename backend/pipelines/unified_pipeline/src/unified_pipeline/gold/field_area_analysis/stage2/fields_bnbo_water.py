@@ -31,10 +31,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = CONFIG.stage_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
-        # Explicitly exclude any problematic columns that might exist from previous runs
+        # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
             stage0_bnbo_path,
-            "SELECT bnbo_id, status_category, geometry, bnbo_area_m2",
+            "SELECT *",
             "bnbo_for_fields",
         )
 
@@ -45,10 +45,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
         stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
-        # Explicitly exclude any problematic columns that might exist from previous runs
+        # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
             stage1a_path,
-            "SELECT project_id, bnbo_id, status_category, water_project_geometry, intersection_geometry, intersection_area_m2, water_project_area_m2, bnbo_area_m2, wp_coverage_percentage",
+            "SELECT *",
             "water_projects_bnbo_intersections",
         )
 
