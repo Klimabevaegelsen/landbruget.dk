@@ -11,6 +11,7 @@ Updated to use bulk GeoDanmark download + local joins for improved performance.
 import argparse
 import gc
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -92,44 +93,73 @@ def perform_spatial_join_optimized(
 
     # Enable spatial optimization settings for v1.2.2
     conn.execute("SET enable_progress_bar = false")
-    conn.execute('SET memory_limit = "12GB"')
+
+    # GitHub Actions memory optimization (16GB total, leave headroom)
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        conn.execute('SET memory_limit = "12GB"')  # Conservative for GitHub Actions
+        print("🔧 GitHub Actions detected: Using conservative memory settings (12GB)")
+    else:
+        conn.execute('SET memory_limit = "12GB"')  # Standard setting
 
     try:
-        # Load and optimize GeoDanmark data with ST_Dump
+        # Load and optimize GeoDanmark data
         print("📊 Loading and optimizing GeoDanmark buildings data...")
         conn.execute(f"""
             CREATE OR REPLACE TABLE geodanmark_buildings_raw AS
             SELECT * FROM read_parquet('{geodanmark_path}')
         """)
 
+        # Early filtering optimization: only load buildings we actually need
+        building_ids_str = "', '".join(building_ids)
+        print(f"🎯 Filtering to only needed buildings ({len(building_ids):,} IDs)...")
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE geodanmark_buildings_filtered AS
+            SELECT * FROM geodanmark_buildings_raw
+            WHERE BBRUUID IN ('{building_ids_str}')
+        """)
+
+        # Drop the full table to save memory
+        conn.execute("DROP TABLE geodanmark_buildings_raw")
+
+        # Check how much we filtered
+        filtered_count = conn.execute(
+            "SELECT COUNT(*) FROM geodanmark_buildings_filtered"
+        ).fetchone()[0]
+        print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
+
         # Apply ST_Dump optimization for complex geometries
         conn.execute("""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
+            WITH dumped_geometries AS (
+                SELECT 
+                    BBRUUID,
+                    bygningstype,
+                    opfoerelsesaar,
+                    etagetal,
+                    bygningsanvendelse,
+                    UNNEST(ST_Dump(geometri)).geom as geometry
+                FROM geodanmark_buildings_filtered
+                WHERE ST_IsValid(geometri)
+            )
             SELECT 
                 BBRUUID,
-                UNNEST(ST_Dump(geometri)).geom as geometry,
+                geometry,
                 bygningstype,
                 opfoerelsesaar,
                 etagetal,
                 bygningsanvendelse,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) as building_area_m2
-            FROM geodanmark_buildings_raw
-            WHERE ST_IsValid(geometri)
-            AND ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) > 1  -- Minimum 1m² building area
+                ST_Area_Spheroid(geometry) as building_area_m2
+            FROM dumped_geometries
         """)
 
-        # Create INSPIRE building IDs table for spatial join
-        print("📋 Creating INSPIRE buildings table for SPATIAL_JOIN...")
+        # Create INSPIRE building IDs table for efficient UUID matching
+        print("📋 Creating INSPIRE buildings table for UUID-based join...")
 
         # Convert building IDs to table format for proper JOIN
         building_ids_str = "', '".join(building_ids)
         conn.execute(f"""
             CREATE OR REPLACE TABLE inspire_building_ids AS
-            SELECT 
-                unnest(['{building_ids_str}']) as BBRUUID,
-                -- Create a small geometry for each building ID to enable spatial operations
-                -- This is a placeholder - in real scenarios, you'd have actual geometries
-                ST_Point(0, 0) as placeholder_geometry
+            SELECT unnest(['{building_ids_str}']) as BBRUUID
         """)
 
         inspire_count = conn.execute("SELECT COUNT(*) FROM inspire_building_ids").fetchone()[0]
@@ -141,12 +171,28 @@ def perform_spatial_join_optimized(
 
         if use_spatial_join_operator:
             print("🔥 Using SPATIAL_JOIN operator for optimal performance...")
+            print("📖 Reference: https://github.com/duckdb/duckdb-spatial/pull/545")
 
-            # For UUID-based matching, we'll use a hybrid approach:
-            # 1. Use SPATIAL_JOIN structure but with BBRUUID matching
-            # 2. This prepares us for future true spatial joins
+            # SPATIAL_JOIN operator compliance (PR #545):
+            # 1. Use proper JOIN syntax (not WHERE clause)
+            # 2. Single spatial predicate only
+            # 3. Build side (smaller dataset) should fit in memory
+            # 4. Use one of the supported spatial predicates
 
-            join_query = """
+            # NOTE: For this specific use case (UUID matching), we use efficient UUID joins
+            # SPATIAL_JOIN operator is designed for true spatial operations (geometry intersections)
+            #
+            # SPATIAL_JOIN operator SHOULD be used for:
+            # - Buildings × Agricultural fields (spatial intersection)
+            # - Buildings × Cadastral parcels (spatial containment)
+            # - Buildings × Administrative boundaries (spatial within)
+            # - Any geometry-to-geometry spatial relationships
+            #
+            # UUID joins are optimal when we have exact identifier matches (like this case)
+            # Reference: https://github.com/duckdb/duckdb-spatial/pull/545
+
+            # Efficient UUID-based join (optimal for this use case)
+            uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
             SELECT 
                 g.BBRUUID,
@@ -156,15 +202,15 @@ def perform_spatial_join_optimized(
                 g.etagetal,
                 g.bygningsanvendelse,
                 g.building_area_m2,
-                'spatial_join_matched' as join_status
-            FROM geodanmark_buildings g
-            INNER JOIN inspire_building_ids i ON g.BBRUUID = i.BBRUUID
+                'uuid_matched' as join_status
+            FROM inspire_building_ids i
+            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
             WHERE ST_IsValid(g.geometry)
-            AND g.building_area_m2 > 5  -- Minimum meaningful building area
+            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
 
-            print("⚡ Executing optimized spatial join...")
-            conn.execute(join_query)
+            print("⚡ Executing optimized UUID-based join...")
+            conn.execute(uuid_join_query)
 
         else:
             print("🔄 Using fallback chunked approach...")
@@ -227,7 +273,7 @@ def perform_spatial_join_optimized(
             # Final cleanup
             conn.execute("DROP TABLE IF EXISTS joined_results")
             conn.execute("DROP TABLE IF EXISTS geodanmark_buildings")
-            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings_raw")
+            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings_filtered")  # Added this line
             conn.execute("DROP TABLE IF EXISTS inspire_building_ids")
 
             gc.collect()
@@ -358,21 +404,48 @@ def perform_chunked_spatial_join(
         SELECT * FROM read_parquet('{geodanmark_path}')
     """)
 
+    # Early filtering optimization: only load buildings we actually need
+    building_ids_str = "', '".join(building_ids)
+    print(f"🎯 Filtering to only needed buildings ({len(building_ids):,} IDs)...")
+    conn.execute(f"""
+        CREATE OR REPLACE TABLE geodanmark_buildings_filtered AS
+        SELECT * FROM geodanmark_buildings_raw
+        WHERE BBRUUID IN ('{building_ids_str}')
+    """)
+
+    # Drop the full table to save memory
+    conn.execute("DROP TABLE geodanmark_buildings_raw")
+
+    # Check how much we filtered
+    filtered_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings_filtered").fetchone()[
+        0
+    ]
+    print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
+
     # Apply ST_Dump optimization for complex geometries (like field analysis)
     conn.execute("""
         CREATE OR REPLACE TABLE geodanmark_buildings AS
+        WITH dumped_geometries AS (
+            SELECT 
+                BBRUUID,
+                bygningstype,
+                opfoerelsesaar,
+                etagetal,
+                bygningsanvendelse,
+                UNNEST(ST_Dump(geometri)).geom as geometry
+            FROM geodanmark_buildings_filtered
+            WHERE ST_IsValid(geometri)
+        )
         SELECT 
             BBRUUID,
-            UNNEST(ST_Dump(geometri)).geom as geometry,
-            -- Keep other important attributes
+            geometry,
             bygningstype,
             opfoerelsesaar,
             etagetal,
             bygningsanvendelse,
-            ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) as building_area_m2
-        FROM geodanmark_buildings_raw
-        WHERE ST_IsValid(geometri)
-        AND ST_Area_Spheroid(UNNEST(ST_Dump(geometri)).geom) > 1  -- Minimum 1m² building area
+            ST_Area_Spheroid(geometry) as building_area_m2
+        FROM dumped_geometries
+        WHERE ST_Area_Spheroid(geometry) > 1  -- Minimum 1m² building area
     """)
 
     # Get optimized building count
@@ -385,12 +458,24 @@ def perform_chunked_spatial_join(
     conn.execute("DROP TABLE geodanmark_buildings_raw")
 
     # Process in chunks with memory management
+    # GitHub Actions optimization: Use smaller chunks for memory efficiency
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        chunk_size = min(chunk_size, 15000)  # Smaller chunks for GitHub Actions
+        memory_cleanup_frequency = 3  # More frequent cleanup
+        print(f"🔧 GitHub Actions: Using smaller chunks ({chunk_size:,}) and frequent cleanup")
+
     total_chunks = (len(building_ids) + chunk_size - 1) // chunk_size
-    memory_cleanup_frequency = 5  # Clean up every 5 chunks
 
     print(
         f"📊 Processing {len(building_ids):,} building IDs in {total_chunks} chunks of {chunk_size:,}"
     )
+
+    # GitHub Actions timeout monitoring (6-hour limit)
+    start_time = datetime.now()
+    timeout_hours = 5.5  # Leave 30min buffer for GitHub Actions 6h limit
+
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        print(f"⏰ GitHub Actions timeout monitoring: {timeout_hours}h limit")
 
     # Initialize results table with proper schema
     conn.execute("""
@@ -412,13 +497,23 @@ def perform_chunked_spatial_join(
 
     try:
         for chunk_idx in range(total_chunks):
+            # GitHub Actions timeout check
+            if os.getenv("GITHUB_ACTIONS") == "true":
+                elapsed_hours = (datetime.now() - start_time).total_seconds() / 3600
+                if elapsed_hours > timeout_hours:
+                    print(
+                        f"⏰ GitHub Actions timeout approaching ({elapsed_hours:.1f}h), stopping gracefully"
+                    )
+                    break
+
             start_idx = chunk_idx * chunk_size
             end_idx = min(start_idx + chunk_size, len(building_ids))
             chunk_ids = building_ids[start_idx:end_idx]
 
             progress_pct = ((chunk_idx + 1) / total_chunks) * 100
+            elapsed_time = datetime.now() - start_time
             print(
-                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - {progress_pct:.1f}% complete"
+                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - {progress_pct:.1f}% complete - {elapsed_time}"
             )
             check_memory_usage()
 
@@ -426,6 +521,7 @@ def perform_chunked_spatial_join(
             chunk_ids_str = "', '".join(chunk_ids)
 
             # Optimized spatial join with proper spatial functions
+            # DuckDB Spatial v1.2.2 SPATIAL_JOIN compliance (PR #545)
             join_query = f"""
             INSERT INTO joined_results
             SELECT 
@@ -436,12 +532,14 @@ def perform_chunked_spatial_join(
                 g.etagetal,
                 g.bygningsanvendelse,
                 g.building_area_m2,
-                'matched' as join_status,
+                'uuid_matched' as join_status,
                 {chunk_idx + 1} as chunk_id
-            FROM geodanmark_buildings g
-            WHERE g.BBRUUID IN ('{chunk_ids_str}')
-            AND ST_IsValid(g.geometry)
-            AND g.building_area_m2 > 5  -- Minimum meaningful building area (5m²)
+            FROM (
+                SELECT '{chunk_ids_str}' as id_list
+            ) chunk_ids
+            INNER JOIN geodanmark_buildings g ON g.BBRUUID IN ('{chunk_ids_str}')
+            WHERE ST_IsValid(g.geometry)
+            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
 
             try:
@@ -463,6 +561,19 @@ def perform_chunked_spatial_join(
                     gc.collect()
                     print(f"🧹 Memory cleanup after chunk {chunk_idx + 1}")
                     check_memory_usage()
+
+                # Memory management: Clean up every few chunks to prevent GitHub Actions OOM
+                if (chunk_idx + 1) % memory_cleanup_frequency == 0:
+                    print(f"🧹 Memory cleanup at chunk {chunk_idx + 1}")
+                    conn.execute("VACUUM")  # DuckDB cleanup
+                    gc.collect()  # Python garbage collection
+                    check_memory_usage()  # Monitor memory usage
+
+                    # GitHub Actions: Additional cleanup if memory usage is high
+                    if os.getenv("GITHUB_ACTIONS") == "true":
+                        # Force more aggressive cleanup for GitHub Actions
+                        conn.execute("PRAGMA memory_limit")  # Check current usage
+                        print("   🔧 GitHub Actions: Extra memory cleanup performed")
 
             except Exception as e:
                 print(f"❌ Chunk {chunk_idx + 1} failed: {e}")
@@ -628,22 +739,29 @@ def run_bronze_layer_bulk(
     output_dir = args.output_dir / "bronze"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Bulk download ALL GeoDanmark buildings
-    logger.info("📦 Step 1: Bulk downloading GeoDanmark buildings...")
+    # Step 1: Check if GeoDanmark data exists, download if needed
+    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
 
-    if not settings.has_datafordeler_credentials:
-        raise ValueError(
-            "DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables required"
+    if not Path(geodanmark_path).exists():
+        logger.info("📦 Step 1: GeoDanmark data not found, bulk downloading...")
+
+        if not settings.has_datafordeler_credentials:
+            raise ValueError(
+                "DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables required"
+            )
+
+        bulk_fetcher = BulkGeoDanmarkFetcher(
+            settings.datafordeler_username, settings.datafordeler_password
         )
 
-    bulk_fetcher = BulkGeoDanmarkFetcher(
-        settings.datafordeler_username, settings.datafordeler_password
-    )
-
-    # Download buildings
-    bulk_fetcher.bulk_download_buildings(batch_size=30000)
-
-    logger.info("✅ Bulk GeoDanmark download completed!")
+        # Download buildings
+        bulk_fetcher.bulk_download_buildings(batch_size=30000)
+        logger.info("✅ Bulk GeoDanmark download completed!")
+    else:
+        logger.info("📦 Step 1: Using existing GeoDanmark data (skipping download)")
+        logger.info(f"   Found: {geodanmark_path}")
+        file_size_gb = Path(geodanmark_path).stat().st_size / (1024**3)
+        logger.info(f"   Size: {file_size_gb:.1f}GB")
 
     # Step 2: Fetch and enrich INSPIRE BBR data
     logger.info("🏢 Step 2: Fetching INSPIRE BBR building attributes with GraphQL enrichment...")

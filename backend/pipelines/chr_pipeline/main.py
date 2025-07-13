@@ -1048,7 +1048,7 @@ def main():
                     bronze_path = config.BRONZE_BASE_DIR / bronze_dir_override
                     logging.warning(f"Using bronze files from {bronze_path} for silver processing")
                     run_silver_processing(
-                        bronze_dir=bronze_path, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
+                        bronze_dir=bronze_path, silver_dir=silver_dir, export_timestamp=bronze_dir_override
                     )
                 else:
                     # Fallback to buffer (might be empty, but let silver processing handle it)
