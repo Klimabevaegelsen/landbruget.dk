@@ -34,9 +34,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
         self.gcs_access.query_parquet_direct(
             stage0_wetlands_path,
-            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2 FROM read_parquet('{}')".format(
-                stage0_wetlands_path
-            ),
+            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2",
             "wetlands_raw",
         )
 
@@ -52,9 +50,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
         self.gcs_access.query_parquet_direct(
             stage1b_path,
-            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2 FROM read_parquet('{}')".format(
-                stage1b_path
-            ),
+            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2",
             "water_projects_wetlands_intersections",
         )
 
