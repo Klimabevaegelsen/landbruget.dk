@@ -637,9 +637,9 @@ def process_chr_data_streaming(
                     if context.get("spf_su_table") is not None:
                         # Import SPF-SU processing functions
                         try:
-                            from . import spf_su_processing
+                            from . import spf_su
 
-                            spf_su_herds_table = spf_su_processing.create_spf_su_herds_table(
+                            spf_su_herds_table = spf_su.create_spf_su_herds_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:
@@ -650,9 +650,9 @@ def process_chr_data_streaming(
                 elif step == "silver_spf_su_health_controls":
                     if context.get("spf_su_table") is not None:
                         try:
-                            from . import spf_su_processing
+                            from . import spf_su
 
-                            spf_su_controls_table = spf_su_processing.create_spf_su_health_controls_table(
+                            spf_su_controls_table = spf_su.create_spf_su_health_controls_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:
@@ -663,9 +663,9 @@ def process_chr_data_streaming(
                 elif step == "silver_spf_su_salmonella_data":
                     if context.get("spf_su_table") is not None:
                         try:
-                            from . import spf_su_processing
+                            from . import spf_su
 
-                            spf_su_salmonella_table = spf_su_processing.create_spf_su_salmonella_data_table(
+                            spf_su_salmonella_table = spf_su.create_spf_su_salmonella_data_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:
@@ -849,14 +849,18 @@ def process_chr_data(
     try:
         if vetstat_antibiotics_xml_path and vetstat_antibiotics_xml_path.exists():
             try:
-                run_xml_parser(vetstat_antibiotics_xml_path, vetstat_antibiotics_jsonl_path)
-                if vetstat_antibiotics_jsonl_path.exists() and vetstat_antibiotics_jsonl_path.stat().st_size > 0:
-                    vetstat_loaded = True
-                    logging.info(f"Successfully created intermediate VetStat JSONL: {vetstat_antibiotics_jsonl_path}")
+                if run_xml_parser(vetstat_antibiotics_xml_path, vetstat_antibiotics_jsonl_path):
+                    if vetstat_antibiotics_jsonl_path.exists() and vetstat_antibiotics_jsonl_path.stat().st_size > 0:
+                        vetstat_loaded = True
+                        logging.info(
+                            f"Successfully created intermediate VetStat JSONL: {vetstat_antibiotics_jsonl_path}"
+                        )
+                    else:
+                        logging.warning(
+                            f"XML parser succeeded but output file is empty or missing: {vetstat_antibiotics_jsonl_path}"
+                        )
                 else:
-                    logging.warning(
-                        f"XML parser ran but output file is empty or missing: {vetstat_antibiotics_jsonl_path}"
-                    )
+                    logging.warning("⚠️ VetStat XML processing failed, proceeding without antibiotic data")
                     if vetstat_antibiotics_xml_path.exists():
                         try:
                             vetstat_antibiotics_xml_path.rename(saved_xml_path_obj)
