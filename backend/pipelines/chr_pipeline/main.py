@@ -1044,16 +1044,16 @@ def main():
                 # Determine bronze timestamp for streaming mode
                 bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
 
-                # Check if we should use streaming mode (recommended for memory efficiency)
+                # Use streaming mode for memory efficiency (recommended approach)
                 use_streaming_mode = (
                     # Force streaming if explicitly requested
                     os.getenv("CHR_FORCE_STREAMING", "false").lower() == "true"
                     or
-                    # Use streaming if we have bronze timestamp and no buffer data (avoids memory issues)
-                    (bronze_timestamp and not buffer_data)
-                    or
-                    # Use streaming in GitHub Actions for memory efficiency
+                    # Use streaming in GitHub Actions for memory efficiency (no fallbacks)
                     os.getenv("GITHUB_ACTIONS") == "true"
+                    or
+                    # Use streaming if we have bronze timestamp and no buffer data
+                    (bronze_timestamp and not buffer_data)
                 )
 
                 if use_streaming_mode and bronze_timestamp:
