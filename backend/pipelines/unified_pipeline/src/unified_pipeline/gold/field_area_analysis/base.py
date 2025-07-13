@@ -66,6 +66,16 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"✅ Exported {count:,} rows to {output_dataset}")
 
+    def _get_latest_gold_path(self, dataset: str) -> str:
+        """Get path to latest gold data file for a given dataset."""
+        pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
+        files = self.gcs_access.list_files(pattern)
+
+        if not files:
+            raise FileNotFoundError(f"No gold data found for {dataset}")
+
+        return sorted(files)[-1]  # Latest by timestamp
+
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute the stage processing."""
         self.start_time = time.time()

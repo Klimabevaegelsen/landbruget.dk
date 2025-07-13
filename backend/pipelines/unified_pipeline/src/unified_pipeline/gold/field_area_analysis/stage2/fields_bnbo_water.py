@@ -31,7 +31,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Load water project × BNBO intersections from Stage 1A
         # This contains the actual intersection data we need
-        stage1a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}.parquet"
+        stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
+        stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         self.gcs_access.query_parquet_direct(
             stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
         )
