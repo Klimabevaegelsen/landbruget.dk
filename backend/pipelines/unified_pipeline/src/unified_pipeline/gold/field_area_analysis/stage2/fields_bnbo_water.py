@@ -31,7 +31,14 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = CONFIG.stage_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
-        self.gcs_access.query_parquet_direct(stage0_bnbo_path, "SELECT *", "bnbo_for_fields")
+        # Explicitly exclude any problematic columns that might exist from previous runs
+        self.gcs_access.query_parquet_direct(
+            stage0_bnbo_path,
+            "SELECT bnbo_id, status_category, geometry, bnbo_area_m2 FROM read_parquet('{}')".format(
+                stage0_bnbo_path
+            ),
+            "bnbo_for_fields",
+        )
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered BNBO for field intersections!")
         self.log.info("🚀 PERFORMANCE: 3.7x faster than original (3.7K → 1K BNBO polygons)")
@@ -40,8 +47,13 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
         stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
+        # Explicitly exclude any problematic columns that might exist from previous runs
         self.gcs_access.query_parquet_direct(
-            stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
+            stage1a_path,
+            "SELECT project_id, bnbo_id, status_category, water_project_geometry, intersection_geometry, intersection_area_m2, water_project_area_m2, bnbo_area_m2, wp_coverage_percentage FROM read_parquet('{}')".format(
+                stage1a_path
+            ),
+            "water_projects_bnbo_intersections",
         )
 
         # Use pre-computed BNBO areas covered by water projects (SPEED OPTIMIZATION)
