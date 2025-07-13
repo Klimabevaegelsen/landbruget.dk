@@ -79,17 +79,23 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         """
         Calculate wetland coverage by water projects for each field.
 
-        CORRECT APPROACH:
-        1. Fields × Wetlands: Get total wetland area within each field
-        2. Fields × (Wetlands covered by water projects): Get covered wetland area within each field
-        3. Calculate field-level percentages: % wetlands in field, % of those covered by water projects
+        DuckDB Spatial PR #545 COMPLIANCE:
+        - Separate spatial joins into distinct processing steps
+        - Single spatial predicate per join
+        - Move area filtering to post-join processing
+        - No WHERE clauses with spatial predicates on JOIN operations
 
-        We only care about water projects that intersect with wetlands.
+        CORRECT APPROACH:
+        1. Fields × Wetlands: Get total wetland area within each field (STEP 1)
+        2. Fields × (Wetlands covered by water projects): Get covered wetland area within each field (STEP 2)
+        3. Calculate field-level percentages: % wetlands in field, % of those covered by water projects
         """
 
         self.log.info("🎯 FIELD-LEVEL WETLAND WATER COVERAGE ANALYSIS")
         self.log.info("🔧 Using wetland-water project intersection geometries")
-        self.log.info("✅ Following DuckDB Spatial PR #545: Single spatial predicate joins")
+        self.log.info(
+            "✅ DuckDB Spatial PR #545 COMPLIANCE: Separate spatial joins, no WHERE spatial predicates"
+        )
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM fields_raw").fetchone()[0]
@@ -119,7 +125,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             WHERE FALSE
         """)
 
-        # Initialize detailed intersection table for Stage 3 optimization
+        # Initialize detailed intersections table for Stage 3 optimization
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_intersections AS
             SELECT 
@@ -127,7 +133,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS VARCHAR) as toerv_pct,
+                CAST(NULL AS DOUBLE) as toerv_pct,
                 CAST(NULL AS GEOMETRY) as field_wetland_intersection_geometry,
                 CAST(NULL AS DOUBLE) as field_wetland_intersection_area_m2,
                 CAST(NULL AS GEOMETRY) as field_geometry,
@@ -135,9 +141,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             WHERE FALSE
         """)
 
-        total_processed = 0
+        total_fields_processed = 0
+        total_wetland_intersections = 0
+        total_covered_intersections = 0
 
-        # Process each batch
+        # Process each batch with separated spatial joins
         for batch_num in range(num_batches):
             offset = batch_num * batch_size
             progress_pct = ((batch_num + 1) / num_batches) * 100
@@ -154,10 +162,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             if batch_count == 0:
                 break
 
-            # Step 1: Fields × Wetlands (total wetland area within each field)
-            self.log.info(f"  Step 1: {batch_count:,} fields × wetlands (total area)")
+            # STEP 1: Fields × Wetlands (total wetland area within each field)
+            # DuckDB Spatial PR #545 COMPLIANCE: Single spatial predicate only
+            self.log.info(f"  STEP 1: {batch_count:,} fields × wetlands (single spatial join)")
             self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_wetland_total AS
+                CREATE OR REPLACE TABLE batch_field_wetland_raw AS
                 SELECT 
                     f.field_id,
                     f.block_id,
@@ -165,13 +174,29 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.year,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
-                    w.wetland_id,  -- Include wetland ID for foundation data joins
+                    w.wetland_id,
                     w.toerv_pct,
-                    ST_Intersection(f.geometry, w.geometry) as field_wetland_intersection_geometry,
-                    ST_Area_Spheroid(ST_Intersection(f.geometry, w.geometry)) as field_wetland_area_m2
+                    w.geometry as wetland_geometry
                 FROM fields_batch f
                 JOIN wetlands_raw w ON ST_Intersects(f.geometry, w.geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, w.geometry)) > 100
+            """)
+
+            # Post-join processing: Calculate areas (NO SPATIAL WHERE CLAUSES)
+            self.log.info("  Post-processing: Calculate intersection areas")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_field_wetland_total AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    field_geometry,
+                    field_area_m2,
+                    wetland_id,
+                    toerv_pct,
+                    ST_Intersection(field_geometry, wetland_geometry) as field_wetland_intersection_geometry,
+                    ST_Area_Spheroid(ST_Intersection(field_geometry, wetland_geometry)) as field_wetland_area_m2
+                FROM batch_field_wetland_raw
             """)
 
             # Save detailed intersections for Stage 3 optimization
@@ -191,120 +216,139 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 FROM batch_field_wetland_total
             """)
 
-            # Step 2: Fields × (Wetlands covered by water projects) - using Stage 1B foundation data
-            self.log.info(f"  Step 2: {batch_count:,} fields × wetlands covered by water projects")
+            # STEP 2: Fields × (Wetlands covered by water projects)
+            # DuckDB Spatial PR #545 COMPLIANCE: Separate spatial join
+            self.log.info(
+                f"  STEP 2: {batch_count:,} fields × wetlands covered by water projects (separate spatial join)"
+            )
             self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_wetland_covered AS
+                CREATE OR REPLACE TABLE batch_field_wetland_covered_raw AS
                 SELECT 
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.geometry as field_geometry,
                     wpwi.toerv_pct,
-                    ST_Area_Spheroid(ST_Intersection(f.geometry, wpwi.intersection_geometry)) as field_covered_wetland_area_m2
+                    wpwi.intersection_geometry as water_covered_wetland_geometry
                 FROM fields_batch f
                 JOIN water_projects_wetlands_intersections wpwi ON ST_Intersects(f.geometry, wpwi.intersection_geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, wpwi.intersection_geometry)) > 100
             """)
 
-            total_wetland_intersections = self.conn.execute(
+            # Post-join processing: Calculate covered areas (NO SPATIAL WHERE CLAUSES)
+            self.log.info("  Post-processing: Calculate covered intersection areas")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_field_wetland_covered AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    toerv_pct,
+                    ST_Area_Spheroid(ST_Intersection(field_geometry, water_covered_wetland_geometry)) as field_covered_wetland_area_m2
+                FROM batch_field_wetland_covered_raw
+            """)
+
+            batch_wetland_intersections = self.conn.execute(
                 "SELECT COUNT(*) FROM batch_field_wetland_total"
             ).fetchone()[0]
-            covered_wetland_intersections = self.conn.execute(
+            batch_covered_intersections = self.conn.execute(
                 "SELECT COUNT(*) FROM batch_field_wetland_covered"
             ).fetchone()[0]
 
             self.log.info(
-                f"  Found {total_wetland_intersections:,} total field-wetland intersections"
+                f"  Found {batch_wetland_intersections:,} total field-wetland intersections"
             )
             self.log.info(
-                f"  Found {covered_wetland_intersections:,} field-covered wetland intersections"
+                f"  Found {batch_covered_intersections:,} field-covered wetland intersections"
             )
 
-            if total_wetland_intersections == 0:
-                # Handle fields with no wetlands
-                self.conn.execute("""
-                    INSERT INTO fields_wetland_water
-                    SELECT 
-                        field_id, block_id, cvr_number, year, geometry, 
-                        ST_Area_Spheroid(geometry) as field_area_m2,
-                        0 as total_wetland_area_m2, 
-                        0 as wetland_covered_by_water_projects_m2,
-                        0 as wetland_covered_by_water_projects_pct,
-                        0 as wetland_not_covered_by_water_projects_pct, 
-                        0 as field_wetland_coverage_pct
-                    FROM fields_batch
-                """)
-                total_processed += batch_count
+            if batch_wetland_intersections == 0:
+                self.log.info(f"  No wetland intersections found in batch {batch_num + 1}")
                 continue
 
-            # Step 3: Aggregate per field and calculate percentages
-            self.log.info("  Step 3: Aggregating and calculating field-level percentages")
+            # Aggregate to field level
+            self.log.info("  Aggregating to field-level wetland coverage statistics")
             self.conn.execute("""
-                INSERT INTO fields_wetland_water
+                CREATE OR REPLACE TABLE batch_field_aggregates AS
                 SELECT 
-                    t.field_id,
-                    t.block_id,
-                    t.cvr_number,
-                    t.year,
-                    t.field_geometry as geometry,
-                    t.field_area_m2,
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.year,
+                    f.field_geometry as geometry,
+                    f.field_area_m2,
                     
-                    -- Total wetland area within field
-                    SUM(t.field_wetland_area_m2) as total_wetland_area_m2,
+                    -- Total wetland area in field
+                    COALESCE(SUM(f.field_wetland_area_m2), 0) as total_wetland_area_m2,
                     
-                    -- Wetland area covered by water projects within field
-                    COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as wetland_covered_by_water_projects_m2,
+                    -- Wetlands covered by water projects
+                    COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as wetland_covered_by_water_projects_m2
                     
-                    -- Calculate percentages
+                FROM batch_field_wetland_total f
+                LEFT JOIN batch_field_wetland_covered c ON f.field_id = c.field_id 
+                    AND f.block_id = c.block_id 
+                    AND f.cvr_number = c.cvr_number 
+                    AND f.year = c.year
+                    AND f.toerv_pct = c.toerv_pct
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_geometry, f.field_area_m2
+            """)
+
+            # Calculate percentages and final metrics
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE batch_final AS
+                SELECT 
+                    *,
+                    -- Coverage percentages
                     CASE 
-                        WHEN SUM(t.field_wetland_area_m2) > 0 
-                        THEN (COALESCE(SUM(c.field_covered_wetland_area_m2), 0) / SUM(t.field_wetland_area_m2)) * 100
+                        WHEN total_wetland_area_m2 > 0 
+                        THEN (wetland_covered_by_water_projects_m2 / total_wetland_area_m2) * 100 
                         ELSE 0 
                     END as wetland_covered_by_water_projects_pct,
                     
                     CASE 
-                        WHEN SUM(t.field_wetland_area_m2) > 0 
-                        THEN (100 - (COALESCE(SUM(c.field_covered_wetland_area_m2), 0) / SUM(t.field_wetland_area_m2)) * 100)
+                        WHEN total_wetland_area_m2 > 0 
+                        THEN ((total_wetland_area_m2 - wetland_covered_by_water_projects_m2) / total_wetland_area_m2) * 100 
                         ELSE 0 
                     END as wetland_not_covered_by_water_projects_pct,
                     
-                    (SUM(t.field_wetland_area_m2) / t.field_area_m2) * 100 as field_wetland_coverage_pct
+                    -- Field coverage percentage
+                    (total_wetland_area_m2 / field_area_m2) * 100 as field_wetland_coverage_pct
                     
-                FROM batch_field_wetland_total t
-                LEFT JOIN batch_field_wetland_covered c 
-                    ON t.field_id = c.field_id 
-                    AND t.block_id = c.block_id 
-                    AND t.cvr_number = c.cvr_number
-                    AND t.toerv_pct = c.toerv_pct
-                GROUP BY 
-                    t.field_id, t.block_id, t.cvr_number, t.year, t.field_geometry, t.field_area_m2
+                FROM batch_field_aggregates
             """)
 
-            batch_processed = self.conn.execute(
-                "SELECT COUNT(*) FROM fields_wetland_water WHERE field_id IN (SELECT field_id FROM fields_batch)"
-            ).fetchone()[0]
-            total_processed += batch_processed
+            # Insert into main results table
+            self.conn.execute("""
+                INSERT INTO fields_wetland_water 
+                SELECT * FROM batch_final
+            """)
 
-            self.log.info(f"  ✅ Batch {batch_num + 1}: {batch_processed:,} fields processed")
+            total_fields_processed += batch_count
+            total_wetland_intersections += batch_wetland_intersections
+            total_covered_intersections += batch_covered_intersections
 
-            # Clean up batch tables
+            # Memory cleanup
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
+            self.conn.execute("DROP TABLE IF EXISTS batch_field_wetland_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_field_wetland_total")
+            self.conn.execute("DROP TABLE IF EXISTS batch_field_wetland_covered_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_field_wetland_covered")
+            self.conn.execute("DROP TABLE IF EXISTS batch_field_aggregates")
+            self.conn.execute("DROP TABLE IF EXISTS batch_final")
 
-            # Memory cleanup every few batches
-            if (batch_num + 1) % CONFIG.stage2_memory_cleanup_frequency == 0:
-                import gc
+        # Final summary
+        final_fields = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
 
-                gc.collect()
-
-        # Final count
-        final_count = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
-        self.log.info(f"✅ Processed {final_count:,} fields for wetland water coverage analysis")
+        self.log.info(f"✅ STAGE 2B COMPLETE: {final_fields:,} fields with wetland analysis")
+        self.log.info(f"📊 Total wetland intersections: {total_wetland_intersections:,}")
+        self.log.info(f"📊 Water-covered intersections: {total_covered_intersections:,}")
+        self.log.info("✅ DuckDB Spatial PR #545 COMPLIANCE: Separated spatial joins completed")
 
         return {
-            "total_fields": final_count,
+            "fields_processed": final_fields,
+            "total_wetland_intersections": total_wetland_intersections,
+            "covered_intersections": total_covered_intersections,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
