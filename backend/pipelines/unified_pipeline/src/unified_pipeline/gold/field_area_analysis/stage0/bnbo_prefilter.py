@@ -105,3 +105,9 @@ class BNBOPreFilter(PreFilteringStageBase):
             "output_path": output_path,
             "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 2 BNBO processing",
         }
+
+    def _save_output_data(self, result: Dict[str, Any]):
+        """Save output data - already handled in _execute_stage_processing for Stage 0."""
+        # Stage 0 classes handle export directly in _execute_stage_processing
+        # to use custom output paths and naming conventions
+        self.log.info("✅ BNBO pre-filtering data already saved to GCS")
