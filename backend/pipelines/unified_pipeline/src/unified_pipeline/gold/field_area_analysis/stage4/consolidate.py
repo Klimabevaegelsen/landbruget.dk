@@ -21,13 +21,18 @@ class ConsolidateResults(FieldAnalysisStageBase):
         super().__init__(config, "Stage 4: Consolidation")
 
     def _load_input_data(self):
-        """Load all field-property intersections and environmental analyses from previous stages."""
+        """Load all field-property intersections, soil data, and environmental analyses from previous stages."""
         # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
         stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
+
+        # Load field-soil intersections from Stage 1B
+        stage1b_dataset = CONFIG.stage_outputs["field_soil_intersections"]
+        stage1b_path = self._get_latest_gold_path(stage1b_dataset)
+        self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
 
         # Load final BNBO analysis from Stage 3A (only fields with BNBO)
         stage3a_dataset = CONFIG.stage_outputs["final_bnbo"]
@@ -86,8 +91,69 @@ class ConsolidateResults(FieldAnalysisStageBase):
         ).fetchone()[0]
         self.log.info(f"Found {all_fields_count:,} fields with property intersections")
 
+        # Create soil type summary per field from Stage 1B data
+        self.log.info("Step 2: Creating field-level soil type summary...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_summary AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                
+                -- Soil type diversity metrics
+                COUNT(DISTINCT soil_type_category) as soil_type_count,
+                COUNT(DISTINCT soil_code) as unique_soil_codes,
+                
+                -- Dominant soil type (largest area)
+                (
+                    SELECT soil_type_category 
+                    FROM field_soil_areas fsa2 
+                    WHERE fsa2.field_id = fsa.field_id 
+                    AND fsa2.block_id = fsa.block_id 
+                    AND fsa2.cvr_number = fsa.cvr_number 
+                    AND fsa2.year = fsa.year
+                    ORDER BY fsa2.soil_area_m2 DESC 
+                    LIMIT 1
+                ) as dominant_soil_type,
+                
+                -- Dominant soil coverage percentage
+                (
+                    SELECT soil_area_share_pct 
+                    FROM field_soil_areas fsa2 
+                    WHERE fsa2.field_id = fsa.field_id 
+                    AND fsa2.block_id = fsa.block_id 
+                    AND fsa2.cvr_number = fsa.cvr_number 
+                    AND fsa2.year = fsa.year
+                    ORDER BY fsa2.soil_area_m2 DESC 
+                    LIMIT 1
+                ) as dominant_soil_coverage_pct,
+                
+                -- Total soil coverage (should be close to 100% for most fields)
+                SUM(soil_area_share_pct) as total_soil_coverage_pct,
+                
+                -- Soil breakdown as JSON: {soil_type: {area_m2, coverage_pct}}
+                '{' || STRING_AGG(
+                    '"' || soil_type_category || '": {' ||
+                    '"area_m2": ' || ROUND(soil_area_m2, 2) || ', ' ||
+                    '"coverage_pct": ' || ROUND(soil_area_share_pct, 2) ||
+                    '}', ', '
+                    ORDER BY soil_area_m2 DESC
+                ) || '}' as soil_type_breakdown
+                
+            FROM field_soil_areas fsa
+            GROUP BY field_id, block_id, cvr_number, year
+        """)
+
+        soil_fields_count = self.conn.execute("SELECT COUNT(*) FROM field_soil_summary").fetchone()[
+            0
+        ]
+        self.log.info(f"Created soil summaries for {soil_fields_count:,} fields")
+
         # Create final consolidated analysis starting with ALL fields that have properties
-        self.log.info("Step 2: Creating final analysis with environmental data as LEFT JOINs...")
+        self.log.info(
+            "Step 3: Creating final analysis with environmental and soil data as LEFT JOINs..."
+        )
         consolidation_query = """
         CREATE OR REPLACE TABLE field_area_analysis_final AS
         SELECT 
@@ -103,6 +169,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
             f.property_count,
             f.total_property_intersection_area_m2,
             f.primary_bfe_number,
+            
+            -- Soil type data (from Stage 1B - may be NULL if no soil data)
+            COALESCE(s.soil_type_count, 0) as soil_type_count,
+            COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
+            COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
+            COALESCE(s.dominant_soil_coverage_pct, 0) as dominant_soil_coverage_pct,
+            COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
+            COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
             
             -- BNBO analysis data (from Stage 3A - may be NULL if no BNBO)
             COALESCE(b.total_bnbo_area_m2, 0) as total_bnbo_area_m2,
@@ -154,6 +228,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
             END as has_property_environmental_relationships
             
         FROM all_fields_with_properties f
+        LEFT JOIN field_soil_summary s ON f.field_id = s.field_id 
+            AND f.block_id = s.block_id 
+            AND f.cvr_number = s.cvr_number 
+            AND f.year = s.year
         LEFT JOIN final_bnbo_analysis b ON f.field_id = b.field_id 
             AND f.block_id = b.block_id 
             AND f.cvr_number = b.cvr_number 
@@ -178,6 +256,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
                 COUNT(CASE WHEN property_count > 0 THEN 1 END) as fields_with_properties,
+                COUNT(CASE WHEN soil_type_count > 0 THEN 1 END) as fields_with_soil_data,
                 COUNT(CASE WHEN has_environmental_features THEN 1 END) as fields_with_environmental_features,
                 COUNT(CASE WHEN has_property_environmental_relationships THEN 1 END) as fields_with_property_env_relationships,
                 COUNT(CASE WHEN properties_with_bnbo_count > 0 THEN 1 END) as fields_with_bnbo_property_relationships,
@@ -188,11 +267,16 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 AVG(field_wetland_coverage_pct) as avg_field_wetland_pct,
                 AVG(combined_property_environmental_coverage_pct) as avg_property_environmental_pct,
                 AVG(property_count) as avg_properties_per_field,
+                AVG(CASE WHEN soil_type_count > 0 THEN dominant_soil_coverage_pct END) as avg_dominant_soil_coverage_pct,
+                AVG(CASE WHEN soil_type_count > 0 THEN total_soil_coverage_pct END) as avg_total_soil_coverage_pct,
+                AVG(CASE WHEN soil_type_count > 0 THEN soil_type_count END) as avg_soil_types_per_field,
                 
                 -- Water project coverages
                 AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_bnbo_water_coverage,
                 AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct END) as avg_wetland_water_coverage,
-                AVG(CASE WHEN properties_with_wetland_count > 0 THEN property_wetland_water_coverage_pct END) as avg_property_wetland_water_coverage,
+                AVG(CASE WHEN properties_with_wetland_count > 0 THEN 
+                    (total_property_wetland_covered_m2 / NULLIF(total_property_wetland_area_m2, 0)) * 100 
+                END) as avg_property_wetland_water_coverage,
                 
                 -- Property-environmental spatial relationships
                 SUM(properties_with_bnbo_count) as total_bnbo_property_relationships,
@@ -219,6 +303,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             fields_with_bnbo,
             fields_with_wetlands,
             fields_with_props,
+            fields_with_soil_data,
             fields_with_env_features,
             fields_with_prop_env_relationships,
             fields_with_bnbo_prop_relationships,
@@ -227,6 +312,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
             avg_wetland_pct,
             avg_prop_env_pct,
             avg_props_per_field,
+            avg_dominant_soil_pct,
+            avg_total_soil_pct,
+            avg_soil_types_per_field,
             avg_bnbo_water,
             avg_wetland_water,
             avg_property_wetland_water,
@@ -282,6 +370,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.log.info(
             f"   Fields with properties: {fields_with_props:,} ({(fields_with_props / total_fields) * 100:.1f}%)"
         )
+        self.log.info(
+            f"   Fields with soil data: {fields_with_soil_data:,} ({(fields_with_soil_data / total_fields) * 100:.1f}%)"
+        )
         self.log.info(f"   Fields with environmental features: {fields_with_env_features:,}")
         self.log.info(
             f"   Fields with property-environmental relationships: {fields_with_prop_env_relationships:,}"
@@ -298,6 +389,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.log.info(f"     Wetlands: {avg_wetland_pct:.2f}%")
         self.log.info(f"     Property-environmental: {avg_prop_env_pct:.2f}%")
         self.log.info(f"     Properties per field: {avg_props_per_field:.1f}")
+        self.log.info(f"     Dominant soil type coverage: {avg_dominant_soil_pct:.1f}%")
+        self.log.info(f"     Total soil coverage: {avg_total_soil_pct:.1f}%")
+        self.log.info(f"     Soil types per field: {avg_soil_types_per_field:.1f}")
 
         self.log.info("   Property-environmental spatial relationships:")
         self.log.info(f"     Total BNBO-property relationships: {total_bnbo_prop_relationships:,}")
@@ -348,11 +442,15 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "fields_with_bnbo": fields_with_bnbo,
             "fields_with_wetlands": fields_with_wetlands,
             "fields_with_properties": fields_with_props,
+            "fields_with_soil_data": fields_with_soil_data,
             "fields_with_environmental_features": fields_with_env_features,
             "fields_with_property_env_relationships": fields_with_prop_env_relationships,
             "avg_bnbo_pct": avg_bnbo_pct,
             "avg_wetland_pct": avg_wetland_pct,
             "avg_property_environmental_pct": avg_prop_env_pct,
+            "avg_dominant_soil_coverage_pct": avg_dominant_soil_pct,
+            "avg_total_soil_coverage_pct": avg_total_soil_pct,
+            "avg_soil_types_per_field": avg_soil_types_per_field,
             "avg_bnbo_water_coverage": avg_bnbo_water,
             "avg_wetland_water_coverage": avg_wetland_water,
             "avg_property_wetland_water_coverage": avg_property_wetland_water,
