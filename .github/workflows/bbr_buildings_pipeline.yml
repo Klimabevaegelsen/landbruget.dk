@@ -357,10 +357,10 @@ jobs:
         # Install psutil for memory monitoring
         uv pip install --system psutil
         
-        # Run bronze layer spatial join
-        python run_bronze_spatial_join.py
+        # Run bronze layer UUID join (no spatial operations)
+        python main.py --layer bronze
         
-        echo "✅ Bronze layer spatial join completed!"
+        echo "✅ Bronze layer UUID join completed!"
         
         # Aggressive cleanup to manage disk space
         echo "🧹 Cleaning up large files to manage disk space..."
@@ -375,7 +375,7 @@ jobs:
       run: |
         if [ -d "data/bronze" ]; then
           echo "📤 Uploading bronze results to GCS..."
-          gsutil -m cp -r data/bronze/* gs://${{ secrets.GCS_BUCKET }}/bbr_buildings/bronze/
+          gsutil -m cp -r data/bronze/* gs://${{ secrets.GCS_BUCKET }}/bronze/bbr_buildings/
           echo "✅ Bronze results uploaded to GCS"
         fi
 
@@ -483,7 +483,7 @@ jobs:
       run: |
         if [ -d "data/silver" ]; then
           echo "📤 Uploading silver results to GCS..."
-          gsutil -m cp -r data/silver/* gs://${{ secrets.GCS_BUCKET }}/bbr_buildings/silver/
+          gsutil -m cp -r data/silver/* gs://${{ secrets.GCS_BUCKET }}/silver/bbr_buildings/
           echo "✅ Silver results uploaded to GCS"
         fi
 

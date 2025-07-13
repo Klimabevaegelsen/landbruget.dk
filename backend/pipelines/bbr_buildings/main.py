@@ -664,6 +664,12 @@ def main():
         help="Logging level",
     )
 
+    parser.add_argument(
+        "--enhance-classification",
+        action="store_true",
+        help="Enable enhanced building classification in silver layer",
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -717,7 +723,7 @@ def run_bronze_layer_bulk(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Check if GeoDanmark data exists, download if needed
-    geodanmark_path = "data/geodanmark_full/data/geodanmark_buildings_complete.geoparquet"
+    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
 
     if not Path(geodanmark_path).exists():
         logger.info("📦 Step 1: GeoDanmark data not found, bulk downloading...")
@@ -755,7 +761,7 @@ def run_bronze_layer_bulk(
 
     if inspire_result and "data" in inspire_result:
         # Load both datasets
-        geodanmark_path = "data/geodanmark_full/data/geodanmark_buildings_complete.geoparquet"
+        geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
 
         # Extract INSPIRE BBR building IDs
         inspire_data = inspire_result["data"]
@@ -794,6 +800,13 @@ def run_bronze_layer_bulk(
                     attributes_df = pd.DataFrame(attributes_df)
                 attributes_df.to_parquet(attributes_file)
                 logger.info(f"💾 Saved INSPIRE attributes to {attributes_file}")
+
+            # Set GitHub Actions outputs if running in GitHub Actions
+            if "GITHUB_OUTPUT" in os.environ:
+                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                    f.write(f"bronze-output-dir={join_output_dir}\n")
+                    f.write(f"joined-buildings-count={join_result['joined_buildings_count']}\n")
+                logger.info("✅ Set GitHub Actions outputs")
 
             result = {
                 "data": {
