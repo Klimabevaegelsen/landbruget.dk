@@ -165,6 +165,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.year,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
+                    w.wetland_id,  -- Include wetland ID for foundation data joins
                     w.toerv_pct,
                     ST_Intersection(f.geometry, w.geometry) as field_wetland_intersection_geometry,
                     ST_Area_Spheroid(ST_Intersection(f.geometry, w.geometry)) as field_wetland_area_m2
@@ -190,8 +191,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 FROM batch_field_wetland_total
             """)
 
-            # Step 2: Fields × (Wetlands covered by water projects)
-            self.log.info(f"  Step 2: {batch_count:,} fields × covered wetlands")
+            # Step 2: Fields × (Wetlands covered by water projects) - using Stage 1B foundation data
+            self.log.info(f"  Step 2: {batch_count:,} fields × wetlands covered by water projects")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE batch_field_wetland_covered AS
                 SELECT 
@@ -199,11 +200,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
-                    wc.toerv_pct,
-                    ST_Area_Spheroid(ST_Intersection(f.geometry, wc.covered_wetland_geometry)) as field_covered_wetland_area_m2
+                    wpwi.toerv_pct,
+                    ST_Area_Spheroid(ST_Intersection(f.geometry, wpwi.intersection_geometry)) as field_covered_wetland_area_m2
                 FROM fields_batch f
-                JOIN wetlands_covered_by_water wc ON ST_Intersects(f.geometry, wc.covered_wetland_geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, wc.covered_wetland_geometry)) > 100
+                JOIN water_projects_wetlands_intersections wpwi ON ST_Intersects(f.geometry, wpwi.intersection_geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, wpwi.intersection_geometry)) > 100
             """)
 
             total_wetland_intersections = self.conn.execute(
