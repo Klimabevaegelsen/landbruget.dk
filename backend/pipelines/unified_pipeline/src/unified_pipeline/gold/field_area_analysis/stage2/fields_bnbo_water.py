@@ -89,7 +89,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        batch_size = CONFIG.batch_size
+        batch_size = CONFIG.stage2_batch_size
         num_batches = (total_fields + batch_size - 1) // batch_size
 
         self.log.info(
@@ -263,7 +263,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_covered")
 
             # Memory cleanup every few batches
-            if (batch_num + 1) % CONFIG.memory_cleanup_frequency == 0:
+            if (batch_num + 1) % CONFIG.stage2_memory_cleanup_frequency == 0:
                 import gc
 
                 gc.collect()

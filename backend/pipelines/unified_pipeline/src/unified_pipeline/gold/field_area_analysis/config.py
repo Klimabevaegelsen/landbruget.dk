@@ -24,9 +24,8 @@ class FieldAreaAnalysisConfig(BaseModel):
 
     # Processing parameters optimized for GitHub Actions (16GB RAM, 4 CPU)
     batch_size: int = 250000  # Stage 1C: Large datasets (fields × properties)
-    stage3_batch_size: int = (
-        25000  # Stage 3: Complex spatial joins (fields × env features × water projects)
-    )
+    stage2_batch_size: int = 10000  # Stage 2: Field-level spatial joins (memory-intensive)
+    stage3_batch_size: int = 5000  # Stage 3: Complex 3-way spatial joins (memory-intensive)
     max_memory_gb: int = 14  # Leave 2GB for system overhead
     max_threads: int = 4
     max_temp_directory_size: str = "12GB"  # Leave space for downloads
@@ -39,6 +38,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     # GitHub Actions memory management settings
     memory_cleanup_frequency: int = 3  # Clean up every N batches for Stage 3
     stage1_memory_cleanup_frequency: int = 5  # Less frequent for Stage 1 (simpler queries)
+    stage2_memory_cleanup_frequency: int = 2  # More frequent for Stage 2 (spatial joins)
 
     # Output dataset names for intermediate stages
     stage_outputs: Dict[str, str] = {
