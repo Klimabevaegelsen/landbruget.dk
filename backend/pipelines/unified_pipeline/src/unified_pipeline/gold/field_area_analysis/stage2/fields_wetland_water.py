@@ -31,7 +31,14 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
         stage0_wetlands_dataset = CONFIG.stage_outputs["wetlands_prefiltered"]
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
-        self.gcs_access.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
+        # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
+        self.gcs_access.query_parquet_direct(
+            stage0_wetlands_path,
+            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2 FROM read_parquet('{}')".format(
+                stage0_wetlands_path
+            ),
+            "wetlands_raw",
+        )
 
         self.log.info(
             "✅ STAGE 0 OPTIMIZATION: Using pre-filtered wetlands for field intersections!"
@@ -42,8 +49,13 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
         stage1b_dataset = CONFIG.stage_outputs["water_projects_wetlands_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
+        # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
         self.gcs_access.query_parquet_direct(
-            stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
+            stage1b_path,
+            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2 FROM read_parquet('{}')".format(
+                stage1b_path
+            ),
+            "water_projects_wetlands_intersections",
         )
 
         # Use pre-computed wetland areas covered by water projects (SPEED OPTIMIZATION)
@@ -133,7 +145,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS DOUBLE) as toerv_pct,
+                CAST(NULL AS VARCHAR) as toerv_pct,
                 CAST(NULL AS GEOMETRY) as field_wetland_intersection_geometry,
                 CAST(NULL AS DOUBLE) as field_wetland_intersection_area_m2,
                 CAST(NULL AS GEOMETRY) as field_geometry,
