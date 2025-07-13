@@ -163,6 +163,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.year,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
+                    b.bnbo_id,  -- Include BNBO ID for foundation data joins
                     b.status_category,
                     ST_Intersection(f.geometry, b.geometry) as field_bnbo_intersection_geometry,
                     ST_Area_Spheroid(ST_Intersection(f.geometry, b.geometry)) as field_bnbo_area_m2
@@ -188,8 +189,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 FROM batch_field_bnbo_total
             """)
 
-            # Step 2: Fields × (BNBO covered by water projects)
-            self.log.info(f"  Step 2: {batch_count:,} fields × covered BNBO")
+            # Step 2: Fields × (BNBO covered by water projects) - spatial join needed
+            self.log.info(f"  Step 2: {batch_count:,} fields × BNBO covered by water projects")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE batch_field_bnbo_covered AS
                 SELECT 
@@ -197,11 +198,11 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
-                    bc.status_category,
-                    ST_Area_Spheroid(ST_Intersection(f.geometry, bc.covered_bnbo_geometry)) as field_covered_bnbo_area_m2
+                    wpbi.status_category,
+                    ST_Area_Spheroid(ST_Intersection(f.geometry, wpbi.intersection_geometry)) as field_covered_bnbo_area_m2
                 FROM fields_batch f
-                JOIN bnbo_covered_by_water bc ON ST_Intersects(f.geometry, bc.covered_bnbo_geometry)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, bc.covered_bnbo_geometry)) > 100
+                JOIN water_projects_bnbo_intersections wpbi ON ST_Intersects(f.geometry, wpbi.intersection_geometry)
+                WHERE ST_Area_Spheroid(ST_Intersection(f.geometry, wpbi.intersection_geometry)) > 100
             """)
 
             total_bnbo_intersections = self.conn.execute(
