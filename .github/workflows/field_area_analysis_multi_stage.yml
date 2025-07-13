@@ -27,7 +27,7 @@ env:
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
 jobs:
-  # Stage 0: Pre-filtering (Sequential for memory management)
+  # Stage 0: Pre-filtering (Concurrent - operations are independent)
   stage0-properties-prefilter:
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
@@ -62,7 +62,6 @@ jobs:
             --stage=0 --job=properties_prefilter
 
   stage0-wetlands-prefilter:
-    needs: stage0-properties-prefilter
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -96,7 +95,6 @@ jobs:
             --stage=0 --job=wetlands_prefilter
 
   stage0-bnbo-prefilter:
-    needs: stage0-wetlands-prefilter
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -130,7 +128,6 @@ jobs:
             --stage=0 --job=bnbo_prefilter
 
   stage0-water-projects-prefilter:
-    needs: stage0-bnbo-prefilter
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -165,7 +162,7 @@ jobs:
 
   # Stage 1: Base Intersections (Parallel - now using pre-filtered data)
   stage1-water-projects-bnbo:
-    needs: stage0-water-projects-prefilter
+    needs: [stage0-bnbo-prefilter, stage0-water-projects-prefilter]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -199,7 +196,7 @@ jobs:
             --stage=1 --job=water_projects_bnbo
 
   stage1-water-projects-wetlands:
-    needs: stage0-water-projects-prefilter
+    needs: [stage0-wetlands-prefilter, stage0-water-projects-prefilter]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -233,7 +230,7 @@ jobs:
             --stage=1 --job=water_projects_wetlands
 
   stage1-fields-properties:
-    needs: stage0-water-projects-prefilter
+    needs: [stage0-properties-prefilter]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -294,7 +291,6 @@ jobs:
           find /tmp -type f -size +100M -delete 2>/dev/null || true
 
   stage1-fields-soil-types:
-    needs: stage0-water-projects-prefilter
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
