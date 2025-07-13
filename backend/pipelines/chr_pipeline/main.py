@@ -866,7 +866,7 @@ def main():
             has_buffer_data = bool(buffer_data)
             has_context_import = context_import_path and os.path.exists(context_import_path)
 
-            # Check if we have bronze data files available
+            # Check if we have bronze data files available locally
             bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
             has_bronze_files = False
 
@@ -886,14 +886,27 @@ def main():
                     has_bronze_files = True
                     logging.warning(f"Found bronze files in current timestamp directory: {bronze_path}")
 
-            if has_buffer_data or has_context_import or has_bronze_files:
+            # Check if streaming mode is available for GCS data access
+            bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
+            can_use_streaming = (
+                # Force streaming if explicitly requested
+                os.getenv("CHR_FORCE_STREAMING", "false").lower() == "true"
+                or
+                # Use streaming in GitHub Actions for memory efficiency
+                os.getenv("GITHUB_ACTIONS") == "true"
+                or
+                # Use streaming if we have bronze timestamp and no buffer data
+                (bronze_timestamp and not buffer_data)
+            )
+
+            if has_buffer_data or has_context_import or has_bronze_files or (can_use_streaming and bronze_timestamp):
                 logging.warning(
-                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Override: {bronze_dir_override}"
+                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
                 )
                 needs_fvm_credentials = False
             else:
                 logging.warning(
-                    f"Silver-only operation but no existing data found. Will need to run bronze steps. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Override: {bronze_dir_override}"
+                    f"Silver-only operation but no existing data found. Will need to run bronze steps. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
                 )
 
         # Initialize context based on whether we need FVM credentials
