@@ -478,6 +478,11 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           
+          # Use the shared bronze timestamp from foundation job
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
+          
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
@@ -611,6 +616,11 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           
+          # Use the shared bronze timestamp from foundation job
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
+          
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
@@ -712,6 +722,11 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+          
+          # Use the shared bronze timestamp from foundation job
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
           
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
@@ -818,6 +833,30 @@ jobs:
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          
+          # Read the bronze timestamp from the artifact
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
+          
+          # Create local directories
+          mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
+          mkdir -p /tmp/data/silver/chr
+
+      - name: Download bronze data from GCS
+        run: |
+          cd backend/pipelines/chr_pipeline
+          
+          # Read the bronze timestamp
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
+          
+          # Download all bronze files from GCS
+          gsutil -m cp -r gs://${{ secrets.GCS_BUCKET }}/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || echo "Some bronze files may not exist (this is normal for optional steps)"
+          
+          # List what was downloaded
+          echo "Downloaded bronze files:"
+          ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || echo "No files downloaded"
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
           
           # Set up VetStat credentials if provided
@@ -936,7 +975,6 @@ jobs:
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-          echo "BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP" >> .env
           
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
@@ -966,12 +1004,58 @@ jobs:
           echo "=== Downloaded bronze files ==="
           ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
 
-      - name: Run Silver Processing
+      - name: Load bronze data into buffer and run silver processing
         working-directory: backend/pipelines/chr_pipeline
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
+          # Read the bronze timestamp
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "Loading bronze data from /tmp/data/bronze/chr/$BRONZE_TIMESTAMP into buffer..."
+          
+          # Load bronze data into buffer using a Python script
+          python3 << 'EOF'
+          import json
+          import sys
+          from pathlib import Path
+          
+          # Add the pipeline directory to Python path
+          sys.path.insert(0, str(Path.cwd()))
+          
+          from bronze.export import add_to_buffer
+          
+          bronze_dir = Path(f"/tmp/data/bronze/chr/{sys.argv[1]}")
+          print(f"Loading bronze data from: {bronze_dir}")
+          
+          # Load each bronze file into the buffer
+          file_mappings = {
+              "besaetning_list.json": "besaetning_list",
+              "besaetning_details.json": "besaetning_details", 
+              "diko_flytninger.json": "diko_flytninger",
+              "ejendom_oplysninger.json": "ejendom_oplysninger",
+              "ejendom_vet_events.json": "ejendom_vet_events",
+              "chr_dyr_movement_summaries.json": "chr_dyr_movement_summaries",
+              "spf_su_herds.json": "spf_su_herds",
+              "stamdata_species_usage.json": "stamdata_species_usage"
+          }
+          
+          loaded_count = 0
+          for filename, buffer_key in file_mappings.items():
+              file_path = bronze_dir / filename
+              if file_path.exists():
+                  print(f"Loading {filename} into buffer as {buffer_key}")
+                  with open(file_path, 'r') as f:
+                      data = json.load(f)
+                  add_to_buffer(buffer_key, {"json": data})
+                  print(f"  -> Loaded {len(data)} records")
+                  loaded_count += 1
+              else:
+                  print(f"  -> {filename} not found (optional)")
+          
+          print(f"Bronze data loaded into buffer successfully ({loaded_count} files)")
+          EOF $BRONZE_TIMESTAMP
+          
           # Determine which silver step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
           if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "silver_processing" ]]; then
@@ -988,7 +1072,7 @@ jobs:
             CMD="$CMD --progress"
           fi
           
-          echo "Running silver processing command: $CMD"
+          echo "Running silver processing command with buffer data: $CMD"
           $CMD
 
   # Job 6: Single Step Execution (for individual steps not covered above)
