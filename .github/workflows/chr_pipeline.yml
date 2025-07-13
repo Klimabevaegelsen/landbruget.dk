@@ -1052,7 +1052,7 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: Load bronze data into buffer and run silver processing
+      - name: Run silver processing with bronze files
         working-directory: backend/pipelines/chr_pipeline
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -1062,62 +1062,13 @@ jobs:
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GITHUB_ACTIONS: "true"
         run: |
-          
-          # Read the bronze timestamp
+          # Read the bronze timestamp from artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "Loading bronze data from /tmp/data/bronze/chr/$BRONZE_TIMESTAMP into buffer..."
+          echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
           
-          # Set timestamp as environment variable for Python script
-          export BRONZE_TIMESTAMP
-          
-          # Load bronze data into buffer using a Python script
-          python3 << 'EOF'
-          import json
-          import os
-          import sys
-          from pathlib import Path
-          
-          # Add the pipeline directory to Python path
-          sys.path.insert(0, str(Path.cwd()))
-          
-          from bronze.export import save_raw_data, _data_buffer
-          
-          bronze_timestamp = os.environ.get('BRONZE_TIMESTAMP')
-          bronze_dir = Path(f"/tmp/data/bronze/chr/{bronze_timestamp}")
-          print(f"Loading bronze data from: {bronze_dir}")
-          
-          # Load each bronze file into the buffer
-          file_mappings = {
-              "besaetning_list.json": "besaetning_list",
-              "besaetning_details.json": "besaetning_details", 
-              "diko_flytninger.json": "diko_flytninger",
-              "ejendom_oplysninger.json": "ejendom_oplysninger",
-              "ejendom_vet_events.json": "ejendom_vet_events",
-              "chr_dyr_movement_summaries.json": "chr_dyr_movement_summaries",
-              "spf_su_herds.json": "spf_su_herds",
-              "stamdata_species_usage.json": "stamdata_species_usage"
-          }
-          
-          loaded_count = 0
-          for filename, buffer_key in file_mappings.items():
-              file_path = bronze_dir / filename
-              if file_path.exists():
-                  print(f"Loading {filename} into buffer as {buffer_key}")
-                  with open(file_path, 'r') as f:
-                      data = json.load(f)
-                  
-                  # Add data to buffer directly - each item in the list
-                  for item in data:
-                      save_raw_data(item, buffer_key)
-                  
-                  print(f"  -> Loaded {len(data)} records")
-                  loaded_count += 1
-              else:
-                  print(f"  -> {filename} not found (optional)")
-          
-          print(f"Bronze data loaded into buffer successfully ({loaded_count} files)")
-          print(f"Buffer now contains: {list(_data_buffer.keys())}")
-          EOF
+          # Set the bronze directory override for the main.py execution
+          export BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP
+          echo "Set BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_DATE_FOLDER_OVERRIDE for main.py"
           
           # Determine which silver step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
