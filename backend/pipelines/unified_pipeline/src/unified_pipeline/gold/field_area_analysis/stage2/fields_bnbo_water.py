@@ -118,8 +118,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_m2,
                 CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as bnbo_not_covered_by_water_projects_pct,
-                CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct,
-                CAST(NULL AS VARCHAR) as dominant_bnbo_status
+                CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct
             WHERE FALSE
         """)
 
@@ -279,10 +278,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     COALESCE(SUM(f.field_bnbo_area_m2), 0) as total_bnbo_area_m2,
                     
                     -- BNBO covered by water projects
-                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as bnbo_covered_by_water_projects_m2,
-                    
-                    -- Dominant BNBO status
-                    MODE() WITHIN GROUP (ORDER BY f.status_category) as dominant_bnbo_status
+                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as bnbo_covered_by_water_projects_m2
                     
                 FROM batch_field_bnbo_total f
                 LEFT JOIN batch_field_bnbo_covered c ON f.field_id = c.field_id 
