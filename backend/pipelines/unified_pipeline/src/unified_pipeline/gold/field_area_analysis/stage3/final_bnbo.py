@@ -183,12 +183,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.log.info(f"  Found {property_count:,} property intersections for batch")
 
             if property_count > 0:
-                # OPTIMIZED GEOMETRIC INTERSECTION: Property intersections × Field-BNBO intersections (NO SPATIAL JOIN!)
+                # DuckDB Spatial PR #545 COMPLIANCE: Separate JOIN and spatial filtering
                 self.log.info(
-                    "  SPEED OPTIMIZATION: Property intersections × Pre-computed field-BNBO intersections"
+                    "  STEP 1: Property intersections × Field-BNBO intersections (ID-based JOIN)"
                 )
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
+                    CREATE OR REPLACE TABLE batch_property_bnbo_raw AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -196,15 +196,30 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         p.year,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
+                        p.intersection_geometry as property_geometry,
                         fb.status_category,
-                        ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fb.field_bnbo_intersection_geometry)) as property_bnbo_area_m2
+                        fb.field_bnbo_intersection_geometry as bnbo_geometry
                     FROM batch_property_intersections p
                     JOIN field_bnbo_intersections fb ON p.field_id = fb.field_id 
                         AND p.block_id = fb.block_id 
                         AND p.cvr_number = fb.cvr_number
                         AND p.year = fb.year
-                        AND ST_Intersects(p.intersection_geometry, fb.field_bnbo_intersection_geometry)
-                    WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fb.field_bnbo_intersection_geometry)) > 10
+                """)
+
+                # Post-JOIN spatial processing (NO SPATIAL WHERE CLAUSES)
+                self.log.info("  STEP 2: Area calculation (no spatial filtering)")
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        bfe_number,
+                        property_intersection_area_m2,
+                        status_category,
+                        ST_Area_Spheroid(ST_Intersection(property_geometry, bnbo_geometry)) as property_bnbo_area_m2
+                    FROM batch_property_bnbo_raw
                 """)
 
                 spatial_count = self.conn.execute(
@@ -364,6 +379,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
+            self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_spatial")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_water")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_breakdown")
