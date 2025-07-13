@@ -463,7 +463,7 @@ jobs:
 
   # Stage 4: Consolidation
   stage4-consolidate:
-    needs: [stage3-final-bnbo, stage3-final-wetland]
+    needs: [stage1-fields-soil-types, stage3-final-bnbo, stage3-final-wetland]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
