@@ -419,4 +419,4 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save final BNBO analysis with nested property structure."""
-        self._save_stage_output("final_bnbo_analysis", "final_bnbo_analysis")
+        self._save_stage_output("final_bnbo_analysis", "final_bnbo")
