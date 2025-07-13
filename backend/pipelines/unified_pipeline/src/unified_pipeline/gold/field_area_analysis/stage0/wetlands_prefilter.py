@@ -127,13 +127,22 @@ class WetlandsPreFilter(PreFilteringStageBase):
         # Decompose with ST_Dump and add unique IDs for downstream processing
         self.log.info("Decomposing filtered wetlands with ST_Dump and adding unique IDs...")
         self.conn.execute("""
+            CREATE OR REPLACE TABLE wetlands_decomposed AS
+            SELECT 
+                toerv_pct,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM wetlands_intersecting
+        """)
+
+        # Add unique IDs with spatial ordering
+        self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY toerv_pct, ST_X(ST_Centroid(UNNEST(ST_Dump(geometry)).geom)), ST_Y(ST_Centroid(UNNEST(ST_Dump(geometry)).geom))) as wetland_id,
+                ROW_NUMBER() OVER (ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as wetland_id,
                 toerv_pct,
-                UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as wetland_area_m2
-            FROM wetlands_intersecting
+                geometry,
+                ST_Area_Spheroid(geometry) as wetland_area_m2
+            FROM wetlands_decomposed
         """)
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM wetlands_filtered").fetchone()[0]

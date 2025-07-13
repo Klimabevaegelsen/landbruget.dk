@@ -72,13 +72,22 @@ class BNBOPreFilter(PreFilteringStageBase):
         # Decompose with ST_Dump and add unique IDs for downstream processing
         self.log.info("Decomposing filtered BNBO with ST_Dump and adding unique IDs...")
         self.conn.execute("""
+            CREATE OR REPLACE TABLE bnbo_decomposed AS
+            SELECT 
+                status_category,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM bnbo_intersecting
+        """)
+
+        # Add unique IDs with spatial ordering
+        self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(UNNEST(ST_Dump(geometry)).geom)), ST_Y(ST_Centroid(UNNEST(ST_Dump(geometry)).geom))) as bnbo_id,
+                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
                 status_category,
-                UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as bnbo_area_m2
-            FROM bnbo_intersecting
+                geometry,
+                ST_Area_Spheroid(geometry) as bnbo_area_m2
+            FROM bnbo_decomposed
         """)
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM bnbo_filtered").fetchone()[0]
