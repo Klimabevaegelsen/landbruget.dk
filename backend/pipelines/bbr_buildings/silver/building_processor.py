@@ -109,9 +109,6 @@ class BuildingProcessor:
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 bygningstype as building_type,
-                opfoerelsesaar as building_construction_year,
-                etagetal as building_floors_above_ground,
-                bygningsanvendelse as building_usage_code,
                 building_area_m2 as building_floor_area_sqm,
                 join_status,
                 CASE 
