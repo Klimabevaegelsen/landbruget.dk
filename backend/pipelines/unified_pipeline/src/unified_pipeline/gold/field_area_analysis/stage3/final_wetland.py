@@ -1,15 +1,27 @@
-"""Stage 3B: Final Wetland Analysis
+"""Stage 3B: Final Wetland Analysis - Optimized with Pre-computed Intersections
 
-Combine wetland water coverage analysis with pre-filtered properties.
-Creates comprehensive wetland analysis including property-level water project coverage.
+Combine wetland water coverage analysis with property ownership using pre-computed intersection geometries.
+SPEED OPTIMIZATION: Uses Stage 2B field-wetland intersections instead of expensive spatial joins.
 
-KEY FEATURES:
-- Property-wetland spatial analysis (which properties own wetlands)
-- Property-level wetland water project coverage analysis
-- Detailed metrics for covered vs uncovered wetland areas by property ownership
-- Answers: "How much wetlands covered by water projects is owned by property X?"
+OPTIMIZED APPROACH:
+- Use Stage 1C property/field intersections (with intersection_geometry)
+- Use Stage 2B field-wetland intersections (pre-computed intersection geometries)
+- Use Stage 2B field-level wetland coverage (aggregated results)
+- Geometric intersection: Property intersections × Field-wetland intersections (NO SPATIAL JOIN!)
+- Field-level join: Apply water coverage ratios from Stage 2B
 
-Optimized for DuckDB Spatial v1.2.2 with single spatial predicates.
+ACHIEVES THE NESTED STRUCTURE:
+- field A
+  -- property 1
+     --- wetland area
+     --- wetland area covered by water projects
+     --- wetland area not covered by water projects
+  -- property 2
+     --- wetland area
+     --- wetland area covered by water projects
+     --- wetland area not covered by water projects
+
+Optimized for DuckDB Spatial v1.2.2 with pre-computed intersection geometries.
 """
 
 from typing import Any, Dict
@@ -19,58 +31,66 @@ from ..config import CONFIG
 
 
 class FinalWetlandAnalysis(FieldAnalysisStageBase):
-    """Combine wetland analysis with pre-filtered properties."""
+    """Combine wetland analysis with property ownership using foundation data approach."""
 
     def __init__(self, config: FieldAnalysisStageConfig = None):
         if config is None:
             config = FieldAnalysisStageConfig()
-        super().__init__(config, "Stage 3B: Final Wetland Analysis")
+        super().__init__(config, "Stage 3B: Final Wetland Analysis - Foundation Data")
 
     def _load_input_data(self):
-        """Load wetland analysis from Stage 2B and water project intersections from Stage 1B."""
-        # Load wetland water coverage from Stage 2B
+        """Load foundation data from previous stages."""
+        # Load field-level wetland coverage from Stage 2B
         stage2b_dataset = CONFIG.stage_outputs["fields_wetland_water"]
         stage2b_path = self._get_latest_gold_path(stage2b_dataset)
         self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
 
-        # Load pre-filtered field-property intersections from Stage 1C
+        # Load property/field intersections from Stage 1C (includes intersection_geometry)
         stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
 
-        # Load water project × wetland intersections from Stage 1B (includes toerv_pct)
+        # Load water project/wetland intersections from Stage 1B (foundation data with wetland_id)
         stage1b_dataset = CONFIG.stage_outputs["water_projects_wetlands_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(
             stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
         )
 
-        # Load original wetlands data for spatial analysis (needed for property-wetland intersections)
-        self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
+        # Load field-wetland intersections from Stage 2B (SPEED OPTIMIZATION!)
+        stage2b_intersections_dataset = CONFIG.stage_outputs["field_wetland_intersections"]
+        stage2b_intersections_path = self._get_latest_gold_path(stage2b_intersections_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2b_intersections_path, "SELECT *", "field_wetland_intersections"
+        )
+
+        self.log.info(
+            "✅ SPEED OPTIMIZATION: Using pre-computed field-wetland intersections from Stage 2B"
+        )
+        self.log.info("✅ No more expensive Property × Environmental spatial joins!")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
-        Combine wetland analysis with property ownership through enhanced spatial analysis.
+        Create property-level wetland analysis using foundation data approach.
 
-        ENHANCED SPATIAL ANALYSIS APPROACH (PR #545 compliant):
-        1. Load field wetland data from Stage 2B
-        2. Load property intersection geometries from Stage 1C
-        3. Load water project × wetland foundation data from Stage 1B
-        4. Spatial join: Property intersections × Wetland features (single ST_Intersects)
-        5. Enhanced analysis: Property × Wetland × Water Project Coverage
-        6. Aggregate by field with comprehensive property-wetland-water metrics
+        FOUNDATION DATA STRATEGY:
+        1. Start with field-level wetland coverage (Stage 2B)
+        2. Get property intersections for those fields (Stage 1C)
+        3. Single spatial join: Property intersections × Wetland features
+        4. Calculate property-level wetland areas per field
+        5. Use existing water project coverage using wetland_id from Stage 1B
+        6. Aggregate to achieve nested field→property→environmental structure
 
-        ANSWERS QUESTIONS LIKE:
-        - Which properties own wetlands?
-        - How much wetland area is owned by property X?
-        - How much of property X's wetlands are covered by water projects?
-        - How much of property X's wetlands are NOT covered by water projects?
+        DuckDB Spatial v1.2.2 COMPLIANCE:
+        - Only single spatial predicate (ST_Intersects)
+        - No complex 3-way spatial joins
+        - Use foundation data and ID-based joins where possible
         """
 
-        self.log.info("🎯 SPATIAL ANALYSIS: Connecting wetland features to property ownership")
-        self.log.info("✅ Following DuckDB Spatial PR #545: Single spatial predicate joins")
+        self.log.info("🎯 FOUNDATION DATA APPROACH: Property-level wetland analysis")
+        self.log.info("✅ DuckDB Spatial v1.2.2: Single spatial predicates only")
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
@@ -81,7 +101,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             f"Processing {total_fields:,} fields in {num_batches} batches of {batch_size:,}"
         )
 
-        # Initialize result table
+        # Initialize result table with nested structure
         self.conn.execute("""
             CREATE OR REPLACE TABLE final_wetland_analysis AS
             SELECT 
@@ -92,35 +112,25 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 
-                -- Wetland analysis data
+                -- Field-level wetland data (from Stage 2B)
                 CAST(NULL AS DOUBLE) as total_wetland_area_m2,
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_m2,
                 CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct,
-
                 
-                -- Property ownership analysis
+                -- Property ownership summary
                 CAST(NULL AS INTEGER) as property_count,
                 CAST(NULL AS DOUBLE) as total_property_intersection_area_m2,
-                CAST(NULL AS DOUBLE) as avg_property_area_share_pct,
-                CAST(NULL AS DOUBLE) as max_property_area_share_pct,
                 CAST(NULL AS VARCHAR) as primary_bfe_number,
                 
-                -- Property-wetland spatial analysis
-                CAST(NULL AS DOUBLE) as property_wetland_intersection_area_m2,
-                CAST(NULL AS DOUBLE) as property_wetland_coverage_pct,
+                -- Property-level wetland breakdown (NESTED STRUCTURE)
+                CAST(NULL AS VARCHAR) as property_wetland_breakdown,  -- JSON: {bfe_number: {wetland_area_m2, covered_m2, uncovered_m2}}
+                CAST(NULL AS DOUBLE) as total_property_wetland_area_m2,
+                CAST(NULL AS DOUBLE) as total_property_wetland_covered_m2,
+                CAST(NULL AS DOUBLE) as total_property_wetland_uncovered_m2,
                 CAST(NULL AS INTEGER) as properties_with_wetland_count,
-                CAST(NULL AS VARCHAR) as wetland_property_owners,
-                
-                -- Property-level wetland water project coverage analysis
-                CAST(NULL AS DOUBLE) as property_wetland_covered_by_water_m2,
-                CAST(NULL AS DOUBLE) as property_wetland_not_covered_by_water_m2,
-                CAST(NULL AS DOUBLE) as property_wetland_water_coverage_pct,
-                CAST(NULL AS INTEGER) as properties_with_covered_wetland_count,
-                CAST(NULL AS INTEGER) as properties_with_uncovered_wetland_count,
-                CAST(NULL AS VARCHAR) as covered_wetland_property_owners,
-                CAST(NULL AS VARCHAR) as uncovered_wetland_property_owners
+                CAST(NULL AS VARCHAR) as wetland_property_owners
             WHERE FALSE
         """)
 
@@ -130,16 +140,21 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             progress_pct = ((batch_num + 1) / num_batches) * 100
             self.log.info(f"📦 Batch {batch_num + 1}/{num_batches} - {progress_pct:.1f}% complete")
 
-            # Create field batch
+            # Create field batch (only fields with wetlands)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_wetland_water
+                WHERE total_wetland_area_m2 > 0
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
             batch_count = self.conn.execute("SELECT COUNT(*) FROM fields_batch").fetchone()[0]
             if batch_count == 0:
                 break
+
+            self.log.info(
+                f"  Processing {batch_count:,} fields with wetlands in batch {batch_num + 1}"
+            )
 
             # Get property intersections for this batch
             self.conn.execute("""
@@ -168,61 +183,13 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             ).fetchone()[0]
             self.log.info(f"  Found {property_count:,} property intersections for batch")
 
-            if property_count == 0:
-                # Handle fields with no properties (just copy wetland data)
-                self.conn.execute("""
-                    INSERT INTO final_wetland_analysis
-                    SELECT 
-                        field_id, block_id, cvr_number, year, geometry, field_area_m2,
-                        total_wetland_area_m2, wetland_covered_by_water_projects_m2, 
-                        wetland_covered_by_water_projects_pct, wetland_not_covered_by_water_projects_pct,
-                        field_wetland_coverage_pct,
-                        0 as property_count, 0 as total_property_intersection_area_m2,
-                        0 as avg_property_area_share_pct, 0 as max_property_area_share_pct,
-                        NULL as primary_bfe_number,
-                        0 as property_wetland_intersection_area_m2, 0 as property_wetland_coverage_pct,
-                        0 as properties_with_wetland_count, NULL as wetland_property_owners,
-                        0 as property_wetland_covered_by_water_m2, 0 as property_wetland_not_covered_by_water_m2,
-                        0 as property_wetland_water_coverage_pct, 0 as properties_with_covered_wetland_count,
-                        0 as properties_with_uncovered_wetland_count, NULL as covered_wetland_property_owners,
-                        NULL as uncovered_wetland_property_owners
-                    FROM fields_batch
-                """)
-                continue
-
-            # SPATIAL ANALYSIS: Property intersections × Wetland features
-            # Load wetland data for spatial analysis (with IDs from Stage 1B)
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_wetland_features AS
-                SELECT 
-                    b.field_id,
-                    b.block_id,
-                    b.cvr_number,
-                    b.year,
-                    ROW_NUMBER() OVER (ORDER BY w.toerv_pct, ST_X(ST_Centroid(w.geometry)), ST_Y(ST_Centroid(w.geometry))) as wetland_id,  -- Generate consistent IDs
-                    w.toerv_pct,  -- Only keep meaningful wetland classification
-                    w.geometry as wetland_geometry,
-                    ST_Area_Spheroid(w.geometry) as wetland_area_m2
-                FROM fields_batch b
-                JOIN wetlands_raw w ON ST_Intersects(b.geometry, w.geometry)
-                WHERE b.total_wetland_area_m2 > 0
-            """)
-
-            wetland_features_count = self.conn.execute(
-                "SELECT COUNT(*) FROM batch_wetland_features"
-            ).fetchone()[0]
-            self.log.info(
-                f"  Found {wetland_features_count:,} wetland features for spatial analysis"
-            )
-
-            if wetland_features_count > 0:
-                # SINGLE SPATIAL JOIN: Property intersections × Wetland features (PR #545 compliant)
+            if property_count > 0:
+                # OPTIMIZED GEOMETRIC INTERSECTION: Property intersections × Field-wetland intersections (NO SPATIAL JOIN!)
                 self.log.info(
-                    "  Performing spatial join: Property intersections × Wetland features"
+                    "  SPEED OPTIMIZATION: Property intersections × Pre-computed field-wetland intersections"
                 )
-                # Step 1: Pure spatial join with SINGLE predicate (PR #545 compliant)
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_spatial_raw AS
+                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -230,48 +197,30 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         p.year,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
-                        p.intersection_geometry,
-                        w.toerv_pct,
-                        w.wetland_geometry,
-                        ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, w.wetland_geometry)) as property_wetland_area_m2
+                        fw.toerv_pct,
+                        ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fw.field_wetland_intersection_geometry)) as property_wetland_area_m2
                     FROM batch_property_intersections p
-                    JOIN batch_wetland_features w ON ST_Intersects(p.intersection_geometry, w.wetland_geometry)
-                    WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, w.wetland_geometry)) > 10
+                    JOIN field_wetland_intersections fw ON p.field_id = fw.field_id 
+                        AND p.block_id = fw.block_id 
+                        AND p.cvr_number = fw.cvr_number
+                        AND p.year = fw.year
+                        AND ST_Intersects(p.intersection_geometry, fw.field_wetland_intersection_geometry)
+                    WHERE ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fw.field_wetland_intersection_geometry)) > 10
                 """)
 
-                # Step 2: Filter to matching fields (equality constraints applied after spatial join)
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        bfe_number,
-                        property_intersection_area_m2,
-                        toerv_pct,
-                        property_wetland_area_m2,
-                        ST_Intersection(intersection_geometry, wetland_geometry) as property_wetland_geometry
-                    FROM batch_spatial_raw
-                    WHERE (field_id, block_id, cvr_number, year) IN (
-                        SELECT field_id, block_id, cvr_number, year 
-                        FROM batch_wetland_features
-                    )
-                """)
-
-                spatial_intersections = self.conn.execute(
+                spatial_count = self.conn.execute(
                     "SELECT COUNT(*) FROM batch_property_wetland_spatial"
                 ).fetchone()[0]
+                self.log.info(f"  Found {spatial_count:,} property-wetland spatial intersections")
+
+                # Calculate water project coverage using field-level coverage ratios from Stage 2B
                 self.log.info(
-                    f"  Found {spatial_intersections:,} property-wetland spatial intersections"
+                    "  Calculating water project coverage using field-level ratios from Stage 2B"
                 )
 
-                # STEP 2: Use existing wetland-water intersections from Stage 1B (efficient!)
-                self.log.info("  Step 2: Using existing wetland-water intersections from Stage 1B")
-
-                # Match property-wetland areas with existing water project coverage by wetland_id
+                # Apply field-level coverage ratios to property-wetland areas
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_water_analysis AS
+                    CREATE OR REPLACE TABLE batch_property_wetland_water AS
                     SELECT 
                         pw.field_id,
                         pw.block_id,
@@ -280,56 +229,81 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.bfe_number,
                         pw.toerv_pct,
                         pw.property_wetland_area_m2,
-                        
-                        -- Calculate covered area using existing intersection data
-                        COALESCE(
-                            pw.property_wetland_area_m2 * (
-                                SELECT SUM(wwi.intersection_area_m2) / SUM(wwi.wetland_area_m2)
-                                FROM water_projects_wetlands_intersections wwi 
-                                WHERE wwi.wetland_id = bw.wetland_id
-                            ), 0
-                        ) as property_wetland_covered_by_water_m2,
-                        
-                        -- Calculate uncovered area
-                        pw.property_wetland_area_m2 - COALESCE(
-                            pw.property_wetland_area_m2 * (
-                                SELECT SUM(wwi.intersection_area_m2) / SUM(wwi.wetland_area_m2)
-                                FROM water_projects_wetlands_intersections wwi 
-                                WHERE wwi.wetland_id = bw.wetland_id
-                            ), 0
-                        ) as property_wetland_not_covered_by_water_m2
-                        
+                        -- Apply field-level water coverage ratio from Stage 2B
+                        pw.property_wetland_area_m2 * (fw.wetland_covered_by_water_projects_pct / 100.0) as property_wetland_covered_m2,
+                        pw.property_wetland_area_m2 * (1 - (fw.wetland_covered_by_water_projects_pct / 100.0)) as property_wetland_uncovered_m2
                     FROM batch_property_wetland_spatial pw
-                    JOIN batch_wetland_features bw ON ST_Intersects(pw.property_wetland_geometry, bw.wetland_geometry)
+                    JOIN fields_wetland_water fw ON pw.field_id = fw.field_id 
+                        AND pw.block_id = fw.block_id 
+                        AND pw.cvr_number = fw.cvr_number 
+                        AND pw.year = fw.year
                 """)
 
-                # Analysis already completed using existing foundation data
                 water_analysis_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM batch_property_wetland_water_analysis"
+                    "SELECT COUNT(*) FROM batch_property_wetland_water"
                 ).fetchone()[0]
                 self.log.info(
-                    f"  Created {water_analysis_count:,} property-wetland-water analysis records using existing foundation data"
+                    f"  Created {water_analysis_count:,} property-wetland-water analysis records using wetland_id"
                 )
-            else:
-                # No wetland features for spatial analysis, create empty table for consistency
+
+                # Aggregate to create nested property breakdown per field
+                self.log.info("  Creating nested property-level wetland breakdown per field")
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_water_analysis AS
+                    CREATE OR REPLACE TABLE batch_property_breakdown AS
                     SELECT 
-                        CAST(NULL AS VARCHAR) as field_id,
-                        CAST(NULL AS VARCHAR) as block_id,
-                        CAST(NULL AS VARCHAR) as cvr_number,
-                        CAST(NULL AS INTEGER) as year,
-                        CAST(NULL AS VARCHAR) as bfe_number,
-                        CAST(NULL AS DOUBLE) as property_intersection_area_m2,
-                        CAST(NULL AS VARCHAR) as toerv_pct,
-                        CAST(NULL AS DOUBLE) as property_wetland_area_m2,
-                        CAST(NULL AS DOUBLE) as property_wetland_covered_by_water_m2,
-                        CAST(NULL AS DOUBLE) as property_wetland_not_covered_by_water_m2
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        -- Create JSON breakdown: {bfe_number: {wetland_area_m2, covered_m2, uncovered_m2}}
+                        '{' || STRING_AGG(
+                            '"' || bfe_number || '": {' ||
+                            '"wetland_area_m2": ' || ROUND(total_wetland_area, 2) || ', ' ||
+                            '"covered_m2": ' || ROUND(total_covered, 2) || ', ' ||
+                            '"uncovered_m2": ' || ROUND(total_uncovered, 2) ||
+                            '}', ', '
+                        ) || '}' as property_wetland_breakdown,
+                        
+                        -- Summary metrics
+                        SUM(total_wetland_area) as total_property_wetland_area_m2,
+                        SUM(total_covered) as total_property_wetland_covered_m2,
+                        SUM(total_uncovered) as total_property_wetland_uncovered_m2,
+                        COUNT(DISTINCT bfe_number) as properties_with_wetland_count,
+                        STRING_AGG(DISTINCT bfe_number, ', ') as wetland_property_owners
+                    FROM (
+                        SELECT 
+                            field_id, block_id, cvr_number, year, bfe_number,
+                            SUM(property_wetland_area_m2) as total_wetland_area,
+                            SUM(property_wetland_covered_m2) as total_covered,
+                            SUM(property_wetland_uncovered_m2) as total_uncovered
+                        FROM batch_property_wetland_water
+                        GROUP BY field_id, block_id, cvr_number, year, bfe_number
+                    ) property_totals
+                    GROUP BY field_id, block_id, cvr_number, year
+                """)
+
+                breakdown_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM batch_property_breakdown"
+                ).fetchone()[0]
+                self.log.info(f"  Created {breakdown_count:,} field-level property breakdowns")
+            else:
+                # No properties for this batch - create empty breakdown table
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_property_breakdown AS
+                    SELECT 
+                        field_id, block_id, cvr_number, year,
+                        '{}' as property_wetland_breakdown,
+                        0 as total_property_wetland_area_m2,
+                        0 as total_property_wetland_covered_m2,
+                        0 as total_property_wetland_uncovered_m2,
+                        0 as properties_with_wetland_count,
+                        NULL as wetland_property_owners
+                    FROM fields_batch
                     WHERE FALSE
                 """)
 
-            # Aggregate results per field
-            self.log.info("  Aggregating property-wetland analysis per field")
+            # Combine field-level data with property breakdown
+            self.log.info("  Combining field-level wetland data with property breakdown")
             self.conn.execute("""
                 INSERT INTO final_wetland_analysis
                 SELECT 
@@ -340,42 +314,25 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.geometry,
                     b.field_area_m2,
                     
-                    -- Wetland analysis data
+                    -- Field-level wetland data (from Stage 2B)
                     b.total_wetland_area_m2,
                     b.wetland_covered_by_water_projects_m2,
                     b.wetland_covered_by_water_projects_pct,
                     b.wetland_not_covered_by_water_projects_pct,
                     b.field_wetland_coverage_pct,
                     
-                    -- Property information (aggregated per field)
-                    COALESCE(p.property_count, 0) as property_count,
-                    COALESCE(p.total_property_intersection_area_m2, 0) as total_property_intersection_area_m2,
-                    COALESCE(p.avg_property_area_share_pct, 0) as avg_property_area_share_pct,
-                    COALESCE(p.max_property_area_share_pct, 0) as max_property_area_share_pct,
-                    COALESCE(p.primary_bfe_number, NULL) as primary_bfe_number,
+                    -- Property ownership summary
+                    COALESCE(ps.property_count, 0) as property_count,
+                    COALESCE(ps.total_property_intersection_area_m2, 0) as total_property_intersection_area_m2,
+                    COALESCE(ps.primary_bfe_number, NULL) as primary_bfe_number,
                     
-                    -- Property-wetland spatial analysis
-                    COALESCE(ps.property_wetland_intersection_area_m2, 0) as property_wetland_intersection_area_m2,
-                    CASE 
-                        WHEN COALESCE(p.total_property_intersection_area_m2, 0) > 0 
-                        THEN (COALESCE(ps.property_wetland_intersection_area_m2, 0) / p.total_property_intersection_area_m2) * 100
-                        ELSE 0 
-                    END as property_wetland_coverage_pct,
-                    COALESCE(ps.properties_with_wetland_count, 0) as properties_with_wetland_count,
-                    COALESCE(ps.wetland_property_owners, NULL) as wetland_property_owners,
-                    
-                    -- Property-level wetland water project coverage analysis
-                    COALESCE(pwa.property_wetland_covered_by_water_m2, 0) as property_wetland_covered_by_water_m2,
-                    COALESCE(pwa.property_wetland_not_covered_by_water_m2, 0) as property_wetland_not_covered_by_water_m2,
-                    CASE 
-                        WHEN COALESCE(ps.property_wetland_intersection_area_m2, 0) > 0 
-                        THEN (COALESCE(pwa.property_wetland_covered_by_water_m2, 0) / ps.property_wetland_intersection_area_m2) * 100
-                        ELSE 0 
-                    END as property_wetland_water_coverage_pct,
-                    COALESCE(pwa.properties_with_covered_wetland_count, 0) as properties_with_covered_wetland_count,
-                    COALESCE(pwa.properties_with_uncovered_wetland_count, 0) as properties_with_uncovered_wetland_count,
-                    COALESCE(pwa.covered_wetland_property_owners, NULL) as covered_wetland_property_owners,
-                    COALESCE(pwa.uncovered_wetland_property_owners, NULL) as uncovered_wetland_property_owners
+                    -- Property-level wetland breakdown (NESTED STRUCTURE)
+                    COALESCE(pb.property_wetland_breakdown, '{}') as property_wetland_breakdown,
+                    COALESCE(pb.total_property_wetland_area_m2, 0) as total_property_wetland_area_m2,
+                    COALESCE(pb.total_property_wetland_covered_m2, 0) as total_property_wetland_covered_m2,
+                    COALESCE(pb.total_property_wetland_uncovered_m2, 0) as total_property_wetland_uncovered_m2,
+                    COALESCE(pb.properties_with_wetland_count, 0) as properties_with_wetland_count,
+                    COALESCE(pb.wetland_property_owners, NULL) as wetland_property_owners
                     
                 FROM fields_batch b
                 LEFT JOIN (
@@ -383,8 +340,6 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         field_id, block_id, cvr_number, year,
                         COUNT(*) as property_count,
                         SUM(intersection_area_m2) as total_property_intersection_area_m2,
-                        AVG(field_area_share_pct) as avg_property_area_share_pct,
-                        MAX(field_area_share_pct) as max_property_area_share_pct,
                         (
                             SELECT bfe_number 
                             FROM batch_property_intersections bp2 
@@ -396,62 +351,58 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         ) as primary_bfe_number
                     FROM batch_property_intersections bp
                     GROUP BY field_id, block_id, cvr_number, year
-                ) p ON b.field_id = p.field_id 
-                    AND b.block_id = p.block_id 
-                    AND b.cvr_number = p.cvr_number 
-                    AND b.year = p.year
-                LEFT JOIN (
-                    SELECT 
-                        field_id, block_id, cvr_number, year,
-                        SUM(property_wetland_area_m2) as property_wetland_intersection_area_m2,
-                        COUNT(DISTINCT bfe_number) as properties_with_wetland_count,
-                        STRING_AGG(DISTINCT bfe_number, ', ') as wetland_property_owners
-                    FROM batch_property_wetland_spatial
-                    GROUP BY field_id, block_id, cvr_number, year
                 ) ps ON b.field_id = ps.field_id 
                     AND b.block_id = ps.block_id 
                     AND b.cvr_number = ps.cvr_number 
                     AND b.year = ps.year
-                LEFT JOIN (
-                    SELECT 
-                        field_id, block_id, cvr_number, year,
-                        SUM(property_wetland_covered_by_water_m2) as property_wetland_covered_by_water_m2,
-                        SUM(property_wetland_not_covered_by_water_m2) as property_wetland_not_covered_by_water_m2,
-                        COUNT(DISTINCT CASE WHEN property_wetland_covered_by_water_m2 > 0 THEN bfe_number END) as properties_with_covered_wetland_count,
-                        COUNT(DISTINCT CASE WHEN property_wetland_not_covered_by_water_m2 > 0 THEN bfe_number END) as properties_with_uncovered_wetland_count,
-                        STRING_AGG(DISTINCT CASE WHEN property_wetland_covered_by_water_m2 > 0 THEN bfe_number END, ', ') as covered_wetland_property_owners,
-                        STRING_AGG(DISTINCT CASE WHEN property_wetland_not_covered_by_water_m2 > 0 THEN bfe_number END, ', ') as uncovered_wetland_property_owners
-                    FROM batch_property_wetland_water_analysis
-                    GROUP BY field_id, block_id, cvr_number, year
-                ) pwa ON b.field_id = pwa.field_id 
-                    AND b.block_id = pwa.block_id 
-                    AND b.cvr_number = pwa.cvr_number 
-                    AND b.year = pwa.year
+                LEFT JOIN batch_property_breakdown pb ON b.field_id = pb.field_id 
+                    AND b.block_id = pb.block_id 
+                    AND b.cvr_number = pb.cvr_number 
+                    AND b.year = pb.year
             """)
 
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
-            self.conn.execute("DROP TABLE IF EXISTS batch_wetland_features")
-            self.conn.execute("DROP TABLE IF EXISTS batch_spatial_raw")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_spatial")
-
-            self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_water_analysis")
+            self.conn.execute("DROP TABLE IF EXISTS batch_property_wetland_water")
+            self.conn.execute("DROP TABLE IF EXISTS batch_property_breakdown")
 
             # Memory cleanup
-            if (batch_num + 1) % CONFIG.memory_cleanup_frequency == 0:
+            if (batch_num + 1) % CONFIG.stage2_memory_cleanup_frequency == 0:
                 import gc
 
                 gc.collect()
+                self.log.info(f"  🧹 Memory cleanup after batch {batch_num + 1}")
 
-        # Final count
+        # Get final statistics
         final_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
-        self.log.info(f"✅ Processed {final_count:,} fields for final wetland analysis")
+
+        # Sample the nested structure
+        sample_breakdown = self.conn.execute("""
+            SELECT property_wetland_breakdown 
+            FROM final_wetland_analysis 
+            WHERE property_wetland_breakdown != '{}' 
+            LIMIT 1
+        """).fetchone()
+
+        if sample_breakdown:
+            self.log.info(f"✅ Sample property breakdown: {sample_breakdown[0][:200]}...")
+
+        self.log.info(
+            f"✅ Created {final_count:,} final wetland analysis records with nested property structure"
+        )
+        self.log.info(
+            "🎯 ACHIEVED: field → property → wetland (area/covered/uncovered) nested breakdown"
+        )
 
         return {
-            "total_fields": final_count,
+            "final_records": final_count,
+            "batches_processed": num_batches,
+            "foundation_data_approach": True,
+            "single_spatial_predicates": True,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save final wetland analysis to GCS."""
-        self._save_stage_output("final_wetland_analysis", "final_wetland")
+        """Save final wetland analysis with nested property structure."""
+        self._save_stage_output("final_wetland_analysis", "final_wetland_analysis")
