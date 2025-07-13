@@ -29,6 +29,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     water_projects_filtered_dataset: str = (
         "stage0_water_projects_filtered"  # 2.4K → ~500 (80% reduction)
     )
+    soil_types_filtered_dataset: str = "stage0_soil_types_filtered"  # 13K → ~8K (40% reduction)
 
     # Processing parameters optimized for GitHub Actions with Stage 0 pre-filtering
     # Batch sizes can be larger due to dramatically reduced probe sizes
@@ -60,6 +61,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "bnbo_prefiltered": "stage0_bnbo_filtered",
         "wetlands_prefiltered": "stage0_wetlands_filtered",
         "water_projects_prefiltered": "stage0_water_projects_filtered",
+        "soil_types_prefiltered": "stage0_soil_types_filtered",
         # Stage 1 outputs (using pre-filtered datasets)
         "bnbo_water_coverage": "field_analysis_bnbo_water_coverage",
         "water_projects_bnbo_intersections": "field_analysis_water_projects_bnbo_intersections",
