@@ -777,26 +777,7 @@ def process_chr_data(
             if not bronze_dir.exists() and os.getenv("GITHUB_ACTIONS") == "true":
                 bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
 
-        # In GitHub Actions, ALWAYS download fresh data from GCS regardless of any local files
-        if os.getenv("GITHUB_ACTIONS") == "true" and bronze_dir_override:
-            logging.warning(f"GitHub Actions detected - downloading fresh bronze data from GCS: {bronze_dir_override}")
-
-            # Ensure bronze_dir is set to the GitHub Actions path
-            bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
-
-            # Remove any existing local files to ensure clean download
-            import shutil
-
-            if bronze_dir.exists():
-                shutil.rmtree(bronze_dir)
-            bronze_dir.mkdir(parents=True, exist_ok=True)
-
-            if download_bronze_data_from_gcs(bronze_dir_override, bronze_dir):
-                logging.info(f"✅ Successfully downloaded fresh bronze data from GCS to {bronze_dir}")
-            else:
-                logging.error("❌ Failed to download bronze data from GCS")
-                sys.exit(1)
-        elif bronze_dir and bronze_dir.exists() and any(bronze_dir.glob("*.json")):
+        if bronze_dir and bronze_dir.exists() and any(bronze_dir.glob("*.json")):
             logging.info(f"Silver processing source mode: bronze files from {bronze_dir}")
         else:
             logging.error("Cannot process silver data: no in_memory_data provided and no bronze files found.")
