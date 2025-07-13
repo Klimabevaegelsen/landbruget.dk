@@ -44,14 +44,27 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Use ST_Dump for multipolygon decomposition and add unique IDs
         self.log.info("Decomposing BNBO polygons with ST_Dump and adding unique IDs...")
 
+        # Step 1: Decompose multipolygons with ST_Dump
         self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_status AS
+            CREATE OR REPLACE TABLE bnbo_status_decomposed AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(UNNEST(ST_Dump(geometry)).geom)), ST_Y(ST_Centroid(UNNEST(ST_Dump(geometry)).geom))) as bnbo_id,
                 status_category,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM bnbo_status_raw
         """)
+
+        # Step 2: Add unique IDs with ROW_NUMBER using the decomposed geometries
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE bnbo_status AS
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
+                status_category,
+                geometry
+            FROM bnbo_status_decomposed
+        """)
+
+        # Clean up temporary table
+        self.conn.execute("DROP TABLE IF EXISTS bnbo_status_decomposed")
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
