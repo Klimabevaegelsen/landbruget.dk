@@ -3,6 +3,7 @@
 Command-line interface for Field Area Analysis Multi-Stage Pipeline
 
 Usage:
+    python -m unified_pipeline.gold.field_area_analysis.cli --stage=0 --job=properties_prefilter
     python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --job=water_projects_bnbo
     python -m unified_pipeline.gold.field_area_analysis.cli --stage=2 --job=fields_soil_types
     python -m unified_pipeline.gold.field_area_analysis.cli --stage=all
@@ -17,9 +18,13 @@ from typing import Any, Dict
 from unified_pipeline.util.log_util import Logger
 
 from .base import FieldAnalysisStageConfig
-from .stage1.fields_properties import FieldsPropertiesIntersection
+from .stage0.bnbo_prefilter import BNBOPreFilter
 
 # Import all stage classes
+from .stage0.properties_prefilter import PropertiesPreFilter
+from .stage0.water_projects_prefilter import WaterProjectsPreFilter
+from .stage0.wetlands_prefilter import WetlandsPreFilter
+from .stage1.fields_properties import FieldsPropertiesIntersection
 from .stage1.fields_soil_types import FieldsSoilTypesIntersection
 from .stage1.water_projects_bnbo import WaterProjectsBNBOIntersection
 from .stage1.water_projects_wetlands import WaterProjectsWetlandsIntersection
@@ -34,23 +39,31 @@ logger = Logger.get_logger()
 
 # Stage and job mapping
 STAGE_JOBS = {
+    # Stage 0 (pre-filtering for massive performance improvement)
+    0: {
+        "properties_prefilter": PropertiesPreFilter,
+        "bnbo_prefilter": BNBOPreFilter,
+        "wetlands_prefilter": WetlandsPreFilter,
+        "water_projects_prefilter": WaterProjectsPreFilter,
+    },
+    # Stage 1 (foundation intersections using pre-filtered datasets)
     1: {
         "water_projects_bnbo": WaterProjectsBNBOIntersection,
         "water_projects_wetlands": WaterProjectsWetlandsIntersection,
         "fields_properties": FieldsPropertiesIntersection,
         "fields_soil_types": FieldsSoilTypesIntersection,
     },
-    # Stage 2 (formerly Stage 3)
+    # Stage 2 (field-level analysis with pre-filtered data)
     2: {
         "fields_bnbo_water": FieldsBNBOWaterCoverage,
         "fields_wetland_water": FieldsWetlandWaterCoverage,
     },
-    # Stage 3 (formerly Stage 4)
+    # Stage 3 (property-level analysis)
     3: {
         "final_bnbo": FinalBNBOAnalysis,
         "final_wetland": FinalWetlandAnalysis,
     },
-    # Stage 4 (formerly Stage 5)
+    # Stage 4 (consolidation)
     4: {
         "consolidate": ConsolidateResults,
     },
@@ -123,7 +136,7 @@ async def run_all_stages(config: FieldAnalysisStageConfig) -> Dict[str, Any]:
 
     # Run stages sequentially (dependencies handled by stage ordering)
     # Note: Stage 2 is empty in the current architecture
-    for stage in [1, 2, 3, 4]:
+    for stage in [0, 1, 2, 3, 4]:
         try:
             stage_result = await run_stage_all_jobs(stage, config)
             all_results[f"stage_{stage}"] = stage_result
@@ -165,6 +178,7 @@ Examples:
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --job=fields_properties --bucket=my-bucket
 
 Stage/Job combinations:
+  Stage 0: properties_prefilter, bnbo_prefilter, wetlands_prefilter, water_projects_prefilter
   Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, fields_soil_types
   Stage 2: fields_bnbo_water, fields_wetland_water (uses Stage 1 foundation data)
   Stage 3: final_bnbo, final_wetland
@@ -173,7 +187,10 @@ Stage/Job combinations:
     )
 
     parser.add_argument(
-        "--stage", type=str, required=True, help="Stage to run (1, 2, 3, 4, 5, or 'all')"
+        "--stage",
+        type=str,
+        required=True,
+        help="Stage to run (0, 1, 2, 3, 4, stage0-stage4, or 'all')",
     )
 
     parser.add_argument(
@@ -234,8 +251,12 @@ async def main():
             # Run complete pipeline
             result = await run_all_stages(config)
 
-        elif args.stage.isdigit():
-            stage_num = int(args.stage)
+        elif args.stage.isdigit() or args.stage.startswith("stage"):
+            # Handle both numeric (0, 1, 2) and string formats (stage0, stage1, stage2)
+            if args.stage.isdigit():
+                stage_num = int(args.stage)
+            elif args.stage.startswith("stage"):
+                stage_num = int(args.stage.replace("stage", ""))
 
             if args.job:
                 # Run specific job
@@ -244,7 +265,7 @@ async def main():
                 # Run all jobs in stage
                 result = await run_stage_all_jobs(stage_num, config)
         else:
-            logger.error(f"Invalid stage: {args.stage}. Use 1-5 or 'all'")
+            logger.error(f"Invalid stage: {args.stage}. Use 0-4, stage0-stage4, or 'all'")
             sys.exit(1)
 
         logger.info("🎉 Pipeline execution completed successfully!")
