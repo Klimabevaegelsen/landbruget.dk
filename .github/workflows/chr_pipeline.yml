@@ -1039,7 +1039,7 @@ jobs:
           echo "Loading bronze data from /tmp/data/bronze/chr/$BRONZE_TIMESTAMP into buffer..."
           
           # Load bronze data into buffer using a Python script
-          python3 << 'EOF'
+          python3 << 'EOF' $BRONZE_TIMESTAMP
           import json
           import sys
           from pathlib import Path
@@ -1078,7 +1078,7 @@ jobs:
                   print(f"  -> {filename} not found (optional)")
           
           print(f"Bronze data loaded into buffer successfully ({loaded_count} files)")
-          EOF $BRONZE_TIMESTAMP
+          EOF
           
           # Determine which silver step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
