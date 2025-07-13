@@ -305,6 +305,12 @@ jobs:
           name: chr-context-data
           path: /tmp/
 
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/
+
       - name: Set up environment variables
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -322,6 +328,45 @@ jobs:
           
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
+
+      - name: Download Required Bronze Data from GCS
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          # Download the bronze timestamp from artifact to know which folder to download from
+          if [ -f "/tmp/bronze_timestamp.txt" ]; then
+            BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          else
+            # If no timestamp file, try to find the latest timestamp from the foundation job
+            echo "No bronze timestamp file found, trying to find latest bronze data..."
+            BRONZE_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/bronze/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+            if [ -z "$BRONZE_TIMESTAMP" ]; then
+              echo "❌ Could not determine bronze timestamp"
+              exit 1
+            fi
+          fi
+          
+          echo "📥 Downloading foundation bronze data for parallel job: $BRONZE_TIMESTAMP"
+          
+          # Create the target directory with the timestamp
+          mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
+          
+          # Download foundation data files that parallel jobs need
+          echo "Downloading foundation files from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          
+          # Download besaetning_list.json (needed by most steps)
+          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/besaetning_list.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ besaetning_list.json not found (may not be needed)"
+          
+          # Download stamdata files if they exist
+          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/stamdata_*.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ stamdata files not found (may not be needed)"
+          
+          # List what we downloaded
+          echo "=== Downloaded foundation files ==="
+          ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || echo "No files downloaded"
+          
+          # Set the bronze timestamp for the pipeline to use
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
 
       - name: Run Parallel Group 1 Step
         working-directory: backend/pipelines/chr_pipeline
