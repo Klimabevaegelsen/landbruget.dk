@@ -31,11 +31,26 @@ class WetlandsPreFilter(PreFilteringStageBase):
 
         # Load full wetlands dataset
         self.log.info("Loading full wetlands dataset (1.6M polygons)...")
-        self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_full")
+        self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
+
+        # CRITICAL: Decompose wetlands with ST_Dump BEFORE spatial join to prevent memory issues
+        self.log.info(
+            "Decomposing wetland MultiPolygons with ST_Dump to prevent memory overflow..."
+        )
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE wetlands_full AS
+            SELECT 
+                toerv_pct,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM wetlands_raw
+        """)
 
         # Log dataset sizes
-        wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_full").fetchone()[0]
-        self.log.info(f"📊 Input: {wetlands_count:,} wetland polygons to filter")
+        raw_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
+        decomposed_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_full").fetchone()[0]
+        self.log.info(
+            f"📊 Input: {raw_count:,} wetland MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+        )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -124,17 +139,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} wetlands kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
             )
 
-        # Decompose with ST_Dump and add unique IDs for downstream processing
-        self.log.info("Decomposing filtered wetlands with ST_Dump and adding unique IDs...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE wetlands_decomposed AS
-            SELECT 
-                toerv_pct,
-                UNNEST(ST_Dump(geometry)).geom as geometry
-            FROM wetlands_intersecting
-        """)
-
-        # Add unique IDs with spatial ordering
+            # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
+        self.log.info("Adding unique IDs to filtered wetland polygons...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
@@ -142,7 +148,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 toerv_pct,
                 geometry,
                 ST_Area_Spheroid(geometry) as wetland_area_m2
-            FROM wetlands_decomposed
+            FROM wetlands_intersecting
         """)
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM wetlands_filtered").fetchone()[0]

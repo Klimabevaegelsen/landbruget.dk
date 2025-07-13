@@ -31,11 +31,28 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
 
         # Load full water projects dataset
         self.log.info("Loading full water projects dataset...")
-        self._load_silver_dataset(CONFIG.water_projects_dataset, "water_projects_full")
+        self._load_silver_dataset(CONFIG.water_projects_dataset, "water_projects_raw")
+
+        # CRITICAL: Decompose water projects with ST_Dump BEFORE spatial join to prevent memory issues
+        self.log.info(
+            "Decomposing water project MultiPolygons with ST_Dump to prevent memory overflow..."
+        )
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE water_projects_full AS
+            SELECT 
+                project_id,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM water_projects_raw
+        """)
 
         # Log dataset sizes
-        projects_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_full").fetchone()[0]
-        self.log.info(f"📊 Input: {projects_count:,} water projects to filter")
+        raw_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_raw").fetchone()[0]
+        decomposed_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_full").fetchone()[
+            0
+        ]
+        self.log.info(
+            f"📊 Input: {raw_count:,} water project MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+        )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -72,24 +89,15 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             "SELECT COUNT(*) FROM water_projects_intersecting"
         ).fetchone()[0]
 
-        # Decompose with ST_Dump for optimal downstream processing
-        self.log.info("Decomposing filtered water projects with ST_Dump...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE water_projects_decomposed AS
-            SELECT 
-                project_id,
-                UNNEST(ST_Dump(geometry)).geom as geometry
-            FROM water_projects_intersecting
-        """)
-
-        # Add areas and final processing
+        # Add areas to filtered water projects (ST_Dump already done in _load_input_data)
+        self.log.info("Adding areas to filtered water projects...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects_filtered AS
             SELECT 
                 project_id,
                 geometry,
                 ST_Area_Spheroid(geometry) as project_area_m2
-            FROM water_projects_decomposed
+            FROM water_projects_intersecting
         """)
 
         total_filtered = self.conn.execute(

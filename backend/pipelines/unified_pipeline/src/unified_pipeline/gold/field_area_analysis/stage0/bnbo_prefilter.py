@@ -31,11 +31,24 @@ class BNBOPreFilter(PreFilteringStageBase):
 
         # Load full BNBO dataset
         self.log.info("Loading full BNBO status dataset...")
-        self._load_silver_dataset(CONFIG.bnbo_status_dataset, "bnbo_status_full")
+        self._load_silver_dataset(CONFIG.bnbo_status_dataset, "bnbo_status_raw")
+
+        # CRITICAL: Decompose BNBO with ST_Dump BEFORE spatial join to prevent memory issues
+        self.log.info("Decomposing BNBO MultiPolygons with ST_Dump to prevent memory overflow...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE bnbo_status_full AS
+            SELECT 
+                status_category,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM bnbo_status_raw
+        """)
 
         # Log dataset sizes
-        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_full").fetchone()[0]
-        self.log.info(f"📊 Input: {bnbo_count:,} BNBO polygons to filter")
+        raw_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_raw").fetchone()[0]
+        decomposed_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_full").fetchone()[0]
+        self.log.info(
+            f"📊 Input: {raw_count:,} BNBO MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+        )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -69,17 +82,8 @@ class BNBOPreFilter(PreFilteringStageBase):
             0
         ]
 
-        # Decompose with ST_Dump and add unique IDs for downstream processing
-        self.log.info("Decomposing filtered BNBO with ST_Dump and adding unique IDs...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_decomposed AS
-            SELECT 
-                status_category,
-                UNNEST(ST_Dump(geometry)).geom as geometry
-            FROM bnbo_intersecting
-        """)
-
-        # Add unique IDs with spatial ordering
+        # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
+        self.log.info("Adding unique IDs to filtered BNBO polygons...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT 
@@ -87,7 +91,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                 status_category,
                 geometry,
                 ST_Area_Spheroid(geometry) as bnbo_area_m2
-            FROM bnbo_decomposed
+            FROM bnbo_intersecting
         """)
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM bnbo_filtered").fetchone()[0]
