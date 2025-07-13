@@ -64,6 +64,7 @@ def perform_uuid_join_optimized(
     building_ids: list[str],
     geodanmark_path: str,
     output_dir: Path,
+    attributes_df=None,  # Optional INSPIRE attributes to include
 ) -> dict[str, Any]:
     """
     Perform efficient UUID-based join between INSPIRE BBR and GeoDanmark data.
@@ -81,6 +82,7 @@ def perform_uuid_join_optimized(
         building_ids: List of building UUIDs from INSPIRE BBR data
         geodanmark_path: Path to GeoDanmark buildings parquet file
         output_dir: Directory to save results
+        attributes_df: Optional INSPIRE attributes to include in output
 
     Returns:
         Dictionary with join results and metadata
@@ -170,26 +172,62 @@ def perform_uuid_join_optimized(
         print(f"   INSPIRE building IDs: {inspire_count:,}")
         print(f"   GeoDanmark buildings (filtered): {geodanmark_count:,}")
 
-        print("⚡ Executing efficient UUID-based join...")
-        print("   Strategy: JOIN geodanmark ON inspire_uuid = geodanmark.bbruuid")
-
-        # Simple and efficient UUID-based join
-        # This is much faster than spatial operations and has proven 63.9% match rate
-        uuid_join_query = """
-        CREATE OR REPLACE TABLE joined_results AS
-        SELECT 
-            g.BBRUUID,
-            g.geometry,
-            g.bygningstype,
-            g.building_area_m2,
-            'uuid_matched' as join_status
-        FROM inspire_building_ids i
-        INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
-        WHERE ST_IsValid(g.geometry)
-        AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
-        """
-
         print("⚡ Executing optimized UUID-based join...")
+
+        # Create INSPIRE attributes table if available
+        if attributes_df is not None:
+            print("📋 Including INSPIRE attributes in join...")
+
+            # Convert attributes to DuckDB table
+            if isinstance(attributes_df, list):
+                import pandas as pd
+
+                attributes_df = pd.DataFrame(attributes_df)
+
+            # Register attributes DataFrame with DuckDB
+            conn.register("inspire_attributes", attributes_df)
+
+            # Enhanced join with INSPIRE attributes
+            uuid_join_query = """
+            CREATE OR REPLACE TABLE joined_results AS
+            SELECT 
+                g.BBRUUID,
+                g.geometry,
+                g.bygningstype,
+                g.building_area_m2,
+                'uuid_matched' as join_status,
+                -- INSPIRE attributes
+                ia.currentUse as inspire_current_use,
+                ia.buildingNature as inspire_building_nature,
+                ia.construction_year as inspire_construction_year,
+                ia.floor_area as inspire_floor_area,
+                ia.floors as inspire_floors,
+                ia.dwellings as inspire_dwellings,
+                ia.address as inspire_address,
+                ia.category_group as inspire_category_group
+            FROM inspire_building_ids i
+            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
+            LEFT JOIN inspire_attributes ia ON g.BBRUUID = ia.building_uuid
+            WHERE ST_IsValid(g.geometry)
+            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
+            """
+        else:
+            print("📋 No INSPIRE attributes available - basic join only...")
+            # Basic join without attributes
+            uuid_join_query = """
+            CREATE OR REPLACE TABLE joined_results AS
+            SELECT 
+                g.BBRUUID,
+                g.geometry,
+                g.bygningstype,
+                g.building_area_m2,
+                'uuid_matched' as join_status
+            FROM inspire_building_ids i
+            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
+            WHERE ST_IsValid(g.geometry)
+            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
+            """
+
         conn.execute(uuid_join_query)
 
         # Get results with spatial statistics
@@ -215,14 +253,43 @@ def perform_uuid_join_optimized(
 
             # Save results optimized for spatial data
             output_file = output_dir / "joined_buildings.geoparquet"
+
+            # Check if we have INSPIRE attributes
+            columns_query = "DESCRIBE joined_results"
+            columns = conn.execute(columns_query).fetchall()
+            column_names = [col[0] for col in columns]
+
+            # Build SELECT statement based on available columns
+            if "inspire_current_use" in column_names:
+                # Full dataset with INSPIRE attributes
+                select_columns = """
+                    BBRUUID,
+                    geometry,
+                    bygningstype,
+                    building_area_m2,
+                    join_status,
+                    inspire_current_use,
+                    inspire_building_nature,
+                    inspire_construction_year,
+                    inspire_floor_area,
+                    inspire_floors,
+                    inspire_dwellings,
+                    inspire_address,
+                    inspire_category_group
+                """
+            else:
+                # Basic dataset without INSPIRE attributes
+                select_columns = """
+                    BBRUUID,
+                    geometry,
+                    bygningstype,
+                    building_area_m2,
+                    join_status
+                """
+
             conn.execute(f"""
                 COPY (
-                    SELECT 
-                        BBRUUID,
-                        geometry,
-                        bygningstype,
-                        building_area_m2,
-                        join_status
+                    SELECT {select_columns}
                     FROM joined_results
                     ORDER BY building_area_m2 DESC
                 ) TO '{output_file}' (FORMAT PARQUET)
@@ -244,6 +311,7 @@ def perform_uuid_join_optimized(
             conn.execute("DROP TABLE IF EXISTS geodanmark_buildings")
             conn.execute("DROP TABLE IF EXISTS geodanmark_buildings_filtered")  # Added this line
             conn.execute("DROP TABLE IF EXISTS inspire_building_ids")
+            conn.execute("DROP TABLE IF EXISTS inspire_attributes")  # Clean up attributes table
 
             gc.collect()
             check_memory_usage()
@@ -255,9 +323,9 @@ def perform_uuid_join_optimized(
                 "output_file": str(output_file),
                 "avg_building_area_m2": avg_area,
                 "total_building_area_m2": total_area,
-                "spatial_join_operator_used": spatial_join_used,
-                "optimization_used": "DuckDB Spatial v1.2.2 SPATIAL_JOIN operator",
-                "reference": "https://github.com/duckdb/duckdb-spatial/pull/545",
+                "join_method": "UUID-based matching (BBRUUID)",
+                "optimization_used": "DuckDB UUID join with optional INSPIRE attributes",
+                "includes_inspire_attributes": "inspire_current_use" in column_names,
             }
         else:
             print("❌ No matching buildings found")
@@ -877,31 +945,22 @@ def run_silver_layer(
     # Step 3: Perform UUID join (core silver layer processing)
     logger.info("🔗 Step 3: Performing UUID join between INSPIRE BBR and GeoDanmark...")
 
-    # Perform the UUID-based join
+    # Perform the UUID-based join with INSPIRE attributes
     join_result = perform_uuid_join_optimized(
         building_ids=building_ids,
         geodanmark_path=geodanmark_path,
         output_dir=silver_output_dir,
+        attributes_df=attributes_df,  # Pass attributes to include in main file
     )
 
     if not join_result or join_result.get("error"):
         logger.error(f"❌ UUID join failed: {join_result.get('error', 'Unknown error')}")
         return None
 
-    # Step 4: Save INSPIRE attributes alongside joined data
-    if attributes_df is not None:
-        attributes_file = silver_output_dir / "inspire_attributes.parquet"
-        if isinstance(attributes_df, list):
-            import pandas as pd
-
-            attributes_df = pd.DataFrame(attributes_df)
-        attributes_df.to_parquet(attributes_file)
-        logger.info(f"💾 Saved INSPIRE attributes to {attributes_file}")
-
-    # Step 5: Upload silver results to GCS
+    # Step 4: Upload silver results to GCS (only the main joined file)
     _upload_silver_data_to_gcs(silver_output_dir, timestamp, logger)
 
-    # Step 6: Set GitHub Actions outputs
+    # Step 5: Set GitHub Actions outputs
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"silver-output-dir={silver_output_dir}\n")
