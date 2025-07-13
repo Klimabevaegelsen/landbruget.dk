@@ -1028,19 +1028,52 @@ jobs:
           echo "=== Downloaded bronze files ==="
           ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
 
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
+
+      - id: 'auth-silver'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
       - name: Load bronze data into buffer and run silver processing
         working-directory: backend/pipelines/chr_pipeline
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+          GITHUB_ACTIONS: "true"
         run: |
+          
           # Read the bronze timestamp
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           echo "Loading bronze data from /tmp/data/bronze/chr/$BRONZE_TIMESTAMP into buffer..."
           
+          # Set timestamp as environment variable for Python script
+          export BRONZE_TIMESTAMP
+          
           # Load bronze data into buffer using a Python script
-          python3 << 'EOF' $BRONZE_TIMESTAMP
+          python3 << 'EOF'
           import json
+          import os
           import sys
           from pathlib import Path
           
@@ -1049,7 +1082,8 @@ jobs:
           
           from bronze.export import add_to_buffer
           
-          bronze_dir = Path(f"/tmp/data/bronze/chr/{sys.argv[1]}")
+          bronze_timestamp = os.environ.get('BRONZE_TIMESTAMP')
+          bronze_dir = Path(f"/tmp/data/bronze/chr/{bronze_timestamp}")
           print(f"Loading bronze data from: {bronze_dir}")
           
           # Load each bronze file into the buffer
