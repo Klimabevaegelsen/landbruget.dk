@@ -1080,7 +1080,7 @@ jobs:
           # Add the pipeline directory to Python path
           sys.path.insert(0, str(Path.cwd()))
           
-          from bronze.export import add_to_buffer
+          from bronze.export import save_raw_data, _data_buffer
           
           bronze_timestamp = os.environ.get('BRONZE_TIMESTAMP')
           bronze_dir = Path(f"/tmp/data/bronze/chr/{bronze_timestamp}")
@@ -1105,13 +1105,18 @@ jobs:
                   print(f"Loading {filename} into buffer as {buffer_key}")
                   with open(file_path, 'r') as f:
                       data = json.load(f)
-                  add_to_buffer(buffer_key, {"json": data})
+                  
+                  # Add data to buffer directly - each item in the list
+                  for item in data:
+                      save_raw_data(item, buffer_key)
+                  
                   print(f"  -> Loaded {len(data)} records")
                   loaded_count += 1
               else:
                   print(f"  -> {filename} not found (optional)")
           
           print(f"Bronze data loaded into buffer successfully ({loaded_count} files)")
+          print(f"Buffer now contains: {list(_data_buffer.keys())}")
           EOF
           
           # Determine which silver step to run
