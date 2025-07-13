@@ -177,7 +177,7 @@ except ImportError as e:
 logging.info("--- Script execution started ---")
 
 
-def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export_timestamp: str) -> None:
+def _save_discovered_cvr_numbers(con: ibis.BaseBackend, raw_con, silver_dir: Path, export_timestamp: str) -> None:
     """
     Extract and save CVR numbers discovered in the CHR pipeline silver data.
 
@@ -204,12 +204,12 @@ def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export
         for table_name, cvr_column in cvr_tables.items():
             try:
                 # Check if table exists
-                tables_result = con.con.execute("SHOW TABLES").fetchall()
+                tables_result = raw_con.execute("SHOW TABLES").fetchall()
                 existing_tables = [table[0] for table in tables_result]
 
                 if table_name in existing_tables:
                     cvr_numbers = extract_cvr_numbers_from_table(
-                        table_name=table_name, connection=con.con, cvr_column=cvr_column
+                        table_name=table_name, connection=raw_con, cvr_column=cvr_column
                     )
 
                     if cvr_numbers:
@@ -290,9 +290,15 @@ def process_chr_data_streaming(
     try:
         # Initialize GCS access with DuckDB connection
         gcs_access = GCSDataAccess()
-        con = gcs_access.duckdb_conn
+        raw_con = gcs_access.duckdb_conn
 
-        logging.info("✅ Initialized GCS access with DuckDB connection")
+        # Create Ibis connection wrapper for compatibility with existing silver code
+        import ibis
+        import ibis.backends.duckdb
+
+        con = ibis.backends.duckdb.Backend.from_connection(raw_con)
+
+        logging.info("✅ Initialized GCS access with Ibis-wrapped DuckDB connection")
 
         # Define datasets to process in order
         datasets_config = {
@@ -376,7 +382,7 @@ def process_chr_data_streaming(
                             shutil.copyfileobj(src, dst)
 
                     # Load into DuckDB using read_json_auto for robust JSON parsing
-                    con.execute(f"""
+                    con.raw_sql(f"""
                         CREATE TABLE {table_name} AS 
                         SELECT * FROM read_json_auto('{str(temp_path)}', 
                                                    maximum_object_size=1073741824)
@@ -386,7 +392,7 @@ def process_chr_data_streaming(
                     temp_path.unlink()
 
                 # Get record count for verification
-                count_result = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
                 record_count = count_result[0] if count_result else 0
 
                 logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
@@ -427,14 +433,14 @@ def process_chr_data_streaming(
 
                 if run_xml_parser(temp_xml_path, temp_jsonl_path):
                     # Load processed JSONL into DuckDB
-                    con.execute(f"""
+                    con.raw_sql(f"""
                         CREATE TABLE vetstat AS 
                         SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
                                                    maximum_object_size=1073741824)
                     """)
 
                     # Verify loading
-                    count_result = con.execute("SELECT COUNT(*) FROM vetstat").fetchone()
+                    count_result = con.raw_sql("SELECT COUNT(*) FROM vetstat").fetchone()
                     record_count = count_result[0] if count_result else 0
                     logging.info(f"✅ Loaded vetstat: {record_count:,} records")
 
@@ -546,7 +552,7 @@ def process_chr_data_streaming(
                         try:
                             parquet_path = silver_dir / "property_owners.parquet"
                             if parquet_path.exists():
-                                con.execute(
+                                con.raw_sql(
                                     f"CREATE OR REPLACE TABLE property_owners AS SELECT * FROM read_parquet('{parquet_path}')"
                                 )
                         except Exception as e:
@@ -561,7 +567,7 @@ def process_chr_data_streaming(
                         try:
                             parquet_path = silver_dir / "property_users.parquet"
                             if parquet_path.exists():
-                                con.execute(
+                                con.raw_sql(
                                     f"CREATE OR REPLACE TABLE property_users AS SELECT * FROM read_parquet('{parquet_path}')"
                                 )
                         except Exception as e:
@@ -676,7 +682,7 @@ def process_chr_data_streaming(
 
         # Save discovered CVR numbers for pipeline integration
         try:
-            _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
+            _save_discovered_cvr_numbers(con, raw_con, silver_dir, export_timestamp)
         except Exception as e:
             logging.warning(f"⚠️ Failed to save CVR numbers: {e}")
 
@@ -693,11 +699,11 @@ def process_chr_data_streaming(
         # Cleanup DuckDB tables to free memory
         try:
             for table_name in loaded_tables.values():
-                con.execute(f"DROP TABLE IF EXISTS {table_name}")
+                con.raw_sql(f"DROP TABLE IF EXISTS {table_name}")
 
             # Drop lookup tables
             for lookup_name in lookup_tables.keys():
-                con.execute(f"DROP TABLE IF EXISTS {lookup_name}")
+                con.raw_sql(f"DROP TABLE IF EXISTS {lookup_name}")
 
             logging.info("✅ Cleaned up DuckDB tables")
         except Exception as e:
@@ -1312,7 +1318,7 @@ def process_chr_data(
 
     # --- 12. CVR Collection (Right after silver processing, before cleanup) ---
     if CVR_COLLECTION_AVAILABLE:
-        _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
+        _save_discovered_cvr_numbers(con, con.con, silver_dir, export_timestamp)
     else:
         logging.warning("CVR collection disabled due to import error")
 
