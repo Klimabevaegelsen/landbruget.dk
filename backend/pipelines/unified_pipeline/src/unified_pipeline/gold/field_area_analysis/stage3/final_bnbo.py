@@ -23,23 +23,26 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load BNBO analysis from Stage 2A and foundation data for 3-way spatial analysis."""
         # Load BNBO water coverage from Stage 2A
-        stage2a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['fields_bnbo_water']}/{CONFIG.stage_outputs['fields_bnbo_water']}.parquet"
+        stage2a_dataset = CONFIG.stage_outputs["fields_bnbo_water"]
+        stage2a_path = self._get_latest_gold_path(stage2a_dataset)
         self.gcs_access.query_parquet_direct(stage2a_path, "SELECT *", "fields_bnbo_water")
 
         # Load pre-filtered field-property intersections from Stage 1C
-        stage1c_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['field_property_intersections']}/{CONFIG.stage_outputs['field_property_intersections']}.parquet"
+        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
 
         # Load water project × BNBO intersections from Stage 1A for 3-way spatial analysis
-        stage1a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}/{CONFIG.stage_outputs['water_projects_bnbo_intersections']}.parquet"
+        stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
+        stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         self.gcs_access.query_parquet_direct(
             stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
         )
 
         # Load original BNBO data for spatial analysis (needed for property-BNBO intersections)
-        self._load_silver_dataset(CONFIG.bnbo_dataset, "bnbo_for_fields")
+        self._load_silver_dataset(CONFIG.bnbo_status_dataset, "bnbo_for_fields")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """

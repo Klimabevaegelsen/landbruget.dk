@@ -23,11 +23,13 @@ class ConsolidateResults(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load final BNBO and wetland analyses from Stage 3."""
         # Load final BNBO analysis from Stage 3A
-        stage3a_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['final_bnbo']}/{CONFIG.stage_outputs['final_bnbo']}.parquet"
+        stage3a_dataset = CONFIG.stage_outputs["final_bnbo"]
+        stage3a_path = self._get_latest_gold_path(stage3a_dataset)
         self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
 
         # Load final wetland analysis from Stage 3B
-        stage3b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['final_wetland']}/{CONFIG.stage_outputs['final_wetland']}.parquet"
+        stage3b_dataset = CONFIG.stage_outputs["final_wetland"]
+        stage3b_path = self._get_latest_gold_path(stage3b_dataset)
         self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:

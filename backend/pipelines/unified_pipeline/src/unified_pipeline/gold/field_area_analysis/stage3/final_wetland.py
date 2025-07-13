@@ -29,17 +29,20 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load wetland analysis from Stage 2B and water project intersections from Stage 1B."""
         # Load wetland water coverage from Stage 2B
-        stage2b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['fields_wetland_water']}/{CONFIG.stage_outputs['fields_wetland_water']}.parquet"
+        stage2b_dataset = CONFIG.stage_outputs["fields_wetland_water"]
+        stage2b_path = self._get_latest_gold_path(stage2b_dataset)
         self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
 
         # Load pre-filtered field-property intersections from Stage 1C
-        stage1c_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['field_property_intersections']}/{CONFIG.stage_outputs['field_property_intersections']}.parquet"
+        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
 
         # Load water project × wetland intersections from Stage 1B (includes toerv_pct)
-        stage1b_path = f"gs://{CONFIG.bucket}/gold/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}/{CONFIG.stage_outputs['water_projects_wetlands_intersections']}.parquet"
+        stage1b_dataset = CONFIG.stage_outputs["water_projects_wetlands_intersections"]
+        stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(
             stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
         )
