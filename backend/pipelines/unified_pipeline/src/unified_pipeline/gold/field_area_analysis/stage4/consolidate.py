@@ -62,7 +62,6 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(b.bnbo_covered_by_water_projects_pct, 0) as bnbo_covered_by_water_projects_pct,
             COALESCE(b.bnbo_not_covered_by_water_projects_pct, 0) as bnbo_not_covered_by_water_projects_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
-            COALESCE(b.dominant_bnbo_status, 'No BNBO') as dominant_bnbo_status,
             
             -- Wetland analysis data
             COALESCE(w.total_wetland_area_m2, 0) as total_wetland_area_m2,

@@ -118,7 +118,6 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as bnbo_not_covered_by_water_projects_pct,
                 CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct,
-                CAST(NULL AS VARCHAR) as dominant_bnbo_status,
                 
                 -- Property ownership summary
                 CAST(NULL AS INTEGER) as property_count,
@@ -334,7 +333,6 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     b.bnbo_covered_by_water_projects_pct,
                     b.bnbo_not_covered_by_water_projects_pct,
                     b.field_bnbo_coverage_pct,
-                    b.dominant_bnbo_status,
                     
                     -- Property ownership summary
                     COALESCE(ps.property_count, 0) as property_count,
