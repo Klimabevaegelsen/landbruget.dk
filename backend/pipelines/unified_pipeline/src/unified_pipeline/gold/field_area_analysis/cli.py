@@ -22,6 +22,7 @@ from .stage0.bnbo_prefilter import BNBOPreFilter
 
 # Import all stage classes
 from .stage0.properties_prefilter import PropertiesPreFilter
+from .stage0.soil_types_prefilter import SoilTypesPreFilter
 from .stage0.water_projects_prefilter import WaterProjectsPreFilter
 from .stage0.wetlands_prefilter import WetlandsPreFilter
 from .stage1.fields_properties import FieldsPropertiesIntersection
@@ -45,6 +46,7 @@ STAGE_JOBS = {
         "bnbo_prefilter": BNBOPreFilter,
         "wetlands_prefilter": WetlandsPreFilter,
         "water_projects_prefilter": WaterProjectsPreFilter,
+        "soil_types_prefilter": SoilTypesPreFilter,
     },
     # Stage 1 (foundation intersections using pre-filtered datasets)
     1: {

@@ -1,12 +1,20 @@
-"""Stage 1D: Fields × Soil Types Base Intersection
+"""Stage 1D: Fields × Soil Types Base Intersection - OPTIMIZED
 
-Basic field analysis with soil type intersections.
+Optimized field analysis with soil type intersections using DuckDB Spatial v1.2.2 SPATIAL_JOIN operator.
 Creates foundation dataset for environmental coverage calculations.
 
-Optimized for DuckDB Spatial v1.2.2 with SPATIAL_JOIN operator.
-Based on learnings from Stage 1C (Fields × Properties) success.
+MAJOR OPTIMIZATIONS:
+1. Uses Stage 0 pre-filtered soil types (~8K instead of 13K polygons)
+2. ST_Dump + UNNEST for optimal multipolygon decomposition
+3. Single spatial predicate (ST_Intersects only) for SPATIAL_JOIN operator
+4. No redundant geometry storage or expensive duplicate calculations
+5. Foundation data output with soil_id for efficient downstream joins
+6. Efficient single-pass processing instead of tiny batches
+
+References: https://github.com/duckdb/duckdb-spatial/pull/545
 """
 
+import time
 from typing import Any, Dict
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
@@ -19,200 +27,186 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
     def __init__(self, config: FieldAnalysisStageConfig = None):
         if config is None:
             config = FieldAnalysisStageConfig()
-        super().__init__(config, "Stage 1D: Fields × Soil Types")
+        super().__init__(config, "Stage 1D: Fields × Soil Types (OPTIMIZED)")
 
     def _load_input_data(self):
-        """Load agricultural fields and soil types datasets."""
+        """Load agricultural fields and Stage 0 pre-filtered soil types."""
         # Load agricultural fields (600K fields)
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields")
+        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_raw")
 
-        # Load soil types (13K polygons)
-        self._load_silver_dataset(CONFIG.soil_types_dataset, "soil_types")
+        # OPTIMIZATION: Decompose agricultural fields with ST_Dump for optimal spatial indexing
+        self.log.info(
+            "Decomposing agricultural fields with ST_Dump for optimal spatial indexing..."
+        )
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE agricultural_fields AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                UNNEST(ST_Dump(geometry)).geom as geometry,
+                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as field_area_m2
+            FROM agricultural_fields_raw
+        """)
+
+        # Load Stage 0 pre-filtered soil types (~8K polygons instead of 13K)
+        self.log.info("Loading Stage 0 pre-filtered soil types (major performance boost)...")
+        self._load_stage0_dataset("soil_types_prefiltered", "soil_types")
+
+        # Log dataset sizes for performance tracking
+        fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+
+        self.log.info(f"✅ Loaded {fields_count:,} field polygons (after ST_Dump)")
+        self.log.info(f"✅ Loaded {soil_count:,} pre-filtered soil type polygons")
+        self.log.info(
+            f"🚀 Processing {fields_count * soil_count:,} potential combinations (optimized)"
+        )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
-        Create base field-soil intersections using batched processing for memory efficiency.
+        Create field-soil intersections using optimized single-pass processing.
 
-        Key optimizations:
-        1. Process fields in batches to manage memory (600K fields is too large for single join)
-        2. Single spatial predicate (ST_Intersects only) for SPATIAL_JOIN operator per batch
-        3. Soil types (13K, smaller) as BUILD side, field batches as PROBE side
-        4. Stream results to avoid memory accumulation
+        DuckDB Spatial v1.2.2 SPATIAL_JOIN OPTIMIZATIONS:
+        1. Single spatial predicate (ST_Intersects only) to trigger SPATIAL_JOIN operator
+        2. Soil types (smaller, pre-filtered) as BUILD side for spatial indexing
+        3. Agricultural fields as PROBE side
+        4. No WHERE clauses with spatial predicates - all filtering post-join
+        5. Foundation data with soil_id for efficient downstream joins
+        6. Stream processing to avoid memory accumulation
         """
 
-        # Get total field count for batching
-        total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        batch_size = (
-            5000  # Further reduced for better temp file management (5K × 13K = 65M combinations)
-        )
-        num_batches = (total_fields + batch_size - 1) // batch_size
+        start_time = time.time()
+        self.log.info("🚀 OPTIMIZED SINGLE-PASS PROCESSING with SPATIAL_JOIN operator")
+        self.log.info("✅ DuckDB Spatial v1.2.2: Single spatial predicate only")
 
-        self.log.info(
-            f"Processing {total_fields:,} fields × 13K soil types in {num_batches} batches of {batch_size:,}"
-        )
+        # STEP 1: SPATIAL_JOIN - Soil types (BUILD) × Fields (PROBE)
+        # This triggers the SPATIAL_JOIN operator for massive performance gains
+        spatial_start = time.time()
+        self.log.info("STEP 1: Executing SPATIAL_JOIN (soil types BUILD × fields PROBE)...")
 
-        # Additional memory optimizations for large spatial joins
-        self.conn.execute("SET preserve_insertion_order=false")  # Reduce memory overhead
-        self.conn.execute("SET threads=2")  # Reduce parallelism to save memory
-
-        # Initialize result table
         self.conn.execute("""
-            CREATE OR REPLACE TABLE field_soil_detailed AS
+            CREATE OR REPLACE TABLE field_soil_intersections AS
             SELECT 
-                CAST(NULL AS VARCHAR) as field_id,
-                CAST(NULL AS VARCHAR) as block_id,
-                CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS GEOMETRY) as field_geometry,
-                CAST(NULL AS DOUBLE) as field_area_m2,
-                CAST(NULL AS VARCHAR) as soil_code,
-                CAST(NULL AS VARCHAR) as soil_description,
-                CAST(NULL AS VARCHAR) as soil_type_category,
-                CAST(NULL AS DOUBLE) as soil_intersection_area_m2,
-                CAST(NULL AS DOUBLE) as soil_area_share_pct
-            WHERE FALSE
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                f.field_area_m2,
+                s.soil_id,
+                s.soil_code,
+                s.soil_description,
+                s.soil_type_category,
+                -- Calculate intersection geometry and area in single operation
+                ST_Intersection(f.geometry, s.geometry) as intersection_geometry,
+                ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry)) as soil_intersection_area_m2
+            FROM soil_types s  -- BUILD side (smaller, pre-filtered dataset - gets spatial indexed)
+            JOIN agricultural_fields f ON ST_Intersects(s.geometry, f.geometry)  -- PROBE side (larger dataset)
         """)
 
-        total_intersections = 0
-        total_meaningful = 0
+        spatial_time = time.time() - spatial_start
+        raw_intersections = self.conn.execute(
+            "SELECT COUNT(*) FROM field_soil_intersections"
+        ).fetchone()[0]
 
-        # Process each batch
-        for batch_num in range(num_batches):
-            offset = batch_num * batch_size
-            self.log.info(f"Processing batch {batch_num + 1}/{num_batches} (offset: {offset:,})")
+        self.log.info(
+            f"✅ SPATIAL_JOIN completed in {spatial_time:.1f}s: {raw_intersections:,} raw intersections"
+        )
 
-            # Create field batch
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE fields_batch AS
-                SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
-                    geometry,
-                    ST_Area_Spheroid(geometry) as field_area_m2
-                FROM agricultural_fields
-                LIMIT {batch_size} OFFSET {offset}
-            """)
+        # STEP 2: Post-join filtering (NO SPATIAL WHERE CLAUSES)
+        # DuckDB Spatial PR #545 compliance: Move all filtering to post-join processing
+        filter_start = time.time()
+        self.log.info("STEP 2: Post-join area filtering (no spatial WHERE clauses)...")
 
-            batch_count = self.conn.execute("SELECT COUNT(*) FROM fields_batch").fetchone()[0]
-            if batch_count == 0:
-                break
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_meaningful AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                field_area_m2,
+                soil_id,
+                soil_code,
+                soil_description,
+                soil_type_category,
+                intersection_geometry,
+                soil_intersection_area_m2,
+                (soil_intersection_area_m2 / field_area_m2) * 100 as soil_area_share_pct
+            FROM field_soil_intersections
+            WHERE 
+                -- Area filtering to remove noise (post-join, non-spatial)
+                soil_intersection_area_m2 > 100  -- Minimum 100m² intersection
+                AND (soil_intersection_area_m2 / field_area_m2) > 0.01  -- Minimum 1% coverage
+        """)
 
-            # Step 1: SPATIAL_JOIN for this batch - CORRECT ORDER: soil types (BUILD) × fields (PROBE)
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_spatial AS
-                SELECT 
-                    f.field_id,
-                    f.block_id, 
-                    f.cvr_number,
-                    f.year,
-                    f.geometry as field_geometry,
-                    f.field_area_m2,
-                    s.soil_code,
-                    s.soil_description,
-                    COALESCE(s.theme_name, 'Unknown') as soil_type_category,
-                    s.geometry as soil_geometry
-                FROM soil_types s  -- BUILD side (smaller dataset - gets spatial indexed)
-                JOIN fields_batch f ON ST_Intersects(s.geometry, f.geometry)  -- PROBE side (larger dataset)
-            """)
+        filter_time = time.time() - filter_start
+        meaningful_intersections = self.conn.execute(
+            "SELECT COUNT(*) FROM field_soil_meaningful"
+        ).fetchone()[0]
+        filtered_out = raw_intersections - meaningful_intersections
 
-            batch_spatial_count = self.conn.execute(
-                "SELECT COUNT(*) FROM batch_spatial"
-            ).fetchone()[0]
+        self.log.info(f"✅ Post-join filtering completed in {filter_time:.1f}s")
+        self.log.info(f"   Meaningful intersections: {meaningful_intersections:,}")
+        self.log.info(
+            f"   Noise filtered: {filtered_out:,} ({filtered_out / raw_intersections * 100:.1f}%)"
+        )
 
-            # Step 2: Calculate areas and apply filtering for this batch
-            if batch_spatial_count > 0:
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_detailed AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        field_geometry,
-                        field_area_m2,
-                        soil_code,
-                        soil_description,
-                        soil_type_category,
-                        
-                        -- Calculate intersection area
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, soil_geometry)) as soil_intersection_area_m2,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, soil_geometry)) / field_area_m2) * 100 as soil_area_share_pct
-                        
-                    FROM batch_spatial
-                    WHERE 
-                        -- Area filtering to remove noise (learned from Stage 1C)
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, soil_geometry)) > 100
-                        AND (ST_Area_Spheroid(ST_Intersection(field_geometry, soil_geometry)) / field_area_m2) > 0.01
-                """)
+        # STEP 3: Create foundation data for downstream stages
+        foundation_start = time.time()
+        self.log.info(
+            "STEP 3: Creating foundation data with soil_id for efficient downstream joins..."
+        )
 
-                batch_meaningful_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM batch_detailed"
-                ).fetchone()[0]
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_foundation AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                soil_id,  -- Foundation data: enables ID-based joins in later stages
+                soil_code,
+                soil_description,
+                soil_type_category,
+                soil_intersection_area_m2,
+                soil_area_share_pct,
+                field_area_m2,
+                intersection_geometry  -- Preserve for property-level analysis
+            FROM field_soil_meaningful
+            ORDER BY field_id, block_id, cvr_number, soil_intersection_area_m2 DESC
+        """)
 
-                # Append to main result table
-                if batch_meaningful_count > 0:
-                    self.conn.execute("""
-                        INSERT INTO field_soil_detailed 
-                        SELECT * FROM batch_detailed
-                    """)
+        # STEP 4: Create simplified areas table (backward compatibility)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_soil_areas AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                soil_code,
+                soil_description,
+                soil_type_category,
+                soil_intersection_area_m2 as soil_area_m2,
+                soil_area_share_pct,
+                field_area_m2
+            FROM field_soil_foundation
+        """)
 
-                total_meaningful += batch_meaningful_count
-            else:
-                batch_meaningful_count = 0
+        foundation_time = time.time() - foundation_start
+        foundation_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_soil_foundation"
+        ).fetchone()[0]
 
-            total_intersections += batch_spatial_count
+        self.log.info(
+            f"✅ Foundation data created in {foundation_time:.1f}s: {foundation_count:,} records"
+        )
 
-            self.log.info(
-                f"  ✅ Batch {batch_num + 1}: {batch_count:,} fields → {batch_spatial_count:,} intersections → {batch_meaningful_count:,} meaningful"
-            )
-
-            # Clean up batch tables
-            self.conn.execute("DROP TABLE IF EXISTS fields_batch")
-            self.conn.execute("DROP TABLE IF EXISTS batch_spatial")
-            self.conn.execute("DROP TABLE IF EXISTS batch_detailed")
-
-            # Memory cleanup every 5 batches
-            if (batch_num + 1) % 5 == 0:
-                import gc
-
-                gc.collect()
-                self.log.info(f"  🧹 Memory cleanup after batch {batch_num + 1}")
-
-        spatial_count = total_intersections
-        detailed_count = total_meaningful
-        filtered_out = spatial_count - detailed_count
-
-        self.log.info("✅ Batched processing completed:")
-        self.log.info(f"   Total spatial intersections: {spatial_count:,}")
-        self.log.info(f"   Meaningful intersections: {detailed_count:,}")
-        self.log.info(f"   Noise filtered: {filtered_out:,}")
-
-        self.log.info("Step 2: Creating simplified soil areas per field...")
-
-        # Create simplified table with just area per soil type per field
-        final_query = """
-        CREATE OR REPLACE TABLE field_soil_areas AS
-        SELECT 
-            field_id,
-            block_id,
-            cvr_number,
-            year,
-            soil_code,
-            soil_description,
-            soil_type_category,
-            soil_intersection_area_m2 as soil_area_m2,
-            soil_area_share_pct,
-            field_area_m2
-        FROM field_soil_detailed
-        ORDER BY field_id, block_id, cvr_number, soil_intersection_area_m2 DESC
-        """
-
-        self.conn.execute(final_query)
-
-        # Get comprehensive statistics
-        final_count = self.conn.execute("SELECT COUNT(*) FROM field_soil_areas").fetchone()[0]
+        # STEP 5: Generate comprehensive statistics
+        stats_start = time.time()
+        self.log.info("STEP 5: Generating performance and coverage statistics...")
 
         # Get soil type statistics
         soil_stats = self.conn.execute("""
@@ -220,9 +214,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 soil_type_category,
                 COUNT(*) as intersection_count,
                 COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as field_count,
-                SUM(soil_area_m2) / 1000000 as total_area_km2,
+                SUM(soil_intersection_area_m2) / 1000000 as total_area_km2,
                 AVG(soil_area_share_pct) as avg_coverage_pct
-            FROM field_soil_areas
+            FROM field_soil_foundation
             GROUP BY soil_type_category
             ORDER BY field_count DESC
         """).fetchall()
@@ -233,80 +227,68 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 COUNT(*) as total_intersections,
                 COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as fields_with_soil,
                 AVG(soil_area_share_pct) as avg_soil_coverage,
-                COUNT(DISTINCT soil_code) as unique_soil_types
-            FROM field_soil_areas
+                COUNT(DISTINCT soil_id) as unique_soil_polygons,
+                COUNT(DISTINCT soil_code) as unique_soil_codes
+            FROM field_soil_foundation
         """).fetchone()
 
-        total_intersections, fields_with_soil, avg_coverage, unique_soil_types = coverage_stats
+        (
+            total_intersections,
+            fields_with_soil,
+            avg_coverage,
+            unique_soil_polygons,
+            unique_soil_codes,
+        ) = coverage_stats
 
-        self.log.info("✅ Created simplified field soil areas:")
+        stats_time = time.time() - stats_start
+        total_time = time.time() - start_time
+
+        self.log.info(f"✅ Statistics generated in {stats_time:.1f}s")
+        self.log.info("=" * 60)
+        self.log.info("🎯 OPTIMIZED SOIL TYPES PROCESSING COMPLETED")
+        self.log.info(f"   Total processing time: {total_time:.1f}s")
+        self.log.info(
+            f"   SPATIAL_JOIN time: {spatial_time:.1f}s ({spatial_time / total_time * 100:.1f}%)"
+        )
+        self.log.info(f"   Post-processing time: {total_time - spatial_time:.1f}s")
+        self.log.info("=" * 60)
+        self.log.info("📊 COVERAGE STATISTICS:")
         self.log.info(f"   Total field-soil intersections: {total_intersections:,}")
         self.log.info(f"   Fields with soil data: {fields_with_soil:,}")
         self.log.info(f"   Average soil coverage: {avg_coverage:.1f}%")
-        self.log.info(f"   Unique soil types: {unique_soil_types}")
-
-        self.log.info("   Top soil categories by field count:")
+        self.log.info(f"   Unique soil polygons: {unique_soil_polygons:,}")
+        self.log.info(f"   Unique soil codes: {unique_soil_codes:,}")
+        self.log.info("=" * 60)
+        self.log.info("🏆 TOP SOIL CATEGORIES by field count:")
         for soil_category, intersection_count, field_count, area_km2, avg_pct in soil_stats[:5]:
             self.log.info(
-                f"     {soil_category}: {field_count:,} fields, {intersection_count:,} intersections, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
+                f"   {soil_category}: {field_count:,} fields, {intersection_count:,} intersections, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
             )
 
-        # Clean up intermediate table to save memory
-        self.conn.execute("DROP TABLE IF EXISTS field_soil_detailed")
+        # Clean up intermediate tables to save memory
+        self.conn.execute("DROP TABLE IF EXISTS field_soil_intersections")
+        self.conn.execute("DROP TABLE IF EXISTS field_soil_meaningful")
 
         return {
             "total_intersections": total_intersections,
             "fields_with_soil": fields_with_soil,
             "avg_soil_coverage": avg_coverage,
-            "unique_soil_types": unique_soil_types,
+            "unique_soil_polygons": unique_soil_polygons,
+            "unique_soil_codes": unique_soil_codes,
             "soil_category_stats": soil_stats,
-            "spatial_intersections": spatial_count,
-            "meaningful_intersections": detailed_count,
+            "processing_time": total_time,
+            "spatial_join_time": spatial_time,
+            "raw_intersections": raw_intersections,
+            "meaningful_intersections": meaningful_intersections,
             "noise_filtered": filtered_out,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save field soil areas directly to GCS as parquet file."""
-        import os
-        import tempfile
-        from datetime import datetime
+        """Save both foundation data and simplified areas to GCS."""
+        # Save foundation data (with soil_id and intersection_geometry) - for future optimization
+        self.log.info("Saving foundation data with soil_id for efficient downstream joins...")
+        self._save_stage_output("field_soil_foundation", "field_soil_foundation")
 
-        try:
-            # Create timestamp and GCS path following the standard pattern
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dataset_name = "field_soil_areas"
-            filename = f"{dataset_name}.parquet"
-            gcs_path = f"gold/{dataset_name}/{timestamp}/{filename}"
-
-            # Create temporary file for export
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
-                temp_path = tmp_file.name
-
-            # Export table to temporary file using DuckDB COPY
-            self.conn.execute(f"""
-                COPY field_soil_areas TO '{temp_path}' 
-                (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
-            """)
-
-            # Upload to GCS using gcs_access
-            full_gcs_path = f"gs://{CONFIG.bucket}/{gcs_path}"
-
-            # Use gcs_access fs to upload
-            with open(temp_path, "rb") as src:
-                with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
-                    import shutil
-
-                    shutil.copyfileobj(src, dst)
-
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-            self.log.info(f"✅ Saved field soil areas to {full_gcs_path}")
-
-        except Exception as e:
-            self.log.error(f"❌ Failed to save field soil areas: {e}")
-            # Clean up temp file on error
-            if "temp_path" in locals() and os.path.exists(temp_path):
-                os.unlink(temp_path)
-            raise
+        # Save simplified areas (backward compatibility) - this is what Stage 4 expects
+        self.log.info("Saving simplified field soil areas (Stage 4 compatibility)...")
+        self._save_stage_output("field_soil_areas", "field_soil_intersections")

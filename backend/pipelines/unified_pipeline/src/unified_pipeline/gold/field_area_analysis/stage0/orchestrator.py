@@ -21,6 +21,7 @@ from unified_pipeline.util.log_util import Logger
 from ..base import FieldAnalysisStageConfig
 from .bnbo_prefilter import BNBOPreFilter
 from .properties_prefilter import PropertiesPreFilter
+from .soil_types_prefilter import SoilTypesPreFilter
 from .water_projects_prefilter import WaterProjectsPreFilter
 from .wetlands_prefilter import WetlandsPreFilter
 
@@ -34,6 +35,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
     2. Wetlands (second largest dataset)
     3. BNBO (smaller but important)
     4. Water Projects (smallest, for completeness)
+    5. Soil Types (moderate size, for completeness)
 
     All operations are independent and could be run in parallel,
     but we run sequentially to manage memory usage on GitHub Actions.
@@ -51,7 +53,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
     results = {}
 
     # Step 1: Properties pre-filtering (most critical - 90% reduction)
-    log.info("📊 Step 1/4: Properties pre-filtering (6.5M → ~500K)")
+    log.info("📊 Step 1/5: Properties pre-filtering (6.5M → ~500K)")
     properties_start = time.time()
     try:
         properties_filter = PropertiesPreFilter(config)
@@ -64,7 +66,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         raise
 
     # Step 2: Wetlands pre-filtering (second biggest impact - 85% reduction)
-    log.info("🌊 Step 2/4: Wetlands pre-filtering (1.6M → ~200K)")
+    log.info("🌊 Step 2/5: Wetlands pre-filtering (1.6M → ~200K)")
     wetlands_start = time.time()
     try:
         wetlands_filter = WetlandsPreFilter(config)
@@ -77,7 +79,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         raise
 
     # Step 3: BNBO pre-filtering (70% reduction)
-    log.info("🌿 Step 3/4: BNBO pre-filtering (3.7K → ~1K)")
+    log.info("🌿 Step 3/5: BNBO pre-filtering (3.7K → ~1K)")
     bnbo_start = time.time()
     try:
         bnbo_filter = BNBOPreFilter(config)
@@ -90,7 +92,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         raise
 
     # Step 4: Water projects pre-filtering (80% reduction)
-    log.info("💧 Step 4/4: Water projects pre-filtering (2.4K → ~500)")
+    log.info("💧 Step 4/5: Water projects pre-filtering (2.4K → ~500)")
     projects_start = time.time()
     try:
         projects_filter = WaterProjectsPreFilter(config)
@@ -100,6 +102,19 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         log.info(f"✅ Water projects pre-filtering completed in {projects_time:.1f}s")
     except Exception as e:
         log.error(f"❌ Water projects pre-filtering failed: {e}")
+        raise
+
+    # Step 5: Soil types pre-filtering (40% reduction)
+    log.info("🏔️ Step 5/5: Soil types pre-filtering (13K → ~8K)")
+    soil_types_start = time.time()
+    try:
+        soil_types_filter = SoilTypesPreFilter(config)
+        soil_types_result = await soil_types_filter.run()
+        results["soil_types"] = soil_types_result
+        soil_types_time = time.time() - soil_types_start
+        log.info(f"✅ Soil types pre-filtering completed in {soil_types_time:.1f}s")
+    except Exception as e:
+        log.error(f"❌ Soil types pre-filtering failed: {e}")
         raise
 
     # Final summary
@@ -117,6 +132,8 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         log.info(f"   BNBO: {results['bnbo']['performance_improvement']}")
     if "water_projects" in results:
         log.info(f"   Water Projects: {results['water_projects']['performance_improvement']}")
+    if "soil_types" in results:
+        log.info(f"   Soil Types: {results['soil_types']['performance_improvement']}")
 
     log.info("🚀 PIPELINE READY: Subsequent stages will run 10-15x faster!")
 
