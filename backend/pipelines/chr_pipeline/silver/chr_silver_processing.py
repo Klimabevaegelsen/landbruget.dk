@@ -773,9 +773,6 @@ def process_chr_data(
             from . import config
 
             bronze_dir = config.BRONZE_BASE_DIR / bronze_dir_override
-            # Check GitHub Actions fallback path
-            if not bronze_dir.exists() and os.getenv("GITHUB_ACTIONS") == "true":
-                bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
 
         if bronze_dir and bronze_dir.exists() and any(bronze_dir.glob("*.json")):
             logging.info(f"Silver processing source mode: bronze files from {bronze_dir}")
@@ -912,7 +909,7 @@ def process_chr_data(
     # --- 3. Load Bronze Data into Ibis Tables ---
     logging.info("Loading bronze data into Ibis tables...")
 
-    # Fallback has been removed - only in-memory data is supported
+    # Only in-memory data is supported
 
     raw_tables = {}
 
@@ -1046,9 +1043,7 @@ def process_chr_data(
                     if "data" in locals():
                         del data
             else:
-                logging.warning(
-                    f"No data (or not a list) found in memory buffer for {source_info['mem_key']}. Will attempt file fallback if configured."
-                )
+                logging.warning(f"No data (or not a list) found in memory buffer for {source_info['mem_key']}.")
 
         # --- Attempt 2: Load from Files (when not using memory) --- #
         if not successfully_loaded and not load_from_memory and bronze_dir:

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from lxml import etree
 
 # Import the exporter function
-from .export import save_data_immediately
+from .export import save_raw_data
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
@@ -514,18 +514,18 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                             json_data.append(item)
                             logger.info(f"Extracted data item with keys: {list(item.keys())}")
 
-                    # Save both the raw XML and the parsed JSON immediately to GCS
-                    save_data_immediately(
+                    # Save both the raw XML and the parsed JSON using buffering pattern
+                    save_raw_data(
+                        raw_response=raw_xml_response,
                         data_type="vetstat_antibiotics",
-                        data=raw_xml_response,
                         identifier=f"{chr_number}_{species_code}_xml",
                     )
 
-                    # Also save the parsed JSON data immediately
+                    # Also save the parsed JSON data using buffering pattern
                     if json_data:
-                        save_data_immediately(
+                        save_raw_data(
+                            raw_response=json_data,
                             data_type="vetstat_antibiotics",
-                            data=json_data,
                             identifier=f"{chr_number}_{species_code}_json",
                         )
 
@@ -533,17 +533,17 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                 else:
                     logger.warning(f"No antibiotic usage data found in XML response for CHR {chr_number}")
                     # Save just the raw XML immediately
-                    save_data_immediately(
+                    save_raw_data(
+                        raw_response=raw_xml_response,
                         data_type="vetstat_antibiotics",
-                        data=raw_xml_response,
                         identifier=f"{chr_number}_{species_code}_xml",
                     )
             except Exception as e:
                 logger.error(f"Failed to parse XML response for CHR {chr_number}: {e}")
                 # Save the raw XML response even if parsing fails
-                save_data_immediately(
+                save_raw_data(
+                    raw_response=raw_xml_response,
                     data_type="vetstat_antibiotics",
-                    data=raw_xml_response,
                     identifier=f"{chr_number}_{species_code}_xml",
                 )
 

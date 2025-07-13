@@ -689,26 +689,10 @@ def load_cattle_movement_summaries(
                     if "unique_movement_dates_set" in chunk_stats:
                         # Use the set version for .update() operations
                         all_movement_dates.update(chunk_stats["unique_movement_dates_set"])
-                    elif "unique_movement_dates" in chunk_stats:
-                        # Fallback: Check if it's still a set (before conversion) or already converted to int
-                        if isinstance(chunk_stats["unique_movement_dates"], set):
-                            all_movement_dates.update(chunk_stats["unique_movement_dates"])
-                        elif isinstance(chunk_stats["unique_movement_dates"], int):
-                            # If it's already converted to count, we can't recover the original dates
-                            # This is expected for the current implementation
-                            pass
 
                     if "counterparty_herds_set" in chunk_stats:
                         # Use the set version for .update() operations
                         all_counterparty_herds.update(chunk_stats["counterparty_herds_set"])
-                    elif "counterparty_herds" in chunk_stats:
-                        # Fallback: Check if it's still a set (before conversion) or already converted to int
-                        if isinstance(chunk_stats["counterparty_herds"], set):
-                            all_counterparty_herds.update(chunk_stats["counterparty_herds"])
-                        elif isinstance(chunk_stats["counterparty_herds"], int):
-                            # If it's already converted to count, we can't recover the original herds
-                            # This is expected for the current implementation
-                            pass
 
                     successful_chunks += 1
                     logger.info(
