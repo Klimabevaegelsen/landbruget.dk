@@ -52,6 +52,57 @@ logger.info(
     f"Using export timestamp: {EXPORT_TIMESTAMP} (from {'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'})"
 )
 
+
+def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
+    """
+    Save data immediately to GCS without buffering - fixes parallel processing issues.
+
+    This replaces the broken save_raw_data + finalize_export pattern that doesn't work
+    with parallel GitHub Actions jobs. Each job now saves its data immediately.
+
+    Args:
+        data_type: Type of data (e.g., 'vetstat_antibiotics', 'chr_dyr_movement_summaries')
+        data: The data to save (dict, list, or string)
+        identifier: Unique identifier for this data batch
+
+    Returns:
+        bool: True if save succeeded, False otherwise
+    """
+    try:
+        if not USE_GCS:
+            logger.warning("GCS not available - cannot save data immediately")
+            return False
+
+        # Determine file format based on data type
+        if isinstance(data, str) and data.strip().startswith("<"):
+            # XML data
+            filename = f"{data_type}_{identifier}.xml"
+            content = data
+            content_type = "application/xml"
+        else:
+            # JSON data (dict, list, or already-serialized JSON string)
+            filename = f"{data_type}_{identifier}.json"
+            if isinstance(data, str):
+                content = data  # Already serialized
+            else:
+                content = json.dumps(data, indent=2, default=str)
+            content_type = "application/json"
+
+        # Save directly to GCS
+        bucket = gcs_client.bucket(GCS_BUCKET)
+        blob_path = f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}"
+        blob = bucket.blob(blob_path)
+
+        blob.upload_from_string(content, content_type=content_type)
+
+        logger.info(f"✅ Saved {data_type} data immediately to gs://{GCS_BUCKET}/{blob_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to save {data_type} data immediately: {e}")
+        return False
+
+
 # --- Helper Functions ---
 
 

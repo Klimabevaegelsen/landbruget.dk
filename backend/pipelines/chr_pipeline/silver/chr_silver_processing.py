@@ -47,6 +47,83 @@ except ImportError as e:
     save_pipeline_cvr_numbers = None
     GCSDataAccess = None
 
+
+def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Path) -> bool:
+    """
+    Download bronze data from GCS to local filesystem for silver processing.
+
+    Args:
+        bronze_dir_override: The timestamp folder name (e.g., "20250713_125139")
+        local_bronze_dir: Local directory to download files to
+
+    Returns:
+        True if download successful, False otherwise
+    """
+    if not CVR_COLLECTION_AVAILABLE or GCSDataAccess is None:
+        logging.error("GCS utilities not available - cannot download bronze data")
+        return False
+
+    bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    if not bucket_name:
+        logging.error("GCS_BUCKET not set - cannot download bronze data")
+        return False
+
+    try:
+        gcs_access = GCSDataAccess()
+
+        # Create local directory
+        local_bronze_dir.mkdir(parents=True, exist_ok=True)
+
+        # List of expected bronze files
+        expected_files = [
+            "besaetning_list.json",
+            "besaetning_details.json",
+            "diko_flytninger.json",
+            "ejendom_oplysninger.json",
+            "ejendom_vet_events.json",
+            "spf_su_herds.json",
+            "stamdata_species_usage.json",
+            "vetstat_antibiotics.xml",  # Optional
+        ]
+
+        downloaded_count = 0
+        for filename in expected_files:
+            try:
+                gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir_override}/{filename}"
+                local_path = local_bronze_dir / filename
+
+                # Check if file exists in GCS
+                if gcs_access.file_exists(gcs_path):
+                    # Download file
+                    with gcs_access.fs.open(gcs_path, "rb") as src:
+                        with open(local_path, "wb") as dst:
+                            import shutil
+
+                            shutil.copyfileobj(src, dst)
+
+                    logging.info(f"✅ Downloaded {filename} from GCS")
+                    downloaded_count += 1
+                else:
+                    if filename == "vetstat_antibiotics.xml":
+                        logging.info(f"⚠️ Optional file {filename} not found in GCS - skipping")
+                    else:
+                        logging.warning(f"❌ Required file {filename} not found in GCS")
+
+            except Exception as e:
+                logging.error(f"❌ Failed to download {filename}: {e}")
+
+        if downloaded_count >= 6:  # At least the required files (excluding optional vetstat)
+            logging.info(f"✅ Successfully downloaded {downloaded_count} files from GCS")
+            return True
+        else:
+            logging.error(f"❌ Only downloaded {downloaded_count} files - insufficient for processing")
+            return False
+
+    except Exception as e:
+        logging.error(f"❌ Failed to download bronze data from GCS: {e}")
+        return False
+
+
 # Try to import schema documentation (after sys.path setup)
 SchemaDocumentationManager = None
 
@@ -195,7 +272,26 @@ def process_chr_data(
             if not bronze_dir.exists() and os.getenv("GITHUB_ACTIONS") == "true":
                 bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
 
-        if bronze_dir and bronze_dir.exists():
+        # In GitHub Actions, ALWAYS download fresh data from GCS regardless of any local files
+        if os.getenv("GITHUB_ACTIONS") == "true" and bronze_dir_override:
+            logging.warning(f"GitHub Actions detected - downloading fresh bronze data from GCS: {bronze_dir_override}")
+
+            # Ensure bronze_dir is set to the GitHub Actions path
+            bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
+
+            # Remove any existing local files to ensure clean download
+            import shutil
+
+            if bronze_dir.exists():
+                shutil.rmtree(bronze_dir)
+            bronze_dir.mkdir(parents=True, exist_ok=True)
+
+            if download_bronze_data_from_gcs(bronze_dir_override, bronze_dir):
+                logging.info(f"✅ Successfully downloaded fresh bronze data from GCS to {bronze_dir}")
+            else:
+                logging.error("❌ Failed to download bronze data from GCS")
+                sys.exit(1)
+        elif bronze_dir and bronze_dir.exists() and any(bronze_dir.glob("*.json")):
             logging.info(f"Silver processing source mode: bronze files from {bronze_dir}")
         else:
             logging.error("Cannot process silver data: no in_memory_data provided and no bronze files found.")
@@ -468,7 +564,27 @@ def process_chr_data(
                     f"No data (or not a list) found in memory buffer for {source_info['mem_key']}. Will attempt file fallback if configured."
                 )
 
-        # Fallback has been removed - only in-memory data is supported
+        # --- Attempt 2: Load from Files (when not using memory) --- #
+        if not successfully_loaded and not load_from_memory and bronze_dir:
+            logging.info(f"Attempting to load '{table_name}' from bronze files...")
+            file_path = bronze_dir / source_info["file_key"]
+
+            if file_path.exists():
+                try:
+                    logging.info(f"Loading {table_name} from file: {file_path}")
+                    # Use DuckDB's read_json_auto for robust JSON loading
+                    max_obj_size_bytes = 1073741824  # 1GB
+                    con.con.sql(
+                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
+                    )
+                    raw_tables[table_name] = con.table(table_name)
+                    successfully_loaded = True
+                    logging.info(f"Successfully loaded {table_name} from file {file_path}")
+
+                except Exception as e_file:
+                    logging.error(f"Failed to load '{table_name}' from file {file_path}: {e_file}")
+            else:
+                logging.warning(f"File not found for '{table_name}': {file_path}")
 
         if not successfully_loaded:
             # Check if this is an optional table that can be skipped

@@ -15,7 +15,7 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter
-from .export import save_raw_data
+from .export import save_data_immediately
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
@@ -161,10 +161,10 @@ if __name__ == "__main__":
         if combinations_raw:
             logger.info("Raw Species/Usage Combinations Response (Top Level):")
             # Save the raw data using keyword arguments
-            save_raw_data(
-                raw_response=combinations_raw,
-                data_type="stamdata_species_usage",  # Be specific
-                identifier="all",  # Identifier for this bulk data
+            save_data_immediately(
+                data_type="stamdata_species_usage",
+                data=combinations_raw,
+                identifier="all",
             )
 
             # Serialize and pretty print the raw response for inspection
