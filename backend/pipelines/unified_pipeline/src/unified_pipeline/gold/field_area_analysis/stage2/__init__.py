@@ -3,5 +3,6 @@
 - Fields × BNBO water coverage analysis
 - Fields × Wetland water coverage analysis
 
-Uses foundation data from Stage 1 for optimized processing.
+SPEED OPTIMIZATION: Uses pre-computed intersection geometries from Stage 1A/1B.
+No longer recreates expensive spatial intersections - reuses Stage 1 results.
 """
