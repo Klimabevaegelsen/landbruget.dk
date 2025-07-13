@@ -89,7 +89,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        batch_size = CONFIG.stage2_batch_size
+        batch_size = CONFIG.batch_size
         num_batches = (total_fields + batch_size - 1) // batch_size
 
         self.log.info(
