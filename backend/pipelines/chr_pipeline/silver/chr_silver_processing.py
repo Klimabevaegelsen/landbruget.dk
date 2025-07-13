@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 from datetime import date, datetime
@@ -79,11 +80,13 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
             "besaetning_list.json",
             "besaetning_details.json",
             "diko_flytninger.json",
+            "chr_dyr_movement_summaries.json",  # Added: CHR cattle movement data
             "ejendom_oplysninger.json",
             "ejendom_vet_events.json",
             "spf_su_herds.json",
             "stamdata_species_usage.json",
             "vetstat_antibiotics.xml",  # Optional
+            "vetstat_antibiotics.json",  # Added: VetStat JSON data (also optional)
         ]
 
         downloaded_count = 0
@@ -104,7 +107,13 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
                     logging.info(f"✅ Downloaded {filename} from GCS")
                     downloaded_count += 1
                 else:
-                    if filename == "vetstat_antibiotics.xml":
+                    # Handle optional files
+                    optional_files = [
+                        "vetstat_antibiotics.xml",
+                        "vetstat_antibiotics.json",
+                        "chr_dyr_movement_summaries.json",
+                    ]
+                    if filename in optional_files:
                         logging.info(f"⚠️ Optional file {filename} not found in GCS - skipping")
                     else:
                         logging.warning(f"❌ Required file {filename} not found in GCS")
@@ -112,7 +121,10 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
             except Exception as e:
                 logging.error(f"❌ Failed to download {filename}: {e}")
 
-        if downloaded_count >= 6:  # At least the required files (excluding optional vetstat)
+        # Minimum required files: besaetning_list, besaetning_details, diko_flytninger,
+        # ejendom_oplysninger, ejendom_vet_events, spf_su_herds, stamdata_species_usage (7 files)
+        # Optional files: chr_dyr_movement_summaries, vetstat_antibiotics.xml, vetstat_antibiotics.json
+        if downloaded_count >= 7:  # At least the required files (excluding optional files)
             logging.info(f"✅ Successfully downloaded {downloaded_count} files from GCS")
             return True
         else:
@@ -234,20 +246,498 @@ def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export
         logging.error(f"❌ Failed to save CVR numbers for CHR pipeline: {e}")
 
 
+def process_chr_data_streaming(
+    silver_dir: Path,
+    bronze_timestamp: str,
+    export_timestamp: Optional[str] = None,
+) -> bool:
+    """
+    Memory-efficient CHR silver processing using streaming GCS access.
+
+    This function processes CHR bronze data directly from GCS without loading
+    everything into memory, significantly reducing memory usage and eliminating
+    the risk of OOM errors on large datasets.
+
+    Args:
+        silver_dir: Path to the silver data output directory
+        bronze_timestamp: The timestamp string for the bronze data (YYYYMMDD_HHMMSS)
+        export_timestamp: The timestamp string for silver export (defaults to bronze_timestamp)
+
+    Returns:
+        bool: True if processing completed successfully, False otherwise
+    """
+    logging.info("--- Starting CHR Silver Processing (Streaming Mode) ---")
+
+    # Create silver directory if it doesn't exist
+    silver_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use bronze timestamp as export timestamp if not provided
+    if export_timestamp is None:
+        export_timestamp = bronze_timestamp
+        logging.info(f"Using bronze timestamp as export timestamp: {export_timestamp}")
+
+    # Get GCS bucket from environment
+    bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    if not bucket_name:
+        logging.error("GCS_BUCKET environment variable not set")
+        return False
+
+    # Check if GCS utilities are available
+    if not CVR_COLLECTION_AVAILABLE or GCSDataAccess is None:
+        logging.error("GCS utilities not available - cannot process data")
+        return False
+
+    try:
+        # Initialize GCS access with DuckDB connection
+        gcs_access = GCSDataAccess()
+        con = gcs_access.duckdb_conn
+
+        logging.info("✅ Initialized GCS access with DuckDB connection")
+
+        # Define datasets to process in order
+        datasets_config = {
+            "bes_list": {
+                "file": "besaetning_list.json",
+                "table_name": "bes_list",
+                "required": True,
+                "description": "Herd list data",
+            },
+            "bes_details": {
+                "file": "besaetning_details.json",
+                "table_name": "bes_details",
+                "required": True,
+                "description": "Herd details data",
+            },
+            "diko_flyt": {
+                "file": "diko_flytninger.json",
+                "table_name": "diko_flyt",
+                "required": True,
+                "description": "DIKO animal movements",
+            },
+            "cattle_movements": {
+                "file": "chr_dyr_movement_summaries.json",
+                "table_name": "cattle_movements",
+                "required": False,
+                "description": "CHR cattle movements",
+            },
+            "ejendom_oplys": {
+                "file": "ejendom_oplysninger.json",
+                "table_name": "ejendom_oplys",
+                "required": True,
+                "description": "Property information",
+            },
+            "ejendom_vet": {
+                "file": "ejendom_vet_events.json",
+                "table_name": "ejendom_vet",
+                "required": True,
+                "description": "Property veterinary events",
+            },
+            "spf_su_herds": {
+                "file": "spf_su_herds.json",
+                "table_name": "spf_su_herds",
+                "required": False,
+                "description": "SPF-SU herd data",
+            },
+        }
+
+        # Track successfully loaded tables
+        loaded_tables = {}
+
+        # Process each dataset individually
+        for dataset_key, dataset_info in datasets_config.items():
+            gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
+            table_name = dataset_info["table_name"]
+
+            logging.info(f"Processing {dataset_info['description']}: {dataset_info['file']}")
+
+            # Check if file exists in GCS
+            if not gcs_access.file_exists(gcs_path):
+                if dataset_info["required"]:
+                    logging.error(f"❌ Required file not found: {gcs_path}")
+                    return False
+                else:
+                    logging.info(f"⚠️ Optional file not found, skipping: {gcs_path}")
+                    continue
+
+            try:
+                # Get file size for logging
+                file_size_bytes = gcs_access.get_file_size(gcs_path)
+                file_size_mb = file_size_bytes / (1024 * 1024)
+                logging.info(f"📁 File size: {file_size_mb:.1f} MB")
+
+                # Create table directly from GCS JSON file using streaming download
+                # Note: GCSDataAccess.create_table_from_gcs only supports parquet, so we implement JSON loading here
+                with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
+                    temp_path = Path(temp_file.name)
+
+                    # Download JSON file to temp location
+                    with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                        with open(temp_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+
+                    # Load into DuckDB using read_json_auto for robust JSON parsing
+                    con.execute(f"""
+                        CREATE TABLE {table_name} AS 
+                        SELECT * FROM read_json_auto('{str(temp_path)}', 
+                                                   maximum_object_size=1073741824)
+                    """)
+
+                    # Cleanup temp file
+                    temp_path.unlink()
+
+                # Get record count for verification
+                count_result = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                record_count = count_result[0] if count_result else 0
+
+                logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
+                loaded_tables[dataset_key] = table_name
+
+                # Force garbage collection after large datasets
+                if file_size_mb > 50:  # For files > 50MB
+                    import gc
+
+                    gc.collect()
+                    logging.debug(f"Forced garbage collection after loading {file_size_mb:.1f}MB file")
+
+            except Exception as e:
+                if dataset_info["required"]:
+                    logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
+                    return False
+                else:
+                    logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
+                    continue
+
+        # Handle VetStat XML data separately (if exists)
+        vetstat_table_name = None
+        vetstat_gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.xml"
+
+        if gcs_access.file_exists(vetstat_gcs_path):
+            logging.info("Processing VetStat XML data...")
+            try:
+                # Download VetStat XML to temporary file for processing
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_xml:
+                    temp_xml_path = Path(temp_xml.name)
+
+                    # Download XML content
+                    with gcs_access.fs.open(vetstat_gcs_path.replace("gs://", ""), "r") as src:
+                        temp_xml.write(src.read())
+
+                # Process XML to JSONL
+                temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
+
+                if run_xml_parser(temp_xml_path, temp_jsonl_path):
+                    # Load processed JSONL into DuckDB
+                    con.execute(f"""
+                        CREATE TABLE vetstat AS 
+                        SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
+                                                   maximum_object_size=1073741824)
+                    """)
+
+                    # Verify loading
+                    count_result = con.execute("SELECT COUNT(*) FROM vetstat").fetchone()
+                    record_count = count_result[0] if count_result else 0
+                    logging.info(f"✅ Loaded vetstat: {record_count:,} records")
+
+                    vetstat_table_name = "vetstat"
+                    loaded_tables["vetstat"] = vetstat_table_name
+
+                    # Cleanup temporary JSONL
+                    if temp_jsonl_path.exists():
+                        temp_jsonl_path.unlink()
+                else:
+                    logging.warning("⚠️ VetStat XML processing failed, proceeding without antibiotic data")
+
+                # Cleanup temporary XML
+                if temp_xml_path.exists():
+                    temp_xml_path.unlink()
+
+            except Exception as e:
+                logging.warning(f"⚠️ Failed to process VetStat data: {e}")
+        else:
+            logging.info("⚠️ VetStat XML file not found, proceeding without antibiotic data")
+
+        # Check that essential tables were loaded
+        essential_tables = ["bes_details", "ejendom_oplys"]
+        missing_essential = [table for table in essential_tables if table not in loaded_tables]
+
+        if missing_essential:
+            logging.error(f"❌ Missing essential tables: {missing_essential}")
+            return False
+
+        logging.info(f"✅ Successfully loaded {len(loaded_tables)} datasets")
+
+        # Create lookup tables
+        logging.info("Creating lookup tables...")
+        lookup_tables = {}
+
+        try:
+            if vetstat_table_name:
+                lookup_tables["age_groups"] = _create_and_save_lookup(
+                    con,
+                    con.table(vetstat_table_name),
+                    pk_col="Aldersgruppekode",
+                    name_col="Aldersgruppe",
+                    output_path=silver_dir / "age_groups.parquet",
+                    table_name="age_groups",
+                )
+                logging.info("✅ Created age_groups lookup table")
+            else:
+                logging.info("⚠️ Skipping age_groups lookup (no VetStat data)")
+        except Exception as e:
+            logging.warning(f"⚠️ Failed to create age_groups lookup: {e}")
+
+        # Build context for silver processing steps
+        context = {
+            "bes_details_table": con.table(loaded_tables["bes_details"]) if "bes_details" in loaded_tables else None,
+            "diko_flyt_table": con.table(loaded_tables["diko_flyt"]) if "diko_flyt" in loaded_tables else None,
+            "cattle_movements_table": con.table(loaded_tables["cattle_movements"])
+            if "cattle_movements" in loaded_tables
+            else None,
+            "ejendom_oplys_table": con.table(loaded_tables["ejendom_oplys"])
+            if "ejendom_oplys" in loaded_tables
+            else None,
+            "ejendom_vet_table": con.table(loaded_tables["ejendom_vet"]) if "ejendom_vet" in loaded_tables else None,
+            "vetstat_table": con.table(loaded_tables["vetstat"]) if "vetstat" in loaded_tables else None,
+            "spf_su_table": con.table(loaded_tables["spf_su_herds"]) if "spf_su_herds" in loaded_tables else None,
+            "lookup_tables": lookup_tables,
+        }
+
+        # Process silver steps in order
+        silver_steps = [
+            "silver_vet_practices",
+            "silver_properties",
+            "silver_property_owners",
+            "silver_property_users",
+            "silver_herds",
+            "silver_herd_owners",
+            "silver_herd_users",
+            "silver_herd_sizes",
+            "silver_animal_movements",
+            "silver_property_vet_events",
+            "silver_antibiotic_usage",
+            "silver_spf_su_herds",
+            "silver_spf_su_health_controls",
+            "silver_spf_su_salmonella_data",
+        ]
+
+        logging.info("Starting silver processing steps...")
+
+        for step in silver_steps:
+            logging.info(f"Processing silver step: {step}")
+            try:
+                if step == "silver_vet_practices":
+                    vet_practices_table = vet_practices.create_vet_practices_table(
+                        con, context.get("bes_details_table"), silver_dir
+                    )
+                    context["vet_practices_table"] = vet_practices_table
+
+                elif step == "silver_properties":
+                    properties_table = properties.create_properties_table(
+                        con, context.get("ejendom_oplys_table"), silver_dir
+                    )
+                    context["properties_table"] = properties_table
+
+                elif step == "silver_property_owners":
+                    property_owners_table = properties.create_property_owners_table(
+                        con, context.get("ejendom_oplys_table"), silver_dir
+                    )
+                    # Register table in DuckDB for CVR collection
+                    if property_owners_table is not None:
+                        try:
+                            parquet_path = silver_dir / "property_owners.parquet"
+                            if parquet_path.exists():
+                                con.execute(
+                                    f"CREATE OR REPLACE TABLE property_owners AS SELECT * FROM read_parquet('{parquet_path}')"
+                                )
+                        except Exception as e:
+                            logging.warning(f"Failed to register property_owners table for CVR collection: {e}")
+
+                elif step == "silver_property_users":
+                    property_users_table = properties.create_property_users_table(
+                        con, context.get("ejendom_oplys_table"), silver_dir
+                    )
+                    # Register table in DuckDB for CVR collection
+                    if property_users_table is not None:
+                        try:
+                            parquet_path = silver_dir / "property_users.parquet"
+                            if parquet_path.exists():
+                                con.execute(
+                                    f"CREATE OR REPLACE TABLE property_users AS SELECT * FROM read_parquet('{parquet_path}')"
+                                )
+                        except Exception as e:
+                            logging.warning(f"Failed to register property_users table for CVR collection: {e}")
+
+                elif step == "silver_herds":
+                    herds_table = herds.create_herds_table(
+                        con,
+                        context.get("bes_details_table"),
+                        silver_dir,
+                    )
+                    context["herds_table"] = herds_table
+
+                elif step == "silver_herd_owners":
+                    herd_owners_table = herds.create_herd_owners_table(
+                        con, context.get("bes_details_table"), silver_dir
+                    )
+                    # Register table in DuckDB for CVR collection
+                    if herd_owners_table is not None:
+                        con.create_table("herd_owners", herd_owners_table, overwrite=True)
+
+                elif step == "silver_herd_users":
+                    herd_users_table = herds.create_herd_users_table(con, context.get("bes_details_table"), silver_dir)
+                    # Register table in DuckDB for CVR collection
+                    if herd_users_table is not None:
+                        con.create_table("herd_users", herd_users_table, overwrite=True)
+
+                elif step == "silver_herd_sizes":
+                    herd_sizes_table = herds.create_herd_sizes_table(con, context.get("bes_details_table"), silver_dir)
+
+                elif step == "silver_animal_movements":
+                    # Process DIKO movements (always available)
+                    if context.get("diko_flyt_table") is not None:
+                        animal_movements_table = animal_movements.create_animal_movements_table(
+                            con, context.get("diko_flyt_table"), silver_dir
+                        )
+
+                    # Process CHR_dyr cattle movements (optional)
+                    if context.get("cattle_movements_table") is not None:
+                        chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                            con, context.get("cattle_movements_table"), silver_dir
+                        )
+                    else:
+                        logging.info("CHR_dyr cattle movements not available - skipping")
+
+                elif step == "silver_property_vet_events":
+                    if context.get("ejendom_vet_table") is not None:
+                        property_vet_events_table = property_vet_events.create_property_vet_events_table(
+                            con,
+                            context.get("ejendom_vet_table"),
+                            context.get("lookup_tables", {}),
+                            silver_dir,
+                        )
+
+                elif step == "silver_antibiotic_usage":
+                    if context.get("vetstat_table") is not None:
+                        antibiotic_usage_table = antibiotic_usage.create_antibiotic_usage_table(
+                            con,
+                            context.get("vetstat_table"),
+                            context.get("lookup_tables", {}),
+                            silver_dir,
+                        )
+                    else:
+                        logging.info("VetStat data not available - skipping antibiotic usage processing")
+
+                elif step == "silver_spf_su_herds":
+                    if context.get("spf_su_table") is not None:
+                        # Import SPF-SU processing functions
+                        try:
+                            from . import spf_su_processing
+
+                            spf_su_herds_table = spf_su_processing.create_spf_su_herds_table(
+                                con, context.get("spf_su_table"), silver_dir
+                            )
+                        except ImportError:
+                            logging.warning("SPF-SU processing module not available - skipping")
+                    else:
+                        logging.info("SPF-SU data not available - skipping")
+
+                elif step == "silver_spf_su_health_controls":
+                    if context.get("spf_su_table") is not None:
+                        try:
+                            from . import spf_su_processing
+
+                            spf_su_controls_table = spf_su_processing.create_spf_su_health_controls_table(
+                                con, context.get("spf_su_table"), silver_dir
+                            )
+                        except ImportError:
+                            logging.warning("SPF-SU processing module not available - skipping")
+                    else:
+                        logging.info("SPF-SU data not available - skipping health controls")
+
+                elif step == "silver_spf_su_salmonella_data":
+                    if context.get("spf_su_table") is not None:
+                        try:
+                            from . import spf_su_processing
+
+                            spf_su_salmonella_table = spf_su_processing.create_spf_su_salmonella_data_table(
+                                con, context.get("spf_su_table"), silver_dir
+                            )
+                        except ImportError:
+                            logging.warning("SPF-SU processing module not available - skipping")
+                    else:
+                        logging.info("SPF-SU data not available - skipping salmonella data")
+
+                logging.info(f"✅ Completed silver step: {step}")
+
+            except Exception as e:
+                logging.error(f"❌ Failed silver step {step}: {e}", exc_info=True)
+                # Continue with other steps rather than failing completely
+                continue
+
+        # Save discovered CVR numbers for pipeline integration
+        try:
+            _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
+        except Exception as e:
+            logging.warning(f"⚠️ Failed to save CVR numbers: {e}")
+
+        # Upload silver data to GCS
+        try:
+            upload_success = upload_silver_data_to_gcs(silver_dir, export_timestamp)
+            if upload_success:
+                logging.info("✅ Silver data uploaded to GCS successfully")
+            else:
+                logging.warning("⚠️ Silver data upload to GCS failed or was skipped")
+        except Exception as e:
+            logging.error(f"❌ Error during silver data upload to GCS: {e}")
+
+        # Cleanup DuckDB tables to free memory
+        try:
+            for table_name in loaded_tables.values():
+                con.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+            # Drop lookup tables
+            for lookup_name in lookup_tables.keys():
+                con.execute(f"DROP TABLE IF EXISTS {lookup_name}")
+
+            logging.info("✅ Cleaned up DuckDB tables")
+        except Exception as e:
+            logging.warning(f"⚠️ Error during table cleanup: {e}")
+
+        # Final garbage collection
+        import gc
+
+        gc.collect()
+
+        logging.info("✅ CHR Silver Processing (Streaming Mode) completed successfully")
+        return True
+
+    except Exception as e:
+        logging.error(f"❌ CHR Silver Processing (Streaming Mode) failed: {e}", exc_info=True)
+        return False
+
+
 # --- Main Processing Logic ---
 def process_chr_data(
     silver_dir: Path = None,
     in_memory_data: Optional[Dict[str, Dict[str, List[Any]]]] = None,
     export_timestamp: Optional[str] = None,
+    bronze_timestamp: Optional[str] = None,
+    force_streaming: bool = False,
 ):
     """Main function to process CHR data from bronze to silver.
 
+    This function now supports both streaming (memory-efficient) and legacy (in-memory) modes.
+    Streaming mode is recommended for large datasets to avoid memory issues.
+
     Args:
         silver_dir: Path to the silver data output directory.
-        in_memory_data: Dictionary containing buffered bronze data (required).
-        export_timestamp: The timestamp string used for the bronze export (YYYYMMDD_HHMMSS).
+        in_memory_data: Dictionary containing buffered bronze data (legacy mode).
+        export_timestamp: The timestamp string used for the silver export (YYYYMMDD_HHMMSS).
+        bronze_timestamp: The timestamp string for bronze data (required for streaming mode).
+        force_streaming: Force use of streaming mode even if in_memory_data is available.
     """
     logging.info("--- Starting CHR Silver Processing --- ")
+
     # Create silver directory if it doesn't exist
     silver_dir.mkdir(parents=True, exist_ok=True)
 
@@ -255,6 +745,21 @@ def process_chr_data(
     if export_timestamp is None:
         export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         logging.info(f"Generated export timestamp: {export_timestamp}")
+
+    # Determine processing mode: streaming vs legacy
+    use_streaming = force_streaming or (
+        bronze_timestamp is not None and CVR_COLLECTION_AVAILABLE and GCSDataAccess is not None
+    )
+
+    if use_streaming and bronze_timestamp:
+        logging.info("🚀 Using STREAMING mode for memory-efficient processing")
+        return process_chr_data_streaming(
+            silver_dir=silver_dir, bronze_timestamp=bronze_timestamp, export_timestamp=export_timestamp
+        )
+
+    # Legacy mode - original in-memory processing
+    logging.info("📝 Using LEGACY mode with in-memory data")
+    logging.warning("⚠️ Legacy mode may cause memory issues with large datasets. Consider using streaming mode.")
 
     # Determine data source mode - support both memory and file loading
     load_from_memory = in_memory_data is not None and bool(in_memory_data)
