@@ -34,9 +34,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # Explicitly exclude any problematic columns that might exist from previous runs
         self.gcs_access.query_parquet_direct(
             stage0_bnbo_path,
-            "SELECT bnbo_id, status_category, geometry, bnbo_area_m2 FROM read_parquet('{}')".format(
-                stage0_bnbo_path
-            ),
+            "SELECT bnbo_id, status_category, geometry, bnbo_area_m2",
             "bnbo_for_fields",
         )
 
@@ -50,9 +48,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # Explicitly exclude any problematic columns that might exist from previous runs
         self.gcs_access.query_parquet_direct(
             stage1a_path,
-            "SELECT project_id, bnbo_id, status_category, water_project_geometry, intersection_geometry, intersection_area_m2, water_project_area_m2, bnbo_area_m2, wp_coverage_percentage FROM read_parquet('{}')".format(
-                stage1a_path
-            ),
+            "SELECT project_id, bnbo_id, status_category, water_project_geometry, intersection_geometry, intersection_area_m2, water_project_area_m2, bnbo_area_m2, wp_coverage_percentage",
             "water_projects_bnbo_intersections",
         )
 
