@@ -11,7 +11,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-from bronze.export import save_raw_data
+from bronze.export import save_data_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ async def _fetch_spf_su_for_herd(
                     data = await response.json()
 
                     # Save raw data
-                    save_raw_data(raw_response=data, data_type="spf_su_herds", identifier=str(herd_number))
+                    save_data_immediately(data_type="spf_su_herds", data=data, identifier=str(herd_number))
 
                     logger.debug(f"Successfully fetched SPF-SU data for herd {herd_number}")
                     return data

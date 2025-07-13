@@ -18,13 +18,21 @@ from dotenv import load_dotenv
 from lxml import etree
 
 # Import the exporter function
-from .export import save_raw_data
+from .export import save_data_immediately
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 
 # Load environment variables
 load_dotenv()
+
+# Also try to load from the pipeline directory in case working directory is different
+from pathlib import Path
+
+pipeline_dir = Path(__file__).parent.parent
+env_path = pipeline_dir / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 
 # Get Google Cloud Project ID from environment variable
 GOOGLE_CLOUD_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -62,6 +70,12 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
     # Load environment variables from .env file if it exists
     load_dotenv()
+
+    # Also try to load from the pipeline directory in case working directory is different
+    pipeline_dir = Path(__file__).parent.parent
+    env_path = pipeline_dir / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
 
     # Get required environment variables
     username = os.getenv("FVM_USERNAME")
@@ -395,7 +409,7 @@ def create_soap_envelope_template(
         <glr:BrugerNavn>{username}</glr:BrugerNavn>
         <glr:SessionId>1</glr:SessionId>
         <glr:IPAdresse></glr:IPAdresse>
-        <glr:TrackID>{generate_uuid_id('vetstat_request-')}</glr:TrackID>
+        <glr:TrackID>{generate_uuid_id("vetstat_request-")}</glr:TrackID>
       </glr:GLRCHRWSInfoInbound>
       <eks:Request>
         <glr:DyreArtKode>{species_code}</glr:DyreArtKode>
@@ -500,37 +514,37 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                             json_data.append(item)
                             logger.info(f"Extracted data item with keys: {list(item.keys())}")
 
-                    # Save both the raw XML and the parsed JSON
-                    save_raw_data(
-                        raw_response=raw_xml_response,
+                    # Save both the raw XML and the parsed JSON immediately to GCS
+                    save_data_immediately(
                         data_type="vetstat_antibiotics",
-                        identifier=f"{chr_number}_{species_code}",
+                        data=raw_xml_response,
+                        identifier=f"{chr_number}_{species_code}_xml",
                     )
 
-                    # Also save the parsed JSON data
-                    for item in json_data:
-                        save_raw_data(
-                            raw_response=item,
+                    # Also save the parsed JSON data immediately
+                    if json_data:
+                        save_data_immediately(
                             data_type="vetstat_antibiotics",
-                            identifier=f"{chr_number}_{species_code}",
+                            data=json_data,
+                            identifier=f"{chr_number}_{species_code}_json",
                         )
 
                     logger.info(f"Parsed {len(json_data)} antibiotic usage records from XML response")
                 else:
                     logger.warning(f"No antibiotic usage data found in XML response for CHR {chr_number}")
-                    # Save just the raw XML
-                    save_raw_data(
-                        raw_response=raw_xml_response,
+                    # Save just the raw XML immediately
+                    save_data_immediately(
                         data_type="vetstat_antibiotics",
-                        identifier=f"{chr_number}_{species_code}",
+                        data=raw_xml_response,
+                        identifier=f"{chr_number}_{species_code}_xml",
                     )
             except Exception as e:
                 logger.error(f"Failed to parse XML response for CHR {chr_number}: {e}")
                 # Save the raw XML response even if parsing fails
-                save_raw_data(
-                    raw_response=raw_xml_response,
+                save_data_immediately(
                     data_type="vetstat_antibiotics",
-                    identifier=f"{chr_number}_{species_code}",
+                    data=raw_xml_response,
+                    identifier=f"{chr_number}_{species_code}_xml",
                 )
 
             return raw_xml_response

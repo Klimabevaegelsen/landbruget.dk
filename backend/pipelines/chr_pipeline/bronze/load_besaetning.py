@@ -15,7 +15,7 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
-from .export import save_raw_data
+from .export import save_data_immediately
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_besaetning")
@@ -167,10 +167,10 @@ def load_herd_list(
         serialized_response = serialize_object(response, dict)
 
         # Save raw data (using the structured response directly)
-        save_raw_data(
+        save_data_immediately(
             data_type="besaetning_list",
+            data=serialized_response,  # Save the serialized dict
             identifier=f"{species_code}_{usage_code}_{start_herd_number or 0}",
-            raw_response=serialized_response,  # Save the serialized dict
         )
 
         # --- Start Parsing Logic ---
@@ -269,9 +269,9 @@ def load_herd_details(client: Client, username: str, herd_number: int, species_c
             return None  # Return None if no response
         else:
             # Save the raw response using the updated function call signature
-            save_raw_data(
-                raw_response=response,  # Pass the raw Zeep object
+            save_data_immediately(
                 data_type="besaetning_details",
+                data=response,  # Pass the raw Zeep object
                 identifier=f"{herd_number}_{species_code}",
             )
             return response  # Return the raw Zeep response object
