@@ -235,7 +235,7 @@ class GCSDataAccess:
             self.monitor.check_resources("post_query")
             return table_name
 
-    def query_parquet_direct(
+        def query_parquet_direct(
         self, gcs_path: str, query: str = "SELECT *", table_name: str = "result_table"
     ):
         """

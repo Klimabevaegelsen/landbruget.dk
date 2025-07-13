@@ -879,34 +879,12 @@ def main():
                 else:
                     logging.warning(f"Override directory specified but no files found: {bronze_path}")
 
-                    # GITHUB ACTIONS FIX: Try alternative path if in GitHub Actions
-                    if os.getenv("GITHUB_ACTIONS") == "true":
-                        # Try the standard GitHub Actions data path as fallback
-                        fallback_bronze_path = Path("/tmp/data/bronze/chr") / bronze_dir_override
-                        if fallback_bronze_path.exists() and any(fallback_bronze_path.glob("*.json")):
-                            has_bronze_files = True
-                            logging.warning(
-                                f"Found bronze files in GitHub Actions fallback path: {fallback_bronze_path}"
-                            )
-                            # Update the config to use the correct path for later processing
-                            config.BRONZE_BASE_DIR = Path("/tmp/data/bronze/chr")
-                        else:
-                            logging.warning(f"GitHub Actions fallback path also not found: {fallback_bronze_path}")
-
             # PRIORITY 2: Check current export timestamp directory
             if not has_bronze_files:
                 bronze_path = config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP
                 if bronze_path.exists() and any(bronze_path.glob("*.json")):
                     has_bronze_files = True
                     logging.warning(f"Found bronze files in current timestamp directory: {bronze_path}")
-
-            # PRIORITY 3: Check any timestamped subdirectories (fallback)
-            if not has_bronze_files and config.BRONZE_BASE_DIR.exists():
-                for subdir in config.BRONZE_BASE_DIR.iterdir():
-                    if subdir.is_dir() and any(subdir.glob("*.json")):
-                        has_bronze_files = True
-                        logging.warning(f"Found bronze files in fallback directory: {subdir}")
-                        break
 
             if has_buffer_data or has_context_import or has_bronze_files:
                 logging.warning(
@@ -1049,7 +1027,7 @@ def main():
                     # Force streaming if explicitly requested
                     os.getenv("CHR_FORCE_STREAMING", "false").lower() == "true"
                     or
-                    # Use streaming in GitHub Actions for memory efficiency (no fallbacks)
+                    # Use streaming in GitHub Actions for memory efficiency
                     os.getenv("GITHUB_ACTIONS") == "true"
                     or
                     # Use streaming if we have bronze timestamp and no buffer data
@@ -1093,14 +1071,8 @@ def main():
                         bronze_timestamp=bronze_timestamp,
                     )
                 else:
-                    # Fallback to buffer (might be empty, but let silver processing handle it)
-                    logging.warning("⚠️ No specific bronze data source found, using buffer fallback")
-                    run_silver_processing(
-                        in_memory_data=buffer_data,
-                        silver_dir=silver_dir,
-                        export_timestamp=EXPORT_TIMESTAMP,
-                        bronze_timestamp=bronze_timestamp,
-                    )
+                    # No valid bronze data source found - fail explicitly
+                    raise RuntimeError("No bronze data source available for silver processing")
 
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
             except Exception as e:
@@ -1145,12 +1117,8 @@ def main():
 
         # Run comprehensive cleanup
         try:
-            # Try to import cleanup module with absolute import
-            try:
-                from backend.pipelines.chr_pipeline.cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
-            except ImportError:
-                # Fallback to relative import
-                from cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
+            # Import cleanup module with absolute import
+            from backend.pipelines.chr_pipeline.cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
 
             logger.info("Running final cleanup of temporary files...")
             monitor_disk_usage()

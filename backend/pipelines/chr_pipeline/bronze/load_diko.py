@@ -15,7 +15,7 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
-from .export import save_data_immediately
+from .export import save_raw_data
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_diko")
@@ -140,7 +140,7 @@ def load_diko_flytninger(client: Client, username: str, herd_number: int, specie
         logger.warning(f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})")
     else:
         # Save the raw response
-        save_data_immediately(data_type="diko_flytninger", data=response, identifier=f"{herd_number}_{species_code}")
+        save_raw_data(raw_response=response, data_type="diko_flytninger", identifier=f"{herd_number}_{species_code}")
 
     return response
 

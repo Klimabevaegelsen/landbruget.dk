@@ -157,14 +157,8 @@ def _serialize_data(data: Any) -> Optional[str]:
         serialized_obj = serialize_object(data, target_cls=dict)
         return json.dumps(serialized_obj, default=json_serializer)
     except TypeError as type_error:
-        logger.warning(f"TypeError during serialization: {type_error}. Attempting fallback serialization.")
-        try:
-            # Try direct JSON serialization with our custom serializer
-            return json.dumps(data, default=json_serializer)
-        except TypeError as direct_error:
-            logger.error(f"Direct serialization failed: {direct_error}")
-            # As a last resort, try to get a string representation
-            return json.dumps({"fallback_repr": repr(data)})
+        logger.error(f"TypeError during serialization: {type_error}")
+        return None
     except Exception as e:
         logger.error(f"Unexpected error during serialization: {e}")
         return None
