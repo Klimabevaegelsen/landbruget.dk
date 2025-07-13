@@ -149,3 +149,9 @@ class PropertiesPreFilter(PreFilteringStageBase):
             "output_path": output_path,
             "performance_improvement": f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity",
         }
+
+    def _save_output_data(self, result: Dict[str, Any]):
+        """Save output data - already handled in _execute_stage_processing for Stage 0."""
+        # Stage 0 classes handle export directly in _execute_stage_processing
+        # to use custom output paths and naming conventions
+        self.log.info("✅ Properties pre-filtering data already saved to GCS")
