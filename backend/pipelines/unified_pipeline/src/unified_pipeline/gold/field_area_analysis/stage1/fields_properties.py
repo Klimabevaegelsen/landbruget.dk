@@ -261,3 +261,9 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             "output_path": output_path,
             "optimization_impact": "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)",
         }
+
+    def _save_output_data(self, result: Dict[str, Any]):
+        """Save field-property intersection data - already handled in _execute_stage_processing."""
+        # Data is already saved in _execute_stage_processing using save_data_direct
+        # This method is required by the abstract base class but no additional saving is needed
+        self.log.info("✅ Field-property intersection data already saved to GCS")
