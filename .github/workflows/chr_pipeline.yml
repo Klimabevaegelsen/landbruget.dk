@@ -1011,30 +1011,26 @@ jobs:
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Download Bronze Data from GCS
+      - name: Verify Bronze Data Exists in GCS (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
           # Read the bronze timestamp from artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
+          echo "🚀 STREAMING MODE: Verifying bronze data exists in GCS for timestamp: $BRONZE_TIMESTAMP"
           
-          # Create the target directory with the timestamp
-          mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
-          
-          # Download all files from the bronze timestamp folder
-          echo "Downloading from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
-          gsutil -m cp -r gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || {
-            echo "Failed to download bronze data from timestamp folder"
-            echo "Checking what timestamp folders exist..."
+          # Just verify the data exists in GCS - DON'T download it
+          echo "Checking GCS path: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          gsutil ls gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ | head -10 || {
+            echo "❌ No bronze data found in GCS for timestamp: $BRONZE_TIMESTAMP"
+            echo "Available timestamp folders:"
             gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
             exit 1
           }
           
-          # List what we downloaded
-          echo "=== Downloaded bronze files ==="
-          ls -la /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/
+          echo "✅ Bronze data verified in GCS - will be processed via streaming mode"
+          echo "🔥 NO LOCAL DOWNLOAD - Using direct GCS access for memory efficiency"
 
       - name: Install uv
         run: |
@@ -1060,23 +1056,20 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: Run silver processing with bronze files
+      - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+          CHR_FORCE_STREAMING: "true"
           GITHUB_ACTIONS: "true"
         run: |
           # Read the bronze timestamp from artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
+          echo "🚀 STREAMING MODE: Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
           
-          # Set the bronze directory override for the main.py execution
-          export BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_TIMESTAMP
-          echo "Set BRONZE_DATE_FOLDER_OVERRIDE=$BRONZE_DATE_FOLDER_OVERRIDE for main.py"
+          # NO BRONZE_DATE_FOLDER_OVERRIDE - this forces streaming mode
+          echo "🔥 Forcing streaming mode - no local file fallbacks"
           
           # Determine which silver step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -1094,7 +1087,8 @@ jobs:
             CMD="$CMD --progress"
           fi
           
-          echo "Running silver processing command with buffer data: $CMD"
+          echo "🚀 Running silver processing in STREAMING MODE: $CMD"
+          echo "📊 Processing data directly from GCS without local downloads"
           $CMD
 
   # Job 6: Single Step Execution (for individual steps not covered above)
