@@ -21,13 +21,20 @@ class ConsolidateResults(FieldAnalysisStageBase):
         super().__init__(config, "Stage 4: Consolidation")
 
     def _load_input_data(self):
-        """Load final BNBO and wetland analyses from Stage 3."""
-        # Load final BNBO analysis from Stage 3A
+        """Load all field-property intersections and environmental analyses from previous stages."""
+        # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
+        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage1c_path, "SELECT *", "field_property_intersections"
+        )
+
+        # Load final BNBO analysis from Stage 3A (only fields with BNBO)
         stage3a_dataset = CONFIG.stage_outputs["final_bnbo"]
         stage3a_path = self._get_latest_gold_path(stage3a_dataset)
         self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
 
-        # Load final wetland analysis from Stage 3B
+        # Load final wetland analysis from Stage 3B (only fields with wetlands)
         stage3b_dataset = CONFIG.stage_outputs["final_wetland"]
         stage3b_path = self._get_latest_gold_path(stage3b_dataset)
         self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
@@ -42,68 +49,96 @@ class ConsolidateResults(FieldAnalysisStageBase):
         3. Create final comprehensive schema
         """
 
-        self.log.info("Consolidating BNBO and wetland analyses...")
+        self.log.info("Consolidating ALL fields with property data and environmental analyses...")
 
-        # Create final consolidated analysis
+        # First, create a comprehensive field summary with property data
+        self.log.info("Step 1: Creating field-property summary from Stage 1C...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE all_fields_with_properties AS
+            SELECT 
+                field_id,
+                block_id,
+                cvr_number,
+                year,
+                field_geometry as geometry,
+                field_area_m2,
+                
+                -- Property ownership summary
+                COUNT(*) as property_count,
+                SUM(intersection_area_m2) as total_property_intersection_area_m2,
+                (
+                    SELECT bfe_number 
+                    FROM field_property_intersections fp2 
+                    WHERE fp2.field_id = fp.field_id 
+                    AND fp2.block_id = fp.block_id 
+                    AND fp2.cvr_number = fp.cvr_number
+                    AND fp2.year = fp.year
+                    ORDER BY fp2.intersection_area_m2 DESC 
+                    LIMIT 1
+                ) as primary_bfe_number
+                
+            FROM field_property_intersections fp
+            GROUP BY field_id, block_id, cvr_number, year, field_geometry, field_area_m2
+        """)
+
+        all_fields_count = self.conn.execute(
+            "SELECT COUNT(*) FROM all_fields_with_properties"
+        ).fetchone()[0]
+        self.log.info(f"Found {all_fields_count:,} fields with property intersections")
+
+        # Create final consolidated analysis starting with ALL fields that have properties
+        self.log.info("Step 2: Creating final analysis with environmental data as LEFT JOINs...")
         consolidation_query = """
         CREATE OR REPLACE TABLE field_area_analysis_final AS
         SELECT 
-            -- Field identification (use COALESCE to handle potential missing data)
-            COALESCE(b.field_id, w.field_id) as field_id,
-            COALESCE(b.block_id, w.block_id) as block_id,
-            COALESCE(b.cvr_number, w.cvr_number) as cvr_number,
-            COALESCE(b.year, w.year) as year,
-            COALESCE(b.geometry, w.geometry) as geometry,
-            COALESCE(b.field_area_m2, w.field_area_m2) as field_area_m2,
+            -- Field identification (from property intersections - guaranteed to exist)
+            f.field_id,
+            f.block_id,
+            f.cvr_number,
+            f.year,
+            f.geometry,
+            f.field_area_m2,
             
-            -- BNBO analysis data
+            -- Property ownership data (from Stage 1C - guaranteed to exist)
+            f.property_count,
+            f.total_property_intersection_area_m2,
+            f.primary_bfe_number,
+            
+            -- BNBO analysis data (from Stage 3A - may be NULL if no BNBO)
             COALESCE(b.total_bnbo_area_m2, 0) as total_bnbo_area_m2,
             COALESCE(b.bnbo_covered_by_water_projects_m2, 0) as bnbo_covered_by_water_projects_m2,
             COALESCE(b.bnbo_covered_by_water_projects_pct, 0) as bnbo_covered_by_water_projects_pct,
             COALESCE(b.bnbo_not_covered_by_water_projects_pct, 0) as bnbo_not_covered_by_water_projects_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
             
-            -- Wetland analysis data
+            -- Wetland analysis data (from Stage 3B - may be NULL if no wetlands)
             COALESCE(w.total_wetland_area_m2, 0) as total_wetland_area_m2,
             COALESCE(w.wetland_covered_by_water_projects_m2, 0) as wetland_covered_by_water_projects_m2,
             COALESCE(w.wetland_covered_by_water_projects_pct, 0) as wetland_covered_by_water_projects_pct,
             COALESCE(w.wetland_not_covered_by_water_projects_pct, 0) as wetland_not_covered_by_water_projects_pct,
             COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
-
             
-            -- Property ownership analysis (use BNBO data as primary, fallback to wetland)
-            COALESCE(b.property_count, w.property_count, 0) as property_count,
-            COALESCE(b.total_property_intersection_area_m2, w.total_property_intersection_area_m2, 0) as total_property_intersection_area_m2,
-            COALESCE(b.avg_property_area_share_pct, w.avg_property_area_share_pct, 0) as avg_property_area_share_pct,
-            COALESCE(b.max_property_area_share_pct, w.max_property_area_share_pct, 0) as max_property_area_share_pct,
-            COALESCE(b.primary_bfe_number, w.primary_bfe_number) as primary_bfe_number,
-            
-            -- Property-environmental spatial relationships
-            COALESCE(b.property_bnbo_intersection_area_m2, 0) as property_bnbo_intersection_area_m2,
-            COALESCE(b.property_bnbo_coverage_pct, 0) as property_bnbo_coverage_pct,
+            -- Property-environmental spatial relationships (using actual columns from stage 3)
+            COALESCE(b.total_property_bnbo_area_m2, 0) as property_bnbo_intersection_area_m2,
             COALESCE(b.properties_with_bnbo_count, 0) as properties_with_bnbo_count,
             COALESCE(b.bnbo_property_owners, NULL) as bnbo_property_owners,
+            COALESCE(b.property_bnbo_breakdown, '{}') as bnbo_property_breakdown,
+            COALESCE(b.total_property_bnbo_covered_m2, 0) as bnbo_covered_by_properties_m2,
+            COALESCE(b.total_property_bnbo_uncovered_m2, 0) as bnbo_not_covered_by_properties_m2,
             
-            COALESCE(w.property_wetland_intersection_area_m2, 0) as property_wetland_intersection_area_m2,
-            COALESCE(w.property_wetland_coverage_pct, 0) as property_wetland_coverage_pct,
+            COALESCE(w.total_property_wetland_area_m2, 0) as property_wetland_intersection_area_m2,
             COALESCE(w.properties_with_wetland_count, 0) as properties_with_wetland_count,
             COALESCE(w.wetland_property_owners, NULL) as wetland_property_owners,
-            
-            -- Property-level wetland water project coverage
-            COALESCE(w.property_wetland_covered_by_water_m2, 0) as property_wetland_covered_by_water_m2,
-            COALESCE(w.property_wetland_not_covered_by_water_m2, 0) as property_wetland_not_covered_by_water_m2,
-            COALESCE(w.property_wetland_water_coverage_pct, 0) as property_wetland_water_coverage_pct,
-            COALESCE(w.properties_with_covered_wetland_count, 0) as properties_with_covered_wetland_count,
-            COALESCE(w.properties_with_uncovered_wetland_count, 0) as properties_with_uncovered_wetland_count,
-            COALESCE(w.covered_wetland_property_owners, NULL) as covered_wetland_property_owners,
-            COALESCE(w.uncovered_wetland_property_owners, NULL) as uncovered_wetland_property_owners,
+            COALESCE(w.property_wetland_breakdown, '{}') as wetland_property_breakdown,
+            COALESCE(w.total_property_wetland_covered_m2, 0) as wetland_covered_by_properties_m2,
+            COALESCE(w.total_property_wetland_uncovered_m2, 0) as wetland_not_covered_by_properties_m2,
             
             -- Combined environmental-property metrics
             COALESCE(b.properties_with_bnbo_count, 0) + COALESCE(w.properties_with_wetland_count, 0) as total_properties_with_environmental_features,
             CASE 
-                WHEN COALESCE(b.property_count, w.property_count, 0) > 0 
-                THEN ((COALESCE(b.property_bnbo_intersection_area_m2, 0) + COALESCE(w.property_wetland_intersection_area_m2, 0)) / 
-                      COALESCE(b.total_property_intersection_area_m2, w.total_property_intersection_area_m2, 1)) * 100
+                WHEN f.property_count > 0 
+                THEN ((COALESCE(b.total_property_bnbo_area_m2, 0) + COALESCE(w.total_property_wetland_area_m2, 0)) / 
+                      f.total_property_intersection_area_m2) * 100
                 ELSE 0 
             END as combined_property_environmental_coverage_pct,
             
@@ -118,11 +153,15 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 THEN TRUE ELSE FALSE 
             END as has_property_environmental_relationships
             
-        FROM final_bnbo_analysis b
-        FULL OUTER JOIN final_wetland_analysis w ON b.field_id = w.field_id 
-            AND b.block_id = w.block_id 
-            AND b.cvr_number = w.cvr_number 
-            AND b.year = w.year
+        FROM all_fields_with_properties f
+        LEFT JOIN final_bnbo_analysis b ON f.field_id = b.field_id 
+            AND f.block_id = b.block_id 
+            AND f.cvr_number = b.cvr_number 
+            AND f.year = b.year
+        LEFT JOIN final_wetland_analysis w ON f.field_id = w.field_id 
+            AND f.block_id = w.block_id 
+            AND f.cvr_number = w.cvr_number 
+            AND f.year = w.year
         """
 
         self.conn.execute(consolidation_query)
