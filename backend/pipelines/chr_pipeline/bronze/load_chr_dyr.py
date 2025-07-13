@@ -18,6 +18,8 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
+from .export import save_data_immediately
+
 # Import GCS access for persistent storage
 try:
     from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -1198,8 +1200,6 @@ def _append_to_streaming_json(data_type: str, data: Any) -> bool:
 def _finalize_streaming_files() -> bool:
     """Convert streaming temp files to final consolidated JSON files."""
     try:
-        from .export import save_raw_data
-
         for stream_key, stream_info in _streaming_files.items():
             data_type = stream_key.split("_")[0]  # Extract data_type from stream_key
             temp_file = stream_info["temp_file"]
@@ -1213,17 +1213,22 @@ def _finalize_streaming_files() -> bool:
             # Read all records from temp file and create consolidated JSON
             consolidated_data = []
             try:
+                # Check if temp file exists before trying to read it
+                if not os.path.exists(temp_path):
+                    logger.warning(f"Temp file {temp_path} does not exist - skipping {data_type}")
+                    continue
+
                 with open(temp_path, "r", encoding="utf-8") as f:
                     for line in f:
                         if line.strip():
                             consolidated_data.append(json.loads(line.strip()))
 
-                # Save consolidated data using existing export infrastructure
+                # Save consolidated data immediately to GCS
                 if consolidated_data:
-                    save_raw_data(
+                    save_data_immediately(
                         data_type=data_type,
+                        data=consolidated_data,
                         identifier="consolidated",
-                        raw_response=consolidated_data,
                     )
                     logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
 
