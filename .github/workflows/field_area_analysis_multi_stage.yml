@@ -188,7 +188,7 @@ jobs:
 
   # Stage 2: Environmental Coverage (Parallel)
   stage2-fields-bnbo-water:
-    needs: [stage1-water-projects-bnbo, stage1-fields-soil-types]
+    needs: [stage1-water-projects-bnbo]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -222,7 +222,7 @@ jobs:
             --stage=2 --job=fields_bnbo_water
 
   stage2-fields-wetland-water:
-    needs: [stage1-water-projects-wetlands, stage1-fields-soil-types]
+    needs: [stage1-water-projects-wetlands]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
