@@ -463,6 +463,12 @@ jobs:
           name: chr-context-data
           path: /tmp/
 
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/
+
       - name: Set up environment variables
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -601,6 +607,12 @@ jobs:
           name: chr-context-data
           path: /tmp/
 
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/
+
       - name: Set up environment variables
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
@@ -705,6 +717,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: chr-context-data
+          path: /tmp/
+
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
           path: /tmp/
 
       - name: Set up environment variables
@@ -816,6 +834,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: chr-context-with-details
+          path: /tmp/
+
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
           path: /tmp/
 
       - name: Set up environment variables
