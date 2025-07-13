@@ -292,8 +292,8 @@ jobs:
       ENVIRONMENT: production
 
     outputs:
-      bronze-output-dir: ${{ steps.process-bronze.outputs.bronze-output-dir }}
-      joined-buildings-count: ${{ steps.process-bronze.outputs.joined-buildings-count }}
+      bronze-timestamp: ${{ steps.process-bronze.outputs.bronze-timestamp }}
+      inspire-buildings-count: ${{ steps.process-bronze.outputs.inspire-buildings-count }}
 
     steps:
     - uses: actions/checkout@v4
@@ -310,7 +310,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/bbr_buildings
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install BBR buildings pipeline dependencies
+        cd ../bbr_buildings
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
         uv pip install --system -e .
@@ -336,14 +341,14 @@ jobs:
         name: inspire-bbr-data-${{ github.run_id }}
         path: backend/pipelines/bbr_buildings/
 
-    - name: Process Bronze Layer - Spatial Join
+    - name: Process Bronze Layer - Data Collection
       id: process-bronze
       working-directory: backend/pipelines/bbr_buildings
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
-        echo "🔗 Starting spatial join of GeoDanmark and INSPIRE BBR data..."
+        echo "📦 Starting bronze layer data collection and upload..."
         echo "📊 GeoDanmark buildings: ${{ needs.fetch-geodanmark.outputs.buildings-count }}"
         echo "📊 INSPIRE BBR buildings: ${{ needs.fetch-inspire-bbr.outputs.buildings-count }}"
         
@@ -354,38 +359,23 @@ jobs:
         echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GOOGLE_CLOUD_PROJECT }}" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
         
-        # Install psutil for memory monitoring
-        uv pip install --system psutil
+        # Run bronze layer - data collection only, uploads to GCS
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        echo "BRONZE_TIMESTAMP=$TIMESTAMP" >> $GITHUB_OUTPUT
         
-        # Run bronze layer UUID join (no spatial operations)
         python main.py --layer bronze
         
-        echo "✅ Bronze layer UUID join completed!"
+        # Count buildings for output
+        INSPIRE_COUNT=$(python -c "import json; data = json.load(open('data/inspire_building_ids.json')); print(len(data))")
+        echo "INSPIRE_BUILDINGS_COUNT=$INSPIRE_COUNT" >> $GITHUB_OUTPUT
         
-        # Aggressive cleanup to manage disk space
-        echo "🧹 Cleaning up large files to manage disk space..."
+        echo "✅ Bronze layer data collection completed!"
+        echo "📤 Data uploaded to GCS with timestamp: $TIMESTAMP"
+        
+        # Cleanup large files to save space
+        echo "🧹 Cleaning up large files..."
         rm -f data/geodanmark_buildings_complete.geoparquet
-        rm -f data/inspire_building_ids.json
-        rm -f data/inspire_attributes.parquet
         ls -lah data/
-        df -h
-
-    - name: Upload Bronze Results to GCS
-      working-directory: backend/pipelines/bbr_buildings
-      run: |
-        if [ -d "data/bronze" ]; then
-          echo "📤 Uploading bronze results to GCS..."
-          gsutil -m cp -r data/bronze/* gs://${{ secrets.GCS_BUCKET }}/bronze/bbr_buildings/
-          echo "✅ Bronze results uploaded to GCS"
-        fi
-
-    - name: Upload Bronze Pipeline Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: bbr-bronze-results-${{ github.run_id }}
-        path: |
-          backend/pipelines/bbr_buildings/data/bronze/
-        retention-days: 7
 
   # Silver layer processing job
   process-silver:
@@ -415,7 +405,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/bbr_buildings
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install BBR buildings pipeline dependencies
+        cd ../bbr_buildings
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
         uv pip install --system -e .
@@ -429,16 +424,11 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Download Bronze Results
-      uses: actions/download-artifact@v4
-      with:
-        name: bbr-bronze-results-${{ github.run_id }}
-        path: backend/pipelines/bbr_buildings/data/bronze/
-
     - name: Set up environment variables
       env:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        BRONZE_TIMESTAMP: ${{ needs.process-bronze.outputs.bronze-timestamp }}
       run: |
         cd backend/pipelines/bbr_buildings
         echo "ENVIRONMENT=production" >> .env
@@ -446,24 +436,17 @@ jobs:
         echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        echo "BRONZE_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
 
-    - name: Run Silver Layer Processing
+    - name: Run Silver Layer Processing - UUID Join
       working-directory: backend/pipelines/bbr_buildings
       run: |
-        echo "🥈 Starting silver layer processing..."
-        echo "📊 Processing ${{ needs.process-bronze.outputs.joined-buildings-count }} joined buildings"
-        
-        # Find the bronze output directory
-        BRONZE_DIR=$(find data/bronze -maxdepth 1 -type d -name "20*" | sort -r | head -n 1)
-        if [[ -z "$BRONZE_DIR" ]]; then
-          echo "❌ Error: No bronze layer output found"
-          exit 1
-        fi
-        
-        echo "📂 Using bronze data from: $BRONZE_DIR"
+        echo "🥈 Starting silver layer UUID join processing..."
+        echo "📊 Processing ${{ needs.process-bronze.outputs.inspire-buildings-count }} INSPIRE buildings"
+        echo "🕐 Using bronze data from timestamp: ${{ needs.process-bronze.outputs.bronze-timestamp }}"
         
         # Build silver command
-        CMD="python main.py --layer silver --input-dir $BRONZE_DIR"
+        CMD="python main.py --layer silver"
         
         # Add enhancement flag
         if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
@@ -476,7 +459,7 @@ jobs:
         echo "Running command: $CMD"
         $CMD
         
-        echo "✅ Silver layer processing completed!"
+        echo "✅ Silver layer UUID join processing completed!"
 
     - name: Upload Silver Results to GCS
       working-directory: backend/pipelines/bbr_buildings
@@ -513,10 +496,19 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         
         if [[ "${{ inputs.layer }}" == "bronze" || "${{ inputs.layer }}" == "both" ]]; then
-          echo "## Bronze Layer Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Bronze Layer Results (Data Collection)" >> $GITHUB_STEP_SUMMARY
           echo "- **GeoDanmark Buildings**: ${{ needs.fetch-geodanmark.outputs.buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **INSPIRE BBR Buildings**: ${{ needs.fetch-inspire-bbr.outputs.buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Joined Buildings**: ${{ needs.process-bronze.outputs.joined-buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **INSPIRE BBR Buildings**: ${{ needs.process-bronze.outputs.inspire-buildings-count || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bronze Timestamp**: ${{ needs.process-bronze.outputs.bronze-timestamp || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Data Status**: Uploaded to GCS for silver layer processing" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ inputs.layer }}" == "silver" || "${{ inputs.layer }}" == "both" ]]; then
+          echo "## Silver Layer Results (UUID Join)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Join Method**: UUID-based matching (BBRUUID)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Processing**: GeoDanmark × INSPIRE BBR buildings" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enhancement**: ${{ inputs.enhance_classification == true && 'Enabled' || 'Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
         fi
         
@@ -537,10 +529,15 @@ jobs:
           echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
           echo "- Insufficient disk space" >> $GITHUB_STEP_SUMMARY
           echo "- WFS service limits or timeouts" >> $GITHUB_STEP_SUMMARY
+          echo "- GCS access issues" >> $GITHUB_STEP_SUMMARY
         else
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## ✅ Pipeline Completed Successfully" >> $GITHUB_STEP_SUMMARY
           echo "All jobs completed successfully. Data has been uploaded to GCS." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Architecture:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bronze Layer**: Raw data collection and GCS upload" >> $GITHUB_STEP_SUMMARY
+          echo "- **Silver Layer**: UUID-based join and data processing" >> $GITHUB_STEP_SUMMARY
         fi
 
   # Cleanup job
