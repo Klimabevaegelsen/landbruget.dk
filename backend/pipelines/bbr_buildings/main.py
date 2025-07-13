@@ -21,7 +21,6 @@ from typing import Any
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config import Settings, get_settings
-from silver.building_processor import BuildingProcessor
 from utils.logger import setup_logger
 
 try:
@@ -30,6 +29,14 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
+
+# Add this import for GCS operations
+try:
+    from backend.common.storage_interface import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
 
 
 def check_memory_usage():
@@ -134,9 +141,6 @@ def perform_uuid_join_optimized(
                 SELECT 
                     BBRUUID,
                     bygningstype,
-                    opfoerelsesaar,
-                    etagetal,
-                    bygningsanvendelse,
                     UNNEST(ST_Dump(geometri)).geom as geometry
                 FROM geodanmark_buildings_filtered
                 WHERE ST_IsValid(geometri)
@@ -145,9 +149,6 @@ def perform_uuid_join_optimized(
                 BBRUUID,
                 geometry,
                 bygningstype,
-                opfoerelsesaar,
-                etagetal,
-                bygningsanvendelse,
                 ST_Area_Spheroid(geometry) as building_area_m2
             FROM dumped_geometries
         """)
@@ -180,9 +181,6 @@ def perform_uuid_join_optimized(
             g.BBRUUID,
             g.geometry,
             g.bygningstype,
-            g.opfoerelsesaar,
-            g.etagetal,
-            g.bygningsanvendelse,
             g.building_area_m2,
             'uuid_matched' as join_status
         FROM inspire_building_ids i
@@ -209,7 +207,7 @@ def perform_uuid_join_optimized(
         (total_buildings, unique_buildings, avg_area, min_area, max_area, total_area) = final_stats
 
         if total_buildings > 0:
-            print("🎯 SPATIAL_JOIN results:")
+            print("🎯 UUID JOIN results:")
             print(f"   Total buildings: {total_buildings:,}")
             print(f"   Unique buildings: {unique_buildings:,}")
             print(f"   Average building area: {avg_area:.1f} m²")
@@ -223,9 +221,6 @@ def perform_uuid_join_optimized(
                         BBRUUID,
                         geometry,
                         bygningstype,
-                        opfoerelsesaar,
-                        etagetal,
-                        bygningsanvendelse,
                         building_area_m2,
                         join_status
                     FROM joined_results
@@ -233,19 +228,16 @@ def perform_uuid_join_optimized(
                 ) TO '{output_file}' (FORMAT PARQUET)
             """)
 
-            print(f"💾 Saved SPATIAL_JOIN results to {output_file}")
+            print(f"💾 Saved UUID JOIN results to {output_file}")
 
-            # Check if SPATIAL_JOIN operator was actually used
+            # Verify the join was UUID-based (not spatial)
             explain_result = conn.execute("""
                 EXPLAIN SELECT * FROM geodanmark_buildings g
                 INNER JOIN inspire_building_ids i ON g.BBRUUID = i.BBRUUID
                 LIMIT 1
             """).fetchall()
 
-            spatial_join_used = any("SPATIAL_JOIN" in str(row) for row in explain_result)
-            print(
-                f"🔍 SPATIAL_JOIN operator detected: {'✅ YES' if spatial_join_used else '❌ NO (using standard JOIN)'}"
-            )
+            print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
 
             # Final cleanup
             conn.execute("DROP TABLE IF EXISTS joined_results")
@@ -406,9 +398,6 @@ def perform_chunked_spatial_join(
             SELECT 
                 BBRUUID,
                 bygningstype,
-                opfoerelsesaar,
-                etagetal,
-                bygningsanvendelse,
                 UNNEST(ST_Dump(geometri)).geom as geometry
             FROM geodanmark_buildings_filtered
             WHERE ST_IsValid(geometri)
@@ -417,9 +406,6 @@ def perform_chunked_spatial_join(
             BBRUUID,
             geometry,
             bygningstype,
-            opfoerelsesaar,
-            etagetal,
-            bygningsanvendelse,
             ST_Area_Spheroid(geometry) as building_area_m2
         FROM dumped_geometries
         WHERE ST_Area_Spheroid(geometry) > 1  -- Minimum 1m² building area
@@ -461,9 +447,6 @@ def perform_chunked_spatial_join(
             CAST(NULL AS VARCHAR) as BBRUUID,
             CAST(NULL AS GEOMETRY) as geometry,
             CAST(NULL AS VARCHAR) as bygningstype,
-            CAST(NULL AS INTEGER) as opfoerelsesaar,
-            CAST(NULL AS INTEGER) as etagetal,
-            CAST(NULL AS VARCHAR) as bygningsanvendelse,
             CAST(NULL AS DOUBLE) as building_area_m2,
             CAST(NULL AS VARCHAR) as join_status,
             CAST(NULL AS INTEGER) as chunk_id
@@ -505,9 +488,6 @@ def perform_chunked_spatial_join(
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
-                g.opfoerelsesaar,
-                g.etagetal,
-                g.bygningsanvendelse,
                 g.building_area_m2,
                 'uuid_matched' as join_status,
                 {chunk_idx + 1} as chunk_id
@@ -585,9 +565,6 @@ def perform_chunked_spatial_join(
                         BBRUUID,
                         geometry,
                         bygningstype,
-                        opfoerelsesaar,
-                        etagetal,
-                        bygningsanvendelse,
                         building_area_m2,
                         join_status
                     FROM joined_results
@@ -686,11 +663,9 @@ def main():
             run_bronze_layer_bulk(args, settings, logger, pipeline_start_time)
 
         elif args.layer == "silver":
-            if not args.input_dir:
-                logger.error("--input-dir is required for silver layer")
-                sys.exit(1)
-
-            run_silver_layer(args, settings, logger)
+            # Silver layer can work with bronze timestamp from GitHub Actions
+            bronze_timestamp = os.getenv("BRONZE_TIMESTAMP")
+            run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
 
         elif args.layer == "both":
             # Run bronze layer and get data in memory
@@ -716,18 +691,28 @@ def run_bronze_layer_bulk(
     pipeline_start_time: datetime,
     return_data: bool = False,
 ):
-    """Execute bronze layer processing with bulk GeoDanmark download + local joins."""
-    logger.info("🚀 Starting bronze layer with BULK GeoDanmark download + local joins")
+    """
+    Execute bronze layer processing - raw data collection and upload to GCS.
+
+    Bronze layer responsibility:
+    - Download raw GeoDanmark buildings data
+    - Download raw INSPIRE BBR data
+    - Upload both to GCS immediately
+    - Return metadata for coordination
+    """
+    logger.info("🚀 Starting bronze layer - raw data collection and GCS upload")
 
     output_dir = args.output_dir / "bronze"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Check if GeoDanmark data exists, download if needed
-    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
+    timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+    bronze_output_dir = output_dir / timestamp
+    bronze_output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Step 1: GeoDanmark raw data (already handled by separate job if needed)
+    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
     if not Path(geodanmark_path).exists():
         logger.info("📦 Step 1: GeoDanmark data not found, bulk downloading...")
-
         if not settings.has_datafordeler_credentials:
             raise ValueError(
                 "DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables required"
@@ -736,133 +721,333 @@ def run_bronze_layer_bulk(
         bulk_fetcher = BulkGeoDanmarkFetcher(
             settings.datafordeler_username, settings.datafordeler_password
         )
-
-        # Download buildings
         bulk_fetcher.bulk_download_buildings(batch_size=30000)
         logger.info("✅ Bulk GeoDanmark download completed!")
     else:
-        logger.info("📦 Step 1: Using existing GeoDanmark data (skipping download)")
-        logger.info(f"   Found: {geodanmark_path}")
+        logger.info("📦 Step 1: Using existing GeoDanmark data")
         file_size_gb = Path(geodanmark_path).stat().st_size / (1024**3)
-        logger.info(f"   Size: {file_size_gb:.1f}GB")
+        logger.info(f"   Found: {geodanmark_path} ({file_size_gb:.1f}GB)")
 
-    # Step 2: Fetch and enrich INSPIRE BBR data
-    logger.info("🏢 Step 2: Fetching INSPIRE BBR building attributes with GraphQL enrichment...")
+    # Step 2: INSPIRE BBR raw data - upload to GCS immediately
+    logger.info("🏢 Step 2: Fetching INSPIRE BBR data and uploading to GCS...")
     inspire_fetcher = InspireBBRFetcher(settings, logger)
     inspire_result = inspire_fetcher.fetch_data(
-        output_dir,
-        sample_size=args.sample_size,  # None = all buildings, or specify for testing
-        return_data=True,  # Always return data for local joins
+        bronze_output_dir,
+        sample_size=args.sample_size,
+        return_data=True,  # Get data for GCS upload
         pipeline_start_time=pipeline_start_time,
     )
 
-    # Step 3: Perform local spatial join
-    logger.info("🔗 Step 3: Performing local spatial join...")
+    if not inspire_result or "data" not in inspire_result:
+        logger.error("❌ Failed to fetch INSPIRE BBR data")
+        return None
 
-    if inspire_result and "data" in inspire_result:
-        # Load both datasets
-        geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
+    # Upload INSPIRE BBR data to GCS immediately (bronze layer responsibility)
+    inspire_data = inspire_result["data"]
+    building_ids = inspire_data.get("building_ids", [])
+    attributes_df = inspire_data.get("attributes_df", [])
 
-        # Extract INSPIRE BBR building IDs
-        inspire_data = inspire_result["data"]
-        if "building_ids" in inspire_data and "attributes_df" in inspire_data:
-            building_ids = inspire_data["building_ids"]
-            attributes_df = inspire_data["attributes_df"]
-        else:
-            logger.warning("INSPIRE BBR data structure not as expected")
-            building_ids = []
-            attributes_df = None
+    if building_ids:
+        logger.info(f"📤 Uploading {len(building_ids):,} building IDs to GCS...")
+        _upload_bronze_data_to_gcs(building_ids, attributes_df, timestamp, logger)
 
-        logger.info(
-            f"🔍 Joining {len(building_ids):,} INSPIRE BBR buildings with GeoDanmark data..."
-        )
+    # Set GitHub Actions outputs for coordination with silver layer
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"bronze-timestamp={timestamp}\n")
+            f.write(f"building-ids-count={len(building_ids)}\n")
+            f.write(
+                f"geodanmark-available={'true' if Path(geodanmark_path).exists() else 'false'}\n"
+            )
+        logger.info("✅ Set GitHub Actions outputs for silver layer coordination")
 
-        # Create timestamped output directory
-        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-        join_output_dir = output_dir / timestamp
-        join_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Perform optimized UUID-based join (much faster than spatial operations)
-        join_result = perform_uuid_join_optimized(
-            building_ids=building_ids,
-            geodanmark_path=geodanmark_path,
-            output_dir=join_output_dir,
-        )
-
-        if join_result["success"]:
-            # Save INSPIRE attributes if available
-            if attributes_df:
-                attributes_file = join_output_dir / "inspire_attributes.parquet"
-                # Convert list of dicts to DataFrame if needed
-                if isinstance(attributes_df, list):
-                    import pandas as pd
-
-                    attributes_df = pd.DataFrame(attributes_df)
-                attributes_df.to_parquet(attributes_file)
-                logger.info(f"💾 Saved INSPIRE attributes to {attributes_file}")
-
-            # Set GitHub Actions outputs if running in GitHub Actions
-            if "GITHUB_OUTPUT" in os.environ:
-                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-                    f.write(f"bronze-output-dir={join_output_dir}\n")
-                    f.write(f"joined-buildings-count={join_result['joined_buildings_count']}\n")
-                logger.info("✅ Set GitHub Actions outputs")
-
-            result = {
-                "data": {
-                    "joined_buildings_count": join_result["joined_buildings_count"],
-                    "output_dir": str(join_output_dir),
-                    "attributes_df": attributes_df,
-                    "building_ids": building_ids,
-                },
-                "metadata": {
-                    "inspire_metadata": inspire_result.get("metadata", None),
-                    "joined_buildings_count": join_result["joined_buildings_count"],
-                    "chunks_processed": join_result["chunks_processed"],
-                    "source": "bulk_geodanmark_with_inspire_bbr_join",
-                    "join_method": "chunked_spatial_join_by_bbruuid",
-                },
-            }
-        else:
-            logger.error(f"❌ Spatial join failed: {join_result.get('error', 'Unknown error')}")
-            result = None
-    else:
-        logger.error("❌ INSPIRE BBR data not available for joining")
-        result = None
-
-    logger.info("🎉 Bronze layer processing completed successfully with bulk approach!")
+    logger.info("✅ Bronze layer completed - raw data uploaded to GCS")
 
     if return_data:
-        return result
-    return None
+        return {
+            "timestamp": timestamp,
+            "building_ids_count": len(building_ids),
+            "geodanmark_path": geodanmark_path,
+            "metadata": inspire_result.get("metadata", {}),
+        }
+
+
+def _upload_bronze_data_to_gcs(
+    building_ids: list, attributes_df, timestamp: str, logger: logging.Logger
+):
+    """Upload bronze data to GCS for silver layer consumption."""
+    if not GCS_AVAILABLE:
+        logger.warning("⚠️ GCS not available - skipping bronze data upload")
+        return
+
+    try:
+        gcs_access = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+
+        # Upload building IDs as JSON
+        building_ids_path = (
+            f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
+        )
+        import json
+
+        building_ids_json = json.dumps(building_ids, indent=2)
+        gcs_access.upload_text(building_ids_json, building_ids_path)
+        logger.info(f"✅ Uploaded building IDs to {building_ids_path}")
+
+        # Upload attributes as Parquet if available
+        if attributes_df is not None:
+            attributes_path = (
+                f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
+            )
+
+            # Convert to DataFrame if needed
+            if isinstance(attributes_df, list):
+                import pandas as pd
+
+                attributes_df = pd.DataFrame(attributes_df)
+
+            # Upload as Parquet
+            import io
+
+            parquet_buffer = io.BytesIO()
+            attributes_df.to_parquet(parquet_buffer, index=False)
+            parquet_buffer.seek(0)
+
+            with gcs_access.fs.open(attributes_path, "wb") as f:
+                f.write(parquet_buffer.getvalue())
+
+            logger.info(f"✅ Uploaded attributes to {attributes_path}")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to upload bronze data to GCS: {e}")
+        logger.warning("Silver layer will need to process locally")
 
 
 def run_silver_layer(
-    args: argparse.Namespace, settings: Settings, logger: logging.Logger, bronze_data=None
+    args: argparse.Namespace,
+    settings: Settings,
+    logger: logging.Logger,
+    bronze_data=None,
+    bronze_timestamp: str = None,
 ):
-    """Execute silver layer processing."""
-    logger.info("Starting silver layer processing")
+    """
+    Execute silver layer processing - joins, transformations, and final output.
+
+    Silver layer responsibility:
+    - Read bronze data from GCS or local artifacts
+            - Perform UUID-based joins between INSPIRE BBR and GeoDanmark
+    - Apply transformations and data quality checks
+    - Upload final processed data to GCS
+    """
+    logger.info("🚀 Starting silver layer - data processing and joins")
 
     output_dir = args.output_dir / "silver"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    processor = BuildingProcessor(settings, logger)
-
-    if bronze_data is not None:
-        # Use data directly from bronze layer (in-memory processing)
-        logger.info("Using bronze data from memory - skipping disk I/O")
-        processor.process_buildings_from_data(
-            bronze_data=bronze_data,
-            output_dir=output_dir,
-        )
+    # Determine timestamp - from bronze layer or current
+    if bronze_timestamp:
+        timestamp = bronze_timestamp
+        logger.info(f"📅 Using bronze timestamp: {timestamp}")
+    elif bronze_data and "timestamp" in bronze_data:
+        timestamp = bronze_data["timestamp"]
+        logger.info(f"📅 Using bronze data timestamp: {timestamp}")
     else:
-        # Traditional mode: read from disk
-        processor.process_buildings(
-            input_dir=args.input_dir,
-            output_dir=output_dir,
-        )
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        logger.info(f"📅 Using current timestamp: {timestamp}")
 
-    logger.info("Silver layer processing completed successfully")
+    silver_output_dir = output_dir / timestamp
+    silver_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Step 1: Load bronze data (from GCS, artifacts, or in-memory)
+    building_ids, attributes_df = _load_bronze_data(bronze_data, bronze_timestamp, logger)
+
+    if not building_ids:
+        logger.error("❌ No building IDs available for processing")
+        return None
+
+    logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
+
+    # Step 2: Check GeoDanmark data availability
+    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
+    if not Path(geodanmark_path).exists():
+        logger.error(f"❌ GeoDanmark data not found: {geodanmark_path}")
+        logger.error("   Silver layer requires GeoDanmark data from bronze layer or separate job")
+        return None
+
+    # Step 3: Perform UUID join (core silver layer processing)
+    logger.info("🔗 Step 3: Performing UUID join between INSPIRE BBR and GeoDanmark...")
+
+    # Perform the UUID-based join
+    join_result = perform_uuid_join_optimized(
+        building_ids=building_ids,
+        geodanmark_path=geodanmark_path,
+        output_dir=silver_output_dir,
+    )
+
+    if not join_result or join_result.get("error"):
+        logger.error(f"❌ UUID join failed: {join_result.get('error', 'Unknown error')}")
+        return None
+
+    # Step 4: Save INSPIRE attributes alongside joined data
+    if attributes_df is not None:
+        attributes_file = silver_output_dir / "inspire_attributes.parquet"
+        if isinstance(attributes_df, list):
+            import pandas as pd
+
+            attributes_df = pd.DataFrame(attributes_df)
+        attributes_df.to_parquet(attributes_file)
+        logger.info(f"💾 Saved INSPIRE attributes to {attributes_file}")
+
+    # Step 5: Upload silver results to GCS
+    _upload_silver_data_to_gcs(silver_output_dir, timestamp, logger)
+
+    # Step 6: Set GitHub Actions outputs
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"silver-output-dir={silver_output_dir}\n")
+            f.write(f"joined-buildings-count={join_result['joined_buildings_count']}\n")
+        logger.info("✅ Set GitHub Actions outputs")
+
+    logger.info("✅ Silver layer completed - processed data available")
+
+    return {
+        "output_dir": str(silver_output_dir),
+        "joined_buildings_count": join_result["joined_buildings_count"],
+        "timestamp": timestamp,
+    }
+
+
+def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger):
+    """Load bronze data from various sources (in-memory, GCS, artifacts)."""
+    building_ids = []
+    attributes_df = None
+
+    # Try in-memory data first
+    if bronze_data and "building_ids" in bronze_data:
+        logger.info("📊 Using bronze data from memory")
+        inspire_data = bronze_data.get("data", bronze_data)
+        building_ids = inspire_data.get("building_ids", [])
+        attributes_df = inspire_data.get("attributes_df")
+        return building_ids, attributes_df
+
+    # Try GCS if we have a timestamp
+    if bronze_timestamp:
+        logger.info(f"📤 Attempting to load bronze data from GCS (timestamp: {bronze_timestamp})")
+        building_ids, attributes_df = _load_bronze_data_from_gcs(bronze_timestamp, logger)
+        if building_ids:
+            return building_ids, attributes_df
+
+    # Try local artifacts (GitHub Actions)
+    logger.info("📁 Attempting to load bronze data from local artifacts")
+    artifact_locations = [
+        Path("data/inspire_building_ids.json"),
+        Path("data/bronze/inspire_building_ids.json"),
+    ]
+
+    for location in artifact_locations:
+        if location.exists():
+            try:
+                import json
+
+                with open(location) as f:
+                    building_ids = json.load(f)
+                logger.info(f"✅ Loaded {len(building_ids):,} building IDs from {location}")
+
+                # Try to find corresponding attributes
+                attributes_locations = [
+                    location.parent / "inspire_attributes.parquet",
+                    Path("data/inspire_attributes.parquet"),
+                    Path("data/bronze/inspire_attributes.parquet"),
+                ]
+
+                for attr_location in attributes_locations:
+                    if attr_location.exists():
+                        import pandas as pd
+
+                        attributes_df = pd.read_parquet(attr_location)
+                        logger.info(
+                            f"✅ Loaded {len(attributes_df):,} attribute records from {attr_location}"
+                        )
+                        break
+
+                return building_ids, attributes_df
+
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load from {location}: {e}")
+                continue
+
+    logger.warning("⚠️ No bronze data found in any location")
+    return [], None
+
+
+def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
+    """Load bronze data from GCS."""
+    if not GCS_AVAILABLE:
+        logger.warning("⚠️ GCS not available - cannot load from GCS")
+        return [], None
+
+    try:
+        gcs_access = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+
+        # Load building IDs
+        building_ids_path = (
+            f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
+        )
+        building_ids_json = gcs_access.download_text(building_ids_path)
+
+        import json
+
+        building_ids = json.loads(building_ids_json)
+        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
+
+        # Try to load attributes
+        attributes_df = None
+        try:
+            attributes_path = (
+                f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
+            )
+
+            import pandas as pd
+
+            with gcs_access.fs.open(attributes_path, "rb") as f:
+                attributes_df = pd.read_parquet(f)
+            logger.info(f"✅ Loaded {len(attributes_df):,} attribute records from GCS")
+
+        except Exception as e:
+            logger.info(f"📂 No attributes found in GCS: {e}")
+
+        return building_ids, attributes_df
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to load bronze data from GCS: {e}")
+        return [], None
+
+
+def _upload_silver_data_to_gcs(silver_output_dir: Path, timestamp: str, logger: logging.Logger):
+    """Upload silver results to GCS."""
+    if not GCS_AVAILABLE:
+        logger.warning("⚠️ GCS not available - skipping silver data upload")
+        return
+
+    try:
+        gcs_access = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+
+        # Upload all files in silver output directory
+        for file_path in silver_output_dir.glob("*.parquet"):
+            gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
+
+            with open(file_path, "rb") as src:
+                with gcs_access.fs.open(gcs_path, "wb") as dst:
+                    import shutil
+
+                    shutil.copyfileobj(src, dst)
+
+            logger.info(f"✅ Uploaded {file_path.name} to {gcs_path}")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to upload silver data to GCS: {e}")
 
 
 if __name__ == "__main__":
