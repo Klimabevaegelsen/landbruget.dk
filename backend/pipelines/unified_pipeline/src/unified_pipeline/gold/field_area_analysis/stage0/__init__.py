@@ -10,9 +10,11 @@ PERFORMANCE OPTIMIZATION STRATEGY:
 - Pre-filter BNBO: 3.7K → ~1K (estimated 70% reduction)
 - Pre-filter Wetlands: 1.6M → ~200K (estimated 85% reduction)
 - Pre-filter Water Projects: ~2.4K → ~500 (estimated 80% reduction)
+- Pre-filter Soil Types: 13K → ~8K (estimated 40% reduction)
 
 This reduces subsequent stage complexity from:
 - Stage 1: 600K × 6.5M = 3.9B combinations → 600K × 500K = 300M combinations (13x reduction)
+- Stage 1D: 600K × 13K = 7.8B combinations → 600K × 8K = 4.8B combinations (1.6x reduction)
 - Stage 2: Field × Environmental joins become much more manageable
 - Stage 3: Property-level analysis operates on pre-filtered datasets
 
