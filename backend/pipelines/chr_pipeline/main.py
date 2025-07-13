@@ -15,7 +15,7 @@ from bronze.export import (
     export_context_data,
     get_data_buffer,
     import_context_data,
-    save_data_immediately,
+    save_raw_data,
 )
 from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
 from bronze.load_besaetning import create_soap_client as create_bes_client
@@ -148,7 +148,7 @@ def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List
         return []
 
     # Save the raw response to the export buffer
-    save_data_immediately(data_type="stamdata_species_usage", data=response, identifier="all")
+    save_raw_data(raw_response=response, data_type="stamdata_species_usage", identifier="all")
 
     combinations = []
     for combo in response.Response if isinstance(response.Response, list) else [response.Response]:
@@ -1041,26 +1041,70 @@ def main():
                 buffer_data = get_data_buffer()
                 bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
 
-                if buffer_data:
-                    # Use in-memory data
-                    logging.warning("Using in-memory buffer data for silver processing")
+                # Determine bronze timestamp for streaming mode
+                bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
+
+                # Check if we should use streaming mode (recommended for memory efficiency)
+                use_streaming_mode = (
+                    # Force streaming if explicitly requested
+                    os.getenv("CHR_FORCE_STREAMING", "false").lower() == "true"
+                    or
+                    # Use streaming if we have bronze timestamp and no buffer data (avoids memory issues)
+                    (bronze_timestamp and not buffer_data)
+                    or
+                    # Use streaming in GitHub Actions for memory efficiency
+                    os.getenv("GITHUB_ACTIONS") == "true"
+                )
+
+                if use_streaming_mode and bronze_timestamp:
+                    # Use streaming mode for memory efficiency
+                    logging.warning(
+                        f"🚀 Using STREAMING mode for memory-efficient processing (bronze_timestamp: {bronze_timestamp})"
+                    )
+                    success = run_silver_processing(
+                        silver_dir=silver_dir,
+                        export_timestamp=EXPORT_TIMESTAMP,
+                        bronze_timestamp=bronze_timestamp,
+                        force_streaming=True,
+                    )
+                    if not success:
+                        raise RuntimeError("Silver processing (streaming mode) failed")
+
+                elif buffer_data:
+                    # Use legacy in-memory mode
+                    logging.warning("📝 Using LEGACY mode with in-memory buffer data")
+                    logging.warning("⚠️ Legacy mode may cause memory issues with large datasets")
                     run_silver_processing(
-                        in_memory_data=buffer_data, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
+                        in_memory_data=buffer_data,
+                        silver_dir=silver_dir,
+                        export_timestamp=EXPORT_TIMESTAMP,
+                        bronze_timestamp=bronze_timestamp,
                     )
                 elif bronze_dir_override:
-                    # Use bronze files from override directory
-                    logging.warning(f"Using bronze files from override directory: {bronze_dir_override}")
-                    run_silver_processing(in_memory_data=None, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP)
+                    # Use legacy file-based mode
+                    logging.warning(
+                        f"📁 Using LEGACY mode with bronze files from override directory: {bronze_dir_override}"
+                    )
+                    logging.warning("⚠️ Legacy mode may cause memory issues with large datasets")
+                    run_silver_processing(
+                        in_memory_data=None,
+                        silver_dir=silver_dir,
+                        export_timestamp=EXPORT_TIMESTAMP,
+                        bronze_timestamp=bronze_timestamp,
+                    )
                 else:
                     # Fallback to buffer (might be empty, but let silver processing handle it)
-                    logging.warning("No specific bronze data source found, using buffer")
+                    logging.warning("⚠️ No specific bronze data source found, using buffer fallback")
                     run_silver_processing(
-                        in_memory_data=buffer_data, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
+                        in_memory_data=buffer_data,
+                        silver_dir=silver_dir,
+                        export_timestamp=EXPORT_TIMESTAMP,
+                        bronze_timestamp=bronze_timestamp,
                     )
 
-                logging.warning(f"Silver processing completed. Output in: {silver_dir}")
+                logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
             except Exception as e:
-                logging.error(f"Silver processing failed: {e}", exc_info=True)
+                logging.error(f"❌ Silver processing failed: {e}", exc_info=True)
                 raise  # Re-raise to indicate pipeline failure
 
         # Finalize bronze export (if we have bronze data to export)
@@ -1083,7 +1127,15 @@ def main():
             else:
                 logging.warning("No buffer data found, but finalizing export anyway due to bronze steps run")
 
-            logging.warning("Bronze export finalization completed - data saved immediately during bronze steps.")
+            # FIXED: Actually call finalize_export to save consolidated files instead of thousands of individual ones
+            try:
+                from bronze.export import finalize_export
+
+                finalize_export(clear_buffer=clear_buffer_after_export)
+                logging.warning("✅ Bronze export finalization completed - consolidated files saved to GCS")
+            except Exception as e:
+                logging.error(f"Error finalizing bronze export: {e}", exc_info=True)
+                raise
         else:
             logging.warning("No bronze data to export - skipping bronze export finalization.")
 
