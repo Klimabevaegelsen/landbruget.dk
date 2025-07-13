@@ -158,7 +158,6 @@ def _save_discovered_cvr_numbers(con: ibis.BaseBackend, silver_dir: Path, export
 
 # --- Main Processing Logic ---
 def process_chr_data(
-    bronze_dir: Optional[Path] = None,
     silver_dir: Path = None,
     in_memory_data: Optional[Dict[str, Dict[str, List[Any]]]] = None,
     export_timestamp: Optional[str] = None,
@@ -166,11 +165,9 @@ def process_chr_data(
     """Main function to process CHR data from bronze to silver.
 
     Args:
-        bronze_dir: Path to the bronze data directory (used if in_memory_data is None).
         silver_dir: Path to the silver data output directory.
-        in_memory_data: Optional dictionary containing buffered bronze data.
+        in_memory_data: Dictionary containing buffered bronze data (required).
         export_timestamp: The timestamp string used for the bronze export (YYYYMMDD_HHMMSS).
-                          Required if loading from files as fallback.
     """
     logging.info("--- Starting CHR Silver Processing --- ")
     # Create silver directory if it doesn't exist
@@ -181,18 +178,14 @@ def process_chr_data(
         export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         logging.info(f"Generated export timestamp: {export_timestamp}")
 
-    # Determine data source mode (prefer memory)
+    # Determine data source mode (only memory supported)
     load_from_memory = in_memory_data is not None
-    load_from_files_fallback = bronze_dir is not None and export_timestamp is not None
 
-    if not load_from_memory and not load_from_files_fallback:
-        logging.error(
-            "Cannot process silver data: Either in_memory_data or (bronze_dir and export_timestamp for fallback) must be provided."
-        )
+    if not load_from_memory:
+        logging.error("Cannot process silver data: in_memory_data must be provided. File fallback has been removed.")
         sys.exit(1)
 
-    source_mode_log = "in-memory buffer" if load_from_memory else f"files in {bronze_dir}/{export_timestamp} (fallback)"
-    logging.info(f"Silver processing source mode: {source_mode_log}")
+    logging.info("Silver processing source mode: in-memory buffer")
 
     # --- Define Input File Paths or Data Sources ---
     if in_memory_data:
@@ -321,18 +314,7 @@ def process_chr_data(
     # --- 3. Load Bronze Data into Ibis Tables ---
     logging.info("Loading bronze data into Ibis tables...")
 
-    # Debug: List available bronze files
-    if load_from_files_fallback:
-        if bronze_dir.name == export_timestamp:
-            files_dir = bronze_dir
-        else:
-            files_dir = bronze_dir / export_timestamp
-
-        if files_dir.exists():
-            available_files = list(files_dir.glob("*.json"))
-            logging.info(f"Available bronze files in {files_dir}: {[f.name for f in available_files]}")
-        else:
-            logging.warning(f"Bronze files directory does not exist: {files_dir}")
+    # Fallback has been removed - only in-memory data is supported
 
     raw_tables = {}
 
@@ -470,62 +452,7 @@ def process_chr_data(
                     f"No data (or not a list) found in memory buffer for {source_info['mem_key']}. Will attempt file fallback if configured."
                 )
 
-        # --- Attempt 2: Load from File using Ibis (Fallback) --- #
-        if not successfully_loaded and load_from_files_fallback:
-            logging.info(f"Attempting to load '{table_name}' from file (fallback mode)...")
-            # Check if bronze_dir already contains the timestamp directory
-            if bronze_dir.name == export_timestamp:
-                # bronze_dir already points to the timestamped directory
-                timestamped_bronze_dir = bronze_dir
-            else:
-                # bronze_dir is the base directory, add timestamp
-                timestamped_bronze_dir = bronze_dir / export_timestamp
-
-            path = timestamped_bronze_dir / source_info["file_key"]
-
-            if path.exists():
-                input_source = str(path)
-                source_desc = f"file '{path.relative_to(bronze_dir.parent)}' (fallback)"
-
-                logging.info(f"Loading {source_desc} into table '{table_name}' using ibis.read_json...")
-                try:
-                    con.con.sql(f"DROP TABLE IF EXISTS {table_name};")  # Ensure clean slate
-
-                    # Try regular JSON array format first (CHR pipeline exports as JSON arrays)
-                    try:
-                        raw_tables[table_name] = con.read_json(input_source, format="array", auto_detect=True)
-                        successfully_loaded = True
-                        logging.info(
-                            f"Successfully loaded {source_desc} into table '{table_name}' (using JSON array format)."
-                        )
-                    except Exception as e_array:
-                        logging.info(f"JSON array format failed for {table_name}, trying newline_delimited: {e_array}")
-                        # Fallback to newline_delimited format
-                        raw_tables[table_name] = con.read_json(
-                            input_source, format="newline_delimited", auto_detect=True
-                        )
-                        successfully_loaded = True
-                        logging.info(
-                            f"Successfully loaded {source_desc} into table '{table_name}' (using newline_delimited format)."
-                        )
-
-                except Exception as e_file:
-                    logging.error(
-                        f"Fallback file loading failed for {source_desc} into table '{table_name}': {e_file}",
-                        exc_info=True,
-                    )
-                    try:
-                        with open(input_source, "r", encoding="utf-8") as f_err:
-                            logging.error(f"File content sample (first 1000 chars): {f_err.read(1000)}...")
-                    except Exception as read_err:
-                        logging.error(f"Could not read file {input_source} to log sample: {read_err}")
-                    # Ensure table doesn't exist if load failed
-                    try:
-                        con.con.sql(f"DROP TABLE IF EXISTS {table_name};")
-                    except Exception:
-                        pass
-            else:
-                logging.warning(f"Fallback file not found: {path}. Cannot load table '{table_name}'.")
+        # Fallback has been removed - only in-memory data is supported
 
         if not successfully_loaded:
             # Check if this is an optional table that can be skipped
