@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 import tempfile
 from datetime import date, datetime
@@ -178,14 +179,29 @@ def process_chr_data(
         export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         logging.info(f"Generated export timestamp: {export_timestamp}")
 
-    # Determine data source mode (only memory supported)
-    load_from_memory = in_memory_data is not None
+    # Determine data source mode - support both memory and file loading
+    load_from_memory = in_memory_data is not None and bool(in_memory_data)
 
+    # Try to determine bronze directory if not using memory
+    bronze_dir = None
     if not load_from_memory:
-        logging.error("Cannot process silver data: in_memory_data must be provided. File fallback has been removed.")
-        sys.exit(1)
+        # Try to get bronze directory from environment or config
+        bronze_dir_override = os.getenv("BRONZE_DATE_FOLDER_OVERRIDE")
+        if bronze_dir_override:
+            from . import config
 
-    logging.info("Silver processing source mode: in-memory buffer")
+            bronze_dir = config.BRONZE_BASE_DIR / bronze_dir_override
+            # Check GitHub Actions fallback path
+            if not bronze_dir.exists() and os.getenv("GITHUB_ACTIONS") == "true":
+                bronze_dir = Path("/tmp/data/bronze/chr") / bronze_dir_override
+
+        if bronze_dir and bronze_dir.exists():
+            logging.info(f"Silver processing source mode: bronze files from {bronze_dir}")
+        else:
+            logging.error("Cannot process silver data: no in_memory_data provided and no bronze files found.")
+            sys.exit(1)
+    else:
+        logging.info("Silver processing source mode: in-memory buffer")
 
     # --- Define Input File Paths or Data Sources ---
     if in_memory_data:
