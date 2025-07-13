@@ -75,12 +75,21 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         # Decompose with ST_Dump for optimal downstream processing
         self.log.info("Decomposing filtered water projects with ST_Dump...")
         self.conn.execute("""
+            CREATE OR REPLACE TABLE water_projects_decomposed AS
+            SELECT 
+                project_id,
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM water_projects_intersecting
+        """)
+
+        # Add areas and final processing
+        self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects_filtered AS
             SELECT 
                 project_id,
-                UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as project_area_m2
-            FROM water_projects_intersecting
+                geometry,
+                ST_Area_Spheroid(geometry) as project_area_m2
+            FROM water_projects_decomposed
         """)
 
         total_filtered = self.conn.execute(
