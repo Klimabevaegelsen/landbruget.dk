@@ -5,7 +5,6 @@ import argparse
 import concurrent.futures
 import logging
 import os
-import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -1045,11 +1044,9 @@ def main():
                         in_memory_data=buffer_data, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP
                     )
                 elif bronze_dir_override:
-                    # Bronze files override no longer supported - fallback removed
-                    logging.error(
-                        "Bronze files override no longer supported. Silver processing requires in-memory buffer data."
-                    )
-                    sys.exit(1)
+                    # Use bronze files from override directory
+                    logging.warning(f"Using bronze files from override directory: {bronze_dir_override}")
+                    run_silver_processing(in_memory_data=None, silver_dir=silver_dir, export_timestamp=EXPORT_TIMESTAMP)
                 else:
                     # Fallback to buffer (might be empty, but let silver processing handle it)
                     logging.warning("No specific bronze data source found, using buffer")
