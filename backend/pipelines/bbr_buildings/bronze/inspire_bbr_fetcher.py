@@ -642,29 +642,79 @@ class InspireBBRFetcher:
         sample_size: int | None,
         pipeline_start_time: datetime,
     ) -> None:
-        """
-        Save metadata about the fetched data.
-
-        Args:
-            output_dir: Directory to save metadata
-            file_info: File information from FTP page
-            download_url: URL used for download
-            sample_size: Sample size if used for testing
-        """
+        """Save metadata about the INSPIRE BBR fetch."""
         metadata = {
-            "timestamp": pipeline_start_time.isoformat(),
-            "source_url": self.settings.sdfe_ftp_base_url,
+            "timestamp": pipeline_start_time.isoformat()
+            if pipeline_start_time
+            else datetime.now().isoformat(),
             "download_url": download_url,
             "file_info": file_info,
             "sample_size": sample_size,
-            "pipeline_version": "1.0.0",
+            "processing_completed": True,
         }
 
         metadata_path = output_dir / "metadata.json"
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
 
-        self.logger.info(f"Saved metadata to {metadata_path}")
+        self.logger.info(f"Metadata saved to {metadata_path}")
+
+    def _save_for_github_actions(self, processed_data: dict) -> None:
+        """
+        Save processed data to a data directory for GitHub Actions compatibility.
+
+        This method creates a standardized data directory and saves the building
+        attributes data in a format that can be easily accessed by GitHub Actions
+        workflows and artifacts.
+
+        Args:
+            processed_data: Dictionary containing processed building data with 'building_ids' key
+        """
+        try:
+            # Create data directory for GitHub Actions compatibility
+            data_root = Path("data")
+            data_root.mkdir(exist_ok=True)
+
+            # Extract building attributes from processed data
+            building_ids = processed_data.get("building_ids", [])
+            if not building_ids:
+                self.logger.warning(
+                    "No building IDs found in processed data for GitHub Actions save"
+                )
+                return
+
+            self.logger.info(
+                f"💾 Saving {len(building_ids):,} building attributes for GitHub Actions compatibility..."
+            )
+
+            # Save building attributes as JSON for GitHub Actions
+            attributes_file = data_root / "inspire_attributes.json"
+            with open(attributes_file, "w", encoding="utf-8") as f:
+                json.dump(building_ids, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(
+                f"✅ Saved building attributes to {attributes_file} for GitHub Actions"
+            )
+
+            # Also save a summary metadata file
+            summary_metadata = {
+                "total_buildings": len(building_ids),
+                "timestamp": datetime.now().isoformat(),
+                "source": "INSPIRE BBR",
+                "format": "json",
+                "description": "Building attributes data for GitHub Actions compatibility",
+            }
+
+            metadata_file = data_root / "inspire_metadata.json"
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(summary_metadata, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(f"✅ Saved metadata to {metadata_file} for GitHub Actions")
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to save data for GitHub Actions: {e}")
+            # Don't raise the exception as this is a non-critical operation
+            # The main pipeline should continue even if GitHub Actions save fails
 
     def _parse_ftp_page(self) -> tuple[str | None, dict]:
         """
