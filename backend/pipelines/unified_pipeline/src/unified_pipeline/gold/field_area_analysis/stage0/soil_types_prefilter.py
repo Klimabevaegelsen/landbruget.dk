@@ -142,4 +142,4 @@ class SoilTypesPreFilter(PreFilteringStageBase):
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save pre-filtered soil types polygons to GCS."""
-        self._save_prefiltered_dataset("soil_types_filtered", "soil_types_prefiltered")
+        self._save_prefiltered_dataset("soil_types_filtered", "stage0_soil_types_filtered")
