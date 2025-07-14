@@ -52,7 +52,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # Load Stage 0 pre-filtered soil types (~8K polygons instead of 13K)
         self.log.info("Loading Stage 0 pre-filtered soil types (major performance boost)...")
-        self._load_stage0_dataset("soil_types_prefiltered", "soil_types")
+        stage0_soil_types_dataset = CONFIG.stage_outputs["soil_types_prefiltered"]
+        stage0_soil_types_path = self._get_latest_gold_path(stage0_soil_types_dataset)
+        self.gcs_access.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types")
 
         # Log dataset sizes for performance tracking
         fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
