@@ -1,5 +1,10 @@
 name: CHR Pipeline
 
+# Workflow-level concurrency to prevent multiple CHR pipeline runs from interfering
+concurrency:
+  group: chr-pipeline
+  cancel-in-progress: true
+
 on:
   schedule:
     - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
@@ -65,6 +70,10 @@ on:
         description: 'Limit number of herds processed per species'
         type: string
         default: ''
+      max_concurrent_jobs:
+        description: 'Maximum number of concurrent matrix jobs'
+        type: string
+        default: '6'
 
 # Environment variables are set in individual jobs as needed
 # Bronze timestamp is generated in the bronze-foundation job and shared via artifacts
@@ -266,6 +275,7 @@ jobs:
     strategy:
       matrix:
         data_type: [diko, spf_su]
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v4
@@ -373,6 +383,8 @@ jobs:
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
+          SPF_SU_MAX_WORKERS: '2'
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -424,6 +436,7 @@ jobs:
       matrix:
         month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
       fail-fast: false  # Continue processing other months even if one fails
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '6') }}  # Limit concurrent monthly jobs to prevent overwhelming the server
 
     steps:
       - uses: actions/checkout@v4
@@ -497,6 +510,7 @@ jobs:
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
           CONTEXT_IMPORT_PATH: /tmp/chr_context.json
         run: |
           MONTH="${{ matrix.month }}"
@@ -797,6 +811,7 @@ jobs:
     strategy:
       matrix:
         data_type: [ejendom, vetstat]
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v4
@@ -907,6 +922,8 @@ jobs:
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
+          SPF_SU_MAX_WORKERS: '2'
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
