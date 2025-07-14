@@ -49,26 +49,6 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"✅ Loaded {count:,} rows into table {table_name}")
 
-    def _load_stage0_dataset(self, dataset_name: str, table_name: str):
-        """
-        Load a Stage 0 pre-filtered dataset from the gold layer.
-
-        Args:
-            dataset_name: Name of the Stage 0 dataset (e.g., 'soil_types_for_fields')
-            table_name: Name to give the table in DuckDB
-        """
-        self.log.info(f"Loading Stage 0 pre-filtered dataset: {dataset_name}...")
-
-        # Get the latest gold path for this dataset
-        stage0_path = self._get_latest_gold_path(dataset_name)
-
-        # Load using gcs_access query_parquet_direct
-        self.gcs_access.query_parquet_direct(stage0_path, "SELECT *", table_name)
-
-        # Log table statistics
-        count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        self.log.info(f"✅ Loaded {count:,} rows from Stage 0 dataset into table {table_name}")
-
     def _save_stage_output(self, table_name: str, output_key: str):
         """
         Save stage output to GCS using optimized export.
