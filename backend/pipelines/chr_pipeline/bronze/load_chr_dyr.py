@@ -1184,52 +1184,78 @@ def _append_to_streaming_json(data_type: str, data: Any) -> bool:
 def _finalize_streaming_files() -> bool:
     """Convert streaming temp files to final consolidated JSON files."""
     try:
+        if not _streaming_files:
+            logger.warning("No streaming files to finalize")
+            return True
+
+        logger.info(f"Finalizing {len(_streaming_files)} streaming files...")
+
         for stream_key, stream_info in _streaming_files.items():
             data_type = stream_key.split("_")[0]  # Extract data_type from stream_key
             temp_file = stream_info["temp_file"]
             temp_path = stream_info["temp_path"]
             count = stream_info["count"]
 
+            logger.info(f"Processing stream {stream_key}: {count} records from {temp_path}")
+
             # Close the temp file
             if not temp_file.closed:
                 temp_file.close()
+                logger.info(f"Closed temp file for {data_type}")
 
             # Read all records from temp file and create consolidated JSON
             consolidated_data = []
             try:
                 # Check if temp file exists before trying to read it
                 if not os.path.exists(temp_path):
-                    logger.warning(f"Temp file {temp_path} does not exist - skipping {data_type}")
+                    logger.error(f"❌ Temp file {temp_path} does not exist - cannot finalize {data_type}")
+                    logger.error(f"This means data for {data_type} will be lost!")
                     continue
 
+                logger.info(f"Reading {count} records from {temp_path}")
                 with open(temp_path, "r", encoding="utf-8") as f:
+                    line_count = 0
                     for line in f:
                         if line.strip():
-                            consolidated_data.append(json.loads(line.strip()))
+                            try:
+                                consolidated_data.append(json.loads(line.strip()))
+                                line_count += 1
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"Skipping invalid JSON line in {temp_path}: {e}")
+
+                logger.info(f"Successfully read {line_count} valid records from {temp_path}")
 
                 # Save consolidated data immediately to GCS
                 if consolidated_data:
-                    save_data_immediately(
+                    logger.info(f"Saving {len(consolidated_data)} records for {data_type}")
+                    success = save_data_immediately(
                         data_type=data_type,
                         data=consolidated_data,
                         identifier="consolidated",
                     )
-                    logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
+                    if success:
+                        logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
+                    else:
+                        logger.error(f"❌ Failed to save {data_type} to GCS")
+                        return False
 
                     # CRITICAL: Clear consolidated_data immediately after saving to prevent memory accumulation
                     consolidated_data.clear()
                     del consolidated_data
+                else:
+                    logger.warning(f"No valid data found in {temp_path} for {data_type}")
 
             except Exception as e:
-                logger.error(f"Error consolidating {data_type}: {e}")
-            finally:
-                # CRITICAL: Always clean up temp file, even if consolidation fails
-                try:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-                        logger.debug(f"Cleaned up temp file: {temp_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
+                logger.error(f"❌ Error consolidating {data_type}: {e}")
+                return False
+
+            # Clean up temp file ONLY after successful processing
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    logger.debug(f"Cleaned up temp file: {temp_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
 
         # Clear the global registry
         _streaming_files.clear()
@@ -1243,7 +1269,7 @@ def _finalize_streaming_files() -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"Error finalizing streaming files: {e}")
+        logger.error(f"❌ Error finalizing streaming files: {e}")
         return False
 
 
