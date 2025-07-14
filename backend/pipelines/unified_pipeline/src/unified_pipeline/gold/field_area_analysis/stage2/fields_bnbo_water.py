@@ -122,10 +122,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS INTEGER) as year,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
-                CAST(NULL AS DOUBLE) as total_bnbo_area_m2,
-                CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_m2,
-                CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_pct,
-                CAST(NULL AS DOUBLE) as bnbo_not_covered_by_water_projects_pct,
+                CAST(NULL AS DOUBLE) as field_bnbo_total_m2,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_m2,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_pct,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct
             WHERE FALSE
         """)
@@ -283,10 +283,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.field_area_m2,
                     
                     -- Total BNBO area in field
-                    COALESCE(SUM(f.field_bnbo_area_m2), 0) as total_bnbo_area_m2,
+                    COALESCE(SUM(f.field_bnbo_area_m2), 0) as field_bnbo_total_m2,
                     
                     -- BNBO covered by water projects
-                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as bnbo_covered_by_water_projects_m2
+                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as field_bnbo_water_covered_m2
                     
                 FROM batch_field_bnbo_total f
                 LEFT JOIN batch_field_bnbo_covered c ON f.field_id = c.field_id 
@@ -304,19 +304,19 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     *,
                     -- Coverage percentages
                     CASE 
-                        WHEN total_bnbo_area_m2 > 0 
-                        THEN (bnbo_covered_by_water_projects_m2 / total_bnbo_area_m2) * 100 
+                        WHEN field_bnbo_total_m2 > 0 
+                        THEN (field_bnbo_water_covered_m2 / field_bnbo_total_m2) * 100 
                         ELSE 0 
-                    END as bnbo_covered_by_water_projects_pct,
+                    END as field_bnbo_water_covered_pct,
                     
                     CASE 
-                        WHEN total_bnbo_area_m2 > 0 
-                        THEN ((total_bnbo_area_m2 - bnbo_covered_by_water_projects_m2) / total_bnbo_area_m2) * 100 
+                        WHEN field_bnbo_total_m2 > 0 
+                        THEN ((field_bnbo_total_m2 - field_bnbo_water_covered_m2) / field_bnbo_total_m2) * 100 
                         ELSE 0 
-                    END as bnbo_not_covered_by_water_projects_pct,
+                    END as field_bnbo_water_uncovered_pct,
                     
                     -- Field coverage percentage
-                    (total_bnbo_area_m2 / field_area_m2) * 100 as field_bnbo_coverage_pct
+                    (field_bnbo_total_m2 / field_area_m2) * 100 as field_bnbo_coverage_pct
                     
                 FROM batch_field_aggregates
             """)

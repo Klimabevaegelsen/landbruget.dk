@@ -113,10 +113,10 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 
                 -- Field-level BNBO data (from Stage 2A)
-                CAST(NULL AS DOUBLE) as total_bnbo_area_m2,
-                CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_m2,
-                CAST(NULL AS DOUBLE) as bnbo_covered_by_water_projects_pct,
-                CAST(NULL AS DOUBLE) as bnbo_not_covered_by_water_projects_pct,
+                CAST(NULL AS DOUBLE) as field_bnbo_total_m2,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_m2,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_pct,
+                CAST(NULL AS DOUBLE) as field_bnbo_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct,
                 
                 -- Property ownership summary
@@ -126,11 +126,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 
                 -- Property-level BNBO breakdown (NESTED STRUCTURE)
                 CAST(NULL AS VARCHAR) as property_bnbo_breakdown,  -- JSON: {bfe_number: {bnbo_area_m2, covered_m2, uncovered_m2}}
-                CAST(NULL AS DOUBLE) as total_property_bnbo_area_m2,
-                CAST(NULL AS DOUBLE) as total_property_bnbo_covered_m2,
-                CAST(NULL AS DOUBLE) as total_property_bnbo_uncovered_m2,
-                CAST(NULL AS INTEGER) as properties_with_bnbo_count,
-                CAST(NULL AS VARCHAR) as bnbo_property_owners
+                CAST(NULL AS DOUBLE) as property_bnbo_total_m2,
+                CAST(NULL AS DOUBLE) as property_bnbo_water_covered_m2,
+                CAST(NULL AS DOUBLE) as property_bnbo_water_uncovered_m2,
+                CAST(NULL AS INTEGER) as property_bnbo_count,
+                CAST(NULL AS VARCHAR) as property_bnbo_owners
             WHERE FALSE
         """)
 
@@ -144,7 +144,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_bnbo_water
-                WHERE total_bnbo_area_m2 > 0
+                WHERE field_bnbo_total_m2 > 0
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
@@ -243,8 +243,8 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         pb.status_category,
                         pb.property_bnbo_area_m2,
                         -- Apply field-level water coverage ratio from Stage 2A
-                        pb.property_bnbo_area_m2 * (fb.bnbo_covered_by_water_projects_pct / 100.0) as property_bnbo_covered_m2,
-                        pb.property_bnbo_area_m2 * (1 - (fb.bnbo_covered_by_water_projects_pct / 100.0)) as property_bnbo_uncovered_m2
+                        pb.property_bnbo_area_m2 * (fb.field_bnbo_water_covered_pct / 100.0) as property_bnbo_covered_m2,
+                        pb.property_bnbo_area_m2 * (1 - (fb.field_bnbo_water_covered_pct / 100.0)) as property_bnbo_uncovered_m2
                     FROM batch_property_bnbo_spatial pb
                     JOIN fields_bnbo_water fb ON pb.field_id = fb.field_id 
                         AND pb.block_id = fb.block_id 
@@ -278,11 +278,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         ) || '}' as property_bnbo_breakdown,
                         
                         -- Summary metrics
-                        SUM(total_bnbo_area) as total_property_bnbo_area_m2,
-                        SUM(total_covered) as total_property_bnbo_covered_m2,
-                        SUM(total_uncovered) as total_property_bnbo_uncovered_m2,
-                        COUNT(DISTINCT bfe_number) as properties_with_bnbo_count,
-                        STRING_AGG(DISTINCT bfe_number, ', ') as bnbo_property_owners
+                        SUM(total_bnbo_area) as property_bnbo_total_m2,
+                        SUM(total_covered) as property_bnbo_water_covered_m2,
+                        SUM(total_uncovered) as property_bnbo_water_uncovered_m2,
+                        COUNT(DISTINCT bfe_number) as property_bnbo_count,
+                        STRING_AGG(DISTINCT bfe_number, ', ') as property_bnbo_owners
                     FROM (
                         SELECT 
                             field_id, block_id, cvr_number, year, bfe_number,
@@ -306,11 +306,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     SELECT 
                         field_id, block_id, cvr_number, year,
                         '{}' as property_bnbo_breakdown,
-                        0 as total_property_bnbo_area_m2,
-                        0 as total_property_bnbo_covered_m2,
-                        0 as total_property_bnbo_uncovered_m2,
-                        0 as properties_with_bnbo_count,
-                        NULL as bnbo_property_owners
+                        0 as property_bnbo_total_m2,
+                        0 as property_bnbo_water_covered_m2,
+                        0 as property_bnbo_water_uncovered_m2,
+                        0 as property_bnbo_count,
+                        NULL as property_bnbo_owners
                     FROM fields_batch
                     WHERE FALSE
                 """)
@@ -328,10 +328,10 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     b.field_area_m2,
                     
                     -- Field-level BNBO data (from Stage 2A)
-                    b.total_bnbo_area_m2,
-                    b.bnbo_covered_by_water_projects_m2,
-                    b.bnbo_covered_by_water_projects_pct,
-                    b.bnbo_not_covered_by_water_projects_pct,
+                    b.field_bnbo_total_m2,
+                    b.field_bnbo_water_covered_m2,
+                    b.field_bnbo_water_covered_pct,
+                    b.field_bnbo_water_uncovered_pct,
                     b.field_bnbo_coverage_pct,
                     
                     -- Property ownership summary
@@ -341,11 +341,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     
                     -- Property-level BNBO breakdown (NESTED STRUCTURE)
                     COALESCE(pb.property_bnbo_breakdown, '{}') as property_bnbo_breakdown,
-                    COALESCE(pb.total_property_bnbo_area_m2, 0) as total_property_bnbo_area_m2,
-                    COALESCE(pb.total_property_bnbo_covered_m2, 0) as total_property_bnbo_covered_m2,
-                    COALESCE(pb.total_property_bnbo_uncovered_m2, 0) as total_property_bnbo_uncovered_m2,
-                    COALESCE(pb.properties_with_bnbo_count, 0) as properties_with_bnbo_count,
-                    COALESCE(pb.bnbo_property_owners, NULL) as bnbo_property_owners
+                    COALESCE(pb.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
+                    COALESCE(pb.property_bnbo_water_covered_m2, 0) as property_bnbo_water_covered_m2,
+                    COALESCE(pb.property_bnbo_water_uncovered_m2, 0) as property_bnbo_water_uncovered_m2,
+                    COALESCE(pb.property_bnbo_count, 0) as property_bnbo_count,
+                    COALESCE(pb.property_bnbo_owners, NULL) as property_bnbo_owners
                     
                 FROM fields_batch b
                 LEFT JOIN (

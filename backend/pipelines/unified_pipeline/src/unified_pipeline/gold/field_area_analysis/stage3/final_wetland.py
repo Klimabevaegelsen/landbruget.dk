@@ -113,10 +113,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 
                 -- Field-level wetland data (from Stage 2B)
-                CAST(NULL AS DOUBLE) as total_wetland_area_m2,
-                CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_m2,
-                CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
-                CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
+                CAST(NULL AS DOUBLE) as field_wetland_total_m2,
+                CAST(NULL AS DOUBLE) as field_wetland_water_covered_m2,
+                CAST(NULL AS DOUBLE) as field_wetland_water_covered_pct,
+                CAST(NULL AS DOUBLE) as field_wetland_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct,
                 
                 -- Property ownership summary
@@ -126,11 +126,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 
                 -- Property-level wetland breakdown (NESTED STRUCTURE)
                 CAST(NULL AS VARCHAR) as property_wetland_breakdown,  -- JSON: {bfe_number: {wetland_area_m2, covered_m2, uncovered_m2}}
-                CAST(NULL AS DOUBLE) as total_property_wetland_area_m2,
-                CAST(NULL AS DOUBLE) as total_property_wetland_covered_m2,
-                CAST(NULL AS DOUBLE) as total_property_wetland_uncovered_m2,
-                CAST(NULL AS INTEGER) as properties_with_wetland_count,
-                CAST(NULL AS VARCHAR) as wetland_property_owners
+                CAST(NULL AS DOUBLE) as property_wetland_total_m2,
+                CAST(NULL AS DOUBLE) as property_wetland_water_covered_m2,
+                CAST(NULL AS DOUBLE) as property_wetland_water_uncovered_m2,
+                CAST(NULL AS INTEGER) as property_wetland_count,
+                CAST(NULL AS VARCHAR) as property_wetland_owners
             WHERE FALSE
         """)
 
@@ -144,7 +144,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_wetland_water
-                WHERE total_wetland_area_m2 > 0
+                WHERE field_wetland_total_m2 > 0
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
@@ -245,8 +245,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.toerv_pct,
                         pw.property_wetland_area_m2,
                         -- Apply field-level water coverage ratio from Stage 2B
-                        pw.property_wetland_area_m2 * (fw.wetland_covered_by_water_projects_pct / 100.0) as property_wetland_covered_m2,
-                        pw.property_wetland_area_m2 * (1 - (fw.wetland_covered_by_water_projects_pct / 100.0)) as property_wetland_uncovered_m2
+                        pw.property_wetland_area_m2 * (fw.field_wetland_water_covered_pct / 100.0) as property_wetland_covered_m2,
+                        pw.property_wetland_area_m2 * (1 - (fw.field_wetland_water_covered_pct / 100.0)) as property_wetland_uncovered_m2
                     FROM batch_property_wetland_spatial pw
                     JOIN fields_wetland_water fw ON pw.field_id = fw.field_id 
                         AND pw.block_id = fw.block_id 
@@ -280,11 +280,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         ) || '}' as property_wetland_breakdown,
                         
                         -- Summary metrics
-                        SUM(total_wetland_area) as total_property_wetland_area_m2,
-                        SUM(total_covered) as total_property_wetland_covered_m2,
-                        SUM(total_uncovered) as total_property_wetland_uncovered_m2,
-                        COUNT(DISTINCT bfe_number) as properties_with_wetland_count,
-                        STRING_AGG(DISTINCT bfe_number, ', ') as wetland_property_owners
+                        SUM(total_wetland_area) as property_wetland_total_m2,
+                        SUM(total_covered) as property_wetland_water_covered_m2,
+                        SUM(total_uncovered) as property_wetland_water_uncovered_m2,
+                        COUNT(DISTINCT bfe_number) as property_wetland_count,
+                        STRING_AGG(DISTINCT bfe_number, ', ') as property_wetland_owners
                     FROM (
                         SELECT 
                             field_id, block_id, cvr_number, year, bfe_number,
@@ -308,11 +308,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     SELECT 
                         field_id, block_id, cvr_number, year,
                         '{}' as property_wetland_breakdown,
-                        0 as total_property_wetland_area_m2,
-                        0 as total_property_wetland_covered_m2,
-                        0 as total_property_wetland_uncovered_m2,
-                        0 as properties_with_wetland_count,
-                        NULL as wetland_property_owners
+                        0 as property_wetland_total_m2,
+                        0 as property_wetland_water_covered_m2,
+                        0 as property_wetland_water_uncovered_m2,
+                        0 as property_wetland_count,
+                        NULL as property_wetland_owners
                     FROM fields_batch
                     WHERE FALSE
                 """)
@@ -330,10 +330,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     b.field_area_m2,
                     
                     -- Field-level wetland data (from Stage 2B)
-                    b.total_wetland_area_m2,
-                    b.wetland_covered_by_water_projects_m2,
-                    b.wetland_covered_by_water_projects_pct,
-                    b.wetland_not_covered_by_water_projects_pct,
+                    b.field_wetland_total_m2,
+                    b.field_wetland_water_covered_m2,
+                    b.field_wetland_water_covered_pct,
+                    b.field_wetland_water_uncovered_pct,
                     b.field_wetland_coverage_pct,
                     
                     -- Property ownership summary
@@ -343,11 +343,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     
                     -- Property-level wetland breakdown (NESTED STRUCTURE)
                     COALESCE(pb.property_wetland_breakdown, '{}') as property_wetland_breakdown,
-                    COALESCE(pb.total_property_wetland_area_m2, 0) as total_property_wetland_area_m2,
-                    COALESCE(pb.total_property_wetland_covered_m2, 0) as total_property_wetland_covered_m2,
-                    COALESCE(pb.total_property_wetland_uncovered_m2, 0) as total_property_wetland_uncovered_m2,
-                    COALESCE(pb.properties_with_wetland_count, 0) as properties_with_wetland_count,
-                    COALESCE(pb.wetland_property_owners, NULL) as wetland_property_owners
+                    COALESCE(pb.property_wetland_total_m2, 0) as property_wetland_total_m2,
+                    COALESCE(pb.property_wetland_water_covered_m2, 0) as property_wetland_water_covered_m2,
+                    COALESCE(pb.property_wetland_water_uncovered_m2, 0) as property_wetland_water_uncovered_m2,
+                    COALESCE(pb.property_wetland_count, 0) as property_wetland_count,
+                    COALESCE(pb.property_wetland_owners, NULL) as property_wetland_owners
                     
                 FROM fields_batch b
                 LEFT JOIN (

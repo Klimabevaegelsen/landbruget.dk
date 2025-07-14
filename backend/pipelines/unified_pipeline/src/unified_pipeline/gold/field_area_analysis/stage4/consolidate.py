@@ -179,51 +179,51 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
             
             -- BNBO analysis data (from Stage 3A - may be NULL if no BNBO)
-            COALESCE(b.total_bnbo_area_m2, 0) as total_bnbo_area_m2,
-            COALESCE(b.bnbo_covered_by_water_projects_m2, 0) as bnbo_covered_by_water_projects_m2,
-            COALESCE(b.bnbo_covered_by_water_projects_pct, 0) as bnbo_covered_by_water_projects_pct,
-            COALESCE(b.bnbo_not_covered_by_water_projects_pct, 0) as bnbo_not_covered_by_water_projects_pct,
+            COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
+            COALESCE(b.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
+            COALESCE(b.field_bnbo_water_covered_pct, 0) as field_bnbo_water_covered_pct,
+            COALESCE(b.field_bnbo_water_uncovered_pct, 0) as field_bnbo_water_uncovered_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
             
             -- Wetland analysis data (from Stage 3B - may be NULL if no wetlands)
-            COALESCE(w.total_wetland_area_m2, 0) as total_wetland_area_m2,
-            COALESCE(w.wetland_covered_by_water_projects_m2, 0) as wetland_covered_by_water_projects_m2,
-            COALESCE(w.wetland_covered_by_water_projects_pct, 0) as wetland_covered_by_water_projects_pct,
-            COALESCE(w.wetland_not_covered_by_water_projects_pct, 0) as wetland_not_covered_by_water_projects_pct,
+            COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
+            COALESCE(w.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
+            COALESCE(w.field_wetland_water_covered_pct, 0) as field_wetland_water_covered_pct,
+            COALESCE(w.field_wetland_water_uncovered_pct, 0) as field_wetland_water_uncovered_pct,
             COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
             
             -- Property-environmental spatial relationships (using actual columns from stage 3)
-            COALESCE(b.total_property_bnbo_area_m2, 0) as property_bnbo_intersection_area_m2,
-            COALESCE(b.properties_with_bnbo_count, 0) as properties_with_bnbo_count,
-            COALESCE(b.bnbo_property_owners, NULL) as bnbo_property_owners,
-            COALESCE(b.property_bnbo_breakdown, '{}') as bnbo_property_breakdown,
-            COALESCE(b.total_property_bnbo_covered_m2, 0) as bnbo_covered_by_properties_m2,
-            COALESCE(b.total_property_bnbo_uncovered_m2, 0) as bnbo_not_covered_by_properties_m2,
+            COALESCE(b.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
+            COALESCE(b.property_bnbo_count, 0) as property_bnbo_count,
+            COALESCE(b.property_bnbo_owners, NULL) as property_bnbo_owners,
+            COALESCE(b.property_bnbo_breakdown, '{}') as property_bnbo_breakdown,
+            COALESCE(b.property_bnbo_water_covered_m2, 0) as property_bnbo_water_covered_m2,
+            COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_bnbo_water_uncovered_m2,
             
-            COALESCE(w.total_property_wetland_area_m2, 0) as property_wetland_intersection_area_m2,
-            COALESCE(w.properties_with_wetland_count, 0) as properties_with_wetland_count,
-            COALESCE(w.wetland_property_owners, NULL) as wetland_property_owners,
-            COALESCE(w.property_wetland_breakdown, '{}') as wetland_property_breakdown,
-            COALESCE(w.total_property_wetland_covered_m2, 0) as wetland_covered_by_properties_m2,
-            COALESCE(w.total_property_wetland_uncovered_m2, 0) as wetland_not_covered_by_properties_m2,
+            COALESCE(w.property_wetland_total_m2, 0) as property_wetland_total_m2,
+            COALESCE(w.property_wetland_count, 0) as property_wetland_count,
+            COALESCE(w.property_wetland_owners, NULL) as property_wetland_owners,
+            COALESCE(w.property_wetland_breakdown, '{}') as property_wetland_breakdown,
+            COALESCE(w.property_wetland_water_covered_m2, 0) as property_wetland_water_covered_m2,
+            COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_wetland_water_uncovered_m2,
             
             -- Combined environmental-property metrics
-            COALESCE(b.properties_with_bnbo_count, 0) + COALESCE(w.properties_with_wetland_count, 0) as total_properties_with_environmental_features,
+            COALESCE(b.property_bnbo_count, 0) + COALESCE(w.property_wetland_count, 0) as total_properties_with_environmental_features,
             CASE 
                 WHEN f.property_count > 0 
-                THEN ((COALESCE(b.total_property_bnbo_area_m2, 0) + COALESCE(w.total_property_wetland_area_m2, 0)) / 
+                THEN ((COALESCE(b.property_bnbo_total_m2, 0) + COALESCE(w.property_wetland_total_m2, 0)) / 
                       f.total_property_intersection_area_m2) * 100
                 ELSE 0 
             END as combined_property_environmental_coverage_pct,
             
             -- Environmental summary flags
             CASE 
-                WHEN COALESCE(b.total_bnbo_area_m2, 0) > 0 OR COALESCE(w.total_wetland_area_m2, 0) > 0 
+                WHEN COALESCE(b.field_bnbo_total_m2, 0) > 0 OR COALESCE(w.field_wetland_total_m2, 0) > 0 
                 THEN TRUE ELSE FALSE 
             END as has_environmental_features,
             
             CASE 
-                WHEN COALESCE(b.properties_with_bnbo_count, 0) > 0 OR COALESCE(w.properties_with_wetland_count, 0) > 0 
+                WHEN COALESCE(b.property_bnbo_count, 0) > 0 OR COALESCE(w.property_wetland_count, 0) > 0 
                 THEN TRUE ELSE FALSE 
             END as has_property_environmental_relationships
             
@@ -253,14 +253,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
         stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_fields,
-                COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
-                COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
+                COUNT(CASE WHEN field_bnbo_total_m2 > 0 THEN 1 END) as fields_with_bnbo,
+                COUNT(CASE WHEN field_wetland_total_m2 > 0 THEN 1 END) as fields_with_wetlands,
                 COUNT(CASE WHEN property_count > 0 THEN 1 END) as fields_with_properties,
                 COUNT(CASE WHEN soil_type_count > 0 THEN 1 END) as fields_with_soil_data,
                 COUNT(CASE WHEN has_environmental_features THEN 1 END) as fields_with_environmental_features,
                 COUNT(CASE WHEN has_property_environmental_relationships THEN 1 END) as fields_with_property_env_relationships,
-                COUNT(CASE WHEN properties_with_bnbo_count > 0 THEN 1 END) as fields_with_bnbo_property_relationships,
-                COUNT(CASE WHEN properties_with_wetland_count > 0 THEN 1 END) as fields_with_wetland_property_relationships,
+                COUNT(CASE WHEN property_bnbo_count > 0 THEN 1 END) as fields_with_bnbo_property_relationships,
+                COUNT(CASE WHEN property_wetland_count > 0 THEN 1 END) as fields_with_wetland_property_relationships,
                 
                 -- Average coverages
                 AVG(field_bnbo_coverage_pct) as avg_field_bnbo_pct,
@@ -272,29 +272,29 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 AVG(CASE WHEN soil_type_count > 0 THEN soil_type_count END) as avg_soil_types_per_field,
                 
                 -- Water project coverages
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct END) as avg_bnbo_water_coverage,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct END) as avg_wetland_water_coverage,
-                AVG(CASE WHEN properties_with_wetland_count > 0 THEN 
-                    (total_property_wetland_covered_m2 / NULLIF(total_property_wetland_area_m2, 0)) * 100 
+                AVG(CASE WHEN field_bnbo_total_m2 > 0 THEN field_bnbo_water_covered_pct END) as avg_bnbo_water_coverage,
+                AVG(CASE WHEN field_wetland_total_m2 > 0 THEN field_wetland_water_covered_pct END) as avg_wetland_water_coverage,
+                AVG(CASE WHEN property_wetland_count > 0 THEN 
+                    (property_wetland_water_covered_m2 / NULLIF(property_wetland_total_m2, 0)) * 100 
                 END) as avg_property_wetland_water_coverage,
                 
                 -- Property-environmental spatial relationships
-                SUM(properties_with_bnbo_count) as total_bnbo_property_relationships,
-                SUM(properties_with_wetland_count) as total_wetland_property_relationships,
+                SUM(property_bnbo_count) as total_bnbo_property_relationships,
+                SUM(property_wetland_count) as total_wetland_property_relationships,
                 SUM(total_properties_with_environmental_features) as total_environmental_property_relationships,
                 
                 -- Total areas
                 SUM(field_area_m2) / 1000000 as total_field_area_km2,
-                SUM(total_bnbo_area_m2) / 1000000 as total_bnbo_area_km2,
-                SUM(total_wetland_area_m2) / 1000000 as total_wetland_area_km2,
-                SUM(bnbo_covered_by_water_projects_m2) / 1000000 as total_bnbo_covered_km2,
-                SUM(wetland_covered_by_water_projects_m2) / 1000000 as total_wetland_covered_km2,
+                SUM(field_bnbo_total_m2) / 1000000 as total_bnbo_area_km2,
+                SUM(field_wetland_total_m2) / 1000000 as total_wetland_area_km2,
+                SUM(field_bnbo_water_covered_m2) / 1000000 as total_bnbo_covered_km2,
+                SUM(field_wetland_water_covered_m2) / 1000000 as total_wetland_covered_km2,
                 
                 -- Property-level wetland water coverage totals
-                SUM(property_wetland_covered_by_water_m2) / 1000000 as total_property_wetland_covered_km2,
-                SUM(property_wetland_not_covered_by_water_m2) / 1000000 as total_property_wetland_uncovered_km2,
-                SUM(properties_with_covered_wetland_count) as total_properties_with_covered_wetlands,
-                SUM(properties_with_uncovered_wetland_count) as total_properties_with_uncovered_wetlands
+                SUM(property_wetland_water_covered_m2) / 1000000 as total_property_wetland_covered_km2,
+                SUM(property_wetland_water_uncovered_m2) / 1000000 as total_property_wetland_uncovered_km2,
+                SUM(CASE WHEN property_wetland_water_covered_m2 > 0 THEN property_wetland_count ELSE 0 END) as total_properties_with_covered_wetlands,
+                SUM(CASE WHEN property_wetland_water_uncovered_m2 > 0 THEN property_wetland_count ELSE 0 END) as total_properties_with_uncovered_wetlands
             FROM field_area_analysis_final
         """).fetchone()
 
@@ -336,22 +336,22 @@ class ConsolidateResults(FieldAnalysisStageBase):
         env_breakdown = self.conn.execute("""
             SELECT 
                 CASE 
-                    WHEN total_bnbo_area_m2 > 0 AND total_wetland_area_m2 > 0 THEN 'Both BNBO and Wetlands'
-                    WHEN total_bnbo_area_m2 > 0 THEN 'BNBO Only'
-                    WHEN total_wetland_area_m2 > 0 THEN 'Wetlands Only'
+                    WHEN field_bnbo_total_m2 > 0 AND field_wetland_total_m2 > 0 THEN 'Both BNBO and Wetlands'
+                    WHEN field_bnbo_total_m2 > 0 THEN 'BNBO Only'
+                    WHEN field_wetland_total_m2 > 0 THEN 'Wetlands Only'
                     ELSE 'No Environmental Features'
                 END as environmental_category,
                 COUNT(*) as field_count,
                 AVG(property_count) as avg_properties,
                 AVG(field_bnbo_coverage_pct + field_wetland_coverage_pct) as avg_total_env_coverage,
                 AVG(combined_property_environmental_coverage_pct) as avg_property_env_coverage,
-                SUM(properties_with_bnbo_count + properties_with_wetland_count) as total_property_relationships
+                SUM(property_bnbo_count + property_wetland_count) as total_property_relationships
             FROM field_area_analysis_final
             GROUP BY 
                 CASE 
-                    WHEN total_bnbo_area_m2 > 0 AND total_wetland_area_m2 > 0 THEN 'Both BNBO and Wetlands'
-                    WHEN total_bnbo_area_m2 > 0 THEN 'BNBO Only'
-                    WHEN total_wetland_area_m2 > 0 THEN 'Wetlands Only'
+                    WHEN field_bnbo_total_m2 > 0 AND field_wetland_total_m2 > 0 THEN 'Both BNBO and Wetlands'
+                    WHEN field_bnbo_total_m2 > 0 THEN 'BNBO Only'
+                    WHEN field_wetland_total_m2 > 0 THEN 'Wetlands Only'
                     ELSE 'No Environmental Features'
                 END
             ORDER BY field_count DESC

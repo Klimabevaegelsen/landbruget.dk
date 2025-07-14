@@ -124,11 +124,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS INTEGER) as year,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
-                CAST(NULL AS DOUBLE) as total_wetland_area_m2,
-                CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_m2,
+                CAST(NULL AS DOUBLE) as field_wetland_total_m2,
+                CAST(NULL AS DOUBLE) as field_wetland_water_covered_m2,
 
-                CAST(NULL AS DOUBLE) as wetland_covered_by_water_projects_pct,
-                CAST(NULL AS DOUBLE) as wetland_not_covered_by_water_projects_pct,
+                CAST(NULL AS DOUBLE) as field_wetland_water_covered_pct,
+                CAST(NULL AS DOUBLE) as field_wetland_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct
             WHERE FALSE
         """)
@@ -288,10 +288,10 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.field_area_m2,
                     
                     -- Total wetland area in field
-                    COALESCE(SUM(f.field_wetland_area_m2), 0) as total_wetland_area_m2,
+                    COALESCE(SUM(f.field_wetland_area_m2), 0) as field_wetland_total_m2,
                     
                     -- Wetlands covered by water projects
-                    COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as wetland_covered_by_water_projects_m2
+                    COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as field_wetland_water_covered_m2
                     
                 FROM batch_field_wetland_total f
                 LEFT JOIN batch_field_wetland_covered c ON f.field_id = c.field_id 
@@ -309,19 +309,19 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     *,
                     -- Coverage percentages
                     CASE 
-                        WHEN total_wetland_area_m2 > 0 
-                        THEN (wetland_covered_by_water_projects_m2 / total_wetland_area_m2) * 100 
+                        WHEN field_wetland_total_m2 > 0 
+                        THEN (field_wetland_water_covered_m2 / field_wetland_total_m2) * 100 
                         ELSE 0 
-                    END as wetland_covered_by_water_projects_pct,
+                    END as field_wetland_water_covered_pct,
                     
                     CASE 
-                        WHEN total_wetland_area_m2 > 0 
-                        THEN ((total_wetland_area_m2 - wetland_covered_by_water_projects_m2) / total_wetland_area_m2) * 100 
+                        WHEN field_wetland_total_m2 > 0 
+                        THEN ((field_wetland_total_m2 - field_wetland_water_covered_m2) / field_wetland_total_m2) * 100 
                         ELSE 0 
-                    END as wetland_not_covered_by_water_projects_pct,
+                    END as field_wetland_water_uncovered_pct,
                     
                     -- Field coverage percentage
-                    (total_wetland_area_m2 / field_area_m2) * 100 as field_wetland_coverage_pct
+                    (field_wetland_total_m2 / field_area_m2) * 100 as field_wetland_coverage_pct
                     
                 FROM batch_field_aggregates
             """)
