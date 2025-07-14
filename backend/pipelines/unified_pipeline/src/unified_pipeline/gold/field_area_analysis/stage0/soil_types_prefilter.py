@@ -132,14 +132,22 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         for category, count, area_km2 in category_stats[:5]:
             self.log.info(f"     {category}: {count:,} polygons, {area_km2:.1f} km²")
 
+        # Export filtered soil types using standard pipeline pattern (like other Stage 0 jobs)
+        output_path = self._get_stage0_output_path("stage0_soil_types_filtered")
+        self.gcs_access.export_table_to_gcs_direct("soil_types_filtered", output_path)
+
         return {
             "original_count": total_soil_types,
             "filtered_count": total_filtered,
             "reduction_percentage": reduction_pct,
             "processing_time": processing_time,
+            "output_path": output_path,
             "category_breakdown": category_stats,
+            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing",
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save pre-filtered soil types polygons to GCS."""
-        self._save_prefiltered_dataset("soil_types_filtered", "stage0_soil_types_filtered")
+        """Save output data - already handled in _execute_stage_processing for Stage 0."""
+        # Stage 0 classes handle export directly in _execute_stage_processing
+        # to use custom output paths and naming conventions
+        self.log.info("✅ Soil types pre-filtering data already saved to GCS")
