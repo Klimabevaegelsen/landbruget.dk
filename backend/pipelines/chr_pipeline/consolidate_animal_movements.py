@@ -6,7 +6,7 @@ This script consolidates monthly CHR animal movement JSON files into a single
 consolidated file for silver layer processing.
 
 Usage:
-    python consolidate_chr_animal_movements.py --timestamp 20250714_075448
+    python consolidate_animal_movements.py --timestamp 20250714_075448
 """
 
 import argparse
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 # Add the backend directory to Python path for imports
-sys.path.append(str(Path(__file__).parent.parent.parent / "backend"))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from pipelines.unified_pipeline.src.unified_pipeline.util.gcs_access import GCSDataAccess
 
