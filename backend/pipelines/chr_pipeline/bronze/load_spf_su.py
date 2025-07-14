@@ -8,6 +8,7 @@ for pig herds (species_code = 15).
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -16,18 +17,22 @@ from bronze.export import save_raw_data
 logger = logging.getLogger(__name__)
 
 
-async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = 5) -> List[Dict[str, Any]]:
+async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = None) -> List[Dict[str, Any]]:
     """
     Load SPF-SU data for individual pig herd numbers.
 
     Args:
         pig_herd_numbers: List of individual herd numbers for pig herds
-        max_workers: Maximum number of concurrent requests (default: 5 for rate limiting)
+        max_workers: Maximum number of concurrent requests (default: 3 for rate limiting)
 
     Returns:
         List of SPF-SU data dictionaries
     """
+    if max_workers is None:
+        max_workers = int(os.getenv("SPF_SU_MAX_WORKERS", "3"))
+
     logger.info(f"Starting SPF-SU data collection for {len(pig_herd_numbers)} pig herd numbers")
+    logger.info(f"Using {max_workers} concurrent workers for rate limiting")
     logger.info(f"⏱️ Estimated time: {len(pig_herd_numbers) * 2 / 60:.1f} minutes at 30 requests/minute")
 
     results = []

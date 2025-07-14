@@ -92,7 +92,9 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument("--test-species-codes", type=str, help="Comma-separated list of species codes for testing")
     parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds to process")
     parser.add_argument("--limit-herds-per-species", type=int, help="Limit number of herds per species")
-    parser.add_argument("--workers", type=int, default=10, help="Number of parallel workers")
+    parser.add_argument(
+        "--workers", type=int, default=int(os.getenv("CHR_MAX_WORKERS", "5")), help="Number of parallel workers"
+    )
     parser.add_argument("--log-level", type=str, default="WARNING", help="Logging level")
     parser.add_argument("--progress", action="store_true", help="Show progress information")
     parser.add_argument("--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)")
@@ -834,7 +836,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         import asyncio
 
         try:
-            results = asyncio.run(load_spf_su_data(pig_herd_numbers, max_workers=5))
+            results = asyncio.run(load_spf_su_data(pig_herd_numbers))
             context["spf_su_results"] = results
             if context["args"]["progress"]:
                 successful = len([r for r in results if r])
