@@ -108,14 +108,14 @@ class InspireBBRFetcher:
                     gpkg_path.unlink()
                     self.logger.info(f"Cleaned up GPKG file ({size_gb:.1f}GB)")
 
-                    # Save metadata
-        self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
+            # Save metadata
+            self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
 
-        # Save data for GitHub Actions artifacts (in addition to timestamped directory)
-        if processed_data and "building_ids" in processed_data:
-            self._save_for_github_actions(processed_data)
+            # Save data for GitHub Actions artifacts (in addition to timestamped directory)
+            if processed_data and "building_ids" in processed_data:
+                self._save_for_github_actions(processed_data)
 
-        self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
+            self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
 
             if return_data and processed_data is not None:
                 # Handle the new data structure
