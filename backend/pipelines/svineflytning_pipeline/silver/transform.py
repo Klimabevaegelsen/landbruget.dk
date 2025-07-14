@@ -538,45 +538,117 @@ class SvineflytningSilverProcessor:
         """
         logger.info("Exporting silver data")
 
-        # Create output directory
-        if USE_GCS:
-            destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
-            storage_type = "gcs"
-        else:
-            destination_base = self.output_dir / export_timestamp
-            destination_base.mkdir(parents=True, exist_ok=True)
-            storage_type = "local"
+        # Create local output directory first (always needed)
+        local_destination = self.output_dir / export_timestamp
+        local_destination.mkdir(parents=True, exist_ok=True)
 
-        # Export each table
+        # Export each table to local files first
         tables = ["silver_movements", "silver_properties", "silver_vehicles"]
         exported_files = []
 
         for table in tables:
             filename = f"{table.replace('silver_', '')}.parquet"
+            local_path = local_destination / filename
 
-            if USE_GCS:
-                # Export to GCS
-                gcs_path = f"{destination_base}/{filename}"
-                self.conn.execute(f"""
-                    COPY {table} TO '{gcs_path}' (FORMAT PARQUET)
-                """)
-                exported_files.append(gcs_path)
-                logger.info(f"Exported {table} to {gcs_path}")
+            # Export to local file using DuckDB COPY
+            self.conn.execute(f"""
+                COPY {table} TO '{local_path}' (FORMAT PARQUET)
+            """)
+            logger.info(f"Exported {table} to local file: {local_path}")
+
+        # If using GCS, upload the local files
+        if USE_GCS:
+            success = self._upload_silver_data_to_gcs(local_destination, export_timestamp)
+            if success:
+                # Build GCS paths for return
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    exported_files.append(gcs_path)
+                destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
+                storage_type = "gcs"
             else:
-                # Export to local file
-                local_path = destination_base / filename
-                self.conn.execute(f"""
-                    COPY {table} TO '{local_path}' (FORMAT PARQUET)
-                """)
+                logger.warning("GCS upload failed, falling back to local files")
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    local_path = local_destination / filename
+                    exported_files.append(str(local_path))
+                destination_base = str(local_destination)
+                storage_type = "local"
+        else:
+            # Local storage only
+            for table in tables:
+                filename = f"{table.replace('silver_', '')}.parquet"
+                local_path = local_destination / filename
                 exported_files.append(str(local_path))
-                logger.info(f"Exported {table} to {local_path}")
+            destination_base = str(local_destination)
+            storage_type = "local"
 
         return {
-            "destination": destination_base if USE_GCS else str(destination_base),
+            "destination": destination_base,
             "storage_type": storage_type,
             "exported_files": exported_files,
             "export_timestamp": export_timestamp,
         }
+
+    def _upload_silver_data_to_gcs(self, silver_dir: Path, export_timestamp: str) -> bool:
+        """
+        Upload all silver parquet files to GCS using streaming.
+
+        Args:
+            silver_dir: Local directory containing silver parquet files
+            export_timestamp: Timestamp string for the export (YYYYMMDD_HHMMSS)
+
+        Returns:
+            True if upload successful, False otherwise
+        """
+        try:
+            # Try to import GCS utilities
+            from unified_pipeline.util.gcs_access import GCSDataAccess
+
+            gcs_access = GCSDataAccess()
+
+            # Find all parquet files in the silver directory
+            parquet_files = list(silver_dir.glob("*.parquet"))
+
+            if not parquet_files:
+                logger.warning(f"No parquet files found in {silver_dir}")
+                return False
+
+            logger.info(f"Uploading {len(parquet_files)} silver files to GCS bucket '{GCS_BUCKET}'")
+
+            uploaded_count = 0
+            for parquet_file in parquet_files:
+                try:
+                    # Create GCS path: silver/svineflytning/{timestamp}/{filename}
+                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{parquet_file.name}"
+
+                    # Upload file using streaming
+                    with open(parquet_file, "rb") as src:
+                        with gcs_access.fs.open(gcs_path, "wb") as dst:
+                            import shutil
+
+                            shutil.copyfileobj(src, dst)
+
+                    logger.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")
+                    uploaded_count += 1
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to upload {parquet_file.name}: {e}")
+
+            if uploaded_count == len(parquet_files):
+                logger.info(f"✅ Successfully uploaded all {uploaded_count} silver files to GCS")
+                return True
+            else:
+                logger.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
+                return False
+
+        except ImportError:
+            logger.warning("GCS utilities not available - skipping silver data upload")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error uploading silver data to GCS: {e}")
+            return False
 
 
 def process_svineflytning_silver(
