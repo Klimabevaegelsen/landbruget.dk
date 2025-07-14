@@ -993,7 +993,8 @@ jobs:
           echo "Consolidating animal movement data for timestamp: $BRONZE_TIMESTAMP"
           
           # Run the consolidation script
-          python scripts/analysis/consolidate_chr_animal_movements.py \
+          cd backend/pipelines/chr_pipeline
+          python consolidate_animal_movements.py \
             --timestamp "$BRONZE_TIMESTAMP" \
             --bucket "$GCS_BUCKET"
 
