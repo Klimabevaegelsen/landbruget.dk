@@ -18,6 +18,8 @@ import duckdb
 from dotenv import load_dotenv
 from google.cloud import storage
 
+# Import DateTimeEncoder for JSON serialization
+
 # Load environment variables
 load_dotenv()
 
@@ -192,15 +194,130 @@ class SvineflytningSilverProcessor:
             logger.warning("No movements found in bronze data")
             return 0
 
-        # Create DuckDB table from movements
+        # Create DuckDB table from movements using direct data insertion
         self.conn.execute("DROP TABLE IF EXISTS raw_movements")
-        self.conn.execute(
-            """
-            CREATE TABLE raw_movements AS 
-            SELECT * FROM read_json_auto($1)
-        """,
-            [json.dumps(all_movements)],
-        )
+
+        # Create the raw_movements table with proper schema - capturing ALL fields
+        self.conn.execute("""
+            CREATE TABLE raw_movements (
+                Id BIGINT,
+                Oprindelse VARCHAR,
+                Handling VARCHAR,
+                FlytteTidspunkt_SvineflytDato DATE,
+                FlytteTidspunkt_SvineflytTidspunkt INTEGER,
+                FlytteTidspunkt_SvineflytRaekkefoelge INTEGER,
+                Afsender_Landekode VARCHAR,
+                Afsender_ChrNummer BIGINT,
+                Afsender_BesaetningsNummer BIGINT,
+                Afsender_Ejendom_Adresse VARCHAR,
+                Afsender_Ejendom_ByNavn VARCHAR,
+                Afsender_Ejendom_PostNummer INTEGER,
+                Afsender_Ejendom_PostDistrikt VARCHAR,
+                Afsender_Ejendom_KommuneNummer INTEGER,
+                Afsender_Ejendom_KommuneNavn VARCHAR,
+                Afsender_Ejendom_DatoOpret DATE,
+                Afsender_Ejendom_DatoOpdatering DATE,
+                Afsender_UdlandsEjendom VARCHAR,
+                Modtager_Landekode VARCHAR,
+                Modtager_ChrNummer BIGINT,
+                Modtager_BesaetningsNummer BIGINT,
+                Modtager_Ejendom_Adresse VARCHAR,
+                Modtager_Ejendom_ByNavn VARCHAR,
+                Modtager_Ejendom_PostNummer INTEGER,
+                Modtager_Ejendom_PostDistrikt VARCHAR,
+                Modtager_Ejendom_KommuneNummer INTEGER,
+                Modtager_Ejendom_KommuneNavn VARCHAR,
+                Modtager_Ejendom_DatoOpret DATE,
+                Modtager_Ejendom_DatoOpdatering DATE,
+                Modtager_UdlandsEjendom VARCHAR,
+                AntalDyr_AntalDyrIAlt INTEGER,
+                AntalDyr_AntalSoer INTEGER,
+                AntalDyr_AntalSlagtesvin INTEGER,
+                AntalDyr_Antal190LitersContainere INTEGER,
+                AntalDyr_Antal240LitersContainere INTEGER,
+                Koeretoej_Forvogn_Landekode VARCHAR,
+                Koeretoej_Forvogn_RegNr VARCHAR,
+                Koeretoej_Haenger_Landekode VARCHAR,
+                Koeretoej_Haenger_RegNr VARCHAR,
+                Omlaesser VARCHAR,
+                TracesDokument VARCHAR,
+                Sundhedscertifikat VARCHAR,
+                IndberetterLogon VARCHAR,
+                IndberetningForetaget TIMESTAMP,
+                _chunk_timestamp VARCHAR,
+                _chunk_start_date DATE,
+                _chunk_end_date DATE
+            )
+        """)
+
+        # Insert movements directly into DuckDB
+        if all_movements:
+            for movement in all_movements:
+                # Extract nested data safely
+                flyttetidspunkt = movement.get("FlytteTidspunkt") or {}
+                afsender = movement.get("Afsender") or {}
+                afsender_ejendom = afsender.get("Ejendom") or {}
+                modtager = movement.get("Modtager") or {}
+                modtager_ejendom = modtager.get("Ejendom") or {}
+                antal_dyr = movement.get("AntalDyr") or {}
+                koeretoej = movement.get("Koeretoej") or {}
+                forvogn = koeretoej.get("Forvogn") or {}
+                haenger = koeretoej.get("Haenger") or {}
+
+                self.conn.execute(
+                    """
+                    INSERT INTO raw_movements VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    [
+                        movement.get("Id"),
+                        movement.get("Oprindelse"),
+                        movement.get("Handling"),
+                        flyttetidspunkt.get("SvineflytDato"),
+                        flyttetidspunkt.get("SvineflytTidspunkt"),
+                        flyttetidspunkt.get("SvineflytRaekkefoelge"),
+                        afsender.get("Landekode"),
+                        afsender.get("ChrNummer"),
+                        afsender.get("BesaetningsNummer"),
+                        afsender_ejendom.get("Adresse"),
+                        afsender_ejendom.get("ByNavn"),
+                        afsender_ejendom.get("PostNummer"),
+                        afsender_ejendom.get("PostDistrikt"),
+                        afsender_ejendom.get("KommuneNummer"),
+                        afsender_ejendom.get("KommuneNavn"),
+                        afsender_ejendom.get("DatoOpret"),
+                        afsender_ejendom.get("DatoOpdatering"),
+                        afsender.get("UdlandsEjendom"),
+                        modtager.get("Landekode"),
+                        modtager.get("ChrNummer"),
+                        modtager.get("BesaetningsNummer"),
+                        modtager_ejendom.get("Adresse"),
+                        modtager_ejendom.get("ByNavn"),
+                        modtager_ejendom.get("PostNummer"),
+                        modtager_ejendom.get("PostDistrikt"),
+                        modtager_ejendom.get("KommuneNummer"),
+                        modtager_ejendom.get("KommuneNavn"),
+                        modtager_ejendom.get("DatoOpret"),
+                        modtager_ejendom.get("DatoOpdatering"),
+                        modtager.get("UdlandsEjendom"),
+                        antal_dyr.get("AntalDyrIAlt"),
+                        antal_dyr.get("AntalSoer"),
+                        antal_dyr.get("AntalSlagtesvin"),
+                        antal_dyr.get("Antal190LitersContainere"),
+                        antal_dyr.get("Antal240LitersContainere"),
+                        forvogn.get("Landekode"),
+                        forvogn.get("RegNr"),
+                        haenger.get("Landekode") if haenger else None,
+                        haenger.get("RegNr") if haenger else None,
+                        movement.get("Omlaesser"),
+                        movement.get("TracesDokument"),
+                        movement.get("Sundhedscertifikat"),
+                        movement.get("IndberetterLogon"),
+                        movement.get("IndberetningForetaget"),
+                        movement.get("_chunk_timestamp"),
+                        movement.get("_chunk_start_date"),
+                        movement.get("_chunk_end_date"),
+                    ],
+                )
 
         # Transform into structured silver tables
         self._create_movements_table(export_timestamp)
@@ -221,46 +338,70 @@ class SvineflytningSilverProcessor:
             CREATE OR REPLACE TABLE silver_movements AS
             SELECT 
                 -- Movement identification
-                CAST(Id AS BIGINT) as movement_id,
+                Id as movement_id,
                 Oprindelse as origin_system,
                 Handling as action_type,
                 
                 -- Movement timing
-                TRY_CAST(FlytteTidspunkt.SvineflytDato AS DATE) as movement_date,
-                CAST(FlytteTidspunkt.SvineflytTidspunkt AS INTEGER) as movement_time,
-                CAST(FlytteTidspunkt.SvineflytRaekkefoelge AS INTEGER) as movement_sequence,
+                FlytteTidspunkt_SvineflytDato as movement_date,
+                FlytteTidspunkt_SvineflytTidspunkt as movement_time,
+                FlytteTidspunkt_SvineflytRaekkefoelge as movement_sequence,
                 
                 -- Sender information
-                Afsender.Landekode as sender_country_code,
-                CAST(Afsender.ChrNummer AS BIGINT) as sender_chr_number,
-                CAST(Afsender.BesaetningsNummer AS BIGINT) as sender_herd_number,
+                Afsender_Landekode as sender_country_code,
+                Afsender_ChrNummer as sender_chr_number,
+                Afsender_BesaetningsNummer as sender_herd_number,
+                Afsender_Ejendom_Adresse as sender_address,
+                Afsender_Ejendom_ByNavn as sender_city_name,
+                Afsender_Ejendom_PostNummer as sender_postal_code,
+                Afsender_Ejendom_PostDistrikt as sender_postal_district,
+                Afsender_Ejendom_KommuneNummer as sender_municipality_code,
+                Afsender_Ejendom_KommuneNavn as sender_municipality_name,
+                Afsender_Ejendom_DatoOpret as sender_property_created,
+                Afsender_Ejendom_DatoOpdatering as sender_property_updated,
+                Afsender_UdlandsEjendom as sender_foreign_property,
                 
                 -- Receiver information  
-                Modtager.Landekode as receiver_country_code,
-                CAST(Modtager.ChrNummer AS BIGINT) as receiver_chr_number,
-                CAST(Modtager.BesaetningsNummer AS BIGINT) as receiver_herd_number,
+                Modtager_Landekode as receiver_country_code,
+                Modtager_ChrNummer as receiver_chr_number,
+                Modtager_BesaetningsNummer as receiver_herd_number,
+                Modtager_Ejendom_Adresse as receiver_address,
+                Modtager_Ejendom_ByNavn as receiver_city_name,
+                Modtager_Ejendom_PostNummer as receiver_postal_code,
+                Modtager_Ejendom_PostDistrikt as receiver_postal_district,
+                Modtager_Ejendom_KommuneNummer as receiver_municipality_code,
+                Modtager_Ejendom_KommuneNavn as receiver_municipality_name,
+                Modtager_Ejendom_DatoOpret as receiver_property_created,
+                Modtager_Ejendom_DatoOpdatering as receiver_property_updated,
+                Modtager_UdlandsEjendom as receiver_foreign_property,
                 
                 -- Animal counts
-                CAST(AntalDyr.AntalDyrIAlt AS INTEGER) as total_animals,
-                CAST(AntalDyr.AntalSoer AS INTEGER) as sow_count,
-                CAST(AntalDyr.AntalSlagtesvin AS INTEGER) as slaughter_pig_count,
-                CAST(AntalDyr.Antal190LitersContainere AS INTEGER) as containers_190l,
-                CAST(AntalDyr.Antal240LitersContainere AS INTEGER) as containers_240l,
+                AntalDyr_AntalDyrIAlt as total_animals,
+                AntalDyr_AntalSoer as sow_count,
+                AntalDyr_AntalSlagtesvin as slaughter_pig_count,
+                AntalDyr_Antal190LitersContainere as containers_190l,
+                AntalDyr_Antal240LitersContainere as containers_240l,
                 
                 -- Transport information
-                Koeretoej.Forvogn.Landekode as vehicle_country_code,
-                Koeretoej.Forvogn.RegNr as vehicle_registration,
-                Koeretoej.Haenger.RegNr as trailer_registration,
+                Koeretoej_Forvogn_Landekode as vehicle_country_code,
+                Koeretoej_Forvogn_RegNr as vehicle_registration,
+                Koeretoej_Haenger_Landekode as trailer_country_code,
+                Koeretoej_Haenger_RegNr as trailer_registration,
+                
+                -- Additional transport and documentation
+                Omlaesser as transshipment_info,
+                TracesDokument as traces_document,
+                Sundhedscertifikat as health_certificate,
                 
                 -- Administrative information
                 IndberetterLogon as reporter_login,
-                TRY_CAST(IndberetningForetaget AS TIMESTAMP) as report_timestamp,
+                IndberetningForetaget as report_timestamp,
                 
                 -- Processing metadata
                 '{export_timestamp}' as processed_timestamp,
                 _chunk_timestamp as source_chunk_timestamp,
-                TRY_CAST(_chunk_start_date AS DATE) as source_period_start,
-                TRY_CAST(_chunk_end_date AS DATE) as source_period_end,
+                _chunk_start_date as source_period_start,
+                _chunk_end_date as source_period_end,
                 
                 -- Data quality flags
                 CASE 
@@ -272,7 +413,7 @@ class SvineflytningSilverProcessor:
                     ELSE false
                 END as is_invalid,
                 CASE 
-                    WHEN AntalDyr.AntalDyrIAlt IS NULL OR AntalDyr.AntalDyrIAlt <= 0 THEN true
+                    WHEN AntalDyr_AntalDyrIAlt IS NULL OR AntalDyr_AntalDyrIAlt <= 0 THEN true
                     ELSE false
                 END as missing_animal_count
                 
@@ -300,35 +441,37 @@ class SvineflytningSilverProcessor:
             CREATE OR REPLACE TABLE silver_properties AS
             WITH sender_properties AS (
                 SELECT DISTINCT
-                    Afsender.ChrNummer as chr_number,
-                    Afsender.BesaetningsNummer as herd_number,
+                    Afsender_ChrNummer as chr_number,
+                    Afsender_BesaetningsNummer as herd_number,
                     'sender' as property_role,
-                    Afsender.Ejendom.Adresse as address,
-                    Afsender.Ejendom.ByNavn as city_name,
-                    CAST(Afsender.Ejendom.PostNummer AS INTEGER) as postal_code,
-                    Afsender.Ejendom.PostDistrikt as postal_district,
-                    CAST(Afsender.Ejendom.KommuneNummer AS INTEGER) as municipality_code,
-                    Afsender.Ejendom.KommuneNavn as municipality_name,
-                    TRY_CAST(Afsender.Ejendom.DatoOpret AS DATE) as date_created,
-                    TRY_CAST(Afsender.Ejendom.DatoOpdatering AS DATE) as date_updated
+                    Afsender_Ejendom_Adresse as address,
+                    Afsender_Ejendom_ByNavn as city_name,
+                    Afsender_Ejendom_PostNummer as postal_code,
+                    Afsender_Ejendom_PostDistrikt as postal_district,
+                    Afsender_Ejendom_KommuneNummer as municipality_code,
+                    Afsender_Ejendom_KommuneNavn as municipality_name,
+                    Afsender_Ejendom_DatoOpret as date_created,
+                    Afsender_Ejendom_DatoOpdatering as date_updated,
+                    Afsender_UdlandsEjendom as foreign_property
                 FROM raw_movements
-                WHERE Afsender.ChrNummer IS NOT NULL
+                WHERE Afsender_ChrNummer IS NOT NULL
             ),
             receiver_properties AS (
                 SELECT DISTINCT
-                    Modtager.ChrNummer as chr_number,
-                    Modtager.BesaetningsNummer as herd_number,
+                    Modtager_ChrNummer as chr_number,
+                    Modtager_BesaetningsNummer as herd_number,
                     'receiver' as property_role,
-                    Modtager.Ejendom.Adresse as address,
-                    Modtager.Ejendom.ByNavn as city_name,
-                    CAST(Modtager.Ejendom.PostNummer AS INTEGER) as postal_code,
-                    Modtager.Ejendom.PostDistrikt as postal_district,
-                    CAST(Modtager.Ejendom.KommuneNummer AS INTEGER) as municipality_code,
-                    Modtager.Ejendom.KommuneNavn as municipality_name,
-                    TRY_CAST(Modtager.Ejendom.DatoOpret AS DATE) as date_created,
-                    TRY_CAST(Modtager.Ejendom.DatoOpdatering AS DATE) as date_updated
+                    Modtager_Ejendom_Adresse as address,
+                    Modtager_Ejendom_ByNavn as city_name,
+                    Modtager_Ejendom_PostNummer as postal_code,
+                    Modtager_Ejendom_PostDistrikt as postal_district,
+                    Modtager_Ejendom_KommuneNummer as municipality_code,
+                    Modtager_Ejendom_KommuneNavn as municipality_name,
+                    Modtager_Ejendom_DatoOpret as date_created,
+                    Modtager_Ejendom_DatoOpdatering as date_updated,
+                    Modtager_UdlandsEjendom as foreign_property
                 FROM raw_movements
-                WHERE Modtager.ChrNummer IS NOT NULL
+                WHERE Modtager_ChrNummer IS NOT NULL
             ),
             all_properties AS (
                 SELECT * FROM sender_properties
@@ -346,6 +489,7 @@ class SvineflytningSilverProcessor:
                 municipality_name,
                 date_created,
                 date_updated,
+                foreign_property,
                 '{export_timestamp}' as processed_timestamp,
                 COUNT(*) as occurrence_count,
                 ARRAY_AGG(DISTINCT property_role) as roles
@@ -353,7 +497,7 @@ class SvineflytningSilverProcessor:
             WHERE chr_number IS NOT NULL
             GROUP BY chr_number, herd_number, address, city_name, postal_code, 
                      postal_district, municipality_code, municipality_name, 
-                     date_created, date_updated
+                     date_created, date_updated, foreign_property
         """)
 
         property_count = self.conn.execute("SELECT COUNT(*) FROM silver_properties").fetchone()[0]
@@ -366,16 +510,17 @@ class SvineflytningSilverProcessor:
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE silver_vehicles AS
             SELECT DISTINCT
-                Koeretoej.Forvogn.RegNr as vehicle_registration,
-                Koeretoej.Forvogn.Landekode as vehicle_country_code,
-                Koeretoej.Haenger.RegNr as trailer_registration,
+                Koeretoej_Forvogn_RegNr as vehicle_registration,
+                Koeretoej_Forvogn_Landekode as vehicle_country_code,
+                Koeretoej_Haenger_RegNr as trailer_registration,
+                Koeretoej_Haenger_Landekode as trailer_country_code,
                 '{export_timestamp}' as processed_timestamp,
                 COUNT(*) as usage_count,
-                MIN(TRY_CAST(FlytteTidspunkt.SvineflytDato AS DATE)) as first_movement_date,
-                MAX(TRY_CAST(FlytteTidspunkt.SvineflytDato AS DATE)) as last_movement_date
+                MIN(FlytteTidspunkt_SvineflytDato) as first_movement_date,
+                MAX(FlytteTidspunkt_SvineflytDato) as last_movement_date
             FROM raw_movements
-            WHERE Koeretoej.Forvogn.RegNr IS NOT NULL
-            GROUP BY Koeretoej.Forvogn.RegNr, Koeretoej.Forvogn.Landekode, Koeretoej.Haenger.RegNr
+            WHERE Koeretoej_Forvogn_RegNr IS NOT NULL
+            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode, Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
         """)
 
         vehicle_count = self.conn.execute("SELECT COUNT(*) FROM silver_vehicles").fetchone()[0]
