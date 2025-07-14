@@ -5,11 +5,11 @@ Creates foundation dataset for environmental coverage calculations.
 
 MAJOR OPTIMIZATIONS:
 1. Uses Stage 0 pre-filtered soil types (~8K instead of 13K polygons)
-2. ST_Dump + UNNEST for optimal multipolygon decomposition
-3. Single spatial predicate (ST_Intersects only) for SPATIAL_JOIN operator
-4. No redundant geometry storage or expensive duplicate calculations
-5. Foundation data output with soil_id for efficient downstream joins
-6. Efficient single-pass processing instead of tiny batches
+2. Single spatial predicate (ST_Intersects only) for SPATIAL_JOIN operator
+3. No redundant geometry storage or expensive duplicate calculations
+4. Foundation data output with soil_id for efficient downstream joins
+5. Efficient single-pass processing instead of tiny batches
+6. Keep fields as original multipolygons for consistency with other stages
 
 References: https://github.com/duckdb/duckdb-spatial/pull/545
 """
@@ -34,10 +34,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Load agricultural fields (600K fields)
         self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_raw")
 
-        # OPTIMIZATION: Decompose agricultural fields with ST_Dump for optimal spatial indexing
-        self.log.info(
-            "Decomposing agricultural fields with ST_Dump for optimal spatial indexing..."
-        )
+        # Keep agricultural fields as original multipolygons for consistency with other stages
+        self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
             SELECT 
@@ -45,8 +43,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
-                UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as field_area_m2
+                geometry,
+                ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_raw
         """)
 
@@ -54,14 +52,28 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered soil types (major performance boost)...")
         stage0_soil_types_dataset = CONFIG.stage_outputs["soil_types_prefiltered"]
         stage0_soil_types_path = self._get_latest_gold_path(stage0_soil_types_dataset)
-        self.gcs_access.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types")
+        self.gcs_access.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types_raw")
+
+        # OPTIMIZATION: Decompose soil types with ST_Dump for optimal spatial indexing
+        self.log.info("Decomposing soil types with ST_Dump for optimal spatial indexing...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE soil_types AS
+            SELECT 
+                soil_id,
+                soil_code,
+                soil_description,
+                soil_type_category,
+                UNNEST(ST_Dump(geometry)).geom as geometry,
+                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
+            FROM soil_types_raw
+        """)
 
         # Log dataset sizes for performance tracking
         fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
         soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
 
-        self.log.info(f"✅ Loaded {fields_count:,} field polygons (after ST_Dump)")
-        self.log.info(f"✅ Loaded {soil_count:,} pre-filtered soil type polygons")
+        self.log.info(f"✅ Loaded {fields_count:,} agricultural fields (original multipolygons)")
+        self.log.info(f"✅ Loaded {soil_count:,} soil type polygons (after ST_Dump)")
         self.log.info(
             f"🚀 Processing {fields_count * soil_count:,} potential combinations (optimized)"
         )
