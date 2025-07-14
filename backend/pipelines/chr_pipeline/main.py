@@ -721,12 +721,20 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 try:
                     import glob
 
+                    # Get list of streaming files that are still active
+                    from bronze.load_chr_dyr import _streaming_files
+
+                    active_temp_files = {info["temp_path"] for info in _streaming_files.values()}
+
                     temp_files = glob.glob("/tmp/chr_streaming_*")
                     for temp_file in temp_files:
                         try:
-                            if os.path.exists(temp_file):
+                            # Only clean up files that aren't currently being used for streaming
+                            if os.path.exists(temp_file) and temp_file not in active_temp_files:
                                 os.unlink(temp_file)
                                 logging.debug(f"Cleaned up orphaned temp file: {temp_file}")
+                            elif temp_file in active_temp_files:
+                                logging.debug(f"Keeping active streaming file: {temp_file}")
                         except Exception as e:
                             logging.debug(f"Could not remove temp file {temp_file}: {e}")
                 except Exception as e:
@@ -752,11 +760,16 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         try:
             from bronze.load_chr_dyr import _finalize_streaming_files
 
-            _finalize_streaming_files()
-            if context["args"]["progress"]:
+            logging.info("Finalizing streaming cattle movement files...")
+            success = _finalize_streaming_files()
+            if success:
                 logging.info("✅ Finalized streaming cattle movement files")
+            else:
+                logging.error("❌ Failed to finalize streaming cattle movement files - data may be lost!")
+                # Don't raise here to allow pipeline to continue, but log the issue
         except Exception as e:
-            logging.warning(f"Error finalizing streaming files: {e}")
+            logging.error(f"❌ Error finalizing streaming files: {e}")
+            # Don't raise here to allow pipeline to continue, but log the issue
 
         if context["args"]["progress"]:
             logging.info(
