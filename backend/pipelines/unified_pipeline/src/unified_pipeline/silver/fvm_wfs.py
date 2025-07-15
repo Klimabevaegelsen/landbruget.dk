@@ -455,7 +455,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 markblokke_dataset, self.config.bucket, stage="silver"
             )
 
-            # Handle the new GCS access format
+            # Handle the new return format: _read_data_from_storage now returns table name directly
             if markblokke_result is None:
                 self.log.warning(f"No Markblokke data found for {year}, cannot add block IDs")
                 # Add empty block_id column using DuckDB
@@ -465,13 +465,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 )
                 return result_table
 
-            # Extract GCS access and table name from result
-            if isinstance(markblokke_result, dict) and "gcs_access" in markblokke_result:
-                gcs_access = markblokke_result["gcs_access"]
-                markblokke_table = markblokke_result["table_name"]
+            # ✅ FIXED: Handle string return format from _read_data_from_storage
+            if isinstance(markblokke_result, str):
+                # New format: markblokke_result is directly the table name
+                markblokke_table = markblokke_result
 
                 # Check if table has data
-                row_count = gcs_access.duckdb_conn.execute(
+                row_count = self.conn.execute(
                     f"SELECT COUNT(*) FROM {markblokke_table}"
                 ).fetchone()[0]
 
@@ -484,10 +484,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     )
                     return result_table
 
-                # Get column information from the GCS table
-                columns_result = gcs_access.duckdb_conn.execute(
-                    f"DESCRIBE {markblokke_table}"
-                ).fetchall()
+                # Get column information from the table
+                columns_result = self.conn.execute(f"DESCRIBE {markblokke_table}").fetchall()
                 markblokke_columns = [col[0] for col in columns_result]
 
                 self.log.info(f"Markblokke data columns for {year}: {markblokke_columns}")
@@ -513,61 +511,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 self.log.info(f"Using {block_id_column} as block ID column")
 
-                # ✅ OPTIMIZED: Use DuckDB's ATTACH DATABASE to access the GCS data directly
-                # instead of manually copying data between connections
-                try:
-                    # Create a temporary file path for the markblokke data
-                    import tempfile
-
-                    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
-                        temp_markblokke_path = tmp_file.name
-
-                    # Export markblokke data from GCS connection to temporary file
-                    gcs_access.duckdb_conn.execute(f"""
-                        COPY {markblokke_table} TO '{temp_markblokke_path}' 
-                        (FORMAT PARQUET, COMPRESSION zstd)
-                    """)
-
-                    # Load the data into our main connection
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE blocks AS 
-                        SELECT * FROM read_parquet('{temp_markblokke_path}')
-                    """)
-
-                    # Clean up temporary file
-                    import os
-
-                    if os.path.exists(temp_markblokke_path):
-                        os.unlink(temp_markblokke_path)
-
-                except Exception as e:
-                    self.log.warning(
-                        f"Failed to use optimized data transfer, falling back to manual copy: {e}"
-                    )
-                    # Fallback to manual copying if the optimized approach fails
-                    markblokke_data = gcs_access.duckdb_conn.execute(
-                        f"SELECT * FROM {markblokke_table}"
-                    ).fetchall()
-                    columns_info = gcs_access.duckdb_conn.execute(
-                        f"DESCRIBE {markblokke_table}"
-                    ).fetchall()
-
-                    # Create table in our connection with the same structure
-                    column_defs = []
-                    for col_info in columns_info:
-                        col_name, col_type = col_info[0], col_info[1]
-                        column_defs.append(f"{col_name} {col_type}")
-
-                    create_table_sql = f"CREATE OR REPLACE TABLE blocks ({', '.join(column_defs)})"
-                    self.conn.execute(create_table_sql)
-
-                    # Insert data into our connection
-                    if markblokke_data:
-                        placeholders = ", ".join(["?" for _ in columns_info])
-                        insert_sql = f"INSERT INTO blocks VALUES ({placeholders})"
-                        self.conn.executemany(insert_sql, markblokke_data)
-
-                # Get geometry column names
+                # Get marker table column names
                 marker_columns = self.conn.execute(f"DESCRIBE {marker_table}").fetchall()
                 marker_col_names = [col[0] for col in marker_columns]
 
@@ -600,13 +544,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                         # Also convert markblokke geometries if needed
                         self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE blocks_wkt AS
+                            CREATE OR REPLACE TABLE {markblokke_table}_wkt AS
                             SELECT *, 
                                 CASE WHEN {markblokke_geom_col} IS NOT NULL THEN ST_AsText({markblokke_geom_col}) ELSE NULL END as {markblokke_geom_col}_wkt
-                            FROM blocks
+                            FROM {markblokke_table}
                         """)
-                        self.conn.execute("DROP TABLE blocks")
-                        self.conn.execute("ALTER TABLE blocks_wkt RENAME TO blocks")
+                        markblokke_table = f"{markblokke_table}_wkt"
                         markblokke_geom_col = f"{markblokke_geom_col}_wkt"
 
                 # Perform spatial join using DuckDB-spatial with WKT geometries
@@ -615,7 +558,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         m.*,
                         b.{block_id_column} as block_id
                     FROM {marker_table} m
-                    LEFT JOIN blocks b ON ST_Intersects(
+                    LEFT JOIN {markblokke_table} b ON ST_Intersects(
                         ST_GeomFromText(m.{geom_col}), 
                         ST_GeomFromText(b.{markblokke_geom_col})
                     )
@@ -623,7 +566,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 """
 
                 # Get block count for logging
-                block_count = self.conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
+                block_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {markblokke_table}"
+                ).fetchone()[0]
 
                 self.log.info(
                     f"Executing DuckDB-spatial join for {row_count} markers with {block_count} blocks in {year}"
