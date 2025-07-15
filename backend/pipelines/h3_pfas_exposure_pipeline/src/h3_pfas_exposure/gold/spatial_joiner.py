@@ -179,16 +179,6 @@ class SpatialJoiner:
 
         result_table = f"stage1_intersections_{chunk_idx}"
 
-        # Check if field_uuid column exists in the fields table
-        columns_result = self.conn.execute(f"PRAGMA table_info({fields_table})").fetchall()
-        column_names = [col[1] for col in columns_result]
-
-        # Handle field_uuid column dynamically
-        if "field_uuid" in column_names:
-            field_uuid_select = "f.field_uuid"
-        else:
-            field_uuid_select = "NULL as field_uuid"
-
         query = f"""
         CREATE OR REPLACE TABLE {result_table} AS
         SELECT
@@ -204,8 +194,8 @@ class SpatialJoiner:
             f.crop_name,
             f.geometry,
             -- Add field UUID support
-            {field_uuid_select},
-            COALESCE({field_uuid_select}, 
+            f.field_uuid,
+            COALESCE(f.field_uuid, 
                      'legacy_' || CAST(f.cvr_number AS VARCHAR) || '_' || CAST(f.block_id AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
             ) as primary_field_id
         FROM {h3_table} h
