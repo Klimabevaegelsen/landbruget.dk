@@ -14,6 +14,67 @@ from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config.settings import get_settings
 from utils.logger import setup_logger
 
+# GCS upload functionality
+try:
+    from google.cloud import storage
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
+
+def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str):
+    """Upload file to GCS using the standard pattern from other pipelines."""
+    if not GCS_AVAILABLE:
+        print("⚠️ GCS not available - skipping upload")
+        return False
+
+    try:
+        print(f"📤 Uploading {file_path} to gs://{gcs_bucket}/{gcs_path}")
+
+        # Use the same pattern as other pipelines
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket)
+        blob = bucket.blob(gcs_path)
+
+        blob.upload_from_filename(file_path)
+        print(f"✅ Successfully uploaded to gs://{gcs_bucket}/{gcs_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to upload to GCS: {e}")
+        return False
+
+
+def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str):
+    """Upload INSPIRE BBR data files to GCS."""
+    if not gcs_bucket or not GCS_AVAILABLE:
+        print("ℹ️ Not uploading to GCS (no bucket specified or GCS not available)")
+        return
+
+    print("📤 Uploading INSPIRE BBR data to GCS...")
+
+    # Upload building IDs JSON
+    building_ids_file = output_dir / "inspire_building_ids.json"
+    if building_ids_file.exists():
+        gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
+        upload_to_gcs(str(building_ids_file), gcs_bucket, gcs_path)
+
+    # Upload attributes parquet
+    attributes_file = output_dir / "inspire_attributes.parquet"
+    if attributes_file.exists():
+        gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
+        upload_to_gcs(str(attributes_file), gcs_bucket, gcs_path)
+
+    # Upload bronze subdirectory if it exists
+    bronze_dir = output_dir / "bronze"
+    if bronze_dir.exists():
+        for bronze_file in bronze_dir.rglob("*"):
+            if bronze_file.is_file():
+                relative_path = bronze_file.relative_to(output_dir)
+                gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/{relative_path}"
+                upload_to_gcs(str(bronze_file), gcs_bucket, gcs_path)
+
 
 def _save_attributes_to_parquet(attributes_data, output_dir):
     """Save attributes data to parquet using DuckDB streaming approach."""
@@ -318,6 +379,7 @@ def main():
         # Use WARNING level by default to reduce log output for GitHub Actions
         logger = setup_logger(level="WARNING")
         output_dir = Path("data/bronze")
+        gcs_bucket = os.getenv("GCS_BUCKET")
 
         # Set sample size if specified
         sample_size = None
@@ -339,6 +401,7 @@ def main():
         inspire_fetcher = InspireBBRFetcher(settings, logger)
 
         pipeline_start_time = datetime.now()
+        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Use streaming approach for large datasets to avoid memory issues
         if sample_size and sample_size <= 10000:
@@ -387,6 +450,15 @@ def main():
                 building_count = inspire_result.get("building_count", 0)
 
             print(f"🏢 Total INSPIRE BBR buildings processed: {building_count:,}")
+
+            # Upload to GCS if in production environment
+            if gcs_bucket and os.getenv("ENVIRONMENT") == "production":
+                upload_inspire_data_to_gcs(output_dir, gcs_bucket, timestamp)
+                print(
+                    f"✅ INSPIRE BBR data uploaded to GCS: gs://{gcs_bucket}/bronze/bbr_buildings/inspire/{timestamp}/"
+                )
+            else:
+                print("ℹ️ Not uploading to GCS (no bucket specified or not in production)")
 
             # Write to GITHUB_OUTPUT if running in GitHub Actions
             if "GITHUB_OUTPUT" in os.environ:
