@@ -437,8 +437,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         if isinstance(marker_data, str):
             # marker_data is a table name
             marker_table = marker_data
-            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()[0]
-            if row_count == 0:
+            original_marker_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {marker_table}"
+            ).fetchone()[0]
+            if original_marker_count == 0:
                 return marker_data
         else:
             # marker_data is a /Geo
@@ -446,7 +448,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 return marker_data
             self.conn.register("temp_marker_input", marker_data)
             marker_table = "temp_marker_input"
-            row_count = len(marker_data)
+            original_marker_count = len(marker_data)
 
         try:
             # Read corresponding Markblokke data for spatial join
@@ -552,27 +554,94 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         markblokke_table = f"{markblokke_table}_wkt"
                         markblokke_geom_col = f"{markblokke_geom_col}_wkt"
 
-                # Perform spatial join using DuckDB-spatial with WKT geometries
+                # Check if geometries are already DuckDB spatial objects or WKT strings
+                marker_geom_type = self.conn.execute(f"""
+                    SELECT DISTINCT typeof({geom_col}) as geom_type
+                    FROM {marker_table} 
+                    WHERE {geom_col} IS NOT NULL 
+                    LIMIT 1
+                """).fetchone()
+
+                markblokke_geom_type = self.conn.execute(f"""
+                    SELECT DISTINCT typeof({markblokke_geom_col}) as geom_type
+                    FROM {markblokke_table} 
+                    WHERE {markblokke_geom_col} IS NOT NULL 
+                    LIMIT 1
+                """).fetchone()
+
+                # Determine if we need ST_GeomFromText or if geometries are already spatial objects
+                marker_is_varchar = marker_geom_type and marker_geom_type[0] == "VARCHAR"
+                markblokke_is_varchar = (
+                    markblokke_geom_type and markblokke_geom_type[0] == "VARCHAR"
+                )
+
+                # Build the spatial join query with appropriate geometry handling
+                if marker_is_varchar and markblokke_is_varchar:
+                    # Both are WKT strings, use ST_GeomFromText
+                    marker_geom_expr = f"ST_GeomFromText(m.{geom_col})"
+                    markblokke_geom_expr = f"ST_GeomFromText(b.{markblokke_geom_col})"
+                elif marker_is_varchar:
+                    # Only marker is WKT string
+                    marker_geom_expr = f"ST_GeomFromText(m.{geom_col})"
+                    markblokke_geom_expr = f"b.{markblokke_geom_col}"
+                elif markblokke_is_varchar:
+                    # Only markblokke is WKT string
+                    marker_geom_expr = f"m.{geom_col}"
+                    markblokke_geom_expr = f"ST_GeomFromText(b.{markblokke_geom_col})"
+                else:
+                    # Both are already geometry objects, use directly
+                    marker_geom_expr = f"m.{geom_col}"
+                    markblokke_geom_expr = f"b.{markblokke_geom_col}"
+
+                # Create filtered tables with only non-NULL geometries for optimal SPATIAL_JOIN operator usage
+                marker_filtered = f"{marker_table}_filtered"
+                markblokke_filtered = f"{markblokke_table}_filtered"
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {marker_filtered} AS
+                    SELECT * FROM {marker_table} WHERE {geom_col} IS NOT NULL
+                """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {markblokke_filtered} AS
+                    SELECT * FROM {markblokke_table} WHERE {markblokke_geom_col} IS NOT NULL
+                """)
+
+                # Perform spatial join using DuckDB-spatial with ONLY spatial predicate for optimal SPATIAL_JOIN operator
+                # Based on PR #545: SPATIAL_JOIN operator requires single spatial predicate in JOIN condition
                 spatial_join_query = f"""
                     SELECT 
                         m.*,
                         b.{block_id_column} as block_id
-                    FROM {marker_table} m
-                    LEFT JOIN {markblokke_table} b ON ST_Intersects(
-                        ST_GeomFromText(m.{geom_col}), 
-                        ST_GeomFromText(b.{markblokke_geom_col})
-                    )
-                    WHERE m.{geom_col} IS NOT NULL AND b.{markblokke_geom_col} IS NOT NULL
+                    FROM {marker_filtered} m
+                    LEFT JOIN {markblokke_filtered} b ON ST_Intersects({marker_geom_expr}, {markblokke_geom_expr})
                 """
 
                 # Get block count for logging
                 block_count = self.conn.execute(
-                    f"SELECT COUNT(*) FROM {markblokke_table}"
+                    f"SELECT COUNT(*) FROM {markblokke_filtered}"
+                ).fetchone()[0]
+
+                marker_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {marker_filtered}"
                 ).fetchone()[0]
 
                 self.log.info(
-                    f"Executing DuckDB-spatial join for {row_count} markers with {block_count} blocks in {year}"
+                    f"Executing DuckDB-spatial join for {marker_count} markers with {block_count} blocks in {year}"
                 )
+
+                # Verify SPATIAL_JOIN operator is being used for optimal performance
+                from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
+
+                spatial_join_detected = verify_spatial_join_usage(self.conn, spatial_join_query)
+                if spatial_join_detected:
+                    self.log.info(
+                        "✅ Using optimized SPATIAL_JOIN operator for block ID assignment"
+                    )
+                else:
+                    self.log.warning(
+                        "⚠️ SPATIAL_JOIN not detected - query may use fallback nested loop join"
+                    )
 
                 # Execute the spatial join
                 result_table = f"spatial_join_result_{year}"
@@ -581,10 +650,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     0
                 ]
 
-                # Add markers that didn't have geometry (NULL geometries)
-                if result_count < row_count:
+                # Add markers that didn't have geometry (NULL geometries) back to the result
+                if result_count < original_marker_count:
                     self.log.info(
-                        f"Adding {row_count - result_count} markers without valid geometry"
+                        f"Adding {original_marker_count - result_count} markers without valid geometry"
                     )
 
                     # Get markers with NULL geometry and add to final result
@@ -611,10 +680,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 markers_with_blocks = self.conn.execute(
                     f"SELECT COUNT(*) FROM {result_table} WHERE block_id IS NOT NULL"
                 ).fetchone()[0]
-                if row_count > 0:
+                if original_marker_count > 0:
                     self.log.info(
-                        f"Spatial join success rate: {markers_with_blocks}/{row_count} ({markers_with_blocks / row_count * 100:.1f}%)"
+                        f"Spatial join success rate: {markers_with_blocks}/{original_marker_count} ({markers_with_blocks / original_marker_count * 100:.1f}%)"
                     )
+
+                # Clean up temporary filtered tables
+                self.conn.execute(f"DROP TABLE IF EXISTS {marker_filtered}")
+                self.conn.execute(f"DROP TABLE IF EXISTS {markblokke_filtered}")
 
                 return result_table
             else:
