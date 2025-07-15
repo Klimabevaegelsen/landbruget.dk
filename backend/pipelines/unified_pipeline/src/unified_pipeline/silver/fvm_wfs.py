@@ -70,6 +70,10 @@ class FVMWFSSilverConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
 
+    # UUID generation configuration
+    generate_field_uuid: bool = True
+    uuid_namespace: str = "fvm-field-geometry"
+
     # Year ranges based on FVM WFS capabilities
     markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
@@ -844,11 +848,61 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     else:
                         self.conn.register(final_table_name, result_table)
 
+            # Add field UUID generation for marker data
+            if layer_type == "Marker" and self.config.generate_field_uuid:
+                self._add_field_uuid_to_table(final_table_name, year)
+
             # Clean up any remaining temporary tables to prevent accumulation
             for table in valid_relations:
                 self.conn.execute(f"DROP TABLE IF EXISTS {table}")
 
             return final_table_name
+
+    def _add_field_uuid_to_table(self, table_name: str, year: int):
+        """
+        Add geometry-based UUID to field data using DuckDB.
+
+        Args:
+            table_name: Name of the table to add UUIDs to
+            year: Year of the data (for logging purposes)
+        """
+        if not self.config.generate_field_uuid:
+            return
+
+        self.log.info(f"Adding field UUIDs to {table_name} for year {year}")
+
+        try:
+            # Check if geometry column exists
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+
+            if "geometry" not in column_names:
+                self.log.warning(
+                    f"No geometry column found in {table_name}, skipping UUID generation"
+                )
+                return
+
+            # Add UUID column and generate UUIDs based on geometry
+            self.conn.execute(f"""
+                ALTER TABLE {table_name} ADD COLUMN field_uuid VARCHAR;
+                
+                UPDATE {table_name} 
+                SET field_uuid = uuid5(
+                    '{self.config.uuid_namespace}',
+                    ST_AsWKB(geometry)
+                )
+                WHERE geometry IS NOT NULL;
+            """)
+
+            # Log results
+            uuid_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE field_uuid IS NOT NULL"
+            ).fetchone()[0]
+            total_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.log.info(f"Generated UUIDs for {uuid_count}/{total_count} records in {table_name}")
+
+        except Exception as e:
+            self.log.error(f"Error adding field UUIDs to {table_name}: {e}")
 
     async def _process_layer_type(
         self,

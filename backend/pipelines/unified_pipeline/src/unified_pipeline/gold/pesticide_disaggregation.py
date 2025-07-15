@@ -1093,7 +1093,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 {crop_name_column},
                 {organic_farming_column},
                 CAST({block_id_column} AS VARCHAR) as block_id,
-                year{geometry_select}
+                year{geometry_select},
+                -- Add field UUID support with fallback to composite key
+                COALESCE(field_uuid, 
+                         'legacy_' || CAST({cvr_column} AS VARCHAR) || '_' || CAST({block_id_column} AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
+                ) as primary_field_id,
+                field_uuid
             FROM marker_temp
         """)
 
@@ -1226,7 +1231,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             AllocationMethod VARCHAR,
             MatchConfidence DOUBLE,
             IsPartialFieldCoverage BOOLEAN,
-            DisaggregationDate TIMESTAMP
+            DisaggregationDate TIMESTAMP,
+            -- Add field UUID support for better field identification
+            field_uuid VARCHAR,
+            primary_field_id VARCHAR
         )
         """
         self.duckdb_conn.execute(create_table_sql)
@@ -1410,7 +1418,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     -- Confidence score: higher when areas match more closely
                     GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
-                    NOW() as DisaggregationDate
+                    NOW() as DisaggregationDate,
+                    -- Add field UUID support
+                    m_fields.field_uuid,
+                    m_fields.primary_field_id
                 FROM pending_pesticide_rows p
                 -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
@@ -1507,7 +1518,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
                     GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
-                    NOW() as DisaggregationDate
+                    NOW() as DisaggregationDate,
+                    -- Add field UUID support
+                    m_fields.field_uuid,
+                    m_fields.primary_field_id
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
@@ -1569,7 +1583,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         COUNT(*) as FieldCount,
                         m.field_id as FieldID,
                         m.area_ha as FieldArea,
-                        m.field_id as FieldIdentifier
+                        m.field_id as FieldIdentifier,
+                        m.field_uuid,
+                        m.primary_field_id
                     FROM marker m
                     WHERE m.cvr_number IS NOT NULL 
                       AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
@@ -1607,6 +1623,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         sf.FieldID,
                         sf.FieldArea,
                         sf.FieldIdentifier,
+                        sf.field_uuid,
+                        sf.primary_field_id,
                         (pf.AcreageSize / sf.FieldArea) * 100 as CoveragePercent
                     FROM MarkerSingleFieldCVRCrop sf
                     JOIN PendingForSingleFields pf 
@@ -1629,7 +1647,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     'Partial_Field_Coverage_SingleField' as AllocationMethod,
                     0.8 as MatchConfidence,
                     TRUE as IsPartialFieldCoverage,
-                    NOW() as DisaggregationDate
+                    NOW() as DisaggregationDate,
+                    -- Add field UUID support
+                    c.field_uuid,
+                    c.primary_field_id
                 FROM CandidatesWithFields c
             """
 
@@ -2069,8 +2090,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     -- Confidence based on area match quality and cluster size
                     GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
-                    NOW() as DisaggregationDate
+                    NOW() as DisaggregationDate,
+                    -- Add field UUID support - need to join back to marker table
+                    m.field_uuid,
+                    m.primary_field_id
                 FROM FieldAllocations fa
+                JOIN marker m ON fa.field_id = m.field_id
             """
 
             # Execute the chunked spatial clustering

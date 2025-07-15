@@ -192,7 +192,12 @@ class SpatialJoiner:
             f.area_ha as field_area_ha,
             f.crop_code,
             f.crop_name,
-            f.geometry
+            f.geometry,
+            -- Add field UUID support
+            f.field_uuid,
+            COALESCE(f.field_uuid, 
+                     'legacy_' || CAST(f.cvr_number AS VARCHAR) || '_' || CAST(f.block_id AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
+            ) as primary_field_id
         FROM {h3_table} h
         INNER JOIN {fields_table} f ON ST_Intersects(h.h3_geometry, f.geometry)
         """
@@ -262,6 +267,8 @@ class SpatialJoiner:
             h3_cell,
             center_lat,
             center_lon,
+            field_uuid,
+            primary_field_id,
             field_id,
             cvr_number,
             block_id,
@@ -275,8 +282,8 @@ class SpatialJoiner:
             MAX(coverage_ratio) as coverage_ratio
         FROM {areas_table}
         WHERE h3_cell IS NOT NULL
-        GROUP BY h3_cell, center_lat, center_lon, field_id, cvr_number, block_id,
-                 field_area_ha, crop_code, crop_name, h3_geometry, geometry
+        GROUP BY h3_cell, center_lat, center_lon, primary_field_id, field_id, cvr_number, block_id,
+                 field_area_ha, crop_code, crop_name, h3_geometry, geometry, field_uuid
         """
 
         self.conn.execute(query)
@@ -361,9 +368,15 @@ class SpatialJoiner:
             END as weighted_glyphosate_pesticide_belastning
         FROM {aggregated_table} i
         LEFT JOIN {pesticide_table} p ON (
-            i.cvr_number = p.cvr
-            AND i.field_id = p.extracted_field_id
-            AND i.block_id = p.extracted_block_id
+            -- Primary: Use field UUID if available
+            (i.field_uuid IS NOT NULL AND p.field_uuid IS NOT NULL AND i.field_uuid = p.field_uuid)
+            OR
+            -- Fallback: Use triple key for legacy data
+            (i.field_uuid IS NULL AND (
+                i.cvr_number = p.cvr
+                AND i.field_id = p.extracted_field_id
+                AND i.block_id = p.extracted_block_id
+            ))
         )
         """
 
@@ -411,7 +424,7 @@ class SpatialJoiner:
         field_stats AS (
             SELECT
                 h3_cell,
-                COUNT(DISTINCT CONCAT(cvr_number, '_', block_id, '_', field_id)) as unique_field_count,
+                COUNT(DISTINCT primary_field_id) as unique_field_count,
                 SUM(COALESCE(weighted_pfas_containing_active_ingredient_grams, 0)) as total_pfas_containing_active_ingredient_grams,
                 SUM(COALESCE(weighted_diquat_containing_active_ingredient_grams, 0)) as total_diquat_containing_active_ingredient_grams,
                 SUM(COALESCE(weighted_glyphosate_containing_active_ingredient_grams, 0)) as total_glyphosate_containing_active_ingredient_grams,
