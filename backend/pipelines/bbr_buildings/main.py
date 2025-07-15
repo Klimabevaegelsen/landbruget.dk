@@ -10,6 +10,7 @@ Updated to use bulk GeoDanmark download + local joins for improved performance.
 
 import argparse
 import gc
+import json
 import logging
 import os
 import sys
@@ -19,7 +20,6 @@ from typing import Any
 
 # Updated imports for bulk approach
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
-from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config import Settings, get_settings
 from utils.logger import setup_logger
 
@@ -796,28 +796,31 @@ def run_bronze_layer_bulk(
         file_size_gb = Path(geodanmark_path).stat().st_size / (1024**3)
         logger.info(f"   Found: {geodanmark_path} ({file_size_gb:.1f}GB)")
 
-    # Step 2: INSPIRE BBR raw data - upload to GCS immediately
-    logger.info("🏢 Step 2: Fetching INSPIRE BBR data and uploading to GCS...")
-    inspire_fetcher = InspireBBRFetcher(settings, logger)
-    inspire_result = inspire_fetcher.fetch_data(
-        bronze_output_dir,
-        sample_size=args.sample_size,
-        return_data=True,  # Get data for GCS upload
-        pipeline_start_time=pipeline_start_time,
-    )
+    # Step 2: INSPIRE BBR raw data - read from GCS or local artifacts
+    logger.info("🏢 Step 2: Loading INSPIRE BBR data from artifacts or GCS...")
+    building_ids = []
+    attributes_df = []
 
-    if not inspire_result or "data" not in inspire_result:
-        logger.error("❌ Failed to fetch INSPIRE BBR data")
-        return None
+    # Try to load from local artifacts first (for GitHub Actions workflow)
+    inspire_ids_file = Path("data/inspire_building_ids.json")
+    inspire_attributes_file = Path("data/inspire_attributes.parquet")
 
-    # Upload INSPIRE BBR data to GCS immediately (bronze layer responsibility)
-    inspire_data = inspire_result["data"]
-    building_ids = inspire_data.get("building_ids", [])
-    attributes_df = inspire_data.get("attributes_df", [])
+    if inspire_ids_file.exists():
+        logger.info("📂 Loading INSPIRE BBR building IDs from local artifacts...")
+        with open(inspire_ids_file) as f:
+            building_ids = json.load(f)
+        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from artifacts")
+    else:
+        logger.info("🔍 No local artifacts found - this should not happen in GitHub Actions")
+        logger.info("   The fetch-inspire-bbr job should have created these files")
 
-    if building_ids:
-        logger.info(f"📤 Uploading {len(building_ids):,} building IDs to GCS...")
-        _upload_bronze_data_to_gcs(building_ids, attributes_df, timestamp, logger)
+    if inspire_attributes_file.exists():
+        logger.info("📂 Loading INSPIRE BBR attributes from local artifacts...")
+        # Just note the file exists - we'll use it in silver layer
+        logger.info(f"✅ Found attributes file: {inspire_attributes_file}")
+
+    # In GitHub Actions, the data should already be available via artifacts
+    # No need to re-download or upload to GCS here - that's done by the fetch jobs
 
     # Set GitHub Actions outputs for coordination with silver layer
     if "GITHUB_OUTPUT" in os.environ:
@@ -891,6 +894,138 @@ def _upload_bronze_data_to_gcs(
         logger.warning("Silver layer will need to process locally")
 
 
+def _load_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
+    """Load INSPIRE BBR bronze data from GCS."""
+    if not GCS_AVAILABLE:
+        logger.error("❌ GCS not available - cannot load bronze data")
+        return [], None
+
+    bucket_name = os.getenv("GCS_BUCKET")
+    if not bucket_name:
+        logger.error("❌ GCS_BUCKET not set - cannot load bronze data")
+        return [], None
+
+    try:
+        from google.cloud import storage
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        # Find the latest INSPIRE BBR data
+        prefix = "bronze/bbr_buildings/inspire/"
+        blobs = list(bucket.list_blobs(prefix=prefix))
+
+        if not blobs:
+            logger.error(f"❌ No INSPIRE BBR bronze data found in gs://{bucket_name}/{prefix}")
+            return [], None
+
+        # Get the latest timestamp folder
+        timestamps = set()
+        for blob in blobs:
+            path_parts = blob.name.split("/")
+            if len(path_parts) >= 4:
+                timestamps.add(path_parts[3])  # bronze/bbr_buildings/inspire/TIMESTAMP/
+
+        if not timestamps:
+            logger.error(f"❌ No timestamped INSPIRE BBR data found in gs://{bucket_name}/{prefix}")
+            return [], None
+
+        latest_timestamp = max(timestamps)
+        logger.info(f"📂 Loading INSPIRE BBR data from timestamp: {latest_timestamp}")
+
+        # Download building IDs JSON
+        building_ids_path = f"{prefix}{latest_timestamp}/inspire_building_ids.json"
+        building_ids_blob = bucket.blob(building_ids_path)
+
+        if not building_ids_blob.exists():
+            logger.error(f"❌ Building IDs not found: gs://{bucket_name}/{building_ids_path}")
+            return [], None
+
+        # Download and parse building IDs
+        building_ids_data = building_ids_blob.download_as_text()
+        building_ids = json.loads(building_ids_data)
+
+        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
+
+        # TODO: Load attributes data if needed
+        attributes_df = None
+
+        return building_ids, attributes_df
+
+    except Exception as e:
+        logger.error(f"❌ Failed to load bronze data from GCS: {e}")
+        return [], None
+
+
+def _load_geodanmark_data_from_gcs(logger: logging.Logger) -> str:
+    """Load GeoDanmark data from GCS and return local path."""
+    if not GCS_AVAILABLE:
+        logger.error("❌ GCS not available - cannot load GeoDanmark data")
+        return None
+
+    bucket_name = os.getenv("GCS_BUCKET")
+    if not bucket_name:
+        logger.error("❌ GCS_BUCKET not set - cannot load GeoDanmark data")
+        return None
+
+    try:
+        from google.cloud import storage
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        # Find the latest GeoDanmark data
+        prefix = "bronze/bbr_buildings/geodanmark/"
+        blobs = list(bucket.list_blobs(prefix=prefix))
+
+        if not blobs:
+            logger.error(f"❌ No GeoDanmark bronze data found in gs://{bucket_name}/{prefix}")
+            return None
+
+        # Get the latest timestamp folder
+        timestamps = set()
+        for blob in blobs:
+            path_parts = blob.name.split("/")
+            if len(path_parts) >= 4:
+                timestamps.add(path_parts[3])  # bronze/bbr_buildings/geodanmark/TIMESTAMP/
+
+        if not timestamps:
+            logger.error(f"❌ No timestamped GeoDanmark data found in gs://{bucket_name}/{prefix}")
+            return None
+
+        latest_timestamp = max(timestamps)
+        logger.info(f"📂 Loading GeoDanmark data from timestamp: {latest_timestamp}")
+
+        # Download GeoDanmark geoparquet
+        geodanmark_gcs_path = f"{prefix}{latest_timestamp}/geodanmark_buildings_complete.geoparquet"
+        geodanmark_blob = bucket.blob(geodanmark_gcs_path)
+
+        if not geodanmark_blob.exists():
+            logger.error(f"❌ GeoDanmark data not found: gs://{bucket_name}/{geodanmark_gcs_path}")
+            return None
+
+        # Download to local temporary file
+        local_path = "data/geodanmark_buildings_complete.geoparquet"
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+        logger.info("📥 Downloading GeoDanmark data from GCS...")
+        geodanmark_blob.download_to_filename(local_path)
+
+        # Verify download
+        if not os.path.exists(local_path):
+            logger.error(f"❌ Failed to download GeoDanmark data to {local_path}")
+            return None
+
+        file_size_gb = os.path.getsize(local_path) / (1024**3)
+        logger.info(f"✅ Downloaded GeoDanmark data: {local_path} ({file_size_gb:.1f}GB)")
+
+        return local_path
+
+    except Exception as e:
+        logger.error(f"❌ Failed to load GeoDanmark data from GCS: {e}")
+        return None
+
+
 def run_silver_layer(
     args: argparse.Namespace,
     settings: Settings,
@@ -902,8 +1037,8 @@ def run_silver_layer(
     Execute silver layer processing - joins, transformations, and final output.
 
     Silver layer responsibility:
-    - Read bronze data from GCS or local artifacts
-            - Perform UUID-based joins between INSPIRE BBR and GeoDanmark
+    - Read bronze data from GCS (GeoDanmark and INSPIRE BBR)
+    - Perform UUID-based joins between INSPIRE BBR and GeoDanmark
     - Apply transformations and data quality checks
     - Upload final processed data to GCS
     """
@@ -912,22 +1047,15 @@ def run_silver_layer(
     output_dir = args.output_dir / "silver"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine timestamp - from bronze layer or current
-    if bronze_timestamp:
-        timestamp = bronze_timestamp
-        logger.info(f"📅 Using bronze timestamp: {timestamp}")
-    elif bronze_data and "timestamp" in bronze_data:
-        timestamp = bronze_data["timestamp"]
-        logger.info(f"📅 Using bronze data timestamp: {timestamp}")
-    else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        logger.info(f"📅 Using current timestamp: {timestamp}")
+    # Use current timestamp for silver output
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logger.info(f"📅 Using timestamp: {timestamp}")
 
     silver_output_dir = output_dir / timestamp
     silver_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Load bronze data (from GCS, artifacts, or in-memory)
-    building_ids, attributes_df = _load_bronze_data(bronze_data, bronze_timestamp, logger)
+    # Step 1: Load bronze data from GCS
+    building_ids, attributes_df = _load_bronze_data_from_gcs(logger)
 
     if not building_ids:
         logger.error("❌ No building IDs available for processing")
@@ -935,11 +1063,10 @@ def run_silver_layer(
 
     logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
 
-    # Step 2: Check GeoDanmark data availability
-    geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
-    if not Path(geodanmark_path).exists():
-        logger.error(f"❌ GeoDanmark data not found: {geodanmark_path}")
-        logger.error("   Silver layer requires GeoDanmark data from bronze layer or separate job")
+    # Step 2: Load GeoDanmark data from GCS
+    geodanmark_path = _load_geodanmark_data_from_gcs(logger)
+    if not geodanmark_path:
+        logger.error("❌ GeoDanmark data not found in GCS")
         return None
 
     # Step 3: Perform UUID join (core silver layer processing)
