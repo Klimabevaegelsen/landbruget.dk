@@ -237,8 +237,66 @@ class BaseSource(Generic[T], ABC):
                     self.log.error(f"❌ Critical: Spatial extension failed to load: {retry_e}")
                     # Don't raise here - let individual jobs handle spatial requirements
 
+            # Set up UUID5 function for field UUID generation
+            self._setup_uuid5_function()
+
         except Exception as e:
             self.log.warning(f"DuckDB configuration warning: {e}")
+
+    def _setup_uuid5_function(self):
+        """
+        Set up UUID5 function for field UUID generation.
+
+        This function creates a proper UUID5 implementation using either the crypto extension
+        or built-in MD5 functions as fallback.
+        """
+        try:
+            # Try to install crypto extension for better hash functions
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+
+            # Create proper UUID5 function using crypto extension
+            self.conn.execute("""
+                CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
+                    SELECT CONCAT(
+                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
+                    )
+                )
+            """)
+            self.log.info("✅ UUID5 function created using crypto extension")
+
+        except Exception as e:
+            self.log.warning(f"Could not load crypto extension: {e}")
+            try:
+                # Fallback to built-in MD5 function
+                self.conn.execute("""
+                    CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
+                        SELECT CONCAT(
+                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
+                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
+                            '5', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
+                            CONCAT('8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
+                        )
+                    )
+                """)
+                self.log.info("✅ UUID5 function created using built-in MD5 hash")
+            except Exception as fallback_e:
+                self.log.error(f"❌ Failed to create UUID5 function: {fallback_e}")
+                # Create a simple fallback that just uses MD5 hash
+                try:
+                    self.conn.execute("""
+                        CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
+                            SELECT md5(CONCAT(namespace, CAST(data AS VARCHAR)))
+                        )
+                    """)
+                    self.log.warning("⚠️ UUID5 function created with simplified MD5 fallback")
+                except Exception as simple_e:
+                    self.log.error(f"❌ Critical: Could not create any UUID5 function: {simple_e}")
 
     def __del__(self):
         """Clean up DuckDB connection."""

@@ -613,10 +613,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 CREATE TABLE final_production_estimates AS
                 SELECT * FROM (VALUES 
                     ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy', 
-                     0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp)
+                     0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp, 'dummy', 'dummy')
                 ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming, 
                        landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha, 
-                       yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at)
+                       yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at,
+                       field_uuid, primary_field_id)
                 WHERE false
             """)
 
@@ -801,7 +802,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         z.landsdel_code,
                         z.landsdel_name,
                         z.dst_regions,
-                        ST_AsText(f.geometry) as geometry_wkt
+                        ST_AsText(f.geometry) as geometry_wkt,
+                        f.field_uuid,
+                        f.primary_field_id
                     FROM current_year_fields f
                     LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
                 """)
@@ -863,7 +866,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     -- SPATIAL INFO
                     f.geometry_wkt,
                     -- METADATA
-                    current_timestamp as created_at
+                    current_timestamp as created_at,
+                    -- FIELD UUID SUPPORT
+                    f.field_uuid,
+                    f.primary_field_id
                 FROM year_fields_with_zones f
                 LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
                     AND hst77.time_period = CAST(f.year AS VARCHAR) 
@@ -991,7 +997,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     z.landsdel_code,
                     z.landsdel_name,
                     z.dst_regions,
-                    ST_AsText(f.geometry) as geometry_wkt
+                    ST_AsText(f.geometry) as geometry_wkt,
+                    f.field_uuid,
+                    f.primary_field_id
                 FROM current_batch f
                 LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
             """)
@@ -1017,6 +1025,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """Create optimized year table with minimal memory footprint."""
         # Build SELECT clause with proper column mapping
         field_id_select = "field_id" if "field_id" in column_names else "NULL as field_id"
+        block_id_select = "block_id" if "block_id" in column_names else "NULL as block_id"
+        cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
+        field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
         if "crop_type" in column_names:
             crop_type_select = "crop_type"
@@ -1034,36 +1045,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return
 
         # Create table based on year (block_id available from 2008+)
-        if year >= 2008:
-            create_query = f"""
-                CREATE OR REPLACE TABLE current_year_fields AS
-                SELECT 
-                    {field_id_select},
-                    block_id,
-                    cvr_number,
-                    area_ha,
-                    {crop_type_select},
-                    false as organic_farming,
-                    {year} as year,
-                    {geometry_select}
-                FROM {source_table}
-                WHERE {geometry_where}
-            """
-        else:
-            create_query = f"""
-                CREATE OR REPLACE TABLE current_year_fields AS
-                SELECT 
-                    {field_id_select},
-                    NULL as block_id,
-                    cvr_number,
-                    area_ha,
-                    {crop_type_select},
-                    false as organic_farming,
-                    {year} as year,
-                    {geometry_select}
-                FROM {source_table}
-                WHERE {geometry_where}
-            """
+        create_query = f"""
+            CREATE OR REPLACE TABLE current_year_fields AS
+            SELECT 
+                {field_id_select},
+                {block_id_select},
+                {cvr_number_select},
+                area_ha,
+                {crop_type_select},
+                false as organic_farming,
+                {year} as year,
+                {geometry_select},
+                {field_uuid_select},
+                COALESCE(field_uuid, 'legacy_' || CAST({cvr_number_select} AS VARCHAR) || '_' || CAST({block_id_select} AS VARCHAR) || '_' || CAST({field_id_select} AS VARCHAR)) as primary_field_id
+            FROM {source_table}
+            WHERE {geometry_where}
+        """
 
         self.conn.execute(create_query)
 
@@ -1076,6 +1073,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """Create optimized year table directly from file with minimal memory footprint."""
         # Build SELECT clause with proper column mapping
         field_id_select = "field_id" if "field_id" in column_names else "NULL as field_id"
+        block_id_select = "block_id" if "block_id" in column_names else "NULL as block_id"
+        cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
+        field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
         if "crop_type" in column_names:
             crop_type_select = "crop_type"
@@ -1093,36 +1093,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return
 
         # Create table based on year (block_id available from 2008+)
-        if year >= 2008:
-            create_query = f"""
-                CREATE OR REPLACE TABLE current_year_fields AS
-                SELECT 
-                    {field_id_select},
-                    block_id,
-                    cvr_number,
-                    area_ha,
-                    {crop_type_select},
-                    false as organic_farming,
-                    {year} as year,
-                    {geometry_select}
-                FROM read_parquet('{temp_file}')
-                WHERE {geometry_where}
-            """
-        else:
-            create_query = f"""
-                CREATE OR REPLACE TABLE current_year_fields AS
-                SELECT 
-                    {field_id_select},
-                    NULL as block_id,
-                    cvr_number,
-                    area_ha,
-                    {crop_type_select},
-                    false as organic_farming,
-                    {year} as year,
-                    {geometry_select}
-                FROM read_parquet('{temp_file}')
-                WHERE {geometry_where}
-            """
+        create_query = f"""
+            CREATE OR REPLACE TABLE current_year_fields AS
+            SELECT 
+                {field_id_select},
+                {block_id_select},
+                {cvr_number_select},
+                area_ha,
+                {crop_type_select},
+                false as organic_farming,
+                {year} as year,
+                {geometry_select},
+                {field_uuid_select},
+                COALESCE(field_uuid, 'legacy_' || CAST({cvr_number_select} AS VARCHAR) || '_' || CAST({block_id_select} AS VARCHAR) || '_' || CAST({field_id_select} AS VARCHAR)) as primary_field_id
+            FROM read_parquet('{temp_file}')
+            WHERE {geometry_where}
+        """
 
         self.conn.execute(create_query)
 

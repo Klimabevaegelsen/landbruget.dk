@@ -97,7 +97,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             phase_start = time.time()
             results = self._generate_final_results()
             self.phase_times["final_results"] = time.time() - phase_start
-                self.log.info(
+            self.log.info(
                 f"✅ Phase 5 completed in {self.phase_times['final_results']:.1f} seconds"
             )
 
@@ -113,9 +113,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             total_time = time.time() - start_time
             self._log_performance_summary(total_time, results)
 
-            except Exception as e:
+        except Exception as e:
             self.log.error(f"Field Area Analysis Gold processing failed: {e}")
-                    raise
+            raise
 
     def _load_agricultural_fields(self):
         """Load agricultural fields from the latest available year."""
@@ -129,12 +129,17 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         dataset_name = f"fvm_marker_{latest_year}"
         gcs_path = self._get_latest_silver_path(dataset_name)
 
-            self.gcs_access.query_parquet_direct(
+        self.gcs_access.query_parquet_direct(
             gcs_path,
             f"""SELECT 
                 field_id,
                 block_id,
                 cvr_number,
+                field_uuid,
+                COALESCE(
+                    field_uuid, 
+                    'legacy_' || CAST(cvr_number AS VARCHAR) || '_' || CAST(block_id AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
+                ) as primary_field_id,
                 {latest_year} as year,
                 CASE 
                     WHEN geometry IS NOT NULL THEN geometry
@@ -145,7 +150,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             "fields_raw",
         )
 
-            self.conn.execute("""
+        self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
                 SELECT
                 field_id,
@@ -153,6 +158,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 cvr_number,
                 year,
                 geom,
+                field_uuid,
+                primary_field_id,
                 ST_Area_Spheroid(geom) as field_area_m2
             FROM fields_raw
             WHERE geom IS NOT NULL AND ST_IsValid(geom)
@@ -231,7 +238,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """Execute basic spatial joins using SPATIAL_JOIN operator."""
 
         # Start with agricultural fields
-            self.conn.execute(
+        self.conn.execute(
             "CREATE OR REPLACE TABLE current_fields AS SELECT * FROM agricultural_fields"
         )
 
@@ -247,9 +254,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """)
 
         # 2. BNBO status
-            self.conn.execute("""
+        self.conn.execute("""
             CREATE OR REPLACE TABLE fields_with_bnbo AS
-                SELECT
+            SELECT
                 f.*,
                 b.status_category
             FROM fields_with_soil f
@@ -288,6 +295,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
+                f.field_uuid,
+                f.primary_field_id,
                 f.field_area_m2,
                 
                 -- BNBO area calculations
@@ -328,7 +337,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             LEFT JOIN bnbo_status b ON ST_Intersects(f.geom, b.geom)
             LEFT JOIN wetlands w ON ST_Intersects(f.geom, w.geom)
             LEFT JOIN water_projects wp ON ST_Intersects(f.geom, wp.geom)
-            GROUP BY f.field_id, f.block_id, f.cvr_number, f.field_area_m2
+            GROUP BY (
+                f.field_id, f.block_id, f.cvr_number, f.field_area_m2, 
+                f.field_uuid, f.primary_field_id
+            )
         """)
 
         # Calculate coverage percentages
@@ -404,37 +416,35 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         self.log.info(f"Processing {total_properties:,} properties...")
 
-            # Create results table
-            self.conn.execute("""
+        # Create results table
+        self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_results (
-                    field_id VARCHAR,
-                    block_id VARCHAR,
-                    cvr_number VARCHAR,
-                    bfe_number VARCHAR,
-                    area_share DOUBLE
-                )
-            """)
+                field_id VARCHAR,
+                block_id VARCHAR,
+                cvr_number VARCHAR,
+                bfe_number VARCHAR,
+                intersection_area_m2 DOUBLE,
+                field_uuid VARCHAR,
+                primary_field_id VARCHAR
+            )
+        """)
 
         # Process in chunks
         chunk_size = self.config.batch_size
         processed = 0
 
-            for offset in range(0, total_properties, chunk_size):
+        for offset in range(0, total_properties, chunk_size):
             chunk_size_actual = min(chunk_size, total_properties - offset)
 
-                self.log.info(
+            self.log.info(
                 f"   Processing chunk: {processed:,} to {processed + chunk_size_actual:,}"
-                )
+            )
 
             with self.gcs_access._temp_download(self.properties_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE properties_chunk AS
-                    SELECT
-                        bestemtFastEjendomBFENr as bfe_number,
-                        geometry as geom
-                    FROM read_parquet('{temp_file}')
-                    WHERE bestemtFastEjendomBFENr IS NOT NULL
-                    LIMIT {chunk_size} OFFSET {offset}
+                    SELECT * FROM read_parquet('{temp_file}')
+                    LIMIT {chunk_size_actual} OFFSET {offset}
                 """)
 
                 self.conn.execute("""
@@ -444,7 +454,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         f.block_id,
                         f.cvr_number,
                         p.bfe_number,
-                    ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 * 100 as area_share
+                        ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 * 100 as area_share,
+                        f.field_uuid,
+                        f.primary_field_id
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
                 WHERE ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 > 0.01
@@ -462,14 +474,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         try:
             self.conn.execute("SELECT COUNT(*) FROM field_property_results").fetchone()
             has_properties = True
-        except:
+        except Exception:
             pass
 
         has_environmental_coverage = False
         try:
             self.conn.execute("SELECT COUNT(*) FROM field_coverage_percentages").fetchone()
             has_environmental_coverage = True
-        except:
+        except Exception:
             pass
 
         # Create final results table
@@ -501,9 +513,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     ec.field_wetland_coverage_pct
                 FROM fields_with_wetlands f
                 LEFT JOIN field_property_results p 
-                    ON f.field_id = p.field_id AND f.block_id = p.block_id AND f.cvr_number = p.cvr_number
+                    ON COALESCE(f.field_uuid, f.primary_field_id) = 
+                       COALESCE(p.field_uuid, p.primary_field_id)
                 LEFT JOIN field_coverage_percentages ec
-                    ON f.field_id = ec.field_id AND f.block_id = ec.block_id AND f.cvr_number = ec.cvr_number
+                    ON COALESCE(f.field_uuid, f.primary_field_id) = 
+                       COALESCE(ec.field_uuid, ec.primary_field_id)
             """)
         elif has_environmental_coverage:
             self.conn.execute("""
@@ -533,7 +547,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     ec.field_wetland_coverage_pct
                     FROM fields_with_wetlands f
                 LEFT JOIN field_coverage_percentages ec
-                    ON f.field_id = ec.field_id AND f.block_id = ec.block_id AND f.cvr_number = ec.cvr_number
+                    ON COALESCE(f.field_uuid, f.primary_field_id) = 
+                       COALESCE(ec.field_uuid, ec.primary_field_id)
                 """)
         else:
             # Fallback without environmental coverage
@@ -650,11 +665,13 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             self.log.info("🌿 Environmental Coverage Analysis:")
             self.log.info(f"   Fields with BNBO: {env_stats.get('fields_with_bnbo', 0):,}")
             self.log.info(f"   Fields with wetlands: {env_stats.get('fields_with_wetlands', 0):,}")
-        self.log.info(
-                f"   Avg BNBO coverage by water projects: {env_stats.get('avg_bnbo_coverage_by_water_projects', 0):.1f}%"
+            self.log.info(
+                f"   Avg BNBO coverage by water projects: "
+                f"{env_stats.get('avg_bnbo_coverage_by_water_projects', 0):.1f}%"
             )
             self.log.info(
-                f"   Avg wetland coverage by water projects: {env_stats.get('avg_wetland_coverage_by_water_projects', 0):.1f}%"
+                f"   Avg wetland coverage by water projects: "
+                f"{env_stats.get('avg_wetland_coverage_by_water_projects', 0):.1f}%"
             )
 
         self.log.info("🚀 DUCKDB SPATIAL v1.2.2 SPATIAL_JOIN OPERATOR USED")
