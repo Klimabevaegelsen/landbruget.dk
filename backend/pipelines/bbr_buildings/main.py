@@ -894,7 +894,7 @@ def _upload_bronze_data_to_gcs(
         logger.warning("Silver layer will need to process locally")
 
 
-def _load_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
+def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
     """Load INSPIRE BBR bronze data from GCS."""
     if not GCS_AVAILABLE:
         logger.error("❌ GCS not available - cannot load bronze data")
@@ -1055,7 +1055,7 @@ def run_silver_layer(
     silver_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Load bronze data from GCS
-    building_ids, attributes_df = _load_bronze_data_from_gcs(logger)
+    building_ids, attributes_df = _load_latest_inspire_bronze_data_from_gcs(logger)
 
     if not building_ids:
         logger.error("❌ No building IDs available for processing")
