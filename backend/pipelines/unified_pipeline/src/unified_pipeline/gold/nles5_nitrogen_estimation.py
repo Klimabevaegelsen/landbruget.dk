@@ -73,6 +73,11 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     max_year_lag: int = 1  # Maximum years between field and climate data
     climate_data_days: int = 365  # Days of climate data to analyze
 
+    # Test mode configuration for local development
+    test_mode: bool = False  # Enable test mode to process only a subset of data
+    max_test_records: int = 1000  # Maximum number of records to process in test mode
+    test_years: Optional[List[int]] = [2022]  # Years to process in test mode (single year)
+
     # FVM marker years to process (will be auto-discovered if not specified)
     target_years: Optional[List[int]] = [2022, 2023, 2024, 2025]  # Test with 2022 and forwards
 
@@ -266,10 +271,18 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                                 # Use authenticated temporary download pattern (consistent with other gold processors)
                 try:
                     with self.gcs_access._temp_download(gcs_path) as temp_file:
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE {table_name} AS
-                            SELECT * FROM read_parquet('{temp_file}')
-                        """)
+                        if self.config.test_mode:
+                            # In test mode, limit the number of records
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                SELECT * FROM read_parquet('{temp_file}')
+                                LIMIT {self.config.max_test_records}
+                            """)
+                        else:
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                SELECT * FROM read_parquet('{temp_file}')
+                            """)
 
                     count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                     self.log.info(f"Loaded {count:,} fields for year {year}")
@@ -298,7 +311,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             Table name containing combined agricultural fields data
         """
         # Determine which years to process
-        if self.config.target_years:
+        if self.config.test_mode:
+            years_to_process = self.config.test_years
+            self.log.info(f"🧪 TEST MODE: Processing {len(years_to_process)} years with max {self.config.max_test_records:,} records per year")
+        elif self.config.target_years:
             years_to_process = self.config.target_years
             self.log.info(f"Processing specified years: {years_to_process}")
         else:
@@ -421,7 +437,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             source_table = storage_result['table_name']
 
                             # Copy data to our connection
-                            data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
+                            if self.config.test_mode and dataset_name == self.config.soil_types_dataset:
+                                # In test mode, limit soil data too
+                                data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
+                                self.log.info(f"🧪 TEST MODE: Loaded limited {dataset_name} data ({len(data_df)} records)")
+                            else:
+                                data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
                             self.conn.register(table_name, data_df)
                             loaded_tables[dataset_name] = table_name
                         else:
@@ -461,7 +482,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 if precip_result and isinstance(precip_result, dict):
                     gcs_access = precip_result['gcs_access']
                     source_table = precip_result['table_name']
-                    precip_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
+                    if self.config.test_mode:
+                        # In test mode, limit DMI data too
+                        precip_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
+                        self.log.info(f"🧪 TEST MODE: Loaded limited DMI precipitation data ({len(precip_df)} records)")
+                    else:
+                        precip_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
                     self.conn.register("dmi_precip_temp", precip_df)
                     precip_loaded = True
                     self.log.info("Successfully loaded DMI precipitation data")
@@ -475,7 +501,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 if evap_result and isinstance(evap_result, dict):
                     gcs_access = evap_result['gcs_access']
                     source_table = evap_result['table_name']
-                    evap_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
+                    if self.config.test_mode:
+                        # In test mode, limit DMI data too
+                        evap_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
+                        self.log.info(f"🧪 TEST MODE: Loaded limited DMI evaporation data ({len(evap_df)} records)")
+                    else:
+                        evap_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
                     self.conn.register("dmi_evap_temp", evap_df)
                     evap_loaded = True
                     self.log.info("Successfully loaded DMI evaporation data")
@@ -676,6 +707,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     END as sufficient_climate_data
                 FROM seasonal_aggregation
                 WHERE total_percolation > 0
+                    -- Filter for Denmark coordinates (roughly 8-15°E, 54-58°N)
+                    AND ST_X(geometry) BETWEEN 8 AND 15
+                    AND ST_Y(geometry) BETWEEN 54 AND 58
             """)
 
             count = self.conn.execute("SELECT COUNT(*) FROM climate_percolation").fetchone()[0]
@@ -778,90 +812,69 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             self.log.info(f"Using geometry column: {geometry_column} (format: {geometry_format})")
 
-            # Ensure geometries are valid and in same CRS
-            validate_and_transform_geometries_duckdb(
-                self.conn, "agricultural_fields", "agricultural_fields", geometry_column=geometry_column
-            )
-
-            # Create spatial join using the detected geometry column
+            # Convert geometries to proper spatial objects first
             if geometry_format == 'wkt':
-                # Handle WKT format geometry
                 self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE fields_with_climate AS
+                    CREATE OR REPLACE TABLE agricultural_fields_spatial AS
                     SELECT
-                        f.field_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        COALESCE(f.crop_name, f.crop_code) as crop_type,
-                        f.organic_farming,
-                        f.year,
-                        f.{geometry_column} as field_geometry_wkt,
-                        -- Climate data from nearest grid point
-                        c.percolation_period1,
-                        c.percolation_period2,
-                        c.percolation_period3,
-                        c.total_percolation,
-                        c.avg_precipitation,
-                        c.avg_evaporation,
-                        c.sufficient_climate_data,
-                        -- Calculate distance to climate grid point for quality assessment
-                        ST_Distance(
-                            ST_GeomFromText(f.{geometry_column}),
-                            c.geometry
-                        ) as climate_distance_m
-                    FROM agricultural_fields f
-                    LEFT JOIN climate_percolation c
-                        ON ST_DWithin(
-                            ST_GeomFromText(f.{geometry_column}),
-                            c.geometry,
-                            5000  -- 5km search radius for climate data
-                        )
-                    WHERE f.{geometry_column} IS NOT NULL
-                        AND CAST(f.area_ha AS DOUBLE) > 0
-                    QUALIFY ROW_NUMBER() OVER (
-                        PARTITION BY f.field_id
-                        ORDER BY ST_Distance(ST_GeomFromText(f.{geometry_column}), c.geometry)
-                    ) = 1
+                        *,
+                        ST_GeomFromText({geometry_column}) as geometry_spatial
+                    FROM agricultural_fields
+                    WHERE {geometry_column} IS NOT NULL
+                        AND CAST(area_ha AS DOUBLE) > 0
                 """)
             else:
-                # Handle WKB format geometry
                 self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE fields_with_climate AS
+                    CREATE OR REPLACE TABLE agricultural_fields_spatial AS
                     SELECT
-                        f.field_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        COALESCE(f.crop_name, f.crop_code) as crop_type,
-                        f.organic_farming,
-                        f.year,
-                        ST_AsText(ST_GeomFromWKB(f.{geometry_column})) as field_geometry_wkt,
-                        -- Climate data from nearest grid point
-                        c.percolation_period1,
-                        c.percolation_period2,
-                        c.percolation_period3,
-                        c.total_percolation,
-                        c.avg_precipitation,
-                        c.avg_evaporation,
-                        c.sufficient_climate_data,
-                        -- Calculate distance to climate grid point for quality assessment
-                        ST_Distance(
-                            ST_GeomFromWKB(f.{geometry_column}),
-                            c.geometry
-                        ) as climate_distance_m
-                    FROM agricultural_fields f
-                    LEFT JOIN climate_percolation c
-                        ON ST_DWithin(
-                            ST_GeomFromWKB(f.{geometry_column}),
-                            c.geometry,
-                            5000  -- 5km search radius for climate data
-                        )
-                    WHERE f.{geometry_column} IS NOT NULL
-                        AND CAST(f.area_ha AS DOUBLE) > 0
-                    QUALIFY ROW_NUMBER() OVER (
-                        PARTITION BY f.field_id
-                        ORDER BY ST_Distance(ST_GeomFromWKB(f.{geometry_column}), c.geometry)
-                    ) = 1
+                        *,
+                        ST_GeomFromWKB({geometry_column}) as geometry_spatial
+                    FROM agricultural_fields
+                    WHERE {geometry_column} IS NOT NULL
+                        AND CAST(area_ha AS DOUBLE) > 0
                 """)
+
+            # Now validate the spatial geometries
+            validate_and_transform_geometries_duckdb(
+                self.conn, "agricultural_fields_spatial", "agricultural_fields_spatial", geometry_column="geometry_spatial"
+            )
+
+            # Create spatial join using the spatial table
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE fields_with_climate AS
+                SELECT
+                    f.field_id,
+                    f.cvr_number,
+                    CAST(f.area_ha AS DOUBLE) as area_ha,
+                    COALESCE(f.crop_name, f.crop_code) as crop_type,
+                    f.organic_farming,
+                    f.year,
+                    ST_AsText(f.geometry_spatial) as field_geometry_wkt,
+                    -- Climate data from nearest grid point
+                    c.percolation_period1,
+                    c.percolation_period2,
+                    c.percolation_period3,
+                    c.total_percolation,
+                    c.avg_precipitation,
+                    c.avg_evaporation,
+                    c.sufficient_climate_data,
+                    -- Calculate distance to climate grid point for quality assessment
+                    ST_Distance(
+                        f.geometry_spatial,
+                        c.geometry
+                    ) as climate_distance_m
+                FROM agricultural_fields_spatial f
+                LEFT JOIN climate_percolation c
+                    ON ST_DWithin(
+                        f.geometry_spatial,
+                        c.geometry,
+                        5000  -- 5km search radius for climate data
+                    )
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY f.field_id
+                    ORDER BY ST_Distance(f.geometry_spatial, c.geometry)
+                ) = 1
+            """)
 
             count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
             climate_matched = self.conn.execute(
@@ -873,54 +886,27 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # If no climate data matched, create a fallback version with default climate values
             if climate_matched == 0:
                 self.log.warning("No climate data matched to fields, using default climate values")
-                if geometry_format == 'wkt':
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE fields_with_climate AS
-                        SELECT
-                            f.field_id,
-                            f.cvr_number,
-                            f.area_ha,
-                            COALESCE(f.crop_name, f.crop_code) as crop_type,
-                            f.organic_farming,
-                            f.year,
-                            f.{geometry_column} as field_geometry_wkt,
-                            -- Default climate data
-                            300.0 as percolation_period1,
-                            200.0 as percolation_period2,
-                            400.0 as percolation_period3,
-                            900.0 as total_percolation,
-                            800.0 as avg_precipitation,
-                            300.0 as avg_evaporation,
-                            true as sufficient_climate_data,
-                            0.0 as climate_distance_m
-                        FROM agricultural_fields f
-                        WHERE f.{geometry_column} IS NOT NULL
-                            AND CAST(f.area_ha AS DOUBLE) > 0
-                    """)
-                else:
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE fields_with_climate AS
-                        SELECT
-                            f.field_id,
-                            f.cvr_number,
-                            f.area_ha,
-                            COALESCE(f.crop_name, f.crop_code) as crop_type,
-                            f.organic_farming,
-                            f.year,
-                            ST_AsText(ST_GeomFromWKB(f.{geometry_column})) as field_geometry_wkt,
-                            -- Default climate data
-                            300.0 as percolation_period1,
-                            200.0 as percolation_period2,
-                            400.0 as percolation_period3,
-                            900.0 as total_percolation,
-                            800.0 as avg_precipitation,
-                            300.0 as avg_evaporation,
-                            true as sufficient_climate_data,
-                            0.0 as climate_distance_m
-                        FROM agricultural_fields f
-                        WHERE f.{geometry_column} IS NOT NULL
-                            AND CAST(f.area_ha AS DOUBLE) > 0
-                    """)
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE fields_with_climate AS
+                    SELECT
+                        f.field_id,
+                        f.cvr_number,
+                        CAST(f.area_ha AS DOUBLE) as area_ha,
+                        COALESCE(f.crop_name, f.crop_code) as crop_type,
+                        f.organic_farming,
+                        f.year,
+                        ST_AsText(f.geometry_spatial) as field_geometry_wkt,
+                        -- Default climate data
+                        300.0 as percolation_period1,
+                        200.0 as percolation_period2,
+                        400.0 as percolation_period3,
+                        900.0 as total_percolation,
+                        800.0 as avg_precipitation,
+                        300.0 as avg_evaporation,
+                        true as sufficient_climate_data,
+                        0.0 as climate_distance_m
+                    FROM agricultural_fields_spatial f
+                """)
 
                 fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
                 self.log.info(f"Created fallback fields_with_climate: {fallback_count:,} fields with default climate data")
@@ -932,54 +918,27 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Create a minimal fallback version
             self.log.warning("Creating minimal fallback fields_with_climate due to spatial join error")
             try:
-                if geometry_format == 'wkt':
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE fields_with_climate AS
-                        SELECT
-                            f.field_id,
-                            f.cvr_number,
-                            f.area_ha,
-                            COALESCE(f.crop_name, f.crop_code) as crop_type,
-                            f.organic_farming,
-                            f.year,
-                            f.{geometry_column} as field_geometry_wkt,
-                            -- Default climate data
-                            300.0 as percolation_period1,
-                            200.0 as percolation_period2,
-                            400.0 as percolation_period3,
-                            900.0 as total_percolation,
-                            800.0 as avg_precipitation,
-                            300.0 as avg_evaporation,
-                            true as sufficient_climate_data,
-                            0.0 as climate_distance_m
-                        FROM agricultural_fields f
-                        WHERE f.{geometry_column} IS NOT NULL
-                            AND CAST(f.area_ha AS DOUBLE) > 0
-                    """)
-                else:
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE fields_with_climate AS
-                        SELECT
-                            f.field_id,
-                            f.cvr_number,
-                            f.area_ha,
-                            COALESCE(f.crop_name, f.crop_code) as crop_type,
-                            f.organic_farming,
-                            f.year,
-                            ST_AsText(ST_GeomFromWKB(f.{geometry_column})) as field_geometry_wkt,
-                            -- Default climate data
-                            300.0 as percolation_period1,
-                            200.0 as percolation_period2,
-                            400.0 as percolation_period3,
-                            900.0 as total_percolation,
-                            800.0 as avg_precipitation,
-                            300.0 as avg_evaporation,
-                            true as sufficient_climate_data,
-                            0.0 as climate_distance_m
-                        FROM agricultural_fields f
-                        WHERE f.{geometry_column} IS NOT NULL
-                            AND CAST(f.area_ha AS DOUBLE) > 0
-                    """)
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE fields_with_climate AS
+                    SELECT
+                        f.field_id,
+                        f.cvr_number,
+                        CAST(f.area_ha AS DOUBLE) as area_ha,
+                        COALESCE(f.crop_name, f.crop_code) as crop_type,
+                        f.organic_farming,
+                        f.year,
+                        ST_AsText(f.geometry_spatial) as field_geometry_wkt,
+                        -- Default climate data
+                        300.0 as percolation_period1,
+                        200.0 as percolation_period2,
+                        400.0 as percolation_period3,
+                        900.0 as total_percolation,
+                        800.0 as avg_precipitation,
+                        300.0 as avg_evaporation,
+                        true as sufficient_climate_data,
+                        0.0 as climate_distance_m
+                    FROM agricultural_fields_spatial f
+                """)
 
                 fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
                 self.log.info(f"Created emergency fallback fields_with_climate: {fallback_count:,} fields")
@@ -999,9 +958,19 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         try:
             self.log.info("Joining fields with soil type data")
 
-            # Validate soil data geometries
+            # Convert soil geometries to proper spatial objects first
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE soil_types_spatial AS
+                SELECT
+                    *,
+                    ST_GeomFromWKB(geometry) as geometry_spatial
+                FROM soil_types
+                WHERE geometry IS NOT NULL
+            """)
+
+            # Now validate the spatial geometries
             validate_and_transform_geometries_duckdb(
-                self.conn, "soil_types", "soil_types"
+                self.conn, "soil_types_spatial", "soil_types_spatial", geometry_column="geometry_spatial"
             )
 
             self.conn.execute("""
@@ -1021,10 +990,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         ELSE false
                     END as has_soil_data
                 FROM fields_with_climate f
-                LEFT JOIN soil_types s
+                LEFT JOIN soil_types_spatial s
                     ON ST_Within(
                         ST_GeomFromText(f.field_geometry_wkt),
-                        ST_GeomFromText(s.geometry)
+                        s.geometry_spatial
                     )
             """)
 
@@ -1139,12 +1108,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         EXP(-0.00185 * f.clay_content) as soil_effect,
 
                         -- Fertilizer data (defaults if not available)
-                        COALESCE(fert.total_nitrogen_kg_ha, 150.0) as tn_t_ha,
-                        COALESCE(fert.mineral_n_spring_kg_ha, 0.0) as mineral_n_foraar,
-                        COALESCE(fert.mineral_n_autumn_kg_ha, 0.0) as mineral_n_eft,
-                        COALESCE(fert.mineral_n_applied_kg_ha, 0.0) as mineral_n_udb,
-                        COALESCE(fert.organic_n_kg_ha, 0.0) as organic_n_hus,
-                        COALESCE(fp.harmoni_areal, 0.0) as niveau,
+                        150.0 as tn_t_ha,
+                        0.0 as mineral_n_foraar,
+                        0.0 as mineral_n_eft,
+                        0.0 as mineral_n_udb,
+                        0.0 as organic_n_hus,
+                        0.0 as niveau,
                         0.0 as nfix_ha,  -- Nitrogen fixation - to be enhanced
                         0.0 as niveau_nfix,  -- Nitrogen fixation level - to be enhanced
 
@@ -1152,8 +1121,6 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         -0.1108 * (2017 - 1991) as trend_effect
                     FROM fields_with_climate_soil f
                     LEFT JOIN crop_parameters cp ON f.crop_type = cp.crop_type
-                    LEFT JOIN fertilizer_accounts fert ON f.field_id = fert.field_id AND f.year = fert.year
-                    LEFT JOIN field_plan fp ON f.field_id = fp.field_id AND f.year = fp.year
                     WHERE f.total_percolation IS NOT NULL
                         AND f.total_percolation > 0
                 ),
@@ -1283,6 +1250,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         0.0 as crop_effect,
                         0.8 as drainage_effect,
                         0.9 as soil_effect,
+                        1.0 as perco_soil_effect,
                         50.0 as nitrogen_effect,
                         -2.9 as trend_effect,
                         73.51 as v_base,
@@ -1293,7 +1261,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         0.0 as organic_n_kg_ha,
                         -- Simplified nitrogen washout calculation
                         GREATEST(0, 50.0 + 0.8 * 0.9 * 1.085) as nitrogen_washout_kg_ha,
-                        GREATEST(0, 50.0 + 0.8 * 0.9 * 1.085) * area_ha as total_nitrogen_washout_kg,
+                        GREATEST(0, 50.0 + 0.8 * 0.9 * 1.085) * CAST(area_ha AS DOUBLE) as total_nitrogen_washout_kg,
                         has_soil_data,
                         sufficient_climate_data,
                         'medium' as data_quality,
@@ -1338,6 +1306,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         0.0 as crop_effect,
                         0.8 as drainage_effect,
                         0.9 as soil_effect,
+                        1.0 as perco_soil_effect,
                         50.0 as nitrogen_effect,
                         -2.9 as trend_effect,
                         73.51 as v_base,
@@ -1348,7 +1317,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         0.0 as organic_n_kg_ha,
                         -- Emergency fallback nitrogen washout
                         50.0 as nitrogen_washout_kg_ha,
-                        50.0 * area_ha as total_nitrogen_washout_kg,
+                        50.0 * CAST(area_ha AS DOUBLE) as total_nitrogen_washout_kg,
                         COALESCE(has_soil_data, false) as has_soil_data,
                         COALESCE(sufficient_climate_data, true) as sufficient_climate_data,
                         'low' as data_quality,
@@ -1922,7 +1891,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """Run NLES5 nitrogen estimation gold processing with real climate data."""
         try:
-            self.log.info("Starting NLES5 nitrogen estimation with real DMI climate data")
+            if self.config.test_mode:
+                self.log.info("🧪 TEST MODE: Starting NLES5 nitrogen estimation with limited data")
+                self.log.info(f"🧪 TEST MODE: Max records per dataset: {self.config.max_test_records:,}")
+                self.log.info(f"🧪 TEST MODE: Processing years: {self.config.test_years}")
+            else:
+                self.log.info("Starting NLES5 nitrogen estimation with real DMI climate data")
 
             # Load required silver datasets
             loaded_tables = self._load_required_silver_datasets(silver_data)
@@ -1961,14 +1935,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         self.log.error("NLES5 estimates failed validation - check data quality and model parameters")
                         return
 
-            # Analyze estimates distribution
-            self._analyze_estimates_distribution()
-
-            # Calculate uncertainty estimates
+            # Calculate uncertainty estimates first
             uncertainty_table = self._calculate_uncertainty_estimates()
 
             # Analyze uncertainty patterns
             patterns_table = self._analyze_uncertainty_patterns()
+
+            # Analyze estimates distribution (after uncertainty is calculated)
+            self._analyze_estimates_distribution()
 
             # Save results to gold layer
             self._save_results_to_gold()
