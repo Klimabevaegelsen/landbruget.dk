@@ -1,6 +1,5 @@
 """Module for loading CHR_dyr data (Animal Movements) - Bronze Layer."""
 
-import json
 import logging
 import os
 import time
@@ -18,7 +17,6 @@ from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
 # Import the exporter function
-from .export import save_data_immediately
 
 # Import GCS access for persistent storage
 try:
@@ -487,25 +485,14 @@ def load_animal_movements(
                         f"Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
                     )
 
-            # Save to streaming buffer to prevent memory buildup while maintaining consolidated output
+            # Return the data instead of saving to buffer (batch processing will handle saving)
             if movement_summaries and movement_summaries.get("movements"):
-                # Use streaming save to prevent memory accumulation
-                _save_to_streaming_buffer(
-                    data_type="chr_dyr_movement_summaries",
-                    identifier=f"{herd_number}{date_suffix}",
-                    data=movement_summaries,
-                )
-                logger.info(
-                    f"Herd {herd_number}: Streamed {len(movement_summaries['movements'])} movement summaries to buffer"
-                )
+                logger.info(f"Herd {herd_number}: Processed {len(movement_summaries['movements'])} movement summaries")
+                return movement_summaries
             else:
-                # Still save a minimal record indicating we processed this herd
+                # Return minimal record indicating we processed this herd
                 minimal_record = {"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True}
-                _save_to_streaming_buffer(
-                    data_type="chr_dyr_movement_summaries",
-                    identifier=f"{herd_number}{date_suffix}",
-                    data=minimal_record,
-                )
+                return minimal_record
 
             # Log statistics
             if hasattr(response, "Response") and response.Response:
@@ -598,26 +585,11 @@ def load_cattle_movement_summaries(
     end_date: Optional[date] = None,
 ) -> Optional[Dict]:
     """
-    Fetches cattle movement data and aggregates it into herd-level summaries.
+    Fetches cattle movement data using the unified pipeline pattern.
 
-    This approach processes individual animal records from CHR_dyr but immediately
-    aggregates them into movement summaries similar to pig movements, avoiding
-    the storage of massive individual animal datasets.
-
-    For high-volume herds, automatically splits the date range into smaller chunks
-    while still collecting all the data.
-
-    Args:
-        chr_dyr_client: The CHR_dyr SOAP client
-        username: Username for authentication
-        herd_number: The herd number to fetch data for
-        start_date: Optional start date for filtering
-        end_date: Optional end date for filtering
-
-    Returns:
-        Dict with aggregated movement summaries or None if failed
+    This function maintains the original interface but uses the new consolidated
+    DuckDB processing approach internally.
     """
-
     # Set reasonable date range (last 5 years for cattle movements)
     if start_date is None and end_date is None:
         end_date = date.today()
@@ -627,39 +599,14 @@ def load_cattle_movement_summaries(
 
     logger.info(f"Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
 
-    # Proactive volume detection for unknown herds
-    if not is_high_volume_herd(herd_number) and not is_problematic_herd(herd_number):
-        # For large date ranges (>90 days), do volume detection first
-        total_days = (end_date - start_date).days + 1
-        if total_days > 90:  # Only for requests >3 months
-            logger.info(
-                f"Large date range ({total_days} days) detected for unknown herd {herd_number} - performing volume detection"
-            )
-
-            try:
-                volume_result = detect_herd_volume(chr_dyr_client, username, herd_number)
-
-                if volume_result.get("risk_level") in ["high", "extreme"]:
-                    logger.warning(f"High-volume herd {herd_number} detected during volume check - will use chunking")
-                elif volume_result.get("risk_level") == "moderate":
-                    logger.info(f"Moderate-volume herd {herd_number} detected - will use chunking")
-                else:
-                    logger.info(f"Normal-volume herd {herd_number} detected - proceeding with standard processing")
-
-            except Exception as e:
-                logger.warning(f"Volume detection failed for herd {herd_number}: {e} - proceeding with caution")
-
     # Check if this is a high-volume herd and get optimal date ranges
     date_ranges = get_optimal_date_range(herd_number, start_date, end_date)
 
     if len(date_ranges) > 1:
         logger.info(f"Processing herd {herd_number} in {len(date_ranges)} chunks due to high volume")
 
-    # Aggregate results from all date ranges
-    combined_movements = []
-    total_animals_processed = 0
-    all_movement_dates = set()
-    all_counterparty_herds = set()
+    # Process all date ranges and aggregate results
+    total_movements = 0
     successful_chunks = 0
     failed_chunks = 0
 
@@ -670,109 +617,54 @@ def load_cattle_movement_summaries(
             )
 
             try:
-                # Process this chunk
-                chunk_summaries = load_animal_movements(
-                    chr_dyr_client, username, herd_number, chunk_start, chunk_end, max_retries=3
-                )
+                # Process this chunk - data is added directly to consolidated table
+                result = load_animal_movements(chr_dyr_client, username, herd_number, chunk_start, chunk_end)
 
-                if chunk_summaries and chunk_summaries.get("movements"):
-                    # Combine movements from this chunk
-                    combined_movements.extend(chunk_summaries["movements"])
-
-                    # Add to summary statistics
-                    chunk_stats = chunk_summaries.get("summary_stats", {})
-                    total_animals_processed += chunk_stats.get("total_animals_processed", 0)
-
-                    # CRITICAL FIX: Access the sets BEFORE they're converted to counts
-                    # The _aggregate_cattle_movements function converts sets to counts at the end,
-                    # but we need the actual sets for .update() operations
-                    if "unique_movement_dates_set" in chunk_stats:
-                        # Use the set version for .update() operations
-                        all_movement_dates.update(chunk_stats["unique_movement_dates_set"])
-
-                    if "counterparty_herds_set" in chunk_stats:
-                        # Use the set version for .update() operations
-                        all_counterparty_herds.update(chunk_stats["counterparty_herds_set"])
-
+                if result and result.get("processed_successfully"):
                     successful_chunks += 1
-                    logger.info(
-                        f"Chunk {chunk_idx + 1} completed: {len(chunk_summaries['movements'])} movements, {chunk_stats.get('total_animals_processed', 0)} animals"
-                    )
-
-                elif chunk_summaries and chunk_summaries.get("skipped_reason"):
-                    # Check if this is a successful case with no movements (API returned count only)
-                    if chunk_summaries.get("processed_successfully", False):
-                        successful_chunks += 1
-                        logger.info(
-                            f"Chunk {chunk_idx + 1} completed successfully: {chunk_summaries.get('skipped_reason')}"
-                        )
-                    else:
-                        # Chunk was skipped for a problematic reason (e.g., problematic herd, too large)
-                        logger.warning(f"Chunk {chunk_idx + 1} skipped: {chunk_summaries.get('skipped_reason')}")
-                        # Don't count as failed if it was intentionally skipped
-
+                    total_movements += result.get("movement_count", 0)
+                    logger.info(f"Chunk {chunk_idx + 1} completed: {result.get('movement_count', 0)} movements")
                 else:
-                    logger.warning(f"Chunk {chunk_idx + 1} returned no data")
                     failed_chunks += 1
+                    if result and result.get("skipped_reason"):
+                        logger.warning(f"Chunk {chunk_idx + 1} skipped: {result.get('skipped_reason')}")
+                    else:
+                        logger.warning(f"Chunk {chunk_idx + 1} failed: no result returned")
 
-            except Exception as chunk_error:
-                logger.error(f"Error processing chunk {chunk_idx + 1} for herd {herd_number}: {chunk_error}")
+            except Exception as e:
+                logger.error(f"Error processing chunk {chunk_idx + 1} for herd {herd_number}: {e}")
                 failed_chunks += 1
+                continue
 
-                # If this chunk failed due to volume, try to detect and adapt
-                if "aggregation" in str(chunk_error).lower():
-                    current_days = (chunk_end - chunk_start).days + 1
-                    if current_days > 30:  # If chunk was larger than a month, suggest smaller chunks
-                        suggested_days = max(30, current_days // 2)  # Half the size, but at least 30 days
-                        logger.warning(
-                            f"Chunk processing error suggests herd {herd_number} needs smaller chunks (suggest {suggested_days} days)"
-                        )
-
-                        # Auto-adapt: add this herd to high-volume list with smaller chunks
-                        if not is_high_volume_herd(herd_number):
-                            add_high_volume_herd(herd_number, suggested_days, volume_estimate=None)
-                            logger.info(
-                                f"Auto-added herd {herd_number} to high-volume list with {suggested_days}-day chunks"
-                            )
-
-        # Create combined summary
-        if combined_movements or successful_chunks > 0:
-            combined_summary = {
+        # Return summary result
+        if successful_chunks > 0:
+            return {
                 "reporting_herd_number": herd_number,
-                "movement_count": len(combined_movements),
                 "processed_successfully": True,
-                "processing_stats": {
-                    "total_chunks": len(date_ranges),
-                    "successful_chunks": successful_chunks,
-                    "failed_chunks": failed_chunks,
-                    "chunk_success_rate": successful_chunks / len(date_ranges) * 100 if date_ranges else 0,
-                },
-                "summary_stats": {
-                    "total_animals_processed": total_animals_processed,
-                    "unique_movement_dates": len(all_movement_dates),
-                    "counterparty_herds": len(all_counterparty_herds),
-                    "date_range_processed": f"{start_date} to {end_date}",
-                },
+                "movement_count": total_movements,
+                "successful_chunks": successful_chunks,
+                "failed_chunks": failed_chunks,
+                "total_chunks": len(date_ranges),
+            }
+        else:
+            return {
+                "reporting_herd_number": herd_number,
+                "processed_successfully": False,
+                "movement_count": 0,
+                "successful_chunks": 0,
+                "failed_chunks": failed_chunks,
+                "total_chunks": len(date_ranges),
+                "error": "All chunks failed",
             }
 
-            logger.info(
-                f"Herd {herd_number}: Combined {len(combined_movements)} movements from {successful_chunks}/{len(date_ranges)} successful chunks"
-            )
-            return combined_summary
-
-        else:
-            logger.warning(f"No movement summaries collected for herd {herd_number} from any chunks")
-            return None
-
     except Exception as e:
-        logger.error(f"Error processing cattle movement summaries for herd {herd_number}: {e}")
-
-        # If the error suggests volume issues, try to auto-adapt
-        if not is_high_volume_herd(herd_number):
-            logger.warning(f"Adding herd {herd_number} to high-volume list due to processing error")
-            add_high_volume_herd(herd_number, max_days=60, volume_estimate=None)  # Start with bi-monthly chunks
-
-        return None
+        logger.error(f"Error processing herd {herd_number}: {e}")
+        return {
+            "reporting_herd_number": herd_number,
+            "processed_successfully": False,
+            "movement_count": 0,
+            "error": str(e),
+        }
 
 
 def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
@@ -929,7 +821,6 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_date": None,
                 "counterparty_herd": None,
                 "movement_type": None,  # "incoming" or "outgoing"
-                "animals": [],  # Store animal IDs for debugging
                 "movement_reasons": [],  # Store AarsagAfgaaet values
             }
         )
@@ -986,7 +877,6 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             movement_groups[key]["movement_date"] = movement_date
                             movement_groups[key]["counterparty_herd"] = source_herd
                             movement_groups[key]["movement_type"] = "incoming"
-                            movement_groups[key]["animals"].append(ckr_nr)
 
                             movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
                             movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
@@ -1000,7 +890,6 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             movement_groups[key]["movement_date"] = movement_date
                             movement_groups[key]["counterparty_herd"] = dest_herd
                             movement_groups[key]["movement_type"] = "outgoing"
-                            movement_groups[key]["animals"].append(ckr_nr)
                             movement_groups[key]["movement_reasons"].append(exit_reason)  # Save AarsagAfgaaet
 
                             movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
@@ -1045,7 +934,6 @@ def _aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
                 # Additional metadata
                 "source_data": "chr_dyr_aggregated",
-                "animal_ids_sample": group_data["animals"][:5],  # Keep sample for debugging
             }
             movement_summaries["movements"].append(movement_summary)
 
@@ -1106,197 +994,264 @@ def _parse_date(date_str):
     return None
 
 
-# Global streaming file handles for consolidated output
-_streaming_files = {}
+# Remove the batch processing system and use proper unified pipeline patterns
+# Import the unified GCS access system
+try:
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    GCS_ACCESS_AVAILABLE = True
+except ImportError:
+    GCS_ACCESS_AVAILABLE = False
+
+# Global DuckDB connection for consolidated processing
+_duckdb_conn = None
+_gcs_access = None
 
 
-def _append_to_streaming_json(data_type: str, data: Any) -> bool:
-    """
-    Append data to streaming JSON using simple temporary file approach.
-    This prevents memory buildup while maintaining consolidated output.
-    """
+def _initialize_consolidated_processing():
+    """Initialize DuckDB connection and GCS access for consolidated processing."""
+    global _duckdb_conn, _gcs_access
+
+    if not GCS_ACCESS_AVAILABLE:
+        logger.error("GCSDataAccess not available - cannot use consolidated processing")
+        return False
+
     try:
-        import tempfile
+        _gcs_access = GCSDataAccess()
+        _duckdb_conn = _gcs_access.duckdb_conn
 
-        from .export import EXPORT_TIMESTAMP
-
-        # Create unique stream key
-        stream_key = f"{data_type}_{EXPORT_TIMESTAMP}"
-
-        # Initialize temp file for this stream if needed
-        if stream_key not in _streaming_files:
-            # Use /tmp for temp files to avoid filling up the working directory
-            temp_dir = "/tmp" if os.path.exists("/tmp") else None
-            temp_file = tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".jsonl",
-                delete=False,
-                encoding="utf-8",
-                dir=temp_dir,
-                prefix=f"chr_streaming_{data_type}_",
+        # Create consolidated table for all movement data
+        _duckdb_conn.execute("""
+            CREATE TABLE IF NOT EXISTS consolidated_movements (
+                reporting_herd_number INTEGER,
+                movement_date DATE,
+                counterparty_herd INTEGER,
+                movement_type VARCHAR,
+                animal_count INTEGER,
+                animals TEXT,  -- JSON array of animal IDs
+                movement_reasons TEXT,  -- JSON array of reasons
+                data_source VARCHAR DEFAULT 'chr_dyr'
             )
-            _streaming_files[stream_key] = {"temp_file": temp_file, "temp_path": temp_file.name, "count": 0}
-            logger.info(f"Initialized streaming temp file for {data_type}: {temp_file.name}")
+        """)
 
-        # Append data as JSONL (one JSON object per line)
-        temp_file = _streaming_files[stream_key]["temp_file"]
-        json.dump(data, temp_file, default=str)
-        temp_file.write("\n")
-        temp_file.flush()  # Ensure data is written
-
-        _streaming_files[stream_key]["count"] += 1
-
-        # Log progress every 1000 records
-        count = _streaming_files[stream_key]["count"]
-        if count % 1000 == 0:
-            logger.info(f"Streamed {count} records for {data_type}")
-
-        # CRITICAL: Periodic cleanup to prevent excessive temp file accumulation
-        # Every 5000 records, force a flush and consider finalizing if memory is constrained
-        if count % 5000 == 0:
-            temp_file.flush()
-            os.fsync(temp_file.fileno())  # Force OS to write to disk
-
-            # Check if we're in a memory-constrained environment
-            if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true":
-                # Force garbage collection every 5000 records
-                import gc
-
-                gc.collect()
-
-                # Log memory usage if possible
-                try:
-                    import psutil
-
-                    process = psutil.Process(os.getpid())
-                    memory_mb = process.memory_info().rss / 1024 / 1024
-                    logger.info(f"Memory usage at {count} records for {data_type}: {memory_mb:.1f} MB")
-                except Exception:
-                    pass
-
+        logger.info("✅ Initialized consolidated DuckDB processing")
         return True
-
     except Exception as e:
-        logger.error(f"Error appending to streaming {data_type}: {e}")
+        logger.error(f"Failed to initialize consolidated processing: {e}")
         return False
 
 
-def _finalize_streaming_files() -> bool:
-    """Convert streaming temp files to final consolidated JSON files."""
+def _add_to_consolidated_table(movement_data):
+    """Add movement data directly to consolidated DuckDB table."""
+    global _duckdb_conn
+
+    if not _duckdb_conn or not movement_data:
+        return
+
     try:
-        if not _streaming_files:
-            logger.warning("No streaming files to finalize")
+        # Extract movements from the data
+        movements = movement_data.get("movements", [])
+        reporting_herd = movement_data.get("reporting_herd_number")
+
+        if not movements:
+            return
+
+        # Insert each movement directly into DuckDB table
+        for movement in movements:
+            _duckdb_conn.execute(
+                """
+                INSERT INTO consolidated_movements 
+                (reporting_herd_number, movement_date, counterparty_herd, movement_type, 
+                 animal_count, animals, movement_reasons)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                [
+                    reporting_herd,
+                    movement.get("movement_date"),
+                    movement.get("counterparty_herd"),
+                    movement.get("movement_type"),
+                    movement.get("animal_count", 0),
+                    json.dumps(movement.get("animals", [])),
+                    json.dumps(movement.get("movement_reasons", [])),
+                ],
+            )
+
+        logger.debug(f"Added {len(movements)} movements from herd {reporting_herd} to consolidated table")
+
+    except Exception as e:
+        logger.error(f"Failed to add data to consolidated table: {e}")
+
+
+def _finalize_consolidated_processing():
+    """Save consolidated data to GCS and cleanup resources."""
+    global _duckdb_conn, _gcs_access
+
+    if not _duckdb_conn or not _gcs_access:
+        return False
+
+    try:
+        # Get record count
+        count_result = _duckdb_conn.execute("SELECT COUNT(*) FROM consolidated_movements").fetchone()
+        record_count = count_result[0] if count_result else 0
+
+        if record_count == 0:
+            logger.warning("No movement data to save - consolidated table is empty")
             return True
 
-        logger.info(f"Finalizing {len(_streaming_files)} streaming files...")
+        logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
-        for stream_key, stream_info in _streaming_files.items():
-            data_type = stream_key.split("_")[0]  # Extract data_type from stream_key
-            temp_file = stream_info["temp_file"]
-            temp_path = stream_info["temp_path"]
-            count = stream_info["count"]
+        # Save consolidated data directly to GCS using the unified pipeline pattern
+        from .export import EXPORT_TIMESTAMP
 
-            logger.info(f"Processing stream {stream_key}: {count} records from {temp_path}")
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        gcs_path = f"gs://{bucket_name}/bronze/chr/{EXPORT_TIMESTAMP}/chr_dyr_movement_summaries.parquet"
 
-            # Close the temp file
-            if not temp_file.closed:
-                temp_file.close()
-                logger.info(f"Closed temp file for {data_type}")
+        # Use the unified GCS access pattern - export directly to parquet
+        _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
 
-            # Read all records from temp file and create consolidated JSON
-            consolidated_data = []
-            try:
-                # Check if temp file exists before trying to read it
-                if not os.path.exists(temp_path):
-                    logger.error(f"❌ Temp file {temp_path} does not exist - cannot finalize {data_type}")
-                    logger.error(f"This means data for {data_type} will be lost!")
-                    continue
+        logger.info(f"✅ Saved consolidated movement data to {gcs_path}")
 
-                logger.info(f"Reading {count} records from {temp_path}")
-                with open(temp_path, "r", encoding="utf-8") as f:
-                    line_count = 0
-                    for line in f:
-                        if line.strip():
-                            try:
-                                consolidated_data.append(json.loads(line.strip()))
-                                line_count += 1
-                            except json.JSONDecodeError as e:
-                                logger.warning(f"Skipping invalid JSON line in {temp_path}: {e}")
-
-                logger.info(f"Successfully read {line_count} valid records from {temp_path}")
-
-                # Save consolidated data immediately to GCS
-                if consolidated_data:
-                    logger.info(f"Saving {len(consolidated_data)} records for {data_type}")
-                    success = save_data_immediately(
-                        data_type=data_type,
-                        data=consolidated_data,
-                        identifier="consolidated",
-                    )
-                    if success:
-                        logger.info(f"✅ Finalized {data_type}: {count} records -> consolidated JSON")
-                    else:
-                        logger.error(f"❌ Failed to save {data_type} to GCS")
-                        return False
-
-                    # CRITICAL: Clear consolidated_data immediately after saving to prevent memory accumulation
-                    consolidated_data.clear()
-                    del consolidated_data
-                else:
-                    logger.warning(f"No valid data found in {temp_path} for {data_type}")
-
-            except Exception as e:
-                logger.error(f"❌ Error consolidating {data_type}: {e}")
-                return False
-
-            # Clean up temp file ONLY after successful processing
-            try:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                    logger.debug(f"Cleaned up temp file: {temp_path}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
-
-        # Clear the global registry
-        _streaming_files.clear()
-        logger.info("✅ Finalized all streaming files")
-
-        # Force garbage collection after finalizing all files
-        import gc
-
-        gc.collect()
+        # Clean up table
+        _duckdb_conn.execute("DROP TABLE IF EXISTS consolidated_movements")
 
         return True
 
     except Exception as e:
-        logger.error(f"❌ Error finalizing streaming files: {e}")
+        logger.error(f"Failed to finalize consolidated processing: {e}")
         return False
 
 
-def _save_to_streaming_buffer(data_type: str, identifier: str, data: Any) -> bool:
+# Update the main processing function to use consolidated approach
+def load_animal_movements(
+    chr_dyr_client: Client,
+    username: str,
+    herd_number: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    max_retries: int = 3,
+) -> Optional[Any]:
     """
-    Save data using streaming approach to prevent memory buildup.
-
-    This function now saves data immediately to GCS instead of buffering in temp files,
-    which eliminates the need for consolidation and matches the pattern used by other pipelines.
+    Fetches animal movement data using the unified pipeline pattern.
+    Data is added directly to consolidated DuckDB table instead of creating files.
     """
-    try:
-        # Import here to avoid circular imports
-        from .export import save_data_immediately
+    # Set default date range if not provided
+    if start_date is None and end_date is None:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=365 * 5)  # 5 years of data
+    elif end_date is None:
+        end_date = date.today()
 
-        # Save data immediately to GCS instead of buffering in temp files
-        success = save_data_immediately(data_type=data_type, data=data, identifier=identifier)
+    # Skip herds that have been identified as problematic
+    if is_problematic_herd(herd_number):
+        logger.warning(f"Skipping herd {herd_number} (marked as problematic)")
+        return {
+            "reporting_herd_number": herd_number,
+            "movements": [],
+            "skipped_reason": "problematic_herd",
+        }
 
-        if success:
-            logger.debug(f"✅ Saved {data_type} data immediately to GCS with identifier: {identifier}")
-        else:
-            logger.error(f"❌ Failed to save {data_type} data immediately to GCS")
+    logger.info(f"Fetching animal movements for herd {herd_number} from {start_date} to {end_date}")
 
-        return success
+    # Retry logic for problematic herds
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                wait_time = 2**attempt
+                logger.info(
+                    f"Retrying herd {herd_number} (attempt {attempt + 1}/{max_retries + 1}) after {wait_time}s delay"
+                )
+                time.sleep(wait_time)
 
-    except Exception as e:
-        logger.error(f"❌ Error saving {data_type} data immediately: {e}")
-        return False
+            # Create request structure
+            logger.debug(f"Herd {herd_number}: Creating SOAP request structure...")
+            GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+            common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
+
+            CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+
+            request_params_dict = {"BesaetningsNummer": herd_number}
+            if start_date:
+                request_params_dict["PeriodeFra"] = start_date
+            if end_date:
+                request_params_dict["PeriodeTil"] = end_date
+
+            request_params = CHR_dyrChrBesListeRequestTypeFactory(**request_params_dict)
+            payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}
+
+            # Call the operation
+            logger.debug(f"Herd {herd_number}: Starting SOAP request...")
+            request_start_time = time.time()
+
+            try:
+                response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
+                request_duration = time.time() - request_start_time
+                logger.debug(f"Herd {herd_number}: SOAP request completed in {request_duration:.1f}s")
+            except Exception as soap_error:
+                request_duration = time.time() - request_start_time
+                logger.error(f"Herd {herd_number}: SOAP request failed after {request_duration:.1f}s: {soap_error}")
+                raise
+
+            if response is None:
+                logger.warning(f"No response received for herd {herd_number} (attempt {attempt + 1})")
+                if attempt < max_retries:
+                    continue
+                return None
+
+            # Check for extremely slow requests
+            if request_duration > 1800:  # 30 minutes
+                logger.error(
+                    f"Extremely slow request for herd {herd_number}: {request_duration:.1f}s - marking as problematic"
+                )
+                add_problematic_herd(herd_number)
+                return {
+                    "reporting_herd_number": herd_number,
+                    "movements": [],
+                    "skipped_reason": "extremely_slow_processing",
+                }
+
+            # Process and aggregate the response
+            aggregation_start_time = time.time()
+            logger.info(f"Herd {herd_number}: Starting data aggregation...")
+
+            try:
+                movement_summaries = _aggregate_cattle_movements(response, herd_number)
+                aggregation_duration = time.time() - aggregation_start_time
+                logger.info(f"Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s")
+            except Exception as agg_error:
+                aggregation_duration = time.time() - aggregation_start_time
+                logger.error(
+                    f"Herd {herd_number}: Data aggregation failed after {aggregation_duration:.1f}s: {agg_error}"
+                )
+                raise
+
+            # Add to consolidated table instead of saving individual files
+            _add_to_consolidated_table(movement_summaries)
+
+            # Return summary for tracking
+            if movement_summaries and movement_summaries.get("movements"):
+                logger.info(f"Herd {herd_number}: Processed {len(movement_summaries['movements'])} movement summaries")
+                return {
+                    "reporting_herd_number": herd_number,
+                    "movement_count": len(movement_summaries["movements"]),
+                    "processed_successfully": True,
+                }
+            else:
+                return {
+                    "reporting_herd_number": herd_number,
+                    "movement_count": 0,
+                    "processed_successfully": True,
+                    "no_movements_found": True,
+                }
+
+        except Exception as e:
+            logger.error(f"Error fetching animal movements for herd {herd_number} (attempt {attempt + 1}): {e}")
+            if attempt < max_retries:
+                continue
+            else:
+                logger.error(f"Max retries exceeded for herd {herd_number} due to error: {e}")
+                return None
+
+    return None
 
 
 def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, sample_days: int = 7) -> Dict[str, Any]:
