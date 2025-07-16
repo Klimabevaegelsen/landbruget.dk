@@ -401,7 +401,16 @@ def main():
         inspire_fetcher = InspireBBRFetcher(settings, logger)
 
         pipeline_start_time = datetime.now()
-        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+        # Get shared timestamp from artifact or generate new one
+        timestamp = None
+        if os.path.exists("/tmp/bronze_timestamp.txt"):
+            with open("/tmp/bronze_timestamp.txt") as f:
+                timestamp = f.read().strip()
+            print(f"Using shared bronze timestamp: {timestamp}")
+        else:
+            timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+            print(f"No shared timestamp found, generated: {timestamp}")
 
         # Use streaming approach for large datasets to avoid memory issues
         if sample_size and sample_size <= 10000:

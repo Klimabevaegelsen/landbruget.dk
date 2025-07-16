@@ -63,8 +63,17 @@ def main():
         total_count = result[0] if result else 0
         print(f"🏢 Total GeoDanmark buildings downloaded: {total_count:,}")
 
+        # Get shared timestamp from artifact or generate new one
+        timestamp = None
+        if os.path.exists("/tmp/bronze_timestamp.txt"):
+            with open("/tmp/bronze_timestamp.txt") as f:
+                timestamp = f.read().strip()
+            print(f"Using shared bronze timestamp: {timestamp}")
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            print(f"No shared timestamp found, generated: {timestamp}")
+
         # Upload to GCS if in production environment
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if gcs_bucket and os.getenv("ENVIRONMENT") == "production":
             gcs_path = f"bronze/bbr_buildings/geodanmark/{timestamp}/geodanmark_buildings_complete.geoparquet"
 
