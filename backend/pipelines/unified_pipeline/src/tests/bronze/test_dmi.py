@@ -7,13 +7,12 @@ including configuration validation, API client functionality, and data processin
 
 import os
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
 
 from unified_pipeline.bronze.dmi import DMIApiClient, DMIBronze, DMIBronzeConfig
-from unified_pipeline.util.gcs_util import GCSUtil
 
 
 class TestDMIBronzeConfig:
@@ -186,16 +185,16 @@ class TestDMIBronze:
     """Test cases for DMIBronze."""
 
     @pytest.fixture
-    def mock_gcs_util(self):
-        """Create a mock GCS utility."""
-        return MagicMock(spec=GCSUtil)
+    def mock_gcs_access(self):
+        """Mock GCS access for testing."""
+        return Mock()
 
     @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.fixture
-    def dmi_bronze(self, mock_gcs_util):
+    def dmi_bronze(self):
         """Create a DMIBronze instance for testing."""
         config = DMIBronzeConfig(parameters=["pot_evaporation_makkink"])
-        return DMIBronze(config, mock_gcs_util)
+        return DMIBronze(config)
 
     def test_initialization(self, dmi_bronze):
         """Test DMIBronze initialization."""

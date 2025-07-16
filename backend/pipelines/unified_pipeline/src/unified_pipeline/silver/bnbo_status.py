@@ -20,8 +20,7 @@ from typing import Any, Optional
 # ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -74,28 +73,17 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     6. Saving the processed data back to GCS.
     """
 
-    def __init__(self, config: BNBOStatusSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: BNBOStatusSilverConfig):
         """
         Initialize the BNBOStatusSilver processor.
 
         Args:
-            config (BNBOStatusSilverConfig): Configuration object for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+            config (BNBOStatusSilverConfig): Configuration object for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for BNBO status processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ BNBOStatusSilver: Using unified GCS access and DuckDB connection")
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """
@@ -197,9 +185,24 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             if len(polygon_wkts) == 1:
                 final_wkt = polygon_wkts[0]
             else:
-                # Create MultiPolygon WKT
-                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
-                final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                # Create MultiPolygon WKT - properly extract coordinate parts
+                # Each polygon_wkt is like "POLYGON((x1 y1, x2 y2, ...))"
+                # We need to extract just the "((x1 y1, x2 y2, ...))" part
+                polygon_parts = []
+                for wkt in polygon_wkts:
+                    # Extract everything after "POLYGON" - this gives us "((x1 y1, x2 y2, ...))"
+                    if wkt.startswith("POLYGON"):
+                        coord_part = wkt[7:]  # Remove "POLYGON" prefix
+                        polygon_parts.append(coord_part)
+                    else:
+                        self.log.warning(f"Unexpected WKT format: {wkt}")
+                        continue
+
+                if polygon_parts:
+                    final_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                else:
+                    self.log.error("No valid polygon parts found for MultiPolygon")
+                    return None
 
             # ✅ OPTIMIZED: Use DuckDB ST_Area for area calculation instead of shapely
             try:
@@ -304,6 +307,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Get data for iteration - only fetch when needed
             raw_df = self.conn.execute(f"SELECT * FROM {raw_data}").fetchall()
             columns = [desc[0] for desc in self.conn.description]
+        elif isinstance(raw_data, dict) and "payload" in raw_data:
+            # Handle dictionary format for backward compatibility (mainly for tests)
+            self.log.info("Processing dictionary format data (test compatibility)")
+            raw_df = [(payload,) for payload in raw_data["payload"]]
+            columns = ["payload"]
         else:
             # Handle other data types (fallback)
             self.log.warning(f"Unexpected raw_data type: {type(raw_data)}")
@@ -373,18 +381,29 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     values,
                 )
 
-        table_name = "bnbo_processed_features"
+                table_name = "bnbo_processed_features"
+
+        # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT 
                 *,
-                ST_GeomFromText(geometry) as geometry_spatial
+                ST_GeomFromText(geometry) as geometry_spatial,
+                geometry as geometry_wgs84
             FROM bnbo_features_raw
             WHERE geometry IS NOT NULL
         """)
 
+        # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+        validate_and_transform_geometries_duckdb(
+            self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
+        )
+
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
+
+        # Clean up temporary table
+        self.conn.execute("DROP TABLE IF EXISTS bnbo_features_raw")
 
         return table_name
 
@@ -407,7 +426,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 "Creating dissolved geometries by status category using DuckDB-spatial..."
             )
 
-            # Create dissolved geometries for each category
+            # Create dissolved geometries for each category using transformed coordinates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
                 SELECT 
@@ -421,7 +440,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
 
             # Check what categories we have
             categories_result = self.conn.execute(f"""
-                SELECT status_category, ST_AsText(dissolved_geometry) as geometry_wkt
+                SELECT status_category, dissolved_geometry
                 FROM {dissolved_table_name}
                 ORDER BY status_category
             """).fetchall()
@@ -433,7 +452,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
                         CAST(NULL AS VARCHAR) as status_category,
-                        CAST(NULL AS GEOMETRY) as dissolved_geometry
+                        CAST(NULL AS GEOMETRY) as geometry,
+                        CAST(NULL AS TIMESTAMP) as dissolved_at
                     WHERE FALSE
                 """)
                 return dissolved_table_name
@@ -442,11 +462,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             action_required_geom = None
             completed_geom = None
 
-            for category, geom_wkt in categories_result:
+            for category, dissolved_geom in categories_result:
                 if category == "Action Required":
-                    action_required_geom = geom_wkt
+                    action_required_geom = dissolved_geom
                 elif category == "Completed":
-                    completed_geom = geom_wkt
+                    completed_geom = dissolved_geom
 
             # Process overlaps using DuckDB-spatial ST_Difference
             if action_required_geom and completed_geom:
@@ -457,8 +477,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
                     SELECT 
                         'Action Required' as status_category,
-                        dissolved_geometry,
-                        ST_AsText(dissolved_geometry) as geometry_wkt
+                        dissolved_geometry as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                     WHERE status_category = 'Action Required'
                     
@@ -469,11 +489,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                         ST_Difference(
                             (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
                             (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
-                        ) as dissolved_geometry,
-                        ST_AsText(ST_Difference(
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
-                        )) as geometry_wkt
+                        ) as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                 """)
             else:
                 # No overlaps to handle, use original dissolved geometries
@@ -481,8 +498,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
                     SELECT 
                         status_category,
-                        dissolved_geometry,
-                        ST_AsText(dissolved_geometry) as geometry_wkt
+                        dissolved_geometry as geometry,
+                        CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                 """)
 
@@ -495,8 +512,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Get final count
             final_count = self.conn.execute(f"""
                 SELECT COUNT(*) FROM {dissolved_table_name}
-                WHERE dissolved_geometry IS NOT NULL
-                    AND NOT ST_IsEmpty(dissolved_geometry)
+                WHERE geometry IS NOT NULL
+                    AND NOT ST_IsEmpty(geometry)
             """).fetchone()[0]
 
             self.log.info(
@@ -512,55 +529,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 CREATE OR REPLACE TABLE {empty_table_name} AS
                 SELECT 
                     CAST(NULL AS VARCHAR) as status_category,
-                    CAST(NULL AS GEOMETRY) as dissolved_geometry,
-                    CAST(NULL AS VARCHAR) as geometry_wkt
+                    CAST(NULL AS GEOMETRY) as geometry,
+                    CAST(NULL AS TIMESTAMP) as dissolved_at
                 WHERE FALSE
             """)
             return empty_table_name
-
-    def _copy_table_to_gcs_connection(self, table_name: str) -> None:
-        """
-        Copy a table from the main connection to the GCS connection for saving.
-
-        Args:
-            table_name: Name of the table to copy
-        """
-        try:
-            self.log.info(f"Copying table {table_name} to GCS connection for saving")
-
-            # Drop table if it exists in GCS connection
-            self.gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-
-            # Get data from main connection
-            rows = self.conn.execute(f"SELECT * FROM {table_name}").fetchall()
-            columns = [desc[0] for desc in self.conn.execute(f"DESCRIBE {table_name}").fetchall()]
-
-            self.log.info(f"Table {table_name} has {len(rows)} rows and {len(columns)} columns")
-
-            # Create table in GCS connection
-            column_defs = ", ".join([f'"{col}" VARCHAR' for col in columns])
-            self.gcs_access.duckdb_conn.execute(f"CREATE TABLE {table_name} ({column_defs})")
-
-            # Insert data in batches to avoid memory issues
-            batch_size = 1000
-            placeholders = ", ".join(["?" for _ in columns])
-
-            for i in range(0, len(rows), batch_size):
-                batch = rows[i : i + batch_size]
-                for row in batch:
-                    self.gcs_access.duckdb_conn.execute(
-                        f"INSERT INTO {table_name} VALUES ({placeholders})", row
-                    )
-
-            # Verify table was created in GCS connection
-            gcs_count = self.gcs_access.duckdb_conn.execute(
-                f"SELECT COUNT(*) FROM {table_name}"
-            ).fetchone()[0]
-            self.log.info(f"✅ Table {table_name} copied to GCS connection with {gcs_count} rows")
-
-        except Exception as e:
-            self.log.error(f"Error copying table {table_name} to GCS connection: {e}")
-            raise
 
     async def run(self, bronze_data: Optional[Any] = None) -> None:
         """
@@ -602,14 +575,10 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
             # ✅ MIGRATION: Save DuckDB tables using optimized methods
-            # Copy tables to GCS connection before saving
-            self._copy_table_to_gcs_connection(table_name)
-            self._copy_table_to_gcs_connection(dissolved_table_name)
-
-            # Save the main features table
+            # Save the main features table directly from main connection
             self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")
 
-            # Save the dissolved features table
+            # Save the dissolved features table directly from main connection
             self.save_data_direct(
                 dissolved_table_name,
                 f"{self.config.dataset}_dissolved",

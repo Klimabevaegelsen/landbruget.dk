@@ -25,9 +25,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
-
 
 class BNBOStatusBronzeConfig(BaseJobConfig):
     """
@@ -74,7 +72,6 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
 class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
@@ -87,15 +84,13 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
         config (BNBOStatusBronzeConfig): Configuration object containing settings for the processor.
     """
 
-    def __init__(self, config: BNBOStatusBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: BNBOStatusBronzeConfig):
         """
         Initialize the BNBOStatusBronze processor.
 
         Args:
-            config (BNBOStatusBronzeConfig): Configuration object for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+            config (BNBOStatusBronzeConfig): Configuration object for the processor.        """
+        super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:
         """

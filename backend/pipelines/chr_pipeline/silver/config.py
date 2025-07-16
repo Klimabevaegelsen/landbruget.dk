@@ -3,8 +3,9 @@ from pathlib import Path
 
 # Base paths - handle both local and GCS environments
 if os.getenv("GITHUB_ACTIONS"):
-    # In GitHub Actions, use /tmp for local file operations
-    BASE_DIR = Path("/tmp")
+    # In GitHub Actions, use LOCAL_DATA_PATH if set, otherwise /tmp
+    local_data_path = os.getenv("LOCAL_DATA_PATH", "/tmp")
+    BASE_DIR = Path(local_data_path)
 else:
     # In local environment, use a data directory in the workspace
     BASE_DIR = Path("/usr/data")

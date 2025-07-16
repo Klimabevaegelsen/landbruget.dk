@@ -1,0 +1,28 @@
+# H3 PFAS Exposure Pipeline Configuration Example
+# Copy this to .env and modify as needed
+
+# GCS Configuration
+GCS_BUCKET=landbrugsdata-raw-data
+
+# H3 Configuration
+# Supported resolutions: 7 (~516ha), 8 (~74ha), 9 (~11ha), 10 (~1.5ha)
+H3_RESOLUTION=10
+CHUNK_SIZE=25000
+
+# Processing Configuration
+MEMORY_LIMIT=12GB
+THREAD_COUNT=4
+
+# Logging Configuration
+LOG_LEVEL=INFO
+ENABLE_PROGRESS_TRACKING=true
+LOG_CHUNK_DETAILS=false
+LOG_STAGE_TIMINGS=false
+
+# Output Configuration (optional)
+OUTPUT_DIR=data/gold/h3_pfas_exposure
+
+# Development/Debug (optional)
+# LOG_LEVEL=DEBUG
+# MEMORY_LIMIT=8GB
+# CHUNK_SIZE=10000 

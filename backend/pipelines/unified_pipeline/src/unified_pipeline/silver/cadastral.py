@@ -7,10 +7,8 @@ from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 
 logger = logging.getLogger(__name__)
-
 
 class CadastralSilverConfig(BaseJobConfig):
     """Configuration for the Cadastral Silver source."""
@@ -26,12 +24,11 @@ class CadastralSilverConfig(BaseJobConfig):
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
 
-
 class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
     """Cadastral Silver source."""
 
-    def __init__(self, config: CadastralSilverConfig, gcs_util: GCSUtil) -> None:
-        super().__init__(config, gcs_util)
+    def __init__(self, config: CadastralSilverConfig) -> None:
+        super().__init__(config)
 
     def _get_current_timestamp(self):
         """Get current timestamp using DuckDB."""

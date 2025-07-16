@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       layer_types:
-        description: 'Layer types to process (comma-separated: markblokke,marker,smaabiotoper or "all")'
+        description: 'Layer types to process (comma-separated: markblokke,marker,smaabiotoper,organic_areas or "all")'
         required: false
         default: 'all'
       years:
@@ -34,7 +34,7 @@ jobs:
         run: |
           # Define all layer configurations
           if [ "${{ github.event.inputs.layer_types }}" = "all" ]; then
-            layer_types="markblokke,marker,smaabiotoper"
+            layer_types="markblokke,marker,smaabiotoper,organic_areas"
           else
             layer_types="${{ github.event.inputs.layer_types }}"
           fi
@@ -65,6 +65,13 @@ jobs:
                   years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
                 fi
                 ;;
+              "organic_areas")
+                if [ "${{ github.event.inputs.years }}" = "all" ]; then
+                  years=$(seq 2012 2024)
+                else
+                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
+                fi
+                ;;
             esac
             
             for year in $years; do
@@ -82,6 +89,11 @@ jobs:
                   ;;
                 "smaabiotoper")
                   if [ $year -ge 2023 ] && [ $year -le 2025 ]; then
+                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                  fi
+                  ;;
+                "organic_areas")
+                  if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
                   fi
                   ;;
@@ -138,7 +150,7 @@ jobs:
             -j "$STAGE" \
             --fvm-layer-type ${{ matrix.layer_type }} \
             --fvm-year ${{ matrix.year }}
-        timeout-minutes: 30  # Timeout per layer (should be sufficient based on testing)
+        # timeout-minutes: 30  # Removed timeout to allow organic areas processing to complete
 
       - name: Report completion
         if: success()

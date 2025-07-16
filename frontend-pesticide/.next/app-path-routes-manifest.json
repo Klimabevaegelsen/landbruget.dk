@@ -1,0 +1,6 @@
+{
+  "/api/metadata/route": "/api/metadata",
+  "/api/pmtiles/[...path]/route": "/api/pmtiles/[...path]",
+  "/_not-found/page": "/_not-found",
+  "/page": "/"
+}

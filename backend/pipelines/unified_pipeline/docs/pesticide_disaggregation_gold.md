@@ -25,8 +25,6 @@ from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig
 )
-from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.model.app_config import GCSConfig
 
 # Create configuration
 config = PesticideDisaggregationGoldConfig(
@@ -36,8 +34,7 @@ config = PesticideDisaggregationGoldConfig(
 )
 
 # Initialize processor
-gcs_util = GCSUtil(GCSConfig())
-processor = PesticideDisaggregationGold(config, gcs_util)
+processor = PesticideDisaggregationGold(config)
 
 # Run processing
 import asyncio

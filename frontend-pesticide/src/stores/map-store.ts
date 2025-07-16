@@ -1,77 +1,435 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { YEARS } from '@/lib/utils';
+import { devtools } from 'zustand/middleware';
 
-interface MapState {
-  // Selected year state
-  selectedYear: number;
-  setSelectedYear: (year: number) => void;
+export type DataMode = 'pesticide_total' | 'pfas' | 'diquat' | 'glyphosate';
+export type YearSelection = number | 'total';
+
+export interface MapState {
+  // Map view state
+  zoom: number;
+  center: [number, number];
+  bearing: number;
+  pitch: number;
   
-  // Layer visibility state
-  showPesticides: boolean;
-  showPFAS: boolean;
-  showBNBO: boolean;
-  showBBR: boolean;
-  setShowPesticides: (show: boolean) => void;
-  setShowPFAS: (show: boolean) => void;
-  setShowBNBO: (show: boolean) => void;
-  setShowBBR: (show: boolean) => void;
+  // Map instance reference
+  mapInstance: unknown | null;
   
-  // Cumulative mode state
-  cumulativeMode: boolean;
-  setCumulativeMode: (cumulative: boolean) => void;
+  // Data selection
+  selectedYear: YearSelection;
+  selectedDataMode: DataMode;
   
-  // Available years management
+  // Layer visibility (user-controlled)
+  showBNBOLayer: boolean;
+  showBasemap: boolean;
+  
+  // Loading states
+  isLoading: boolean;
+  isLoadingYear: boolean;
+  isLoadingTiles: boolean;
+  loadingMessage: string;
+  
+  // Error states
+  error: string | null;
+  
+  // Data availability
   availableYears: number[];
-  setAvailableYears: (years: number[]) => void;
+  availableYearOptions: YearSelection[]; // Includes both years and 'total'
+  availableResolutions: number[];
   
-  // Heatmap toggle (pesticide vs PFAS)
-  heatmapMode: 'pesticide' | 'pfas';
-  setHeatmapMode: (mode: 'pesticide' | 'pfas') => void;
+  // UI state
+  showControls: boolean;
+  showTooltip: boolean;
+  tooltipData: Record<string, unknown> | null;
+  tooltipPosition: { x: number; y: number };
+  
+  // Selected cell state
+  selectedCell: {
+    id: string;
+    layer: string;
+    properties: Record<string, unknown>;
+  } | null;
 }
 
-export const useMapStore = create<MapState>()(
-  persist(
-    (set) => ({
+export interface MapActions {
+  // Map view actions
+  setZoom: (zoom: number) => void;
+  setCenter: (center: [number, number]) => void;
+  setBearing: (bearing: number) => void;
+  setPitch: (pitch: number) => void;
+  setViewState: (viewState: Partial<Pick<MapState, 'zoom' | 'center' | 'bearing' | 'pitch'>>) => void;
+  setMapInstance: (mapInstance: unknown | null) => void;
+  flyToLocation: (location: { lat: number; lng: number; zoom?: number }) => void;
+  
+  // Data selection actions
+  setSelectedYear: (year: YearSelection) => void;
+  setSelectedDataMode: (mode: DataMode) => void;
+  
+  // Layer visibility actions
+  setShowBNBOLayer: (show: boolean) => void;
+  setShowBasemap: (show: boolean) => void;
+  toggleBNBOLayer: () => void;
+  
+  // Loading state actions
+  setIsLoading: (loading: boolean) => void;
+  setIsLoadingYear: (loading: boolean) => void;
+  setIsLoadingTiles: (loading: boolean) => void;
+  setLoadingMessage: (message: string) => void;
+  
+  // Error state actions
+  setError: (error: string | null) => void;
+  clearError: () => void;
+  
+  // Data availability actions
+  setAvailableYears: (years: number[]) => void;
+  setAvailableYearOptions: (yearOptions: YearSelection[]) => void;
+  setAvailableResolutions: (resolutions: number[]) => void;
+  
+  // UI actions
+  setShowControls: (show: boolean) => void;
+  setShowTooltip: (show: boolean) => void;
+  setTooltipData: (data: Record<string, unknown> | null) => void;
+  setTooltipPosition: (position: { x: number; y: number }) => void;
+  showTooltipWithData: (data: Record<string, unknown>, position: { x: number; y: number }) => void;
+  hideTooltip: () => void;
+  
+  // Selected cell actions
+  setSelectedCell: (cell: { id: string; layer: string; properties: Record<string, unknown> } | null) => void;
+  clearSelectedCell: () => void;
+  
+  // Utility actions
+  resetToDefaults: () => void;
+}
+
+const DEFAULT_CENTER: [number, number] = [10.0, 56.0]; // Center of Denmark
+const DEFAULT_ZOOM = 7;
+const DEFAULT_YEAR: YearSelection = 2023;
+const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
+
+// Zoom thresholds for layer switching - simplified for 3 levels
+const KOMMUNE_TO_H3_ZOOM = 9.0; // Switch from kommune to H3 at this zoom
+const H3_RES8_TO_RES10_ZOOM = 12.0; // Switch from res8 to res10 at this zoom
+
+// H3 resolution based on zoom level - simplified to only res8 and res10
+const getH3ResolutionForZoom = (zoom: number): number => {
+  if (zoom >= H3_RES8_TO_RES10_ZOOM) return 10;
+  return 8;
+};
+
+export const useMapStore = create<MapState & MapActions>()(
+  devtools(
+    (set, get) => ({
       // Initial state
-      selectedYear: 2024,
-      showPesticides: true,
-      showPFAS: false,
-      showBNBO: true,
-      showBBR: false,
-      cumulativeMode: false,
-      availableYears: YEARS,
-      heatmapMode: 'pesticide',
+      zoom: DEFAULT_ZOOM,
+      center: DEFAULT_CENTER,
+      bearing: 0,
+      pitch: 0,
+      mapInstance: null,
       
-      // Actions
-      setSelectedYear: (year: number) => set({ selectedYear: year }),
+      selectedYear: DEFAULT_YEAR,
+      selectedDataMode: DEFAULT_DATA_MODE,
       
-      setShowPesticides: (show: boolean) => set({ showPesticides: show }),
-      setShowPFAS: (show: boolean) => set({ showPFAS: show }),
-      setShowBNBO: (show: boolean) => set({ showBNBO: show }),
-      setShowBBR: (show: boolean) => set({ showBBR: show }),
+      showBNBOLayer: true,
+      showBasemap: true,
       
-      setCumulativeMode: (cumulative: boolean) => set({ cumulativeMode: cumulative }),
+      isLoading: false,
+      isLoadingYear: false,
+      isLoadingTiles: false,
+      loadingMessage: '',
       
-      setAvailableYears: (years: number[]) => set({ availableYears: years }),
+      error: null,
       
-      setHeatmapMode: (mode: 'pesticide' | 'pfas') => {
-        set({ 
-          heatmapMode: mode,
-          showPesticides: mode === 'pesticide',
-          showPFAS: mode === 'pfas'
+      availableYears: [],
+      availableYearOptions: [],
+      availableResolutions: [8, 10], // Only res8 and res10 for H3
+      
+      showControls: true,
+      showTooltip: false,
+      tooltipData: null,
+      tooltipPosition: { x: 0, y: 0 },
+      
+      selectedCell: null,
+      
+      // Map view actions
+      setZoom: (zoom) => set({ zoom }),
+      setCenter: (center) => set({ center }),
+      setBearing: (bearing) => set({ bearing }),
+      setPitch: (pitch) => set({ pitch }),
+      setViewState: (viewState) => set(viewState),
+      setMapInstance: (mapInstance) => set({ mapInstance }),
+      flyToLocation: (location) => {
+        const { mapInstance } = get();
+        console.log('🗺️ flyToLocation called with:', location);
+        console.log('🗺️ mapInstance:', mapInstance);
+        
+        if (!mapInstance) {
+          console.warn('🗺️ No map instance available for flyToLocation');
+          return;
+        }
+        
+        try {
+          // Cast to any to access MapLibre methods
+          const map = mapInstance as any;
+          
+          if (typeof map.flyTo === 'function') {
+            console.log('🗺️ Flying to location:', location);
+            map.flyTo({
+              center: [location.lng, location.lat],
+              zoom: location.zoom || 12,
+              essential: true,
+              duration: 2000
+            });
+          } else {
+            console.warn('🗺️ Map instance does not have flyTo method');
+          }
+        } catch (error) {
+          console.error('🗺️ Error in flyToLocation:', error);
+        }
+      },
+      
+      // Data selection actions
+      setSelectedYear: (selectedYear) => set({ selectedYear, isLoadingYear: true }),
+      setSelectedDataMode: (selectedDataMode) => set({ selectedDataMode }),
+      
+      // Layer visibility actions
+      setShowBNBOLayer: (showBNBOLayer) => set({ showBNBOLayer }),
+      setShowBasemap: (showBasemap) => set({ showBasemap }),
+      toggleBNBOLayer: () => set((state) => ({ showBNBOLayer: !state.showBNBOLayer })),
+      
+      // Loading state actions
+      setIsLoading: (isLoading) => set({ isLoading }),
+      setIsLoadingYear: (isLoadingYear) => set({ isLoadingYear }),
+      setIsLoadingTiles: (isLoadingTiles) => set({ isLoadingTiles }),
+      setLoadingMessage: (loadingMessage) => set({ loadingMessage }),
+      
+      // Error state actions
+      setError: (error) => set({ error }),
+      clearError: () => set({ error: null }),
+      
+      // Data availability actions
+      setAvailableYears: (availableYears) => {
+        // When years are set, also update year options to include 'total'
+        const availableYearOptions: YearSelection[] = [...availableYears, 'total'];
+        set({ availableYears, availableYearOptions });
+      },
+      setAvailableYearOptions: (availableYearOptions) => set({ availableYearOptions }),
+      setAvailableResolutions: (availableResolutions) => set({ availableResolutions }),
+      
+      // UI actions
+      setShowControls: (showControls) => set({ showControls }),
+      setShowTooltip: (showTooltip) => set({ showTooltip }),
+      setTooltipData: (tooltipData) => set({ tooltipData }),
+      setTooltipPosition: (tooltipPosition) => set({ tooltipPosition }),
+      
+      showTooltipWithData: (data, position) => {
+        set({
+          showTooltip: true,
+          tooltipData: data,
+          tooltipPosition: position,
+        });
+      },
+      
+      hideTooltip: () => {
+        set({
+          showTooltip: false,
+          tooltipData: null,
+        });
+      },
+      
+      // Selected cell actions
+      setSelectedCell: (selectedCell) => set({ selectedCell }),
+      clearSelectedCell: () => set({ selectedCell: null }),
+      
+      // Utility actions
+      resetToDefaults: () => {
+        set({
+          zoom: DEFAULT_ZOOM,
+          center: DEFAULT_CENTER,
+          bearing: 0,
+          pitch: 0,
+          selectedYear: DEFAULT_YEAR,
+          selectedDataMode: DEFAULT_DATA_MODE,
+          showBNBOLayer: true,
+          showBasemap: true,
+          isLoading: false,
+          isLoadingYear: false,
+          isLoadingTiles: false,
+          loadingMessage: '',
+          error: null,
+          showControls: true,
+          showTooltip: false,
+          tooltipData: null,
+          tooltipPosition: { x: 0, y: 0 },
+          selectedCell: null,
         });
       },
     }),
     {
       name: 'map-store',
-      partialize: (state) => ({
+      partialize: (state: MapState & MapActions) => ({
+        // Persist only essential state
+        zoom: state.zoom,
+        center: state.center,
         selectedYear: state.selectedYear,
-        showBNBO: state.showBNBO,
-        showBBR: state.showBBR,
-        cumulativeMode: state.cumulativeMode,
-        heatmapMode: state.heatmapMode,
+        selectedDataMode: state.selectedDataMode,
+        showBNBOLayer: state.showBNBOLayer,
+        showControls: state.showControls,
       }),
     }
   )
-); 
+);
+
+// Computed selectors (these are truly computed and don't cause updates)
+export const getComputedLayerVisibility = (zoom: number) => {
+  const shouldShowH3 = zoom >= KOMMUNE_TO_H3_ZOOM;
+  const shouldShowKommune = zoom < KOMMUNE_TO_H3_ZOOM;
+  
+  return {
+    shouldShowKommune,
+    shouldShowH3,
+    currentH3Resolution: getH3ResolutionForZoom(zoom),
+  };
+};
+
+// Data mode configuration
+export const DATA_MODE_CONFIG = {
+  pesticide_total: {
+    label: 'Total Pesticide Load',
+    description: 'Total pesticide load intensity per hectare',
+    h3Field: 'pesticide_belastning_per_ha',
+    kommuneField: 'pesticide_belastning_per_ha',
+    unit: 'kg/ha',
+    colorScale: 'white-red',
+  },
+  pfas: {
+    label: 'PFAS Intensity',
+    description: 'PFAS-containing pesticide intensity per hectare',
+    h3Field: 'pfas_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField: 'pfas_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
+  },
+  diquat: {
+    label: 'Diquat Intensity',
+    description: 'Diquat-containing pesticide intensity per hectare',
+    h3Field: 'diquat_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField: 'diquat_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
+  },
+  glyphosate: {
+    label: 'Glyphosate Intensity',
+    description: 'Glyphosate-containing pesticide intensity per hectare',
+    h3Field: 'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField: 'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
+  },
+} as const;
+
+// BNBO status configuration
+export const BNBO_STATUS_CONFIG = {
+  'Action Required': {
+    color: '#ff6b6b',
+    label: 'Action Required',
+    description: 'Areas requiring immediate action',
+  },
+  'Completed': {
+    color: '#51cf66',
+    label: 'Completed',
+    description: 'Areas where action has been completed',
+  },
+  'Unknown': {
+    color: '#868e96',
+    label: 'Unknown',
+    description: 'Areas with unknown status',
+  },
+} as const;
+
+// Individual selectors to avoid object recreation
+export const useZoom = () => useMapStore((state) => state.zoom);
+export const useCenter = () => useMapStore((state) => state.center);
+export const useBearing = () => useMapStore((state) => state.bearing);
+export const usePitch = () => useMapStore((state) => state.pitch);
+
+export const useSelectedYear = () => useMapStore((state) => state.selectedYear);
+export const useSelectedDataMode = () => useMapStore((state) => state.selectedDataMode);
+export const useAvailableYears = () => useMapStore((state) => state.availableYears);
+export const useAvailableYearOptions = () => useMapStore((state) => state.availableYearOptions);
+export const useAvailableResolutions = () => useMapStore((state) => state.availableResolutions);
+
+export const useShowBNBOLayer = () => useMapStore((state) => state.showBNBOLayer);
+export const useShowBasemap = () => useMapStore((state) => state.showBasemap);
+
+export const useIsLoading = () => useMapStore((state) => state.isLoading);
+export const useIsLoadingYear = () => useMapStore((state) => state.isLoadingYear);
+export const useIsLoadingTiles = () => useMapStore((state) => state.isLoadingTiles);
+export const useLoadingMessage = () => useMapStore((state) => state.loadingMessage);
+export const useError = () => useMapStore((state) => state.error);
+
+export const useShowControls = () => useMapStore((state) => state.showControls);
+export const useShowTooltip = () => useMapStore((state) => state.showTooltip);
+export const useTooltipData = () => useMapStore((state) => state.tooltipData);
+export const useTooltipPosition = () => useMapStore((state) => state.tooltipPosition);
+
+// Stable selectors for complex state combinations
+export const useMapViewState = () => {
+  const zoom = useZoom();
+  const center = useCenter();
+  const bearing = useBearing();
+  const pitch = usePitch();
+  
+  return { zoom, center, bearing, pitch };
+};
+
+export const useDataState = () => {
+  const selectedYear = useSelectedYear();
+  const selectedDataMode = useSelectedDataMode();
+  const availableYears = useAvailableYears();
+  const availableYearOptions = useAvailableYearOptions();
+  const availableResolutions = useAvailableResolutions();
+  
+  return { selectedYear, selectedDataMode, availableYears, availableYearOptions, availableResolutions };
+};
+
+export const useLayerVisibility = () => {
+  const zoom = useZoom();
+  const showBNBOLayer = useShowBNBOLayer();
+  const showBasemap = useShowBasemap();
+  
+  const computed = getComputedLayerVisibility(zoom);
+  
+  return {
+    showBNBOLayer,
+    showBasemap,
+    ...computed,
+  };
+};
+
+export const useLoadingState = () => {
+  const isLoading = useIsLoading();
+  const isLoadingYear = useIsLoadingYear();
+  const isLoadingTiles = useIsLoadingTiles();
+  const loadingMessage = useLoadingMessage();
+  const error = useError();
+  
+  return { isLoading, isLoadingYear, isLoadingTiles, loadingMessage, error };
+};
+
+export const useTooltipState = () => {
+  const showTooltip = useShowTooltip();
+  const tooltipData = useTooltipData();
+  const tooltipPosition = useTooltipPosition();
+  
+  return { showTooltip, tooltipData, tooltipPosition };
+};
+
+export const useSelectedCellState = () => {
+  const selectedCell = useMapStore((state) => state.selectedCell);
+  const setSelectedCell = useMapStore((state) => state.setSelectedCell);
+  const clearSelectedCell = useMapStore((state) => state.clearSelectedCell);
+  
+  return { selectedCell, setSelectedCell, clearSelectedCell };
+};
+
+// Navigation actions
+export const useFlyToLocation = () => useMapStore((state) => state.flyToLocation); 

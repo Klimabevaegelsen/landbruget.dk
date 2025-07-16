@@ -60,6 +60,9 @@ def parse_args() -> Dict[str, Any]:
 
     parser = argparse.ArgumentParser(description="Run the Svineflytning Data Pipeline.")
     parser.add_argument(
+        "--stage", choices=["bronze", "silver", "all"], default="all", help="Pipeline stage to run (default: all)"
+    )
+    parser.add_argument(
         "--start-date",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
         default=start_date_def,
@@ -70,6 +73,9 @@ def parse_args() -> Dict[str, Any]:
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
         default=end_date_def,
         help="End date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--bronze-timestamp", help="Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)"
     )
     parser.add_argument(
         "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="WARNING", help="Logging level"
@@ -103,42 +109,120 @@ def parse_args() -> Dict[str, Any]:
     return vars(args)
 
 
-def main():
-    """Main pipeline execution."""
-    args = parse_args()
-    setup_logging(args["log_level"])
-
-    logger.warning("Starting Svineflytning pipeline")
+def run_bronze_stage(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the bronze stage of the pipeline."""
+    logger.warning("Starting bronze stage")
     if args["progress"]:
         logger.warning(f"Processing date range: {args['start_date']} to {args['end_date']}")
         logger.warning(f"Using {args['max_concurrent_fetches']} concurrent fetches")
         logger.warning(f"Buffer size: {args['buffer_size']} responses")
 
+    # Get credentials and create client
+    username, password = get_fvm_credentials()
+    client = create_client(ENDPOINTS[args["environment"]], username, password)
+
+    # Use environment variable for output directory, with fallback to relative path
+    output_dir = os.getenv("SVINEFLYTNING_OUTPUT_DIR", "./data/raw/svineflytning")
+
+    # Fetch and stream all movements
+    with logging_redirect_tqdm():
+        result = fetch_all_movements(
+            client=client,
+            start_date=args["start_date"],
+            end_date=args["end_date"],
+            output_dir=output_dir,
+            max_concurrent_fetches=args["max_concurrent_fetches"],
+            buffer_size=args["buffer_size"],
+            show_progress=args["progress"],
+            test_mode=args["test"],
+        )
+
+    logger.warning("Bronze stage completed successfully")
+    if args["progress"]:
+        logger.warning(f"Bronze data exported to: {result['storage_path']}")
+
+    return result
+
+
+def run_silver_stage(args: Dict[str, Any], bronze_result: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Run the silver stage of the pipeline."""
+    logger.warning("Starting silver stage")
+
     try:
-        # Get credentials and create client
-        username, password = get_fvm_credentials()
-        client = create_client(ENDPOINTS[args["environment"]], username, password)
+        from silver.main import process_specific_bronze_timestamp, run_silver_processing
 
-        # Use environment variable for output directory, with fallback to relative path
-        output_dir = os.getenv("SVINEFLYTNING_OUTPUT_DIR", "./data/raw/svineflytning")
+        # Determine how to run silver processing
+        if args.get("bronze_timestamp"):
+            # Process specific bronze timestamp
+            logger.warning(f"Processing specific bronze timestamp: {args['bronze_timestamp']}")
+            result = process_specific_bronze_timestamp(bronze_timestamp=args["bronze_timestamp"])
+        elif bronze_result and "storage_path" in bronze_result:
+            # Use bronze result from current run
+            logger.warning("Processing bronze data from current pipeline run")
+            bronze_path = bronze_result["storage_path"]
 
-        # Fetch and stream all movements
-        with logging_redirect_tqdm():
-            result = fetch_all_movements(
-                client=client,
-                start_date=args["start_date"],
-                end_date=args["end_date"],
-                output_dir=output_dir,
-                max_concurrent_fetches=args["max_concurrent_fetches"],
-                buffer_size=args["buffer_size"],
-                show_progress=args["progress"],
-                test_mode=args["test"],
+            # Extract timestamp from bronze result for consistent naming
+            export_timestamp = bronze_result.get("export_timestamp")
+
+            result = run_silver_processing(
+                bronze_data_path=bronze_path, export_timestamp=export_timestamp, use_latest_bronze=False
             )
+        else:
+            # Auto-discover latest bronze data
+            logger.warning("Auto-discovering latest bronze data")
+            result = run_silver_processing(use_latest_bronze=True)
 
-        # Print information about the export
+        if result["success"]:
+            logger.warning("Silver stage completed successfully")
+            if args["progress"]:
+                logger.warning(f"Silver data exported to: {result['output_path']}")
+                logger.warning(f"Processed {result['processed_movements']} movements")
+        else:
+            logger.error(f"Silver stage failed: {result['error']}")
+
+        return result
+
+    except ImportError as e:
+        logger.error(f"Failed to import silver processing modules: {e}")
+        return {"success": False, "error": f"Silver processing not available: {e}"}
+    except Exception as e:
+        logger.error(f"Silver stage failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def main():
+    """Main pipeline execution."""
+    args = parse_args()
+    setup_logging(args["log_level"])
+
+    logger.warning(f"Starting Svineflytning pipeline - Stage: {args['stage']}")
+
+    bronze_result = None
+    silver_result = None
+
+    try:
+        # Run bronze stage if needed
+        if args["stage"] in ["bronze", "all"]:
+            bronze_result = run_bronze_stage(args)
+            if not bronze_result:
+                logger.error("Bronze stage failed")
+                sys.exit(1)
+
+        # Run silver stage if needed
+        if args["stage"] in ["silver", "all"]:
+            silver_result = run_silver_stage(args, bronze_result)
+            if not silver_result or not silver_result["success"]:
+                logger.error("Silver stage failed")
+                sys.exit(1)
+
+        # Summary
         logger.warning("Pipeline completed successfully")
         if args["progress"]:
-            logger.warning(f"Data exported to: {result['storage_path']}")
+            if bronze_result:
+                logger.warning(f"Bronze: {bronze_result.get('storage_path', 'N/A')}")
+            if silver_result:
+                logger.warning(f"Silver: {silver_result.get('output_path', 'N/A')}")
+                logger.warning(f"Movements processed: {silver_result.get('processed_movements', 'N/A')}")
 
     except Exception as e:
         logger.error(f"Pipeline failed: {str(e)}", exc_info=True)

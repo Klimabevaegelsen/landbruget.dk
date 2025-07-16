@@ -46,6 +46,7 @@ class Source(Enum):
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
         nles5_nitrogen_estimation: NLES5 nitrogen washout estimation gold layer
+        pesticide_disaggregation: Pesticide disaggregation gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
     """
@@ -53,7 +54,7 @@ class Source(Enum):
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
-    spf_su = "spf_su"
+
     soil_types = "soil_types"
     dagi = "dagi"
     jordbrugsanalyser = "jordbrugsanalyser"
@@ -65,6 +66,7 @@ class Source(Enum):
     field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
     nles5_nitrogen_estimation = "nles5_nitrogen_estimation"
+    cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
 
@@ -97,11 +99,13 @@ class FVMLayerType(Enum):
         markblokke: Field blocks data (2005-2026)
         marker: Field markers data (2008-2025)
         smaabiotoper: Small biotopes data (2023-2025)
+        organic_areas: Organic areas data (2012-2024)
     """
 
     markblokke = "markblokke"
     marker = "marker"
     smaabiotoper = "smaabiotoper"
+    organic_areas = "organic_areas"
 
 
 class CliConfig(BaseModel):

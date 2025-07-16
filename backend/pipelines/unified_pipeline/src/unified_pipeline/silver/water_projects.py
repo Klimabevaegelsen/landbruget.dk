@@ -24,8 +24,7 @@ from typing import Any, Optional
 # from shapely import MultiPolygon, Polygon, unary_union, wkt  # MIGRATED: Replaced with DuckDB ST_* functions
 # from shapely.validation import explain_validity  # MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -94,29 +93,18 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
     6. Saving processed data back to GCS
     """
 
-    def __init__(self, config: WaterProjectsSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: WaterProjectsSilverConfig):
         """
         Initialize the WaterProjectsSilver processor.
 
         Args:
             config (WaterProjectsSilverConfig): Configuration object containing settings
-                                                for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+                                                for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for water projects processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ WaterProjectsSilver: Using unified GCS access and DuckDB connection")
 
     def get_first_namespace(self, root: ET.Element) -> Optional[str]:
         """
@@ -202,28 +190,30 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 try:
                     pos = [float(x) for x in pos_list.text.strip().split()]
 
-                    # DEBUG: Log coordinate parsing details
-                    self.log.debug(
-                        f"Raw coordinates count: {len(pos)}, first few: {pos[:6] if len(pos) > 6 else pos}"
-                    )
+                    # Detect if coordinates are 2D or 3D and parse accordingly
+                    if len(pos) < 4:  # Need at least 4 values for a polygon (2 coordinate pairs)
+                        self.log.warning(f"Insufficient coordinate data: {len(pos)} values")
+                        continue
 
-                    # Handle both 2D and 3D coordinates - if we have 3D, take only x,y and skip z
-                    if len(pos) % 3 == 0:
-                        # 3D coordinates (x, y, z) - take only x, y
-                        coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 3)]
-                        self.log.debug(f"Parsed as 3D coordinates, extracted {len(coords)} pairs")
-                    else:
-                        # 2D coordinates (x, y)
-                        coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 2)]
-                        self.log.debug(f"Parsed as 2D coordinates, extracted {len(coords)} pairs")
+                    # Parse as 2D coordinates (x, y pairs) - Danish UTM coordinates
+                    if len(pos) % 2 != 0:
+                        self.log.warning(
+                            f"Odd number of coordinates: {len(pos)} values, cannot parse as coordinate pairs"
+                        )
+                        continue
+
+                    coords = [(pos[i], pos[i + 1]) for i in range(0, len(pos), 2)]
 
                     if len(coords) >= 4:
+                        # Ensure polygon is closed (first and last coordinate should be the same)
+                        if coords[0] != coords[-1]:
+                            coords.append(coords[0])
+
                         # Store coordinate lists instead of Shapely objects
                         polygons.append(coords)
-                        self.log.debug(f"Added polygon with {len(coords)} coordinate pairs")
                     else:
                         self.log.warning(
-                            f"Insufficient coordinates for polygon: {len(coords)} pairs"
+                            f"Insufficient coordinates for polygon: {len(coords)} pairs (need at least 4)"
                         )
                 except Exception as e:
                     self.log.error(f"Failed to parse coordinates: {str(e)}")
@@ -235,28 +225,79 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             # Create WKT geometry directly from coordinates using DuckDB-spatial format
             # Use the same approach as BNBO status pipeline for consistency
             polygon_wkts = []
-            for coords in polygons:
-                # Create coordinate pairs with comma separation (standard WKT format)
+            for i, coords in enumerate(polygons):
+                # Create coordinate pairs with proper WKT format (space between x y, comma between pairs)
                 coord_pairs = [f"{x} {y}" for x, y in coords]
                 polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
+
+                # Validate WKT completeness - check for proper closing
+                if not polygon_wkt.endswith("))"):
+                    self.log.error(
+                        f"Invalid WKT detected - missing closing parentheses: {polygon_wkt[:100]}..."
+                    )
+                    continue
+
+                # Check for proper opening
+                if not polygon_wkt.startswith("POLYGON(("):
+                    self.log.error(
+                        f"Invalid WKT detected - malformed opening: {polygon_wkt[:100]}..."
+                    )
+                    continue
+
+                # Count parentheses to ensure they're balanced
+                open_count = polygon_wkt.count("(")
+                close_count = polygon_wkt.count(")")
+                if open_count != close_count:
+                    self.log.error(
+                        f"Invalid WKT detected - unbalanced parentheses ({open_count} open, {close_count} close): {polygon_wkt[:100]}..."
+                    )
+                    continue
+
                 polygon_wkts.append(polygon_wkt)
+
+            if not polygon_wkts:
+                self.log.warning("No valid polygons found after WKT validation")
+                return None
 
             # Create final WKT (MultiPolygon if multiple, single Polygon otherwise)
             if len(polygon_wkts) == 1:
                 geometry_wkt = polygon_wkts[0]
             else:
-                # Create MultiPolygon WKT - strip POLYGON part and join
-                polygon_parts = [wkt.replace("POLYGON", "").strip() for wkt in polygon_wkts]
-                geometry_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                # Create MultiPolygon WKT - properly extract coordinate parts
+                # Each polygon_wkt is like "POLYGON((x1 y1, x2 y2, ...))"
+                # We need to extract just the "((x1 y1, x2 y2, ...))" part
+                polygon_parts = []
+                for wkt in polygon_wkts:
+                    # Extract everything after "POLYGON" - this gives us "((x1 y1, x2 y2, ...))"
+                    if wkt.startswith("POLYGON"):
+                        coord_part = wkt[7:]  # Remove "POLYGON" prefix
+                        polygon_parts.append(coord_part)
+                    else:
+                        self.log.warning(f"Unexpected WKT format: {wkt}")
+                        continue
+
+                if polygon_parts:
+                    geometry_wkt = f"MULTIPOLYGON({', '.join(polygon_parts)})"
+                else:
+                    self.log.error("No valid polygon parts found for MultiPolygon")
+                    return None
 
             # Calculate area using DuckDB-spatial
-            self.conn.execute("CREATE OR REPLACE TABLE temp_geom_calc (geometry_wkt VARCHAR)")
-            self.conn.execute("INSERT INTO temp_geom_calc VALUES (?)", [geometry_wkt])
-            area_result = self.conn.execute("""
-                SELECT ST_Area(ST_GeomFromText(geometry_wkt)) / 10000 as area_ha
-                FROM temp_geom_calc
-            """).fetchone()
-            area_ha = area_result[0] if area_result else 0
+            try:
+                self.conn.execute("CREATE OR REPLACE TABLE temp_geom (geometry_wkt TEXT)")
+                self.conn.execute("INSERT INTO temp_geom VALUES (?)", [geometry_wkt])
+                area_result = self.conn.execute("""
+                    SELECT ST_Area(ST_GeomFromText(geometry_wkt)) / 10000 as area_ha
+                    FROM temp_geom
+                """).fetchone()
+                area_ha = area_result[0] if area_result else 0
+            except Exception as area_error:
+                self.log.error(f"Error calculating area for feature: {str(area_error)}")
+                self.log.error(f"Geometry WKT length: {len(geometry_wkt)}")
+                self.log.error(f"Geometry WKT starts with: {geometry_wkt[:100]}")
+                self.log.error(f"Geometry WKT ends with: {geometry_wkt[-100:]}")
+                # Set area to 0 but continue processing the feature
+                area_ha = 0
 
             return {"wkt": geometry_wkt, "area_ha": area_ha}
 
@@ -362,72 +403,75 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
         features = []
         data = json.loads(json_data)
         for feature in data.get("features", []):
+            attrs = feature.get("attributes", {})
+            geom = feature.get("geometry", {})
+
+            if "rings" not in geom:
+                continue
+
+            # Convert geometry using DuckDB-spatial
+            # In ArcGIS/GeoJSON format, rings represent exterior and interior rings of a polygon
+            # First ring is exterior, subsequent rings are holes (interior rings)
+            if not geom["rings"]:
+                continue
+
+            rings_wkt = []
+            for ring in geom["rings"]:
+                coords = [(x, y) for x, y in ring]
+                if len(coords) >= 4:
+                    points = ", ".join([f"{x} {y}" for x, y in coords])
+                    rings_wkt.append(f"({points})")
+
+            if not rings_wkt:
+                continue
+
+            # Create single polygon with exterior ring and interior rings (holes)
+            # Format: POLYGON((exterior_ring), (interior_ring1), (interior_ring2), ...)
+            geometry_wkt = f"POLYGON({', '.join(rings_wkt)})"
+
+            # Calculate area using DuckDB-spatial
             try:
-                attrs = feature.get("attributes", {})
-                geom = feature.get("geometry", {})
-
-                if "rings" not in geom:
-                    continue
-
-                # Convert geometry using DuckDB-spatial
-                # In ArcGIS/GeoJSON format, rings represent exterior and interior rings of a polygon
-                # First ring is exterior, subsequent rings are holes (interior rings)
-                if not geom["rings"]:
-                    continue
-
-                rings_wkt = []
-                for ring in geom["rings"]:
-                    coords = [(x, y) for x, y in ring]
-                    if len(coords) >= 4:
-                        points = " ".join([f"{x} {y}" for x, y in coords])
-                        rings_wkt.append(f"({points})")
-
-                if not rings_wkt:
-                    continue
-
-                # Create single polygon with exterior ring and interior rings (holes)
-                # Format: POLYGON((exterior_ring), (interior_ring1), (interior_ring2), ...)
-                geometry_wkt = f"POLYGON({', '.join(rings_wkt)})"
-
-                # Calculate area using DuckDB-spatial
-                self.conn.execute("CREATE OR REPLACE TABLE temp_geom (geometry_wkt VARCHAR)")
+                self.conn.execute("CREATE OR REPLACE TABLE temp_geom (geometry_wkt TEXT)")
                 self.conn.execute("INSERT INTO temp_geom VALUES (?)", [geometry_wkt])
                 area_result = self.conn.execute("""
                     SELECT ST_Area(ST_GeomFromText(geometry_wkt)) / 10000 as area_ha
                     FROM temp_geom
                 """).fetchone()
                 area_ha = area_result[0] if area_result else 0
+            except Exception as area_error:
+                self.log.error(f"Error calculating area for feature: {str(area_error)}")
+                self.log.error(f"Geometry WKT length: {len(geometry_wkt)}")
+                self.log.error(f"Geometry WKT starts with: {geometry_wkt[:100]}")
+                self.log.error(f"Geometry WKT ends with: {geometry_wkt[-100:]}")
+                # Set area to 0 but continue processing the feature
+                area_ha = 0
 
-                # Convert timestamps
-                start_date = (
-                    datetime.fromtimestamp(attrs.get("projektstart") / 1000)
-                    if attrs.get("projektstart")
-                    else None
-                )
-                end_date = (
-                    datetime.fromtimestamp(attrs.get("projektslut") / 1000)
-                    if attrs.get("projektslut")
-                    else None
-                )
+            # Convert timestamps
+            start_date = (
+                datetime.fromtimestamp(attrs.get("projektstart") / 1000)
+                if attrs.get("projektstart")
+                else None
+            )
+            end_date = (
+                datetime.fromtimestamp(attrs.get("projektslut") / 1000)
+                if attrs.get("projektslut")
+                else None
+            )
 
-                processed_feature = {
-                    "layer_name": layer,
-                    "geometry": geometry_wkt,
-                    "area_ha": area_ha,
-                    "projektnavn": attrs.get("projektnavn"),
-                    "enhedskontakt": attrs.get("enhedskontakt"),
-                    "startdato": start_date,
-                    "slutdato": end_date,
-                    "status": attrs.get("status"),
-                    "object_id": attrs.get("OBJECTID"),
-                    "global_id": attrs.get("GlobalID"),
-                }
+            processed_feature = {
+                "layer_name": layer,
+                "geometry": geometry_wkt,
+                "area_ha": area_ha,
+                "projektnavn": attrs.get("projektnavn"),
+                "enhedskontakt": attrs.get("enhedskontakt"),
+                "startdato": start_date,
+                "slutdato": end_date,
+                "status": attrs.get("status"),
+                "object_id": attrs.get("OBJECTID"),
+                "global_id": attrs.get("GlobalID"),
+            }
 
-                features.append(processed_feature)
-
-            except Exception as e:
-                self.log.error(f"Error processing feature: {str(e)}")
-                continue
+            features.append(processed_feature)
 
         return features
 
@@ -464,12 +508,26 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
         for index, (data, layer) in enumerate(raw_data_rows):
             try:
                 service_type = self.config.service_types.get(layer, "wfs")
+                self.log.debug(
+                    f"Processing row {index + 1}: layer={layer}, service_type={service_type}"
+                )
+
                 if service_type == "arcgis":
-                    features.extend(self._process_json_data(data, layer))
+                    processed_features = self._process_json_data(data, layer)
+                    self.log.debug(f"JSON processing returned {len(processed_features)} features")
+                    features.extend(processed_features)
                 else:
-                    features.extend(self._process_xml_data(data, layer))
+                    processed_features = self._process_xml_data(data, layer)
+                    self.log.debug(f"XML processing returned {len(processed_features)} features")
+                    features.extend(processed_features)
             except Exception as e:
-                self.log.error(f"Error processing row {index}: {e}")
+                self.log.error(f"Error processing row {index + 1} (layer: {layer}): {str(e)}")
+                self.log.error(
+                    f"Data type: {type(data)}, Data length: {len(data) if data else 'None'}"
+                )
+                if data:
+                    self.log.error(f"Data starts with: {data[:100]}")
+                    self.log.error(f"Data ends with: {data[-100:]}")
                 continue
         if not features:
             self.log.warning("No features extracted from raw data")
@@ -482,9 +540,23 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
         columns = list(features[0].keys())
 
         # Create the table schema
+        # Use appropriate column types - geometry needs to be TEXT to store long WKT strings
+        column_definitions = []
+        for col in columns:
+            if col == "geometry":
+                column_definitions.append(f"{col} TEXT")  # Use TEXT for long WKT strings
+            elif col in ["area_ha", "budget"]:
+                column_definitions.append(f"{col} DOUBLE")  # Use DOUBLE for numeric values
+            elif col in ["startaar", "tilsagnsaa", "slutaar", "object_id"]:
+                column_definitions.append(f"{col} INTEGER")  # Use INTEGER for numeric IDs
+            elif col in ["startdato", "slutdato"]:
+                column_definitions.append(f"{col} DATE")  # Use DATE for date values
+            else:
+                column_definitions.append(f"{col} VARCHAR")  # Default to VARCHAR for other fields
+
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE temp_features (
-                {", ".join([f"{col} VARCHAR" for col in columns])}
+                {", ".join(column_definitions)}
             )
         """)
 
@@ -506,16 +578,95 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     values,
                 )
         table_name = "water_projects_processed"
+
+        # Create the final table, handling geometry conversion failures gracefully
+        # First, create a table with valid geometries only
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT 
-                *,
-                ST_GeomFromText(geometry) as geometry_spatial
+            CREATE OR REPLACE TABLE {table_name}_temp AS
+            SELECT *
             FROM temp_features
             WHERE geometry IS NOT NULL
+            AND geometry LIKE '%))' -- Only include properly closed geometries
         """)
 
+        # Now add geometry_spatial column by testing each geometry individually
+        self.conn.execute(f"""
+            ALTER TABLE {table_name}_temp ADD COLUMN geometry_spatial GEOMETRY
+        """)
+
+        # Process geometries in batches to handle failures gracefully
+        total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_temp").fetchone()[0]
+        batch_size = 100
+        successful_conversions = 0
+        failed_conversions = 0
+
+        for offset in range(0, total_rows, batch_size):
+            batch_geometries = self.conn.execute(f"""
+                SELECT geometry FROM {table_name}_temp 
+                LIMIT {batch_size} OFFSET {offset}
+            """).fetchall()
+
+            for i, (geom_wkt,) in enumerate(batch_geometries):
+                try:
+                    # Test the geometry conversion first
+                    self.conn.execute("CREATE OR REPLACE TABLE temp_geom_test (wkt TEXT)")
+                    self.conn.execute("INSERT INTO temp_geom_test VALUES (?)", [geom_wkt])
+                    result = self.conn.execute(
+                        "SELECT ST_GeomFromText(wkt) FROM temp_geom_test"
+                    ).fetchone()
+
+                    # If successful, update the main table
+                    self.conn.execute(
+                        f"""
+                        UPDATE {table_name}_temp 
+                        SET geometry_spatial = ST_GeomFromText(?)
+                        WHERE geometry = ?
+                    """,
+                        [geom_wkt, geom_wkt],
+                    )
+                    successful_conversions += 1
+
+                except Exception as e:
+                    failed_conversions += 1
+                    self.log.warning(f"Failed to convert geometry {offset + i + 1}: {str(e)}")
+                    self.log.warning(
+                        f"Geometry length: {len(geom_wkt)}, starts with: {geom_wkt[:100]}"
+                    )
+                    # Leave geometry_spatial as NULL for this row
+
+        # Create the final table with only successfully converted geometries
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT * FROM {table_name}_temp
+            WHERE geometry_spatial IS NOT NULL
+        """)
+
+        # Clean up temporary table
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}_temp")
+        self.conn.execute("DROP TABLE IF EXISTS temp_geom_test")
+
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        total_processed = successful_conversions + failed_conversions
+        success_rate = (
+            (successful_conversions / total_processed * 100) if total_processed > 0 else 0
+        )
+
+        self.log.info("Geometry conversion results:")
+        self.log.info(f"  - Successfully converted: {successful_conversions:,} geometries")
+        self.log.info(f"  - Failed conversions: {failed_conversions:,} geometries")
+        self.log.info(
+            f"  - Total success rate: {success_rate:.1f}% ({successful_conversions:,}/{total_processed:,})"
+        )
+        self.log.info(f"  - Final feature count: {feature_count:,} features")
+
+        if failed_conversions > 0:
+            self.log.warning(
+                f"⚠️  {failed_conversions} features excluded due to geometry conversion failures"
+            )
+        else:
+            self.log.info("✅ All geometries converted successfully!")
+
         self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
 
         return table_name
@@ -550,62 +701,74 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
+                        CAST(NULL AS VARCHAR) as project_id,
                         CAST(NULL AS GEOMETRY) as geometry,
-                        CAST(NULL AS INTEGER) as feature_count
+                        CAST(NULL AS INTEGER) as feature_count,
+                        CAST(NULL AS TIMESTAMP) as dissolved_at
                     WHERE FALSE
                 """)
                 return dissolved_table_name
 
             self.log.info(f"Dissolving {feature_count} features for {dataset} using DuckDB-spatial")
 
-            # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT 
-                    ST_AsText(ST_Transform(ST_Union_Agg(geometry_spatial), 'EPSG:25832', 'EPSG:4326')) as geometry,
-                    COUNT(*) as feature_count,
-                    current_timestamp as dissolved_at
-                FROM {input_table_name}
+            # First, let's check how many valid geometries we have
+            valid_geom_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {input_table_name}
                 WHERE geometry_spatial IS NOT NULL
                 AND ST_IsValid(geometry_spatial)
-            """)
-
-            # Check if dissolve operation produced valid geometry
-            result_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {dissolved_table_name}
-                WHERE geometry IS NOT NULL
             """).fetchone()[0]
 
-            if result_count == 0:
-                self.log.warning(f"Dissolve operation produced no valid geometry for {dataset}")
+            self.log.info(
+                f"Found {valid_geom_count} valid geometries out of {feature_count} total features"
+            )
+
+            if valid_geom_count == 0:
+                self.log.warning(f"No valid geometries found for dissolving {dataset}")
                 # Create empty table
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
                     SELECT 
-                        CAST(NULL AS VARCHAR) as geometry,
+                        CAST(NULL AS VARCHAR) as project_id,
+                        CAST(NULL AS GEOMETRY) as geometry,
                         CAST(0 AS INTEGER) as feature_count,
                         current_timestamp as dissolved_at
                     WHERE FALSE
                 """)
                 return dissolved_table_name
 
-            # Apply final validation using DuckDB-spatial buffer operation
+            # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
+            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {dissolved_table_name}_validated AS
+                CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
                 SELECT 
-                    ST_AsText(ST_Buffer(ST_GeomFromText(geometry), 0)) as geometry,
-                    feature_count,
-                    dissolved_at
-                FROM {dissolved_table_name}
-                WHERE geometry IS NOT NULL
-                AND ST_IsValid(ST_GeomFromText(geometry))
+                    geometry_spatial as geometry_for_transform
+                FROM {input_table_name}
+                WHERE geometry_spatial IS NOT NULL
+                AND ST_IsValid(geometry_spatial)
             """)
 
-            # Replace original table with validated one
-            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
-            self.conn.execute(
-                f"ALTER TABLE {dissolved_table_name}_validated RENAME TO {dissolved_table_name}"
+            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+            validate_and_transform_geometries_duckdb(
+                self.conn,
+                f"{dissolved_table_name}_temp",
+                "water_projects",
+                geometry_column="geometry_for_transform",
             )
+
+            # Now dissolve the transformed geometries
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {dissolved_table_name} AS
+                SELECT 
+                    'water_project_dissolved' as project_id,
+                    ST_Union_Agg(geometry_for_transform) as geometry,
+                    COUNT(*) as feature_count,
+                    current_timestamp as dissolved_at
+                FROM {dissolved_table_name}_temp
+                WHERE geometry_for_transform IS NOT NULL
+            """)
+
+            # Clean up temp table
+            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}_temp")
 
             final_count = self.conn.execute(
                 f"SELECT COUNT(*) FROM {dissolved_table_name}"
@@ -624,20 +787,25 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {empty_table_name} AS
                 SELECT 
-                    CAST(NULL AS VARCHAR) as geometry,
+                    CAST(NULL AS VARCHAR) as project_id,
+                    CAST(NULL AS GEOMETRY) as geometry,
                     CAST(0 AS INTEGER) as feature_count,
                     current_timestamp as dissolved_at
                 WHERE FALSE
             """)
             return empty_table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
         Run the Water Projects silver layer processing.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
                         this data will be used instead of reading from storage.
+
+        Returns:
+            Optional[Any]: Processed data that can be passed to gold stage,
+                          or None if processing fails.
         """
         self.log.info("Running Water Projects silver job for")
         async with AsyncTimer("Water Projects silver job"):
@@ -663,15 +831,24 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # Create table directly from the list of dictionaries
                     if not raw_data_list:
                         self.log.warning("No raw data to process")
-                        return
+                        return None
 
                     # Get column names from the first item
                     columns = list(raw_data_list[0].keys())
 
-                    # Create the table schema
+                    # Create the table schema with proper column types
+                    column_definitions = []
+                    for col in columns:
+                        if col == "payload":
+                            column_definitions.append(f"{col} TEXT")  # Use TEXT for payload data
+                        else:
+                            column_definitions.append(
+                                f"{col} VARCHAR"
+                            )  # Default to VARCHAR for other fields
+
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE temp_raw_data (
-                            {", ".join([f"{col} VARCHAR" for col in columns])}
+                            {", ".join(column_definitions)}
                         )
                     """)
 
@@ -698,20 +875,20 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     self.log.error(
                         f"Expected list of tuples from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
                 raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
                 if raw_data is None:
                     self.log.error("Failed to read raw data")
-                    return
+                    return None
 
             self.log.info("Read raw data successfully")
             table_name = self._process_data(raw_data)
             if table_name is None:
                 self.log.error("Failed to process raw data")
-                return
+                return None
             self.log.info("Processed raw data successfully")
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
@@ -728,3 +905,10 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             )
 
             self.log.info("Saved processed data successfully")
+
+            # Return processed data for potential gold layer consumption
+            return {
+                "processed_data": table_name,
+                "dissolved_data": dissolved_table_name,
+                "dataset": self.config.dataset,
+            }

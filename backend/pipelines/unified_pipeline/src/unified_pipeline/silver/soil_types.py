@@ -22,7 +22,6 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
-from unified_pipeline.util.gcs_util import GCSUtil
 
 load_dotenv()
 
@@ -72,15 +71,13 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
     5. Save processed data to the silver layer
     """
 
-    def __init__(self, config: SoilTypesSilverConfig, gcs_util: GCSUtil) -> None:
+    def __init__(self, config: SoilTypesSilverConfig) -> None:
         """
         Initialize the SoilTypesSilver source.
 
         Args:
-            config (SoilTypesSilverConfig): Configuration for the silver layer processing
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (SoilTypesSilverConfig): Configuration for the silver layer processing"""
+        super().__init__(config)
 
     async def _validate_and_transform_with_duckdb(self, wfs_url: str) -> str:
         """
@@ -267,6 +264,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             """)
 
             # ✅ MIGRATION: Use DuckDB-spatial geometry validation
+            # ✅ COORDINATE FIX: ST_FlipCoordinates is applied in the validator to fix swapped lat/lon coordinates
             validate_and_transform_geometries_duckdb(
                 self.conn, processed_table, self.config.dataset
             )
@@ -389,7 +387,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
                 # Check if coordinates are reasonable for Denmark in WGS84
                 if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
-                    self.log.warning("Coordinates appear to be outside Denmark bounds")
+                    self.log.warning(
+                        "Coordinates appear to be outside Denmark bounds (coordinates should be fixed with ST_FlipCoordinates)"
+                    )
 
             # Check attribute distributions
             soil_type_count = self.conn.execute(f"""

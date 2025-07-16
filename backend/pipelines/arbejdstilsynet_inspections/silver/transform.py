@@ -10,6 +10,59 @@ from datetime import datetime
 import ibis
 from google.cloud import storage
 
+# Add CVR collection import
+try:
+    # Import the CVR collection utility from the unified pipeline
+    from pathlib import Path
+
+    # Find the unified pipeline directory
+    current_file = Path(__file__).resolve()
+    project_root = None
+
+    for parent in current_file.parents:
+        unified_pipeline_path = parent / "backend" / "pipelines" / "unified_pipeline" / "src"
+        if unified_pipeline_path.exists():
+            project_root = unified_pipeline_path
+            break
+
+    if project_root and str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from unified_pipeline.util.cvr_api_client import CVRAPIClient
+    from unified_pipeline.util.cvr_collection import save_pipeline_cvr_numbers
+
+    CVR_COLLECTION_AVAILABLE = True
+except ImportError as e:
+    # Graceful fallback if CVR collection is not available
+    save_pipeline_cvr_numbers = None
+    CVRAPIClient = None
+    CVR_COLLECTION_AVAILABLE = False
+    print(f"CVR collection not available: {e}")
+
+
+def _get_optimized_gcs_access():
+    """
+    Get optimized GCS access with robust import handling.
+
+    Returns GCSDataAccess if available, otherwise None for fallback.
+    """
+    try:
+        # Primary import path - should work when unified_pipeline is properly installed
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        logging.info("✅ Successfully imported optimized GCSDataAccess")
+        return GCSDataAccess
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logging.warning(
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+        )
+        return None
+
+
+# Get optimized GCS access class or None if not available
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
 
 class GCSStorage:
     """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
@@ -21,26 +74,17 @@ class GCSStorage:
 
         # ✅ OPTIMIZED: Initialize optimized GCS access
         self.gcs_access = None
-        if self.is_available:
+        self.use_optimized = False
+
+        if self.is_available and OptimizedGCSDataAccess:
             try:
-                # Import optimized GCS access using proper Python path
-                import sys
-                from pathlib import Path
-
-                # Add the backend directory to Python path
-                backend_path = Path(__file__).parent.parent.parent.parent
-                unified_pipeline_path = backend_path / "pipelines" / "unified_pipeline" / "src"
-
-                if str(unified_pipeline_path) not in sys.path:
-                    sys.path.insert(0, str(unified_pipeline_path))
-
-                from unified_pipeline.util.gcs_access import GCSDataAccess
-
-                self.gcs_access = GCSDataAccess()
+                self.gcs_access = OptimizedGCSDataAccess()
+                self.use_optimized = True
                 logging.info("✅ Arbejdstilsynet Silver GCSStorage: Initialized optimized GCS access")
             except Exception as e:
                 logging.warning(f"Failed to initialize optimized GCS access: {e}")
                 self.gcs_access = None
+                self.use_optimized = False
 
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
@@ -65,7 +109,7 @@ class GCSStorage:
 
         try:
             # ✅ OPTIMIZED: Use streaming upload if available
-            if self.gcs_access:
+            if self.use_optimized and self.gcs_access:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
@@ -408,6 +452,105 @@ class SilverPipeline:
             self.logger.error(f"Error checking for PII: {str(e)}")
             return False
 
+    def extract_and_save_cvr_numbers(self):
+        """Extract P-numbers and map them to CVR numbers using the CVR register."""
+        if not CVR_COLLECTION_AVAILABLE or save_pipeline_cvr_numbers is None:
+            self.logger.info("ℹ️ CVR collection utility not available - skipping CVR extraction")
+            return True
+
+        try:
+            self.logger.info("🔍 Extracting P-numbers for CVR mapping...")
+
+            # Extract unique P-numbers from the data
+            if "company_id" not in self.df.columns:
+                self.logger.warning("⚠️ No company_id (P-number) column found - skipping CVR extraction")
+                return True
+
+            # Get unique P-numbers, filtering out null/invalid values
+            p_numbers = self.df["company_id"].dropna().astype(str).unique()
+            p_numbers = [p for p in p_numbers if p.isdigit() and len(p) >= 8]
+
+            if not p_numbers:
+                self.logger.warning("⚠️ No valid P-numbers found - skipping CVR extraction")
+                return True
+
+            self.logger.info(f"📋 Found {len(p_numbers)} unique P-numbers to map to CVR numbers")
+
+            # Initialize CVR API client
+            cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
+            cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
+
+            cvr_client = CVRAPIClient(username=cvr_username, password=cvr_password)
+
+            # Map P-numbers to CVR numbers using the CVR API
+            cvr_numbers = set()
+            successful_mappings = 0
+
+            for p_number in p_numbers[:50]:  # Limit to first 50 P-numbers to avoid overwhelming the API
+                try:
+                    # Query CVR register for P-number to find the parent CVR number
+                    # Use a search query to find companies with this P-number
+                    query = {
+                        "query": {
+                            "bool": {
+                                "should": [
+                                    {"term": {"Vrvirksomhed.penheder.pNummer": int(p_number)}},
+                                    {"term": {"pNummer": int(p_number)}},
+                                ]
+                            }
+                        },
+                        "size": 1,
+                        "_source": ["Vrvirksomhed.cvrNummer", "cvrNummer"],
+                    }
+
+                    # Make request to CVR API
+                    response = cvr_client._make_request(cvr_client.company_endpoint, query)
+
+                    if response and "hits" in response and response["hits"]["hits"]:
+                        hit = response["hits"]["hits"][0]["_source"]
+
+                        # Extract CVR number from response
+                        cvr_number = None
+                        if "Vrvirksomhed" in hit and "cvrNummer" in hit["Vrvirksomhed"]:
+                            cvr_number = str(hit["Vrvirksomhed"]["cvrNummer"])
+                        elif "cvrNummer" in hit:
+                            cvr_number = str(hit["cvrNummer"])
+
+                        if cvr_number and len(cvr_number) == 8 and cvr_number.isdigit():
+                            cvr_numbers.add(cvr_number)
+                            successful_mappings += 1
+                            self.logger.debug(f"✅ Mapped P-number {p_number} to CVR {cvr_number}")
+
+                except Exception as e:
+                    self.logger.debug(f"⚠️ Could not map P-number {p_number}: {e}")
+                    continue
+
+            self.logger.info(
+                f"🎯 Successfully mapped {successful_mappings} P-numbers to {len(cvr_numbers)} unique CVR numbers"
+            )
+
+            if cvr_numbers:
+                # Save CVR numbers using the collection utility
+                cvr_gcs_path = save_pipeline_cvr_numbers(
+                    pipeline_name="arbejdstilsynet_inspections",
+                    cvr_numbers=list(cvr_numbers),
+                    gcs_access=None,  # Will use default GCS access
+                    bucket=self.gcs_bucket or "landbrugsdata-raw-data",
+                    timestamp=self.timestamp,
+                )
+
+                self.logger.info(f"📋 CVR numbers saved to: {cvr_gcs_path}")
+                self.logger.info(f"✅ Arbejdstilsynet CVR collection completed: {len(cvr_numbers)} CVR numbers")
+            else:
+                self.logger.warning("⚠️ No CVR numbers could be mapped from P-numbers")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error extracting CVR numbers: {e}")
+            # Don't fail the pipeline if CVR extraction fails
+            return True
+
     def save_output(self):
         """Save the transformed data to parquet."""
         try:
@@ -537,6 +680,7 @@ class SilverPipeline:
                 self.filter_by_date,
                 self.check_for_pii,
                 self.save_output,
+                self.extract_and_save_cvr_numbers,
                 self.generate_schema_documentation,
             ]
 

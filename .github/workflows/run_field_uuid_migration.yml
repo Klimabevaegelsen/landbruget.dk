@@ -1,0 +1,55 @@
+name: Run Field UUID Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'INFO'
+        type: choice
+        options:
+        - INFO
+        - DEBUG
+        - WARNING
+        - ERROR
+
+jobs:
+  run-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      
+      - name: Configure uv
+        run: source ~/.cargo/env && uv venv
+
+      - name: Install dependencies
+        run: source .venv/bin/activate && uv pip install -r backend/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Run Backfill Field UUIDs Script
+        id: backfill
+        run: |
+          source .venv/bin/activate
+          python scripts/migration/backfill_field_uuids.py
+        continue-on-error: false
+
+      - name: Run Add Field UUID to Gold Tables Script
+        id: add-to-gold
+        run: |
+          source .venv/bin/activate
+          python scripts/migration/add_field_uuid_to_gold_tables.py
+        continue-on-error: false 

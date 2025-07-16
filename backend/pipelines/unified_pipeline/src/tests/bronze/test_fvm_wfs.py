@@ -11,28 +11,21 @@ from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
 
 
 @pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Create a mock GCS utility."""
-    mock = MagicMock()
-    mock.upload_blob = MagicMock()
-    return mock
-
-
-@pytest.fixture
 def config() -> FVMWFSBronzeConfig:
     """Create a test configuration."""
     return FVMWFSBronzeConfig(
         markblokke_years=[2024],  # Test with just one year
         marker_years=[2024],
         smaabiotoper_years=[2024],
+        organic_areas_years=[2024],
         save_local=True,
     )
 
 
 @pytest.fixture
-def fvm_wfs_bronze(config: FVMWFSBronzeConfig, mock_gcs_util: MagicMock) -> FVMWFSBronze:
+def fvm_wfs_bronze(config: FVMWFSBronzeConfig) -> FVMWFSBronze:
     """Create a FVM WFS bronze instance."""
-    return FVMWFSBronze(config, mock_gcs_util)
+    return FVMWFSBronze(config)
 
 
 def get_async_mock_session(response: AsyncMock) -> MagicMock:
@@ -56,12 +49,14 @@ def test_fvm_wfs_bronze_config() -> None:
 
     assert config.name == "Danish FVM WFS Agricultural Data"
     assert config.type == "wfs"
-    assert config.wfs_url == "https://geodata.fvm.dk/geoserver/ows"
+    assert config.wfs_url == "https://geodata.fvm.dk/geoserver/wfs"
     assert config.dataset_markblokke == "fvm_markblokke"
     assert config.dataset_marker == "fvm_marker"
+    assert config.dataset_organic_areas == "fvm_organic_areas"
     assert len(config.markblokke_years) == 22  # 2005-2026
     assert len(config.marker_years) == 18  # 2008-2025
     assert len(config.smaabiotoper_years) == 3  # 2023-2025
+    assert len(config.organic_areas_years) == 13  # 2012-2024
 
 
 def test_get_layer_name(fvm_wfs_bronze: FVMWFSBronze) -> None:
@@ -74,6 +69,12 @@ def test_get_layer_name(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
     # Test Smaabiotoper
     assert fvm_wfs_bronze._get_layer_name("Smaabiotoper", 2024) == "Marker:Smaabiotoper_2024"
+
+    # Test OrganicAreas
+    assert (
+        fvm_wfs_bronze._get_layer_name("OrganicAreas", 2024)
+        == "Miljoe_og_oekologitilsagn:Oekologiske_arealer_2024"
+    )
 
 
 def test_get_wfs_params(fvm_wfs_bronze: FVMWFSBronze) -> None:

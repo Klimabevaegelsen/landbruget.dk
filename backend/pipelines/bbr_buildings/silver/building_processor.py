@@ -1,66 +1,171 @@
-"""BBR Building processor using DuckDB-spatial."""
+"""BBR Building processor for silver layer processing."""
+
+import logging
+from pathlib import Path
+from typing import Any
 
 import duckdb
-import time
-from pathlib import Path
-from typing import Optional, List, Dict, Any
+
 
 class BuildingProcessor:
-    """Process BBR building data using DuckDB-spatial."""
-    
-    def __init__(self, db_path: str = ":memory:"):
-        self.conn = duckdb.connect(db_path)
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-    
-    def process_buildings(self, input_path: str, output_path: str) -> str:
-        """Process building data with spatial operations."""
-        table_name = f"bbr_buildings_{int(time.time())}"
-        
-        # Load spatial data
-        self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
-            SELECT * FROM ST_Read('{input_path}')
+    """Process BBR building data in the silver layer."""
+
+    def __init__(self, settings, logger: logging.Logger):
+        """Initialize the building processor."""
+        self.settings = settings
+        self.logger = logger
+        self.conn = None
+
+    def _get_connection(self):
+        """Get or create a DuckDB connection with spatial extension."""
+        if self.conn is None:
+            self.conn = duckdb.connect(":memory:")
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
+        return self.conn
+
+    def process_buildings_from_data(self, bronze_data: dict[str, Any], output_dir: Path):
+        """Process buildings from in-memory bronze data."""
+        self.logger.info("Processing buildings from in-memory bronze data")
+
+        # Extract data from bronze result
+        if not bronze_data or "data" not in bronze_data:
+            raise ValueError("Invalid bronze data structure")
+
+        data = bronze_data["data"]
+        output_dir_path = Path(data.get("output_dir", ""))
+
+        if not output_dir_path.exists():
+            raise ValueError(f"Bronze output directory not found: {output_dir_path}")
+
+        # Process the buildings from the bronze output directory
+        self._process_buildings_directory(output_dir_path, output_dir)
+
+    def process_buildings(self, input_dir: Path, output_dir: Path):
+        """Process buildings from disk-based bronze data."""
+        self.logger.info(f"Processing buildings from disk: {input_dir}")
+
+        if not input_dir.exists():
+            raise ValueError(f"Input directory not found: {input_dir}")
+
+        self._process_buildings_directory(input_dir, output_dir)
+
+    def _process_buildings_directory(self, input_dir: Path, output_dir: Path):
+        """Process buildings from a bronze output directory."""
+        conn = self._get_connection()
+
+        # Look for the expected bronze output files
+        joined_buildings_file = input_dir / "joined_buildings.geoparquet"
+        inspire_attributes_file = input_dir / "inspire_attributes.parquet"
+
+        if not joined_buildings_file.exists():
+            raise ValueError(f"Expected joined buildings file not found: {joined_buildings_file}")
+
+        self.logger.info(f"Loading joined buildings from: {joined_buildings_file}")
+
+        # Load the joined buildings data
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE joined_buildings AS
+            SELECT * FROM read_parquet('{joined_buildings_file}')
         """)
-        
-        # Process buildings with spatial operations
-        processed_table = f"processed_{table_name}"
-        self.conn.execute(f"""
-            CREATE TABLE {processed_table} AS
+
+        # Load INSPIRE attributes if available
+        if inspire_attributes_file.exists():
+            self.logger.info(f"Loading INSPIRE attributes from: {inspire_attributes_file}")
+            conn.execute(f"""
+                CREATE OR REPLACE TABLE inspire_attributes AS
+                SELECT * FROM read_parquet('{inspire_attributes_file}')
+            """)
+
+            # Join with INSPIRE attributes if both tables exist
+            conn.execute("""
+                CREATE OR REPLACE TABLE enriched_buildings AS
+                SELECT 
+                    jb.*,
+                    ia.currentUse,
+                    ia.buildingNature,
+                    ia.construction_year,
+                    ia.floor_area,
+                    ia.floors,
+                    ia.dwellings,
+                    ia.address,
+                    ia.category_group
+                FROM joined_buildings jb
+                LEFT JOIN inspire_attributes ia ON jb.BBRUUID = ia.building_uuid
+            """)
+
+            processing_table = "enriched_buildings"
+        else:
+            self.logger.warning("INSPIRE attributes file not found, processing without enrichment")
+            processing_table = "joined_buildings"
+
+        # Apply silver layer transformations
+        self.logger.info("Applying silver layer transformations...")
+
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE processed_buildings AS
             SELECT 
-                *,
-                ST_Area(geom) as building_area,
-                ST_Centroid(geom) as building_centroid,
-                current_timestamp as processed_at
-            FROM {table_name}
-            WHERE ST_IsValid(geom)
+                BBRUUID as building_uuid,
+                geometry as geo_building_polygon,
+                ST_Centroid(geometry) as geo_building_centroid,
+                bygningstype as building_type,
+                building_area_m2 as building_floor_area_sqm,
+                join_status,
+                CASE 
+                    WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                    WHEN currentUse = 'agriculture' THEN 'agricultural'
+                    WHEN currentUse = 'publicServices' THEN 'educational'
+                    ELSE 'other'
+                END as building_usage_category,
+                currentUse as inspire_current_use,
+                buildingNature as inspire_building_nature,
+                construction_year as inspire_construction_year,
+                floor_area as inspire_floor_area,
+                floors as inspire_floors,
+                dwellings as inspire_dwellings,
+                address as address_full,
+                category_group as inspire_category_group,
+                CURRENT_DATE as last_updated
+            FROM {processing_table}
+            WHERE ST_IsValid(geometry)
+            AND building_area_m2 > 0
         """)
-        
-        # Save results
-        self.conn.execute(f"""
-            COPY {processed_table} TO '{output_path}' (FORMAT PARQUET)
+
+        # Get processing statistics
+        stats = conn.execute("""
+            SELECT 
+                COUNT(*) as total_buildings,
+                COUNT(DISTINCT building_uuid) as unique_buildings,
+                AVG(building_floor_area_sqm) as avg_floor_area,
+                COUNT(*) FILTER (WHERE building_usage_category = 'residential') as residential_count,
+                COUNT(*) FILTER (WHERE building_usage_category = 'agricultural') as agricultural_count,
+                COUNT(*) FILTER (WHERE building_usage_category = 'educational') as educational_count
+            FROM processed_buildings
+        """).fetchone()
+
+        self.logger.info("Silver layer processing results:")
+        self.logger.info(f"  Total buildings: {stats[0]:,}")
+        self.logger.info(f"  Unique buildings: {stats[1]:,}")
+        self.logger.info(f"  Average floor area: {stats[2]:.1f} m²")
+        self.logger.info(f"  Residential: {stats[3]:,}")
+        self.logger.info(f"  Agricultural: {stats[4]:,}")
+        self.logger.info(f"  Educational: {stats[5]:,}")
+
+        # Save processed buildings
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / "buildings_processed.geoparquet"
+
+        conn.execute(f"""
+            COPY (
+                SELECT * FROM processed_buildings
+                ORDER BY building_floor_area_sqm DESC
+            ) TO '{output_file}' (FORMAT PARQUET)
         """)
-        
-        return processed_table
-    
-    def validate_geometries(self, table_name: str) -> Dict[str, int]:
-        """Validate building geometries."""
-        results = {}
-        
-        # Count total buildings
-        total = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        results['total'] = total
-        
-        # Count valid geometries
-        valid = self.conn.execute(f"SELECT COUNT(*) FROM {table_name} WHERE ST_IsValid(geom)").fetchone()[0]
-        results['valid'] = valid
-        
-        # Count invalid geometries
-        results['invalid'] = total - valid
-        
-        return results
-    
+
+        self.logger.info(f"Saved processed buildings to: {output_file}")
+
     def close(self):
         """Close database connection."""
         if self.conn:
             self.conn.close()
+            self.conn = None

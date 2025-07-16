@@ -132,6 +132,42 @@ def validate_and_transform_geometries_duckdb(
             WHERE {geometry_column} IS NOT NULL
         """)
 
+        # Check if coordinates need flipping by sampling a few geometries
+        sample_bounds = conn.execute(f"""
+            SELECT 
+                MIN(ST_XMin({geometry_column})) as min_x,
+                MAX(ST_XMax({geometry_column})) as max_x,
+                MIN(ST_YMin({geometry_column})) as min_y,
+                MAX(ST_YMax({geometry_column})) as max_y
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
+            LIMIT 100
+        """).fetchone()
+
+        if sample_bounds:
+            min_x, max_x, min_y, max_y = sample_bounds
+
+            # Check if coordinates appear to be in wrong order (lat/lon instead of lon/lat)
+            # Denmark bounds: longitude 7-16, latitude 54-58
+            x_looks_like_latitude = (50 <= min_x <= 60) and (50 <= max_x <= 60)
+            y_looks_like_longitude = (5 <= min_y <= 20) and (5 <= max_y <= 20)
+
+            if x_looks_like_latitude and y_looks_like_longitude:
+                logger.info(
+                    f"{dataset_name}: Coordinates appear to be in wrong order, applying ST_FlipCoordinates"
+                )
+                conn.execute(f"""
+                    UPDATE {table_name} SET 
+                        {geometry_column} = ST_FlipCoordinates({geometry_column})
+                    WHERE {geometry_column} IS NOT NULL
+                """)
+            else:
+                logger.info(
+                    f"{dataset_name}: Coordinates appear to be in correct order (X: {min_x:.3f}-{max_x:.3f}, Y: {min_y:.3f}-{max_y:.3f})"
+                )
+        else:
+            logger.warning(f"{dataset_name}: Could not determine coordinate order, skipping flip")
+
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""
             SELECT COUNT(*) FROM {table_name} 
@@ -205,15 +241,23 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
         True if SPATIAL_JOIN operator is detected, False otherwise
     """
     try:
-        explain_result = conn.execute(f"EXPLAIN {query}").fetchdf()
-        spatial_join_detected = any(
-            "SPATIAL_JOIN" in str(row) for row in explain_result.values.flatten()
-        )
+        explain_result = conn.execute(f"EXPLAIN {query}").fetchall()
+        explain_text = "\n".join([str(row[0]) for row in explain_result])
+
+        spatial_join_detected = "SPATIAL_JOIN" in explain_text
 
         if spatial_join_detected:
             logger.info("✅ SPATIAL_JOIN operator detected in query plan!")
+            # Log a snippet of the plan showing the SPATIAL_JOIN
+            for line in explain_text.split("\n"):
+                if "SPATIAL_JOIN" in line:
+                    logger.info(f"   📍 {line.strip()}")
         else:
-            logger.warning("⚠️ SPATIAL_JOIN operator not used - check query structure")
+            logger.warning("⚠️ SPATIAL_JOIN operator not used - query may use standard join")
+            logger.warning(
+                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates without complex calculations in SELECT"
+            )
+            logger.debug(f"Query plan:\n{explain_text}")
 
         return spatial_join_detected
     except Exception as e:

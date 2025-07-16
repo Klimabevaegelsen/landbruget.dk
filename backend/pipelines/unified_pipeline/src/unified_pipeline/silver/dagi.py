@@ -23,7 +23,6 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -101,9 +100,9 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
     - Metadata enrichment
     """
 
-    def __init__(self, config: DAGISilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DAGISilverConfig):
         """Initialize the DAGI silver layer with configuration."""
-        super().__init__(config, gcs_util)
+        super().__init__(config)
         # Setup DuckDB with spatial extension
         self._setup_duckdb()
 
@@ -313,36 +312,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             self.log.warning(f"No processed data for DAGI {layer_name}")
                             continue
 
-                        # ✅ OPTIMIZED: Save directly without DataFrame conversion
-                        # First copy table to gcs_access connection for saving
+                        # ✅ OPTIMIZED: Save directly from main connection without copying
                         try:
-                            self.log.info(
-                                f"Copying table {processed_table} to GCS connection for saving"
-                            )
-                            self.gcs_access.duckdb_conn.execute(
-                                f"DROP TABLE IF EXISTS {processed_table}"
-                            )
-                            rows = self.conn.execute(f"SELECT * FROM {processed_table}").fetchall()
-                            columns = [
-                                desc[0]
-                                for desc in self.conn.execute(
-                                    f"DESCRIBE {processed_table}"
-                                ).fetchall()
-                            ]
-
-                            # Create table in gcs_access connection
-                            column_defs = ", ".join([f'"{col}" VARCHAR' for col in columns])
-                            self.gcs_access.duckdb_conn.execute(
-                                f"CREATE TABLE {processed_table} ({column_defs})"
-                            )
-
-                            # Insert data
-                            placeholders = ", ".join(["?" for _ in columns])
-                            for row in rows:
-                                self.gcs_access.duckdb_conn.execute(
-                                    f"INSERT INTO {processed_table} VALUES ({placeholders})", row
-                                )
-
                             gcs_path = self.save_data_direct(
                                 processed_table, silver_dataset_name, self.config.bucket, "silver"
                             )

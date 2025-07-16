@@ -69,21 +69,22 @@ jobs:
         import sys
         import json
         import re
-        from unified_pipeline.util.gcs_util import GCSUtil
+        from unified_pipeline.util.gcs_access import GCSDataAccess
         
         def discover_pesticide_years():
             """Discover available pesticide years from GCS storage."""
             try:
-                gcs_util = GCSUtil()
+                gcs_access = GCSDataAccess()
                 bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
                 
-                # List all files in the pesticides silver directory
-                files = gcs_util.list_files(bucket_name=bucket, prefix="silver/pesticides/")
+                # List all parquet files in the pesticides silver directory (recursive)
+                files = gcs_access.list_files(f"gs://{bucket}/silver/pesticides/*/*.parquet")
                 years = set()
                 
-                for file_blob in files:
+                for file_path in files:
                     # Extract years from filenames like "pesticiddata_2015_2016.parquet"
-                    match = re.search(r"pesticiddata_(\d{4})_(\d{4})\.parquet", file_blob.name)
+                    filename = file_path.split("/")[-1]
+                    match = re.search(r"pesticiddata_(\d{4})_(\d{4})\.parquet", filename)
                     if match:
                         start_year = int(match.group(1))
                         years.add(start_year)
@@ -96,16 +97,16 @@ jobs:
         def discover_field_years():
             """Discover available field years from GCS storage."""
             try:
-                gcs_util = GCSUtil()
+                gcs_access = GCSDataAccess()
                 bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
                 
-                # List all files in silver layer to find fvm_marker directories
-                files = gcs_util.list_files(bucket_name=bucket, prefix="silver/fvm_marker_")
+                # List all parquet files in silver layer to find fvm_marker directories (recursive)
+                files = gcs_access.list_files(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
                 years = set()
                 
-                for file_blob in files:
+                for file_path in files:
                     # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
-                    match = re.search(r"silver/fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_blob.name)
+                    match = re.search(r"fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_path)
                     if match:
                         year1 = int(match.group(1))
                         year2 = int(match.group(2))
@@ -156,8 +157,17 @@ jobs:
             sys.exit(1)
         EOF
         
-        # Run the discovery script
-        years=$(python discover_years.py | tail -n 1)
+        # Run the discovery script and check exit code
+        python discover_years.py > discovery_output.txt
+        discovery_exit_code=$?
+        
+        if [ $discovery_exit_code -ne 0 ]; then
+          echo "❌ Discovery script failed with exit code $discovery_exit_code"
+          cat discovery_output.txt
+          exit $discovery_exit_code
+        fi
+        
+        years=$(tail -n 1 discovery_output.txt)
         year_count=$(echo "$years" | jq '. | length')
         
         echo "years=$years" >> $GITHUB_OUTPUT
@@ -223,7 +233,6 @@ jobs:
             PesticideDisaggregationGold,
             PesticideDisaggregationGoldConfig
         )
-        from unified_pipeline.util.gcs_util import GCSUtil
         
         async def main():
             try:
@@ -236,9 +245,8 @@ jobs:
                     enable_parallel_processing=True
                 )
                 
-                # Initialize GCS utility and processor
-                gcs_util = GCSUtil()
-                processor = PesticideDisaggregationGold(config, gcs_util)
+                # Initialize processor
+                processor = PesticideDisaggregationGold(config)
                 
                 print(f"🎯 Processing year ${{ matrix.year }} with optimized single-year execution")
                 print(f"🔧 Configuration: area_tolerance={config.area_tolerance_pct}%, memory_limit={config.max_memory_gb}GB")
@@ -267,10 +275,16 @@ jobs:
             asyncio.run(main())
         EOF
         
-        # Run the year-specific processing
+        # Run the year-specific processing and check exit code
         python run_year_${{ matrix.year }}.py
+        exit_code=$?
         
-        echo "🎉 Completed pesticide disaggregation for year ${{ matrix.year }}"
+        if [ $exit_code -eq 0 ]; then
+          echo "🎉 Completed pesticide disaggregation for year ${{ matrix.year }}"
+        else
+          echo "❌ Failed pesticide disaggregation for year ${{ matrix.year }} with exit code $exit_code"
+          exit $exit_code
+        fi
 
   summary:
     if: ${{ !inputs.dry_run }}
