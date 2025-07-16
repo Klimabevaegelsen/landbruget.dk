@@ -103,21 +103,62 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
         'Bg0': 0.008799    # βg0: Organic N in animal manure in current year (SE from DCA Rapport 163 Table 3.2)
     }
 
-    # NLES5 Model Parameters (from original implementation)
+    # NLES5 Model Parameters from DCA Rapport 163, Table 3.3
+    # Main crop effects (lambda_ma)
     crop_parameters: Dict[str, float] = {
-        'winter_cereals': 0,
-        'spring_cereals': -6.74,
-        'mixed_cereals_peas': -7.28,
-        'grass_clover': -13.49,
-        'seed_grass': -17.48,
-        'fallow': -11.19,
-        'sugar_beets': -0.64,
-        'maize_potatoes': 3.53,
-        'winter_rape': -7.32,
-        'winter_cereals_after_grass': -1.25,
-        'maize_after_grass': 19.52,
-        'spring_cereals_after_grass': -6.23,
-        'pulses_winter_rape': -2.87
+        'M1': 0.0,  # Winter cereal (reference)
+        'M2': -6.744,  # Spring cereal
+        'M3': -7.279,  # Grain-legume mixtures
+        'M4': -13.493,  # Grass or grass-clover
+        'M5': -17.478,  # Grass for seed
+        'M6': -11.192,  # Set-aside
+        'M7': -0.640,  # Sugar beet, fodder beet
+        'M8': 3.534,  # Silage maize and potato
+        'M9': -7.319,  # Winter oilseed rape
+        'M10': -1.248,  # Winter cereal after grass
+        'M11': 19.524,  # Maize after grass
+        'M12': -6.229,  # Spring cereal after grass
+        'M13': -2.866,  # Grain legumes and spring oilseed rape
+    }
+
+    # Winter vegetation cover effects (lambda_wa)
+    winter_veg_parameters: Dict[str, float] = {
+        'W1': 0.0,  # Winter cereal (reference)
+        'W2': -2.055,  # Bare soil
+        'W3': -0.456,  # Autumn cultivation
+        'W4': -15.959,  # Cover crops, undersown grass and set-aside
+        'W5': -3.792,  # Weeds and volunteers
+        'W6': -14.596,  # Grass and grass-clover
+        'W7': -1.049,  # Winter cereal after grass
+        'W8': -21.060,  # Grass ploughed late autumn or winter
+    }
+
+    # Previous main crop effects (eta_mp)
+    prev_crop_parameters: Dict[str, float] = {
+        'MP1': 0.0,  # Winter cereal (reference)
+        'MP2': 2.847,  # Other crops than winter cereals and grass or grass-clover
+        'MP3': 0.664,  # Grass or grass-clover
+        'MP4': 1.160,  # Spring or winter crops after grass or grass-clover
+    }
+
+    # Previous winter vegetation cover effects (eta_wp)
+    prev_winter_veg_parameters: Dict[str, float] = {
+        'WP1': 0.0,  # Winter cereal (reference)
+        'WP2': 9.704,  # Bare soil
+        'WP3': 10.601,  # Grass-clover
+        'WP4': 9.354,  # Cover crops
+        'WP5': 13.241,  # Grass for seed and set aside
+        'WP6': 5.483,  # Beets and hemp
+        'WP7': -1.572,  # Bare soil after maize or potatoes
+        'WP8': 7.413,  # Winter oilseed rape
+        'WP9': 7.396,  # Bare soil or winter cereal following grass-clover ploughed in spring
+        'WP10': 10.975,  # Bare soil or winter cereal following grass-clover ploughed in autumn
+    }
+
+    # Theta (θ) factors for winter vegetation classes
+    theta_factors: Dict[str, float] = {
+        'WC1': 1.0,  # Large N uptake in autumn
+        'WC2': 1.205144,  # Low or moderate N uptake in autumn
     }
 
     # NLES5 nitrogen coefficients
@@ -135,14 +176,14 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Soil type parameters for percolation effects
     soil_parameters: Dict[str, Dict[str, float]] = {
         'sand': {
-            'per1_coef': -0.001194,
-            'per2_coef': -0.00111,
-            'per_p_coef': -0.00086
+            'per1_coef': 0.001194,
+            'per2_coef': 0.001107,
+            'per_p_coef': -0.000856
         },
         'clay': {
-            'per1_coef': -0.00080,
-            'per2_coef': -0.00075,
-            'per_p_coef': -0.00064
+            'per1_coef': 0.000798,
+            'per2_coef': 0.000745,
+            'per_p_coef': -0.000638
         }
     }
 
@@ -299,6 +340,178 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.error(f"Error reading fields data for year {year}: {e}")
             return None
 
+    @timed(name="Preparing crop sequence data")
+    def _prepare_crop_sequences(self, agricultural_fields_table: str) -> str:
+        """
+        Prepare crop sequence classifications based on N2023_62.md appendices.
+
+        Args:
+            agricultural_fields_table: Name of the table with yearly field data.
+
+        Returns:
+            Table name with NLES5 crop classifications for each field and year.
+        """
+        try:
+            self.log.info("Preparing NLES5 crop sequence classifications.")
+
+            # Step 1: Create GLR code to crop group mapping (from N2023_62.md, Bilag 8.1)
+            # This is a large mapping, so it's defined here directly.
+            glr_to_group_sql = """
+            CREATE OR REPLACE TABLE glr_crop_groups AS
+            SELECT unnest(codes) as glr_code, group_id, group_name
+            FROM (VALUES
+                (1, 'Vårraps', [21]),
+                (2, 'Græs i omdrift', [116, 117, 118, 170, 171, 172, 173, 174, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 272, 273, 275, 276, 277, 278, 279, 284, 285, 286, 287, 306, 326, 596, 597, 598, 943, 944, 945, 946, 975]),
+                (3, 'Permanent græs', [247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 271, 274, 315, 488, 600, 601, 602, 603, 604, 605, 921, 972]),
+                (4, 'Vårbyg', [1, 4, 6, 7, 8, 41, 42, 50, 51, 52, 53, 55, 570, 579, 701, 702, 703, 704, 705]),
+                (5, 'Vinterbyg', [9, 10, 17, 57, 708]),
+                (6, 'Vinterhvede', [11, 13]),
+                (7, 'Vinterraps', [22, 23, 24, 40, 180, 181, 182, 777]),
+                (8, 'Bælgsæd', [25, 30, 31, 32, 35, 36, 54, 424]),
+                (9, 'Majs', [5, 216, 423]),
+                (10, 'Brak', [200, 201, 300, 301, 303, 304, 305, 308, 309, 310, 312, 313, 314, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 350, 360, 361, 487, 489, 491, 492, 493, 494, 495, 496, 497, 498, 499, 503, 545, 549, 550, 559, 560, 561, 562, 563, 564, 590, 800, 801, 888, 900, 901, 902, 903, 905, 906, 907, 908, 920, 999]),
+                (11, 'Gartneri', [58, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 415, 416, 417, 418, 420, 421, 422, 430, 431, 432, 433, 434, 440, 443, 448, 449, 450, 510, 511, 512, 513, 514, 536, 540, 541, 542, 543, 544, 551, 552, 553]),
+                (12, 'Kartofler', [149, 150, 151, 152, 153, 154, 429]),
+                (13, 'Foderroer', [125, 280, 281, 282, 283]),
+                (14, 'Sukkerroer', [160, 161, 162]),
+                (15, 'Træer og buske', [500, 501, 502, 504, 505, 506, 507, 508, 509, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 528, 530, 531, 532, 533, 534, 535, 539, 547, 548]),
+                (16, 'Skov', [311, 526, 527, 529, 537, 538, 576, 577, 578, 580, 581, 582, 583, 584, 585, 586, 587, 588, 589, 591, 592, 593, 594]),
+                (17, 'Havre', [3, 302]),
+                (18, 'Vårhvede', [2]),
+                (19, 'Rug', [14, 15, 16, 56]),
+                (20, 'Vårhelsæd', [210, 211, 212, 213, 214, 215, 230, 234, 960, 961, 962, 963, 964, 965, 966, 970]),
+                (21, 'Frøgræs', [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 120, 121, 122, 123, 124, 126, 650, 651, 652, 653, 654, 655, 656, 657, 658, 659, 660, 661, 662, 663, 664, 665, 666, 667, 668, 669]),
+                (22, 'Efterafgrøder', [968]), -- Only if registered as specific types
+                (23, 'Vinterhelsæd', [220, 221, 222, 223, 224, 235, 706, 707, 709, 710, 711])
+            ) AS t(group_id, group_name, codes);
+            """
+            self.conn.execute(glr_to_group_sql)
+
+            # Step 2: Create a crop history table with group IDs
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE crop_history AS
+                SELECT
+                    a.field_id,
+                    a.year,
+                    g.group_id as crop_group,
+                    g.group_name
+                FROM {agricultural_fields_table} a
+                JOIN glr_crop_groups g ON a.crop_code = g.glr_code;
+            """)
+
+            # Step 3: Create full history with leads and lags
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE full_crop_history AS
+                SELECT
+                    c_curr.field_id,
+                    c_curr.year,
+                    c_curr.crop_group as crop_t,
+                    c_prev.crop_group as crop_t_minus_1,
+                    c_prev2.crop_group as crop_t_minus_2,
+                    c_next.crop_group as crop_t_plus_1
+                FROM crop_history c_curr
+                LEFT JOIN crop_history c_prev ON c_curr.field_id = c_prev.field_id AND c_curr.year = c_prev.year + 1
+                LEFT JOIN crop_history c_prev2 ON c_curr.field_id = c_prev2.field_id AND c_curr.year = c_prev2.year + 2
+                LEFT JOIN crop_history c_next ON c_curr.field_id = c_next.field_id AND c_curr.year = c_next.year - 1;
+            """)
+
+            # Step 4: Apply classification rules from appendices to generate NLES5 codes
+            # This is a complex step that translates the logic from N2023_62.md into SQL
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE fields_with_crop_classifications AS
+                SELECT
+                    h.field_id,
+                    h.year,
+                    -- Main crop (M code) from Bilag 8.4
+                    CASE
+                        WHEN h.crop_t_minus_1 IN (2, 3, 21) THEN -- Previous crop was grass/seed grass
+                            CASE
+                                WHEN h.crop_t IN (5, 6, 19, 23) THEN 'M10' -- Winter cereal after grass
+                                WHEN h.crop_t IN (9) THEN 'M11' -- Maize after grass
+                                WHEN h.crop_t IN (4, 17, 18, 20) THEN 'M12' -- Spring cereal after grass
+                                ELSE 'M4' -- Default to grass
+                            END
+                        ELSE -- Previous crop not grass
+                            CASE h.crop_t
+                                WHEN 6 THEN 'M1'   -- Vinterhvede
+                                WHEN 5 THEN 'M1'   -- Vinterbyg
+                                WHEN 19 THEN 'M1'  -- Rug
+                                WHEN 23 THEN 'M1'  -- Vinterhelsæd
+                                WHEN 4 THEN 'M2'   -- Vårbyg
+                                WHEN 17 THEN 'M2'  -- Havre
+                                WHEN 18 THEN 'M2'  -- Vårhvede
+                                WHEN 20 THEN 'M2'  -- Vårhelsæd
+                                WHEN 2 THEN 'M4'   -- Græs i omdrift
+                                WHEN 3 THEN 'M4'   -- Permanent græs
+                                WHEN 21 THEN 'M5'  -- Frøgræs
+                                WHEN 10 THEN 'M6'  -- Brak
+                                WHEN 13 THEN 'M7'  -- Foderroer
+                                WHEN 14 THEN 'M7'  -- Sukkerroer
+                                WHEN 9 THEN 'M8'   -- Majs
+                                WHEN 12 THEN 'M8'  -- Kartofler
+                                WHEN 7 THEN 'M9'   -- Vinterraps
+                                WHEN 8 THEN 'M13'  -- Bælgsæd
+                                WHEN 1 THEN 'M13'  -- Vårraps
+                                ELSE 'M2' -- Default to spring cereal for others
+                            END
+                    END as m_code,
+
+                    -- Winter vegetation cover (W code) from Bilag 8.5
+                    CASE
+                        -- Winter cereal sown after grass
+                        WHEN h.crop_t IN (2, 3, 21) AND h.crop_t_plus_1 IN (1, 5, 6, 19, 23) THEN 'W7'
+                        -- Grass, beets, or followed by grass/winter rape -> long growing season or green cover
+                        WHEN h.crop_t IN (2, 3, 13, 14, 21) OR h.crop_t_plus_1 IN (2, 3, 7) THEN 'W6'
+                        -- Followed by winter cereals
+                        WHEN h.crop_t_plus_1 IN (1, 5, 6, 19, 23) THEN 'W1'
+                        -- Followed by catch crop
+                        WHEN h.crop_t_plus_1 = 22 THEN 'W4'
+                        -- After maize or potatoes, assume autumn cultivation
+                        WHEN h.crop_t IN (9, 12) THEN 'W3'
+                        ELSE 'W2' -- Default to bare soil
+                    END as w_code,
+
+                    -- Main previous crop (MP code) from Bilag 8.2
+                    CASE
+                        WHEN h.crop_t_minus_1 IN (2, 3, 21) THEN 'MP3' -- Forfrugt is grass
+                        WHEN h.crop_t_minus_2 IN (2, 3, 21) THEN 'MP4' -- For-forfrugt is grass (and forfrugt is not)
+                        WHEN h.crop_t_minus_1 IN (5, 6, 7, 19, 23) THEN 'MP1' -- Forfrugt is winter crop
+                        ELSE 'MP2' -- Other crops
+                    END as mp_code,
+
+                    -- Previous winter vegetation (WP code) from Bilag 8.3
+                    CASE
+                        -- Grass plowed in autumn before winter crop
+                        WHEN h.crop_t_minus_1 IN (2, 3) AND h.crop_t IN (1, 5, 6, 7, 19, 20, 23) THEN 'WP10'
+                        -- Grass plowed in spring before spring crop
+                        WHEN h.crop_t_minus_1 IN (2, 3) AND h.crop_t NOT IN (1, 5, 6, 7, 19, 20, 23) THEN 'WP9'
+                        WHEN h.crop_t_minus_1 = 7 THEN 'WP8' -- Prev crop was winter rape
+                        WHEN h.crop_t_minus_1 IN (9, 12) THEN 'WP7' -- Prev crop was maize/potato
+                        WHEN h.crop_t_minus_1 IN (13, 14) THEN 'WP6' -- Prev crop was beets
+                        WHEN h.crop_t_minus_1 IN (10, 21) THEN 'WP5' -- Prev crop was fallow/seed grass
+                        WHEN h.crop_t_minus_1 = 22 THEN 'WP4' -- Prev crop was catch crop
+                        WHEN h.crop_t IN (2, 3, 21) THEN 'WP3' -- Current crop is grass
+                        WHEN h.crop_t IN (1, 5, 6, 7, 19, 23) THEN 'WP1' -- Current crop is winter cereal/rape
+                        ELSE 'WP2' -- Default to bare soil
+                    END as wp_code,
+
+                    -- Winter crop group (WC code) for theta from Bilag 8.6
+                    CASE
+                        WHEN h.crop_t IN (2, 3, 13, 14, 21) OR h.crop_t_plus_1 = 7 THEN 'WC1'
+                        ELSE 'WC2'
+                    END as wc_code
+                FROM full_crop_history h
+            """)
+
+            count = self.conn.execute("SELECT COUNT(*) FROM fields_with_crop_classifications").fetchone()[0]
+            self.log.info(f"Generated NLES5 crop classifications for {count:,} field-years.")
+
+            return "fields_with_crop_classifications"
+
+        except Exception as e:
+            self.log.error(f"Error preparing crop sequences: {e}")
+            raise
+
     @timed(name="Loading agricultural fields data")
     def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
         """
@@ -355,6 +568,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         # Create UNION query for all tables
         union_queries = []
         for table_name in yearly_tables:
+            # Ensure crop_code is standardized as integer for reliable joins later
+            self.conn.execute(f"ALTER TABLE {table_name} ALTER crop_code TYPE INT;")
             union_queries.append(f"SELECT * FROM {table_name}")
 
         combined_query = " UNION ALL ".join(union_queries)
@@ -397,6 +612,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             loaded_tables["agricultural_fields"] = agricultural_fields_table
         except Exception as e:
             self.log.error(f"Failed to load agricultural fields data: {e}")
+
+        # Prepare crop sequence classifications
+        try:
+            crop_classifications_table = self._prepare_crop_sequences(agricultural_fields_table)
+            loaded_tables["crop_classifications"] = crop_classifications_table
+        except Exception as e:
+            self.log.error(f"Failed to prepare crop sequence data: {e}")
 
         # Handle DMI data separately since it's stored in separate tables
         try:
@@ -678,35 +900,43 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     SELECT
                         centroid_geometry,
                         ST_GeomFromGeoJSON(centroid_geometry) as geometry,
+                        EXTRACT(year from CAST(valid_time AS DATE)) as year,
                         -- NLES5 seasonal periods
                         SUM(CASE
-                            WHEN EXTRACT(month FROM CAST(valid_time AS DATE)) IN (9, 10, 11)
+                            WHEN EXTRACT(month FROM CAST(valid_time AS DATE)) BETWEEN 4 AND 8
                             THEN percolation ELSE 0
-                        END) as percolation_period1,  -- Sep-Nov
+                        END) as percolation_apr_aug,  -- NLES5: A_Aa
                         SUM(CASE
-                            WHEN EXTRACT(month FROM CAST(valid_time AS DATE)) IN (12, 1, 2)
+                            WHEN EXTRACT(month FROM CAST(valid_time AS DATE)) >= 9 OR EXTRACT(month FROM CAST(valid_time AS DATE)) <= 3
                             THEN percolation ELSE 0
-                        END) as percolation_period2,  -- Dec-Feb
-                        SUM(CASE
-                            WHEN EXTRACT(month FROM CAST(valid_time AS DATE)) IN (3, 4, 5, 6, 7, 8)
-                            THEN percolation ELSE 0
-                        END) as percolation_period3,  -- Mar-Aug
+                        END) as percolation_sep_mar,  -- NLES5: A_Ab
                         AVG(precipitation) as avg_precipitation,
                         AVG(evaporation) as avg_evaporation,
                         COUNT(*) as climate_data_points
                     FROM merged_climate
                     WHERE geometry IS NOT NULL
-                    GROUP BY centroid_geometry
+                    GROUP BY centroid_geometry, year
                 )
                 SELECT
-                    *,
-                    percolation_period1 + percolation_period2 + percolation_period3 as total_percolation,
+                    s1.centroid_geometry,
+                    s1.geometry,
+                    s1.year,
+                    s1.percolation_apr_aug as perco_apr_aug_current,
+                    s1.percolation_sep_mar as perco_sep_mar_current,
+                    COALESCE(s2.percolation_sep_mar, 0.0) as perco_sep_mar_previous,
+                    s1.avg_precipitation,
+                    s1.avg_evaporation,
+                    s1.climate_data_points,
+                    s1.percolation_apr_aug + s1.percolation_sep_mar as total_percolation,
                     CASE
-                        WHEN climate_data_points >= 30 THEN true
+                        WHEN s1.climate_data_points >= 30 THEN true
                         ELSE false
                     END as sufficient_climate_data
-                FROM seasonal_aggregation
-                WHERE total_percolation > 0
+                FROM seasonal_aggregation s1
+                LEFT JOIN seasonal_aggregation s2
+                    ON s1.centroid_geometry = s2.centroid_geometry
+                    AND s1.year = s2.year + 1
+                WHERE s1.total_percolation > 0
                     -- Filter for Denmark coordinates (roughly 8-15°E, 54-58°N)
                     AND ST_X(geometry) BETWEEN 8 AND 15
                     AND ST_Y(geometry) BETWEEN 54 AND 58
@@ -741,9 +971,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     FROM dmi_data
                     WHERE parameter_id = 'acc_precip'
                     GROUP BY valid_time
+                    ORDER BY valid_time DESC
                     LIMIT 5
                 """).fetchall()
-                self.log.warning(f"Sample valid_time data: {time_sample}")
+                self.log.warning(f"Sample valid_time data (latest): {time_sample}")
 
                 # Try a simpler approach without geometry conversion
                 simple_count = self.conn.execute("""
@@ -766,13 +997,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 SELECT
                     'POINT(10.0 56.0)' as centroid_geometry,
                     ST_GeomFromText('POINT(10.0 56.0)') as geometry,
-                    300.0 as percolation_period1,
-                    200.0 as percolation_period2,
-                    400.0 as percolation_period3,
-                    900.0 as total_percolation,
+                    2022 as year,
+                    300.0 as perco_apr_aug_current,
+                    400.0 as perco_sep_mar_current,
+                    400.0 as perco_sep_mar_previous,
                     800.0 as avg_precipitation,
                     300.0 as avg_evaporation,
                     365 as climate_data_points,
+                    900.0 as total_percolation,
                     true as sufficient_climate_data
             """)
             self.log.info("Created fallback climate data for Denmark center point")
@@ -851,9 +1083,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     f.year,
                     ST_AsText(f.geometry_spatial) as field_geometry_wkt,
                     -- Climate data from nearest grid point
-                    c.percolation_period1,
-                    c.percolation_period2,
-                    c.percolation_period3,
+                    c.perco_apr_aug_current,
+                    c.perco_sep_mar_current,
+                    c.perco_sep_mar_previous,
                     c.total_percolation,
                     c.avg_precipitation,
                     c.avg_evaporation,
@@ -897,9 +1129,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         f.year,
                         ST_AsText(f.geometry_spatial) as field_geometry_wkt,
                         -- Default climate data
-                        300.0 as percolation_period1,
-                        200.0 as percolation_period2,
-                        400.0 as percolation_period3,
+                        300.0 as perco_apr_aug_current,
+                        400.0 as perco_sep_mar_current,
+                        400.0 as perco_sep_mar_previous,
                         900.0 as total_percolation,
                         800.0 as avg_precipitation,
                         300.0 as avg_evaporation,
@@ -929,9 +1161,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         f.year,
                         ST_AsText(f.geometry_spatial) as field_geometry_wkt,
                         -- Default climate data
-                        300.0 as percolation_period1,
-                        200.0 as percolation_period2,
-                        400.0 as percolation_period3,
+                        300.0 as perco_apr_aug_current,
+                        400.0 as perco_sep_mar_current,
+                        400.0 as perco_sep_mar_previous,
                         900.0 as total_percolation,
                         800.0 as avg_precipitation,
                         300.0 as avg_evaporation,
@@ -973,65 +1205,33 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.conn, "soil_types_spatial", "soil_types_spatial", geometry_column="geometry_spatial"
             )
 
+            # Join with crop classifications
             self.conn.execute("""
-                CREATE OR REPLACE TABLE fields_with_climate_soil AS
+                CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
                 SELECT
-                    f.*,
-                    -- Soil data
-                    s.soil_code,
-                    s.soil_description,
-                    COALESCE(s.clay_content, 15.0) as clay_content,
-                    CASE
-                        WHEN s.soil_code IN ('1', '2', '3', '4') THEN 'sand'
-                        ELSE 'clay'
-                    END as soil_type_category,
-                    CASE
-                        WHEN s.soil_code IS NOT NULL THEN true
-                        ELSE false
-                    END as has_soil_data
-                FROM fields_with_climate f
-                LEFT JOIN soil_types_spatial s
-                    ON ST_Within(
-                        ST_GeomFromText(f.field_geometry_wkt),
-                        s.geometry_spatial
-                    )
+                    f_s.*,
+                    c_c.m_code,
+                    c_c.w_code,
+                    c_c.mp_code,
+                    c_c.wp_code,
+                    c_c.wc_code
+                FROM fields_with_climate_soil f_s
+                LEFT JOIN fields_with_crop_classifications c_c
+                    ON f_s.field_id = c_c.field_id AND f_s.year = c_c.year
             """)
 
-            count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil").fetchone()[0]
-            soil_matched = self.conn.execute(
-                "SELECT COUNT(*) FROM fields_with_climate_soil WHERE has_soil_data = true"
-            ).fetchone()[0]
+            count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil_crops").fetchone()[0]
+            self.log.info(f"Joined with crop classifications, total records: {count:,}")
 
-            self.log.info(f"Soil join complete: {count:,} fields, {soil_matched:,} with soil data")
-
-            # If no soil data matched, create a fallback version with default soil values
-            if soil_matched == 0:
-                self.log.warning("No soil data matched to fields, using default soil values")
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE fields_with_climate_soil AS
-                    SELECT
-                        f.*,
-                        -- Default soil data
-                        '5' as soil_code,
-                        'Medium clay soil' as soil_description,
-                        15.0 as clay_content,
-                        'clay' as soil_type_category,
-                        false as has_soil_data
-                    FROM fields_with_climate f
-                """)
-
-                fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil").fetchone()[0]
-                self.log.info(f"Created fallback fields_with_climate_soil: {fallback_count:,} fields with default soil data")
-
-            return "fields_with_climate_soil"
+            return "fields_with_climate_soil_crops"
 
         except Exception as e:
             self.log.error(f"Error joining soil data: {e}")
             # Create a fallback version with default soil values
-            self.log.warning("Creating fallback fields_with_climate_soil due to soil join error")
+            self.log.warning("Creating fallback fields_with_climate_soil_crops due to soil join error")
             try:
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE fields_with_climate_soil AS
+                    CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
                     SELECT
                         f.*,
                         -- Default soil data
@@ -1039,15 +1239,19 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         'Medium clay soil' as soil_description,
                         15.0 as clay_content,
                         'clay' as soil_type_category,
-                        false as has_soil_data
+                        false as has_soil_data,
+                        -- Default crop codes
+                        'M2' as m_code,
+                        'W2' as w_code,
+                        'MP2' as mp_code,
+                        'WP2' as wp_code,
+                        'WC2' as wc_code
                     FROM fields_with_climate f
                 """)
-
-                fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil").fetchone()[0]
-                self.log.info(f"Created emergency fallback fields_with_climate_soil: {fallback_count:,} fields")
-                return "fields_with_climate_soil"
+                self.log.info("Created fallback fields_with_climate_soil_crops with default soil and crop data")
+                return "fields_with_climate_soil_crops"
             except Exception as fallback_error:
-                self.log.error(f"Even soil fallback creation failed: {fallback_error}")
+                self.log.error(f"Even soil/crop fallback creation failed: {fallback_error}")
                 raise
 
     @timed(name="Calculating NLES5 nitrogen estimates")
@@ -1064,7 +1268,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Debug: Check what crop types are actually in the data
             crop_distribution = self.conn.execute("""
                 SELECT crop_type, COUNT(*) as count
-                FROM fields_with_climate_soil
+                FROM fields_with_climate_soil_crops
                 GROUP BY crop_type
                 ORDER BY count DESC
                 LIMIT 10
@@ -1085,67 +1289,83 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # NLES5 calculation with full model
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE nles5_nitrogen_estimates AS
-                WITH crop_parameters AS (
-                    SELECT crop_type, crop_param FROM (VALUES {crop_params_sql}) AS t(crop_type, crop_param)
-                ),
-                nles5_calculations AS (
+                WITH nles5_calculations AS (
                     SELECT
                         f.*,
-                        cp.crop_param,
-                        -- Drainage effect calculation using NLES5 soil parameters
+                        -- Get all crop effect parameters. TODO: These codes need to be derived from crop sequence data
+                        COALESCE(cp.param, 0.0) as main_crop_effect,
+                        COALESCE(wvp.param, 0.0) as winter_veg_effect,
+                        COALESCE(pcp.param, 0.0) as prev_crop_effect,
+                        COALESCE(pwvp.param, 0.0) as prev_winter_veg_effect,
+                        COALESCE(th.factor, 1.0) as theta_factor,
+
+                        -- Drainage effect calculation using NLES5 soil parameters and correct time periods
                         CASE f.soil_type_category
                             WHEN 'sand' THEN
-                                (1 - EXP({soil_params_sand['per1_coef']} * f.percolation_period1 +
-                                        {soil_params_sand['per2_coef']} * (f.percolation_period2 + f.percolation_period3))) *
-                                EXP({soil_params_sand['per_p_coef']} * (f.percolation_period2 + f.percolation_period3))
+                                (1 - EXP(-{soil_params_sand['per1_coef']} * f.perco_apr_aug_current -
+                                         {soil_params_sand['per2_coef']} * f.perco_sep_mar_current)) *
+                                EXP({soil_params_sand['per_p_coef']} * f.perco_sep_mar_previous)
                             ELSE
-                                (1 - EXP({soil_params_clay['per1_coef']} * f.percolation_period1 +
-                                        {soil_params_clay['per2_coef']} * (f.percolation_period2 + f.percolation_period3))) *
-                                EXP({soil_params_clay['per_p_coef']} * (f.percolation_period2 + f.percolation_period3))
+                                (1 - EXP(-{soil_params_clay['per1_coef']} * f.perco_apr_aug_current -
+                                         {soil_params_clay['per2_coef']} * f.perco_sep_mar_current)) *
+                                EXP({soil_params_clay['per_p_coef']} * f.perco_sep_mar_previous)
                         END as drainage_effect,
 
-                        -- Soil effect calculation
-                        EXP(-0.00185 * f.clay_content) as soil_effect,
+                        -- Soil effect calculation (using positive coefficient as per report, EXP will handle it)
+                        EXP({0.001849} * f.clay_content) as soil_effect,
 
-                        -- Fertilizer data (defaults if not available)
-                        150.0 as tn_t_ha,
-                        0.0 as mineral_n_foraar,
-                        0.0 as mineral_n_eft,
-                        0.0 as mineral_n_udb,
-                        0.0 as organic_n_hus,
-                        0.0 as niveau,
-                        0.0 as nfix_ha,  -- Nitrogen fixation - to be enhanced
-                        0.0 as niveau_nfix,  -- Nitrogen fixation level - to be enhanced
+                        -- Fertilizer data (TODO: replace defaults with real data)
+                        COALESCE(fa.total_nitrogen_kg_ha, 5.0) as tn_t_ha, -- Total N in topsoil (Mg N/ha). Using 5.0 as placeholder
+                        COALESCE(fa.mineral_n_foraar, 100.0) as mineral_n_foraar,
+                        COALESCE(fa.mineral_n_eft, 10.0) as mineral_n_eft,
+                        COALESCE(fa.mineral_n_udb, 5.0) as mineral_n_udb,
+                        COALESCE(fa.organic_n_hus, 40.0) as organic_n_hus,
+                        COALESCE(fa.niveau, 120.0) as mineral_n_prev, -- Placeholder for avg mineral N previous 2 years
+                        COALESCE(fa.nfix_ha, 20.0) as nfix_ha,
+                        COALESCE(fa.nfix_ha, 20.0) as nfix_prev, -- Placeholder for avg N fixation previous 2 years
+                        COALESCE(fa.organic_n_hus, 40.0) as organic_n_prev, -- Placeholder for avg organic N previous 2 years
 
-                        -- Trend effect (reference year 2017)
-                        -0.1108 * (2017 - 1991) as trend_effect
-                    FROM fields_with_climate_soil f
-                    LEFT JOIN crop_parameters cp ON f.crop_type = cp.crop_type
+                        -- Trend effect (dynamic based on field year)
+                        -0.1108 * (f.year - 1991) as trend_effect
+
+                    FROM fields_with_climate_soil_crops f
+                    -- TODO: The crop codes (M1, W1 etc.) need to be derived from crop sequence data.
+                    -- Using f.crop_type for all joins is a placeholder.
+                    LEFT JOIN crop_params cp ON f.m_code = cp.code
+                    LEFT JOIN winter_veg_params wvp ON f.w_code = wvp.code
+                    LEFT JOIN prev_crop_params pcp ON f.mp_code = pcp.code
+                    LEFT JOIN prev_winter_veg_params pwvp ON f.wp_code = pwvp.code
+                    LEFT JOIN theta_factors th ON f.wc_code = th.code
+                    LEFT JOIN fertilizer_accounts fa ON f.cvr_number = fa.cvr_number AND f.year = fa.year -- Placeholder join
                     WHERE f.total_percolation IS NOT NULL
                         AND f.total_percolation > 0
                 ),
                 nitrogen_calculations AS (
                     SELECT
                         *,
+                        -- Combine all crop effects
+                        (main_crop_effect + winter_veg_effect + prev_crop_effect + prev_winter_veg_effect) as total_crop_effect,
+
                         -- Full NLES5 nitrogen effect calculation using all coefficients
                         ({self.config.nitrogen_coefficients['Bt']} * tn_t_ha +
                          {self.config.nitrogen_coefficients['Bcs']} * mineral_n_foraar +
                          {self.config.nitrogen_coefficients['Bca']} * mineral_n_eft +
                          {self.config.nitrogen_coefficients['Budb']} * mineral_n_udb +
-                         {self.config.nitrogen_coefficients['Bm1']} * (niveau + niveau) / 2.0 +
+                         {self.config.nitrogen_coefficients['Bm1']} * (mineral_n_prev + organic_n_prev) / 2.0 +
                          {self.config.nitrogen_coefficients['Bf0']} * nfix_ha +
-                         {self.config.nitrogen_coefficients['Bf1']} * (niveau_nfix + niveau_nfix) / 2.0 +
-                         {self.config.nitrogen_coefficients['Bg0']} * organic_n_hus) as nitrogen_effect,
+                         {self.config.nitrogen_coefficients['Bf1']} * nfix_prev / 2.0 +
+                         {self.config.nitrogen_coefficients['Bg0']} * organic_n_hus
+                        ) as nitrogen_effect,
 
-                        -- Percolation and soil effect
+                        -- Percolation and soil effect with bias correction (rho)
                         drainage_effect * soil_effect * 1.085 as perco_soil_effect
                     FROM nles5_calculations
                 ),
                 final_calculations AS (
                     SELECT
                         *,
-                        -- NLES5 base calculation (V)
-                        23.51 + COALESCE(crop_param, 0) + nitrogen_effect as v_base
+                        -- NLES5 base calculation (V) with theta factor
+                        (23.51 + total_crop_effect + theta_factor * nitrogen_effect) as v_base
                     FROM nitrogen_calculations
                 )
                 SELECT
@@ -1161,16 +1381,16 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     clay_content,
 
                     -- Climate data
-                    percolation_period1,
-                    percolation_period2,
-                    percolation_period3,
+                    perco_apr_aug_current,
+                    perco_sep_mar_current,
+                    perco_sep_mar_previous,
                     total_percolation,
                     avg_precipitation,
                     avg_evaporation,
                     climate_distance_m,
 
                     -- NLES5 model components
-                    crop_param as crop_effect,
+                    total_crop_effect as crop_effect,
                     drainage_effect,
                     soil_effect,
                     nitrogen_effect,
@@ -1178,13 +1398,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     v_base,
 
                     -- Fertilizer data components
-                    tn_t_ha as total_nitrogen_kg_ha,
+                    tn_t_ha as total_soil_n_mg_ha,
                     mineral_n_foraar as mineral_n_spring_kg_ha,
                     mineral_n_eft as mineral_n_autumn_kg_ha,
-                    mineral_n_udb as mineral_n_applied_kg_ha,
-                    organic_n_hus as organic_n_kg_ha,
+                    mineral_n_udb as mineral_n_grazing_kg_ha,
+                    organic_n_hus as organic_n_manure_kg_ha,
+                    nfix_ha as n_fixation_kg_ha,
 
-                    -- Final nitrogen washout calculation (Y5 = trend + V^1.5 * perco_soil_effect)
+                    -- Final nitrogen washout calculation (L = trend + (V^1.5 * P * S * rho))
                     GREATEST(0,
                         trend_effect + POWER(v_base, 1.5) * perco_soil_effect
                     ) as nitrogen_washout_kg_ha,
@@ -1208,7 +1429,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         ELSE 'low'
                     END as data_quality,
 
-                    'nles5_full_model' as estimation_method,
+                    'nles5_full_model_v2' as estimation_method,
                     current_timestamp as created_at,
                     field_geometry_wkt as geometry_wkt
 
@@ -1240,9 +1461,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         soil_code,
                         soil_description,
                         clay_content,
-                        percolation_period1,
-                        percolation_period2,
-                        percolation_period3,
+                        perco_apr_aug_current,
+                        perco_sep_mar_current,
+                        perco_sep_mar_previous,
                         total_percolation,
                         avg_precipitation,
                         avg_evaporation,
@@ -1254,21 +1475,22 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         50.0 as nitrogen_effect,
                         -2.9 as trend_effect,
                         73.51 as v_base,
-                        150.0 as total_nitrogen_kg_ha,
+                        150.0 as total_soil_n_mg_ha,
                         0.0 as mineral_n_spring_kg_ha,
                         0.0 as mineral_n_autumn_kg_ha,
-                        0.0 as mineral_n_applied_kg_ha,
-                        0.0 as organic_n_kg_ha,
+                        0.0 as mineral_n_grazing_kg_ha,
+                        0.0 as organic_n_manure_kg_ha,
+                        0.0 as n_fixation_kg_ha,
                         -- Simplified nitrogen washout calculation
-                        GREATEST(0, 50.0 + 0.8 * 0.9 * 1.085) as nitrogen_washout_kg_ha,
-                        GREATEST(0, 50.0 + 0.8 * 0.9 * 1.085) * CAST(area_ha AS DOUBLE) as total_nitrogen_washout_kg,
+                        GREATEST(0, -2.9 + 50.0 + 0.8 * 0.9 * 1.085) as nitrogen_washout_kg_ha,
+                        GREATEST(0, -2.9 + 50.0 + 0.8 * 0.9 * 1.085) * CAST(area_ha AS DOUBLE) as total_nitrogen_washout_kg,
                         has_soil_data,
                         sufficient_climate_data,
                         'medium' as data_quality,
                         'nles5_simplified_fallback' as estimation_method,
                         current_timestamp as created_at,
                         field_geometry_wkt as geometry_wkt
-                    FROM fields_with_climate_soil
+                    FROM fields_with_climate_soil_crops
                     WHERE total_percolation IS NOT NULL
                         AND total_percolation > 0
                 """)
@@ -1296,9 +1518,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         COALESCE(soil_code, '5') as soil_code,
                         COALESCE(soil_description, 'Medium clay soil') as soil_description,
                         COALESCE(clay_content, 15.0) as clay_content,
-                        COALESCE(percolation_period1, 300.0) as percolation_period1,
-                        COALESCE(percolation_period2, 200.0) as percolation_period2,
-                        COALESCE(percolation_period3, 400.0) as percolation_period3,
+                        COALESCE(perco_apr_aug_current, 300.0) as perco_apr_aug_current,
+                        COALESCE(perco_sep_mar_current, 400.0) as perco_sep_mar_current,
+                        COALESCE(perco_sep_mar_previous, 400.0) as perco_sep_mar_previous,
                         COALESCE(total_percolation, 900.0) as total_percolation,
                         COALESCE(avg_precipitation, 800.0) as avg_precipitation,
                         COALESCE(avg_evaporation, 300.0) as avg_evaporation,
@@ -1310,11 +1532,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         50.0 as nitrogen_effect,
                         -2.9 as trend_effect,
                         73.51 as v_base,
-                        150.0 as total_nitrogen_kg_ha,
+                        150.0 as total_soil_n_mg_ha,
                         0.0 as mineral_n_spring_kg_ha,
                         0.0 as mineral_n_autumn_kg_ha,
-                        0.0 as mineral_n_applied_kg_ha,
-                        0.0 as organic_n_kg_ha,
+                        0.0 as mineral_n_grazing_kg_ha,
+                        0.0 as organic_n_manure_kg_ha,
+                        0.0 as n_fixation_kg_ha,
                         -- Emergency fallback nitrogen washout
                         50.0 as nitrogen_washout_kg_ha,
                         50.0 * CAST(area_ha AS DOUBLE) as total_nitrogen_washout_kg,
@@ -1324,7 +1547,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         'nles5_emergency_fallback' as estimation_method,
                         current_timestamp as created_at,
                         COALESCE(field_geometry_wkt, 'POINT(10.0 56.0)') as geometry_wkt
-                    FROM fields_with_climate_soil
+                    FROM fields_with_climate_soil_crops
                 """)
 
                 fallback_count = self.conn.execute("SELECT COUNT(*) FROM nles5_nitrogen_estimates").fetchone()[0]
@@ -1445,10 +1668,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     COUNT(DISTINCT year) as years_covered,
 
                     -- Fertilizer data summary
-                    AVG(total_nitrogen_kg_ha) as avg_total_nitrogen_kg_ha,
+                    AVG(total_soil_n_mg_ha) as avg_total_soil_n_mg_ha,
                     AVG(mineral_n_spring_kg_ha) as avg_mineral_n_spring_kg_ha,
                     AVG(mineral_n_autumn_kg_ha) as avg_mineral_n_autumn_kg_ha,
-                    AVG(organic_n_kg_ha) as avg_organic_n_kg_ha,
+                    AVG(organic_n_manure_kg_ha) as avg_organic_n_manure_kg_ha,
+                    AVG(n_fixation_kg_ha) as avg_n_fixation_kg_ha,
 
                     current_timestamp as generated_at
                 FROM nles5_nitrogen_estimates
@@ -1536,7 +1760,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.info(f"NLES5 Analysis - Fields: {analysis[0]:,}, Total Area: {analysis[1]:.1f} ha")
                 self.log.info(f"Avg N Washout: {analysis[2]:.2f} kg/ha, Total N Washout: {analysis[7]:.1f} kg")
                 self.log.info(f"Data Quality - Soil: {analysis[11]:.1%}, Climate: {analysis[12]:.1%}, High Quality: {analysis[13]:.1%}")
-                self.log.info(f"Fertilizer Data - Avg Total N: {analysis[17]:.1f} kg/ha, Spring: {analysis[18]:.1f} kg/ha")
+                self.log.info(f"Fertilizer Data - Avg Soil N: {analysis[17]:.1f} Mg/ha, Spring Mineral N: {analysis[18]:.1f} kg/ha")
 
             # Log uncertainty analysis
             uncertainty_analysis = self.conn.execute("SELECT * FROM nles5_uncertainty_analysis").fetchone()
@@ -1606,7 +1830,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         -- 3. INPUT DATA QUALITY UNCERTAINTY
                         -- Fertilizer data availability uncertainty
                         CASE
-                            WHEN total_nitrogen_kg_ha > 0 AND mineral_n_spring_kg_ha >= 0 THEN 0.12  -- 12% with real fertilizer data
+                            WHEN total_soil_n_mg_ha > 0 AND mineral_n_spring_kg_ha >= 0 THEN 0.12  -- 12% with real fertilizer data
                             ELSE 0.30  -- 30% uncertainty using defaults
                         END as input_uncertainty_fertilizer,
 
@@ -1807,9 +2031,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     CASE
                         WHEN nitrogen_washout_kg_ha >= 100 THEN
                             CASE crop_type
-                                WHEN 'maize_potatoes' THEN 'HIGH_LOSS_INTENSIVE: Intensive crop with high nitrogen losses'
-                                WHEN 'winter_cereals' THEN 'HIGH_LOSS_CEREAL: Winter cereals showing excessive nitrogen washout'
-                                WHEN 'spring_cereals' THEN 'HIGH_LOSS_SPRING: Spring cereals with poor nitrogen retention'
+                                WHEN 'M8' THEN 'HIGH_LOSS_INTENSIVE: Intensive crop with high nitrogen losses'
+                                WHEN 'M1' THEN 'HIGH_LOSS_CEREAL: Winter cereals showing excessive nitrogen washout'
+                                WHEN 'M2' THEN 'HIGH_LOSS_SPRING: Spring cereals with poor nitrogen retention'
                                 ELSE 'HIGH_LOSS_GENERAL: Excessive nitrogen washout detected'
                             END
                         WHEN nitrogen_washout_kg_ha >= 50 THEN
@@ -1916,7 +2140,24 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 fields_complete_table = self._join_with_soil_data()
             else:
                 self.log.warning("No soil data available - using fields with climate data only")
-                fields_complete_table = fields_climate_table
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
+                    SELECT
+                        f_c.*,
+                        '5' as soil_code,
+                        'Medium clay soil' as soil_description,
+                        15.0 as clay_content,
+                        'clay' as soil_type_category,
+                        false as has_soil_data,
+                        -- crop codes from previous step
+                        f_c.m_code,
+                        f_c.w_code,
+                        f_c.mp_code,
+                        f_c.wp_code,
+                        f_c.wc_code
+                    FROM fields_with_climate_and_crops f_c
+                """)
+                fields_complete_table = "fields_with_climate_soil_crops"
 
             # Calculate NLES5 nitrogen estimates
             estimates_table = self._calculate_nles5_estimates()
@@ -1951,4 +2192,5 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         except Exception as e:
             self.log.error(f"Error in NLES5 processing: {e}")
+            self.log.exception(e)
             raise
