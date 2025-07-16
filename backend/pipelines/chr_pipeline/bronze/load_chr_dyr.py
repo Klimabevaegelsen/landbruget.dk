@@ -1276,8 +1276,27 @@ def _finalize_streaming_files() -> bool:
 def _save_to_streaming_buffer(data_type: str, identifier: str, data: Any) -> bool:
     """
     Save data using streaming approach to prevent memory buildup.
+
+    This function now saves data immediately to GCS instead of buffering in temp files,
+    which eliminates the need for consolidation and matches the pattern used by other pipelines.
     """
-    return _append_to_streaming_json(data_type, data)
+    try:
+        # Import here to avoid circular imports
+        from .export import save_data_immediately
+
+        # Save data immediately to GCS instead of buffering in temp files
+        success = save_data_immediately(data_type=data_type, data=data, identifier=identifier)
+
+        if success:
+            logger.debug(f"✅ Saved {data_type} data immediately to GCS with identifier: {identifier}")
+        else:
+            logger.error(f"❌ Failed to save {data_type} data immediately to GCS")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"❌ Error saving {data_type} data immediately: {e}")
+        return False
 
 
 def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, sample_days: int = 7) -> Dict[str, Any]:

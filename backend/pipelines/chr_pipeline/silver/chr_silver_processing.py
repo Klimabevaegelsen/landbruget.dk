@@ -80,7 +80,7 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
             "besaetning_list.json",
             "besaetning_details.json",
             "diko_flytninger.json",
-            "chr_dyr_movement_summaries.json",  # Added: CHR cattle movement data
+            "chr_dyr_movement_summaries*.json",  # Added: CHR cattle movement data (streaming files)
             "ejendom_oplysninger.json",
             "ejendom_vet_events.json",
             "spf_su_herds.json",
@@ -321,7 +321,7 @@ def process_chr_data_streaming(
                 "description": "DIKO animal movements",
             },
             "cattle_movements": {
-                "file": "chr_dyr_movement_summaries.json",
+                "file": "chr_dyr_movement_summaries_*.json",
                 "table_name": "cattle_movements",
                 "required": False,
                 "description": "CHR cattle movements",
@@ -351,67 +351,153 @@ def process_chr_data_streaming(
 
         # Process each dataset individually
         for dataset_key, dataset_info in datasets_config.items():
-            gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
             table_name = dataset_info["table_name"]
-
             logging.info(f"Processing {dataset_info['description']}: {dataset_info['file']}")
 
-            # Check if file exists in GCS
-            if not gcs_access.file_exists(gcs_path):
-                if dataset_info["required"]:
-                    logging.error(f"❌ Required file not found: {gcs_path}")
-                    return False
-                else:
-                    logging.info(f"⚠️ Optional file not found, skipping: {gcs_path}")
-                    continue
+            # Handle pattern matching for streaming files (cattle_movements)
+            if "*" in dataset_info["file"]:
+                # This is a pattern for streaming files
+                pattern = dataset_info["file"]
+                gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
 
-            try:
-                # Get file size for logging
-                file_size_bytes = gcs_access.get_file_size(gcs_path)
-                file_size_mb = file_size_bytes / (1024 * 1024)
-                logging.info(f"📁 File size: {file_size_mb:.1f} MB")
+                logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
 
-                # Create table directly from GCS JSON file using streaming download
-                # Note: GCSDataAccess.create_table_from_gcs only supports parquet, so we implement JSON loading here
-                with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
-                    temp_path = Path(temp_file.name)
+                try:
+                    # Use GCSDataAccess to find files matching the pattern
+                    base_path = f"bronze/chr/{bronze_timestamp}"
+                    all_files = gcs_access.list_files(base_path)
 
-                    # Download JSON file to temp location
-                    with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
-                        with open(temp_path, "wb") as dst:
-                            shutil.copyfileobj(src, dst)
+                    # Filter files matching the pattern (simple prefix matching for chr_dyr_movement_summaries_*)
+                    pattern_prefix = pattern.replace("*", "").replace(".json", "")
+                    matching_files = [f for f in all_files if f.startswith(pattern_prefix) and f.endswith(".json")]
 
-                    # Load into DuckDB using read_json_auto for robust JSON parsing
+                    if not matching_files:
+                        if dataset_info["required"]:
+                            logging.error(f"❌ No files found matching required pattern: {pattern}")
+                            return False
+                        else:
+                            logging.info(f"⚠️ No files found matching optional pattern: {pattern} - skipping")
+                            continue
+
+                    logging.info(f"📁 Found {len(matching_files)} files matching pattern")
+
+                    # Create table by combining all matching files using DuckDB's read_json with array
+                    temp_files = []
+                    total_size_mb = 0
+
+                    for file_name in matching_files:
+                        gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{file_name}"
+
+                        # Download each file to temp location
+                        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
+                            temp_path = Path(temp_file.name)
+
+                            # Download file
+                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                                with open(temp_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+
+                            # Get file size for logging
+                            file_size_bytes = temp_path.stat().st_size
+                            file_size_mb = file_size_bytes / (1024 * 1024)
+                            total_size_mb += file_size_mb
+
+                            temp_files.append(str(temp_path))
+
+                    logging.info(f"📊 Total size of {len(matching_files)} files: {total_size_mb:.1f} MB")
+
+                    # Create table using DuckDB's read_json with array of files
+                    file_list_str = "', '".join(temp_files)
                     con.raw_sql(f"""
                         CREATE TABLE {table_name} AS 
-                        SELECT * FROM read_json_auto('{str(temp_path)}', 
+                        SELECT * FROM read_json_auto(['{file_list_str}'], 
                                                    maximum_object_size=1073741824)
                     """)
 
-                    # Cleanup temp file
-                    temp_path.unlink()
+                    # Clean up temp files
+                    for temp_path in temp_files:
+                        Path(temp_path).unlink()
 
-                # Get record count for verification
-                count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-                record_count = count_result[0] if count_result else 0
+                    # Get record count for verification
+                    count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                    record_count = count_result[0] if count_result else 0
 
-                logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
-                loaded_tables[dataset_key] = table_name
+                    logging.info(f"✅ Loaded {table_name}: {record_count:,} records from {len(matching_files)} files")
+                    loaded_tables[dataset_key] = table_name
 
-                # Force garbage collection after large datasets
-                if file_size_mb > 50:  # For files > 50MB
-                    import gc
+                    # Force garbage collection after large datasets
+                    if total_size_mb > 50:  # For files > 50MB total
+                        import gc
 
-                    gc.collect()
-                    logging.debug(f"Forced garbage collection after loading {file_size_mb:.1f}MB file")
+                        gc.collect()
+                        logging.debug(f"Forced garbage collection after loading {total_size_mb:.1f}MB total")
 
-            except Exception as e:
-                if dataset_info["required"]:
-                    logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
-                    return False
-                else:
-                    logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
-                    continue
+                except Exception as e:
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
+                        return False
+                    else:
+                        logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
+                        continue
+            else:
+                # Single file processing (original logic)
+                gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
+
+                # Check if file exists in GCS
+                if not gcs_access.file_exists(gcs_path):
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Required file not found: {gcs_path}")
+                        return False
+                    else:
+                        logging.info(f"⚠️ Optional file not found, skipping: {gcs_path}")
+                        continue
+
+                try:
+                    # Get file size for logging
+                    file_size_bytes = gcs_access.get_file_size(gcs_path)
+                    file_size_mb = file_size_bytes / (1024 * 1024)
+                    logging.info(f"📁 File size: {file_size_mb:.1f} MB")
+
+                    # Create table directly from GCS JSON file using streaming download
+                    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
+                        temp_path = Path(temp_file.name)
+
+                        # Download JSON file to temp location
+                        with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                            with open(temp_path, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+
+                        # Load into DuckDB using read_json_auto for robust JSON parsing
+                        con.raw_sql(f"""
+                            CREATE TABLE {table_name} AS 
+                            SELECT * FROM read_json_auto('{str(temp_path)}', 
+                                                       maximum_object_size=1073741824)
+                        """)
+
+                        # Cleanup temp file
+                        temp_path.unlink()
+
+                    # Get record count for verification
+                    count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                    record_count = count_result[0] if count_result else 0
+
+                    logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
+                    loaded_tables[dataset_key] = table_name
+
+                    # Force garbage collection after large datasets
+                    if file_size_mb > 50:  # For files > 50MB
+                        import gc
+
+                        gc.collect()
+                        logging.debug(f"Forced garbage collection after loading {file_size_mb:.1f}MB file")
+
+                except Exception as e:
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
+                        return False
+                    else:
+                        logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
+                        continue
 
         # Handle VetStat XML data separately (if exists)
         vetstat_table_name = None
@@ -931,7 +1017,7 @@ def process_chr_data(
             "file_key": "besaetning_details.json",
         },
         "diko_flyt": {"mem_key": "diko_flytninger", "file_key": "diko_flytninger.json"},
-        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries.json"},
+        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries*.json"},
         "ejendom_oplys": {
             "mem_key": "ejendom_oplysninger",
             "file_key": "ejendom_oplysninger.json",
@@ -1058,24 +1144,55 @@ def process_chr_data(
         # --- Attempt 2: Load from Files (when not using memory) --- #
         if not successfully_loaded and not load_from_memory and bronze_dir:
             logging.info(f"Attempting to load '{table_name}' from bronze files...")
-            file_path = bronze_dir / source_info["file_key"]
+            file_key = source_info["file_key"]
 
-            if file_path.exists():
-                try:
-                    logging.info(f"Loading {table_name} from file: {file_path}")
-                    # Use DuckDB's read_json_auto for robust JSON loading
-                    max_obj_size_bytes = 1073741824  # 1GB
-                    con.con.sql(
-                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
-                    )
-                    raw_tables[table_name] = con.table(table_name)
-                    successfully_loaded = True
-                    logging.info(f"Successfully loaded {table_name} from file {file_path}")
+            # Handle pattern matching for streaming files
+            if "*" in file_key:
+                # This is a pattern for streaming files
+                import glob
 
-                except Exception as e_file:
-                    logging.error(f"Failed to load '{table_name}' from file {file_path}: {e_file}")
+                pattern_path = bronze_dir / file_key
+                matching_files = glob.glob(str(pattern_path))
+
+                if matching_files:
+                    try:
+                        logging.info(
+                            f"Loading {table_name} from {len(matching_files)} files matching pattern: {file_key}"
+                        )
+                        # Use DuckDB's read_json_auto with array of files
+                        file_list_str = "', '".join(matching_files)
+                        max_obj_size_bytes = 1073741824  # 1GB
+                        con.con.sql(
+                            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size={max_obj_size_bytes});"
+                        )
+                        raw_tables[table_name] = con.table(table_name)
+                        successfully_loaded = True
+                        logging.info(f"Successfully loaded {table_name} from {len(matching_files)} files")
+
+                    except Exception as e_file:
+                        logging.error(f"Failed to load '{table_name}' from pattern {file_key}: {e_file}")
+                else:
+                    logging.warning(f"No files found matching pattern for '{table_name}': {pattern_path}")
             else:
-                logging.warning(f"File not found for '{table_name}': {file_path}")
+                # Single file processing (original logic)
+                file_path = bronze_dir / file_key
+
+                if file_path.exists():
+                    try:
+                        logging.info(f"Loading {table_name} from file: {file_path}")
+                        # Use DuckDB's read_json_auto for robust JSON loading
+                        max_obj_size_bytes = 1073741824  # 1GB
+                        con.con.sql(
+                            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
+                        )
+                        raw_tables[table_name] = con.table(table_name)
+                        successfully_loaded = True
+                        logging.info(f"Successfully loaded {table_name} from file {file_path}")
+
+                    except Exception as e_file:
+                        logging.error(f"Failed to load '{table_name}' from file {file_path}: {e_file}")
+                else:
+                    logging.warning(f"File not found for '{table_name}': {file_path}")
 
         if not successfully_loaded:
             # Check if this is an optional table that can be skipped
