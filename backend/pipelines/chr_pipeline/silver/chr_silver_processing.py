@@ -363,13 +363,14 @@ def process_chr_data_streaming(
                 logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
 
                 try:
-                    # Use GCSDataAccess to find files matching the pattern
-                    base_path = f"bronze/chr/{bronze_timestamp}"
-                    all_files = gcs_access.list_files(base_path)
+                    # Use the same pattern as other successful pipelines
+                    # Use gcs_access.list_files() with full GCS pattern including wildcards
+                    gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
+                    all_files = gcs_access.list_files(gcs_list_pattern)
 
                     # Filter files matching the pattern (simple prefix matching for chr_dyr_movement_summaries_*)
                     pattern_prefix = pattern.replace("*", "").replace(".json", "")
-                    matching_files = [f for f in all_files if f.startswith(pattern_prefix) and f.endswith(".json")]
+                    matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
 
                     if not matching_files:
                         if dataset_info["required"]:
@@ -379,44 +380,14 @@ def process_chr_data_streaming(
                             logging.info(f"⚠️ No files found matching optional pattern: {pattern} - skipping")
                             continue
 
-                    logging.info(f"📁 Found {len(matching_files)} files matching pattern")
+                    logging.info(f"📁 Found {len(matching_files)} files matching pattern: {pattern}")
 
-                    # Create table by combining all matching files using DuckDB's read_json with array
-                    temp_files = []
-                    total_size_mb = 0
-
-                    for file_name in matching_files:
-                        gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{file_name}"
-
-                        # Download each file to temp location
-                        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
-                            temp_path = Path(temp_file.name)
-
-                            # Download file
-                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
-                                with open(temp_path, "wb") as dst:
-                                    shutil.copyfileobj(src, dst)
-
-                            # Get file size for logging
-                            file_size_bytes = temp_path.stat().st_size
-                            file_size_mb = file_size_bytes / (1024 * 1024)
-                            total_size_mb += file_size_mb
-
-                            temp_files.append(str(temp_path))
-
-                    logging.info(f"📊 Total size of {len(matching_files)} files: {total_size_mb:.1f} MB")
-
-                    # Create table using DuckDB's read_json with array of files
-                    file_list_str = "', '".join(temp_files)
+                    # Use DuckDB's read_json_auto with array of files (same as other pipelines)
+                    file_list_str = "', '".join(matching_files)
                     con.raw_sql(f"""
                         CREATE TABLE {table_name} AS 
-                        SELECT * FROM read_json_auto(['{file_list_str}'], 
-                                                   maximum_object_size=1073741824)
+                        SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size=1073741824)
                     """)
-
-                    # Clean up temp files
-                    for temp_path in temp_files:
-                        Path(temp_path).unlink()
 
                     # Get record count for verification
                     count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
@@ -424,13 +395,6 @@ def process_chr_data_streaming(
 
                     logging.info(f"✅ Loaded {table_name}: {record_count:,} records from {len(matching_files)} files")
                     loaded_tables[dataset_key] = table_name
-
-                    # Force garbage collection after large datasets
-                    if total_size_mb > 50:  # For files > 50MB total
-                        import gc
-
-                        gc.collect()
-                        logging.debug(f"Forced garbage collection after loading {total_size_mb:.1f}MB total")
 
                 except Exception as e:
                     if dataset_info["required"]:
