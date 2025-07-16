@@ -1,62 +1,79 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { getBNBOStatusColor, getBBRTypeColor, COLOR_CLASSES } from '@/lib/color-schemes';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
+// Define HoverInfo interface
 interface HoverInfo {
   layer: 'h3' | 'bnbo' | 'bbr';
-  data: any;
+  data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
 }
 
+// Color classes removed as they were unused
+
+// Color mapping functions
+const getBNBOStatusColor = (statusCode: string): string => {
+  const colorMap: Record<string, string> = {
+    'protected': '#22c55e',
+    'buffer': '#3b82f6',
+    'agricultural': '#eab308',
+    'transition': '#f97316',
+    'unprotected': '#6b7280'
+  };
+  return colorMap[statusCode] || '#6b7280';
+};
+
+const getBBRTypeColor = (buildingType: string): string => {
+  const colorMap: Record<string, string> = {
+    'Residential': '#3b82f6',
+    'Agricultural': '#22c55e',
+    'Industrial': '#ef4444',
+    'Commercial': '#a855f7',
+    'Public': '#eab308',
+    'Other': '#6b7280'
+  };
+  return colorMap[buildingType] || '#6b7280';
+};
+
 interface HoverTooltipProps {
   hoverInfo?: HoverInfo | null;
-  onHoverChange?: (info: HoverInfo | null) => void;
 }
 
-export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
-  // Update position when hover info changes
+  // Update visibility and position when hoverInfo changes
   useEffect(() => {
-    if (hoverInfo?.pixel) {
-      const [x, y] = hoverInfo.pixel;
-      setPosition({ x: x + 10, y: y - 10 });
+    if (hoverInfo) {
       setIsVisible(true);
+      // Position tooltip offset from mouse to avoid covering it
+      setPosition({ 
+        x: hoverInfo.pixel[0], // Use exact cursor position
+        y: hoverInfo.pixel[1]  // Use exact cursor position
+      });
     } else {
       setIsVisible(false);
+      setPosition(null);
     }
   }, [hoverInfo]);
 
-  // Format number with appropriate precision
-  const formatNumber = useCallback((value: number | null | undefined, decimals: number = 2): string => {
-    if (value === null || value === undefined || isNaN(value)) return 'N/A';
-    
-    if (Math.abs(value) >= 1000) {
-      return (value / 1000).toFixed(1) + 'K';
-    }
-    
-    return value.toFixed(decimals);
+  // Format functions
+  const formatNumber = useCallback((value: number | unknown, decimals: number = 2): string => {
+    const numValue = typeof value === 'number' ? value : Number(value) || 0;
+    if (numValue === 0) return '0';
+    if (numValue < 0.01 && numValue > 0) return '<0.01';
+    return numValue.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: decimals,
+    });
   }, []);
 
-  // Format percentage
-  const formatPercentage = useCallback((value: number | null | undefined): string => {
-    if (value === null || value === undefined || isNaN(value)) return 'N/A';
-    return (value * 100).toFixed(1) + '%';
-  }, []);
-
-  // Get status color class for BNBO
-  const getBNBOStatusClass = useCallback((statusCode: string): string => {
-    return COLOR_CLASSES.BNBO[statusCode as keyof typeof COLOR_CLASSES.BNBO] || COLOR_CLASSES.BNBO.unprotected;
-  }, []);
-
-  // Get building type color class for BBR
-  const getBBRTypeClass = useCallback((buildingType: string): string => {
-    return COLOR_CLASSES.BBR[buildingType as keyof typeof COLOR_CLASSES.BBR] || COLOR_CLASSES.BBR.Other;
-  }, []);
+  const formatPercentage = useCallback((value: number | unknown): string => {
+    const numValue = typeof value === 'number' ? value : Number(value) || 0;
+    return `${formatNumber(numValue * 100, 1)}%`;
+  }, [formatNumber]);
 
   // Render tooltip content based on layer type
   const renderTooltipContent = useMemo(() => {
@@ -64,122 +81,146 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
 
     switch (hoverInfo.layer) {
       case 'h3':
+        const pfasGrams = Number(hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0);
+        const pesticideLoad = Number(hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load || 0);
+        const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
+        const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
+        const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0);
+        
+        // Calculate intensities
+        const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
+        const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
+        const diquatIntensity = Number(hoverInfo.data.diquat_intensity) || (area > 0 ? diquatGrams / area : 0);
+        const glyphosateIntensity = Number(hoverInfo.data.glyphosate_intensity) || (area > 0 ? glyphosateGrams / area : 0);
+
         return (
-          <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-lg text-gray-900">H3 Hexagon</h3>
-              <div className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 rounded"></div>
-            </div>
-            
-            <div className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-gray-600">H3 ID:</span>
-                  <div className="font-mono text-xs text-gray-800 break-all">
-                    {hoverInfo.data.h3_id}
-                  </div>
+          <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            <div className="p-4 space-y-3">
+              {/* Header - Clean and minimal */}
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Agricultural Area</div>
+                <div className="text-slate-300 text-xs">
+                  {area > 0 ? `${formatNumber(area, 1)} hectares` : 'Area data unavailable'}
                 </div>
-                <div>
-                  <span className="text-gray-600">Year:</span>
-                  <div className="font-semibold text-gray-900">
-                    {hoverInfo.data.year}
+              </div>
+              
+              {/* Total Pesticide Load - Primary metric */}
+              <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-orange-800 text-sm font-medium">Total Pesticide Load</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideLoad, 2)}</div>
+                    <div className="text-orange-600">kg total</div>
+                  </div>
+                  <div>
+                    <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideIntensity, 2)}</div>
+                    <div className="text-orange-600">kg per hectare</div>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t pt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Pesticide Load:</span>
-                  <span className="font-semibold text-blue-600">
-                    {formatNumber(hoverInfo.data.total_pesticide_load)} kg/ha
-                  </span>
+              {/* PFAS - Clean warning design */}
+              <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-red-800 text-sm font-medium">PFAS Active Ingredients</div>
+                  <div className="text-red-600 text-xs font-medium">Persistent</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">PFAS Mass:</span>
-                  <span className="font-semibold text-red-600">
-                    {formatNumber(hoverInfo.data.total_pfas_grams)} g
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Agricultural Area:</span>
-                  <span className="font-semibold">
-                    {formatNumber(hoverInfo.data.agricultural_area_ha)} ha
-                  </span>
-                </div>
-              </div>
-
-              <div className="border-t pt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Field Count:</span>
-                  <span className="font-semibold">{hoverInfo.data.field_count || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Applications:</span>
-                  <span className="font-semibold">{hoverInfo.data.pesticide_application_count || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Coverage:</span>
-                  <span className="font-semibold">
-                    {formatPercentage(hoverInfo.data.avg_field_coverage)}
-                  </span>
-                </div>
-              </div>
-
-              {hoverInfo.data.h3_resolution && (
-                <div className="border-t pt-2">
-                  <div className="text-xs text-gray-500">
-                    H3 Resolution: {hoverInfo.data.h3_resolution}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-red-900 font-semibold text-base">{formatNumber(pfasGrams, 2)}</div>
+                    <div className="text-red-600">grams total</div>
+                  </div>
+                  <div>
+                    <div className="text-red-900 font-semibold text-base">{formatNumber(pfasIntensity, 2)}</div>
+                    <div className="text-red-600">grams per hectare</div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Glyphosate - Clean design */}
+              <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
+                <div className="text-green-800 text-sm font-medium mb-1">Glyphosate Active Ingredients</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateGrams, 2)}</div>
+                    <div className="text-green-600">grams total</div>
+                  </div>
+                  <div>
+                    <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateIntensity, 2)}</div>
+                    <div className="text-green-600">grams per hectare</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Diquat - Clean design */}
+              <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
+                <div className="text-amber-800 text-sm font-medium mb-1">Diquat Active Ingredients</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatGrams, 2)}</div>
+                    <div className="text-amber-600">grams total</div>
+                  </div>
+                  <div>
+                    <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatIntensity, 2)}</div>
+                    <div className="text-amber-600">grams per hectare</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agricultural Activity - Minimal stats */}
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="text-slate-700 text-sm font-medium mb-2">Activity</div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="text-center">
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {hoverInfo.data.applications || hoverInfo.data.pesticide_application_count || 0}
+                    </div>
+                    <div className="text-slate-600">Applications</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {hoverInfo.data.field_count || hoverInfo.data.unique_field_count || 0}
+                    </div>
+                    <div className="text-slate-600">Fields</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {formatPercentage(hoverInfo.data.avg_field_coverage || hoverInfo.data.actual_coverage_ratio || 0)}
+                    </div>
+                    <div className="text-slate-600">Coverage</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         );
 
       case 'bnbo':
         return (
-          <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-lg text-gray-900">BNBO Protected Area</h3>
-              <div 
-                className="w-4 h-4 rounded"
-                style={{ backgroundColor: getBNBOStatusColor(hoverInfo.data.status_code) }}
-              ></div>
-            </div>
-            
-            <div className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-gray-600">BNBO ID:</span>
-                  <div className="font-mono text-xs text-gray-800">
-                    {hoverInfo.data.bnbo_id}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-gray-600">Year:</span>
-                  <div className="font-semibold text-gray-900">
-                    {hoverInfo.data.year}
-                  </div>
+          <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            <div className="p-4 space-y-3">
+              {/* Header - Environmental Protection */}
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Environmental Protection Zone</div>
+                <div className="text-slate-300 text-xs">
+                  {hoverInfo.data.area_ha ? `${formatNumber(hoverInfo.data.area_ha, 1)} hectares` : 'Area data unavailable'}
                 </div>
               </div>
-
-              <div className="border-t pt-2">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-600">Status:</span>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getBNBOStatusClass(hoverInfo.data.status_code)}`}>
-                    {hoverInfo.data.status_description || hoverInfo.data.status_code}
-                  </span>
+              
+              {/* Protection Status */}
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div 
+                    className="w-3 h-3 rounded border"
+                    style={{ backgroundColor: getBNBOStatusColor(hoverInfo.data.status_code) }}
+                  ></div>
+                  <div className="text-slate-700 text-sm font-medium">
+                    {hoverInfo.data.status_description || hoverInfo.data.status_code?.toUpperCase() || 'Unknown'}
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Area:</span>
-                  <span className="font-semibold">
-                    {formatNumber(hoverInfo.data.area_ha)} ha
-                  </span>
-                </div>
-              </div>
-
-              <div className="border-t pt-2">
-                <div className="text-xs text-gray-500">
+                <div className="text-slate-600 text-xs">
                   {hoverInfo.data.status_code === 'protected' && 'Fully protected environmental area'}
                   {hoverInfo.data.status_code === 'buffer' && 'Buffer zone around protected area'}
                   {hoverInfo.data.status_code === 'agricultural' && 'Agricultural buffer zone'}
@@ -193,101 +234,123 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
 
       case 'bbr':
         return (
-          <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-lg text-gray-900">Building</h3>
-              <div 
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: getBBRTypeColor(hoverInfo.data.building_type) }}
-              ></div>
-            </div>
-            
-            <div className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-gray-600">BBR ID:</span>
-                  <div className="font-mono text-xs text-gray-800">
-                    {hoverInfo.data.bbr_id}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-gray-600">Building Code:</span>
-                  <div className="font-mono text-xs text-gray-800">
-                    {hoverInfo.data.building_code || 'N/A'}
-                  </div>
+          <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            <div className="p-4 space-y-3">
+              {/* Header - Building */}
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Building</div>
+                <div className="text-slate-300 text-xs">
+                  {formatNumber(hoverInfo.data.floor_area, 0)} m² floor area
                 </div>
               </div>
-
-              <div className="border-t pt-2">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-600">Type:</span>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getBBRTypeClass(hoverInfo.data.building_type)}`}>
-                    {hoverInfo.data.building_type || 'Unknown'}
-                  </span>
+              
+              {/* Building Details */}
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div 
+                    className="w-3 h-3 rounded border"
+                    style={{ backgroundColor: getBBRTypeColor(hoverInfo.data.building_type) }}
+                  ></div>
+                  <div className="text-slate-700 text-sm font-medium">
+                    {hoverInfo.data.building_type || 'Unknown Type'}
+                  </div>
                 </div>
-                
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Construction Year:</span>
-                    <span className="font-semibold">
-                      {hoverInfo.data.construction_year || 'Unknown'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Floor Area:</span>
-                    <span className="font-semibold">
-                      {formatNumber(hoverInfo.data.floor_area, 0)} m²
-                    </span>
-                  </div>
+                <div className="text-slate-600 text-xs">
+                  Built {hoverInfo.data.construction_year || 'Unknown'}
                 </div>
               </div>
-
-              {hoverInfo.data.address && (
-                <div className="border-t pt-2">
-                  <span className="text-gray-600">Address:</span>
-                  <div className="text-xs text-gray-800 mt-1">
-                    {hoverInfo.data.address}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         );
 
       default:
-        return null;
+        return (
+          <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            <div className="p-4">
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Data Point</div>
+                <div className="text-slate-300 text-xs">Unknown data type</div>
+              </div>
+            </div>
+          </div>
+        );
     }
-  }, [hoverInfo, formatNumber, formatPercentage, getBNBOStatusClass, getBBRTypeClass]);
+  }, [hoverInfo, formatNumber, formatPercentage]);
 
   if (!isVisible || !position || !hoverInfo) {
     return null;
   }
 
+  // Smart positioning to keep the hovered cell always visible
+  const tooltipWidth = 300;
+  const tooltipHeight = 350;
+  const tooltipDistance = 150; // Even larger distance from cursor to tooltip - creates clear gap
+  const padding = 10; // Screen edge padding
+  
+  // Determine the best position based on available space
+  const spaceRight = window.innerWidth - position.x;
+  const spaceLeft = position.x;
+  const spaceBelow = window.innerHeight - position.y;
+  const spaceAbove = position.y;
+  
+  const adjustedPosition = {
+    left: position.x + tooltipDistance,
+    top: position.y + tooltipDistance
+  };
+
+  // Choose horizontal position - keep tooltip far from cursor
+  if (spaceRight >= tooltipWidth + tooltipDistance + padding) {
+    // Enough space on the right - position far to the right
+    adjustedPosition.left = position.x + tooltipDistance;
+  } else if (spaceLeft >= tooltipWidth + tooltipDistance + padding) {
+    // Not enough space on right, position far to the left
+    adjustedPosition.left = position.x - tooltipWidth - tooltipDistance;
+  } else {
+    // Not enough horizontal space, use the side with more room but keep distance
+    if (spaceRight > spaceLeft) {
+      adjustedPosition.left = position.x + tooltipDistance;
+    } else {
+      adjustedPosition.left = position.x - tooltipWidth - tooltipDistance;
+    }
+  }
+
+  // Choose vertical position - keep tooltip far from cursor
+  if (spaceBelow >= tooltipHeight + tooltipDistance + padding) {
+    // Enough space below - position far below
+    adjustedPosition.top = position.y + tooltipDistance;
+  } else if (spaceAbove >= tooltipHeight + tooltipDistance + padding) {
+    // Not enough space below, position far above
+    adjustedPosition.top = position.y - tooltipHeight - tooltipDistance;
+  } else {
+    // Not enough vertical space, use the side with more room but keep distance
+    if (spaceBelow > spaceAbove) {
+      adjustedPosition.top = position.y + tooltipDistance;
+    } else {
+      adjustedPosition.top = position.y - tooltipHeight - tooltipDistance;
+    }
+  }
+
+  // Final bounds checking
+  adjustedPosition.left = Math.max(padding, Math.min(
+    adjustedPosition.left,
+    window.innerWidth - tooltipWidth - padding
+  ));
+  
+  adjustedPosition.top = Math.max(padding, Math.min(
+    adjustedPosition.top,
+    window.innerHeight - tooltipHeight - padding
+  ));
+
   return (
-    <AnimatePresence>
-      <motion.div
-        className="absolute pointer-events-none z-50"
-        style={{
-          left: position.x,
-          top: position.y,
-          transform: 'translate(-50%, -100%)'
-        }}
-        initial={{ opacity: 0, scale: 0.9, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 10 }}
-        transition={{ duration: 0.15, ease: 'easeOut' }}
-      >
-        {renderTooltipContent}
-        
-        {/* Tooltip Arrow */}
-        <div className="absolute top-full left-1/2 transform -translate-x-1/2">
-          <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
-          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-px">
-            <div className="w-0 h-0 border-l-3 border-r-3 border-t-3 border-transparent border-t-gray-200"></div>
-          </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+    <div
+      className="fixed z-50 pointer-events-none"
+      style={{
+        left: adjustedPosition.left,
+        top: adjustedPosition.top,
+      }}
+    >
+      {renderTooltipContent}
+    </div>
   );
 }
 
@@ -295,7 +358,7 @@ export function HoverTooltip({ hoverInfo, onHoverChange }: HoverTooltipProps) {
 export function useHoverTooltip() {
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
 
-  const handleHover = useCallback((info: any) => {
+  const handleHover = useCallback((info: Record<string, unknown>) => {
     if (info?.object && info?.coordinate && info?.pixel) {
       // Determine layer type based on data structure
       let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';

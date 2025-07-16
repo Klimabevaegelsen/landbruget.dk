@@ -15,8 +15,10 @@ services:
       - FVM_PASSWORD=${FVM_PASSWORD}
       - VETSTAT_CERTIFICATE_PASSWORD=${VETSTAT_CERTIFICATE_PASSWORD}
       - VETSTAT_CERTIFICATE_PATH=/app/vetstat.p12
+      - CHR_MAX_WORKERS=${CHR_MAX_WORKERS:-3}
+      - SPF_SU_MAX_WORKERS=${SPF_SU_MAX_WORKERS:-2}
     command: >
-      sh -c "/opt/venv/bin/python debug_paths.py && /opt/venv/bin/python main.py --steps herds --log-level INFO --progress --limit-herds-per-species 10"
+      sh -c "/opt/venv/bin/python debug_paths.py && /opt/venv/bin/python main.py --steps all --log-level INFO --progress --limit-herds-per-species 10 --workers 3"
     networks:
       - chr_network
 

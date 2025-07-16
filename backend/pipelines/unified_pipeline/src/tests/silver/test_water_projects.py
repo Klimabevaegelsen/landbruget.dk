@@ -13,17 +13,6 @@ from pandas import Timestamp
 from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
-from unified_pipeline.util.gcs_util import GCSUtil
-
-
-@pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Return a mock GCSUtil instance."""
-    mock_gcs = MagicMock(spec=GCSUtil)
-    mock_gcs.read_parquet = MagicMock()
-    mock_gcs.upload_blob = MagicMock()
-    return mock_gcs
-
 
 @pytest.fixture
 def config() -> WaterProjectsSilverConfig:
@@ -42,15 +31,13 @@ def config() -> WaterProjectsSilverConfig:
         service_types={"test_layer2": "arcgis"},
     )
 
-
 @pytest.fixture
 def silver_source(
-    config: WaterProjectsSilverConfig, mock_gcs_util: MagicMock
+    config: WaterProjectsSilverConfig
 ) -> WaterProjectsSilver:
     """Return a test WaterProjectsSilver instance."""
-    source = WaterProjectsSilver(config, mock_gcs_util)
+    source = WaterProjectsSilver(config)
     return source
-
 
 @pytest.fixture
 def sample_xml_root() -> ET.Element:
@@ -87,7 +74,6 @@ def sample_xml_root() -> ET.Element:
     """
     return ET.fromstring(xml_string)
 
-
 @pytest.fixture
 def sample_xml_string() -> str:
     """Return a sample XML string for testing."""
@@ -122,7 +108,6 @@ def sample_xml_string() -> str:
     </wfs:FeatureCollection>
     """
 
-
 @pytest.fixture
 def sample_feature_element() -> ET.Element:
     """Return a sample feature element for testing."""
@@ -153,7 +138,6 @@ def sample_feature_element() -> ET.Element:
     """
     return ET.fromstring(xml_string)
 
-
 @pytest.fixture
 def sample_geom_element() -> ET.Element:
     """Return a sample geometry element for testing."""
@@ -176,7 +160,6 @@ def sample_geom_element() -> ET.Element:
     </test:the_geom>
     """
     return ET.fromstring(xml_string)
-
 
 @pytest.fixture
 def sample_json_string() -> str:
@@ -203,7 +186,6 @@ def sample_json_string() -> str:
             ]
         }
     )
-
 
 @pytest.fixture
 def sample_bronze_df() -> dict:
@@ -272,7 +254,6 @@ def sample_bronze_df() -> dict:
         ],
     }
 
-
 @pytest.fixture
 def sample_geodataframe() -> gGeo:
     """Return a sample Geo for testing."""
@@ -288,7 +269,6 @@ def sample_geodataframe() -> gGeo:
         crs="EPSG:25832",
     )
 
-
 def test_config_defaults() -> None:
     """Test that the config defaults are set correctly."""
     config = WaterProjectsSilverConfig()
@@ -302,7 +282,6 @@ def test_config_defaults() -> None:
     assert "Klima_lavbund_demarkation___offentlige_projekter:0" in config.service_types
     assert config.service_types["Klima_lavbund_demarkation___offentlige_projekter:0"] == "arcgis"
 
-
 def test_get_first_namespace_success(
     silver_source: WaterProjectsSilver, sample_xml_root: ET.Element
 ) -> None:
@@ -310,13 +289,11 @@ def test_get_first_namespace_success(
     namespace = silver_source.get_first_namespace(sample_xml_root)
     assert namespace == "http://www.opengis.net/wfs/2.0"
 
-
 def test_get_first_namespace_no_namespace(silver_source: WaterProjectsSilver) -> None:
     """Test get_first_namespace returns None when no namespace is found."""
     root = ET.fromstring("<root><child>Test</child></root>")
     namespace = silver_source.get_first_namespace(root)
     assert namespace is None
-
 
 def test_clean_value_string(silver_source: WaterProjectsSilver) -> None:
     """Test clean_value with string values."""
@@ -324,13 +301,11 @@ def test_clean_value_string(silver_source: WaterProjectsSilver) -> None:
     assert silver_source.clean_value("") is None
     assert silver_source.clean_value("  ") is None
 
-
 def test_clean_value_non_string(silver_source: WaterProjectsSilver) -> None:
     """Test clean_value with non-string values."""
     assert silver_source.clean_value(123) == "123"
     assert silver_source.clean_value(None) == "None"
     assert silver_source.clean_value(True) == "True"
-
 
 def test_parse_geometry_success(
     silver_source: WaterProjectsSilver, sample_geom_element: ET.Element
@@ -344,13 +319,11 @@ def test_parse_geometry_success(
     # Area is in square meters / 10000 for hectares, so 100 sq meters = 0.01 ha
     assert result["area_ha"] > 0
 
-
 def test_parse_geometry_no_multisurface(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with missing MultiSurface."""
     geom_elem = ET.fromstring("<test:the_geom xmlns:test='http://test.namespace'></test:the_geom>")
     result = silver_source._parse_geometry(geom_elem)
     assert result is None
-
 
 def test_parse_geometry_invalid_coordinates(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with invalid coordinates."""
@@ -376,7 +349,6 @@ def test_parse_geometry_invalid_coordinates(silver_source: WaterProjectsSilver) 
     result = silver_source._parse_geometry(geom_elem)
     assert result is None
 
-
 def test_parse_geometry_insufficient_coordinates(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with insufficient coordinates."""
     xml_string = """
@@ -400,7 +372,6 @@ def test_parse_geometry_insufficient_coordinates(silver_source: WaterProjectsSil
     geom_elem = ET.fromstring(xml_string)
     result = silver_source._parse_geometry(geom_elem)
     assert result is None
-
 
 def test_parse_geometry_multiple_polygons(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with multiple polygons."""
@@ -439,7 +410,6 @@ def test_parse_geometry_multiple_polygons(silver_source: WaterProjectsSilver) ->
     assert "MULTIPOLYGON" in result["wkt"]
     assert result["area_ha"] > 0
 
-
 def test_parse_feature_success(
     silver_source: WaterProjectsSilver, sample_feature_element: ET.Element
 ) -> None:
@@ -458,7 +428,6 @@ def test_parse_feature_success(
     # Verify date parsing
     assert isinstance(result["startdato"], Timestamp)
 
-
 def test_parse_feature_no_geometry(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_feature with missing geometry."""
     xml_string = """
@@ -470,7 +439,6 @@ def test_parse_feature_no_geometry(silver_source: WaterProjectsSilver) -> None:
     feature = ET.fromstring(xml_string)
     result = silver_source._parse_feature(feature)
     assert result is None
-
 
 def test_parse_feature_invalid_geometry(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_feature with invalid geometry."""
@@ -486,7 +454,6 @@ def test_parse_feature_invalid_geometry(silver_source: WaterProjectsSilver) -> N
     feature = ET.fromstring(xml_string)
     result = silver_source._parse_feature(feature)
     assert result is None
-
 
 def test_parse_feature_conversion_errors(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_feature with values that can't be converted."""
@@ -521,7 +488,6 @@ def test_parse_feature_conversion_errors(silver_source: WaterProjectsSilver) -> 
     assert "startaar" not in result or result["startaar"] is None
     assert "startdato" not in result or result["startdato"] is None
 
-
 def test_process_xml_data_success(
     silver_source: WaterProjectsSilver, sample_xml_string: str
 ) -> None:
@@ -531,7 +497,6 @@ def test_process_xml_data_success(
     assert "geometry" in result[0]
     assert "layer" in result[0]
     assert result[0]["layer"] == "test_layer"
-
 
 def test_process_xml_data_no_namespace(silver_source: WaterProjectsSilver) -> None:
     """Test _process_xml_data with XML missing namespace."""
@@ -548,7 +513,6 @@ def test_process_xml_data_no_namespace(silver_source: WaterProjectsSilver) -> No
         silver_source._process_xml_data(xml_string, "test_layer")
     assert "No namespace found in XML" in str(excinfo.value)
 
-
 def test_process_xml_data_no_features(silver_source: WaterProjectsSilver) -> None:
     """Test _process_xml_data with XML containing no valid features."""
     xml_string = """
@@ -562,7 +526,6 @@ def test_process_xml_data_no_features(silver_source: WaterProjectsSilver) -> Non
     """
     result = silver_source._process_xml_data(xml_string, "test_layer")
     assert len(result) == 0
-
 
 def test_process_json_data_success(
     silver_source: WaterProjectsSilver, sample_json_string: str
@@ -580,7 +543,6 @@ def test_process_json_data_success(
     assert isinstance(result[0]["startdato"], datetime)
     assert isinstance(result[0]["slutdato"], datetime)
 
-
 def test_process_json_data_missing_rings(silver_source: WaterProjectsSilver) -> None:
     """Test _process_json_data with JSON missing rings."""
     json_string = json.dumps(
@@ -597,7 +559,6 @@ def test_process_json_data_missing_rings(silver_source: WaterProjectsSilver) -> 
     )
     result = silver_source._process_json_data(json_string, "test_layer")
     assert len(result) == 0
-
 
 def test_process_json_data_invalid_geometry(silver_source: WaterProjectsSilver) -> None:
     """Test _process_json_data with JSON containing invalid geometry."""
@@ -620,7 +581,6 @@ def test_process_json_data_invalid_geometry(silver_source: WaterProjectsSilver) 
     )
     result = silver_source._process_json_data(json_string, "test_layer")
     assert len(result) == 0
-
 
 def test_process_data_success(silver_source: WaterProjectsSilver, sample_bronze_df: dict) -> None:
     """Test _process_data with valid bronze data."""
@@ -658,13 +618,11 @@ def test_process_data_success(silver_source: WaterProjectsSilver, sample_bronze_
         mock_process_xml.assert_called_once()
         mock_process_json.assert_called_once()
 
-
 def test_process_data_empty_dataframe(silver_source: WaterProjectsSilver) -> None:
     """Test _process_data with empty ."""
     empty_df = ()
     result = silver_source._process_data(empty_df)
     assert result is None
-
 
 def test_process_data_no_features_extracted(
     silver_source: WaterProjectsSilver, sample_bronze_df: dict
@@ -683,7 +641,6 @@ def test_process_data_no_features_extracted(
         # Verify result
         assert result is None
 
-
 def test_process_data_processing_error(
     silver_source: WaterProjectsSilver, sample_bronze_df: dict
 ) -> None:
@@ -700,7 +657,6 @@ def test_process_data_processing_error(
         assert isinstance(result, gGeo)
         assert len(result) == 1  # Only JSON data is processed
 
-
 def test_create_dissolved_df_success(
     silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
 ) -> None:
@@ -712,7 +668,6 @@ def test_create_dissolved_df_success(
     assert result is not None
     assert isinstance(result, gGeo)
     assert result.crs == "EPSG:4326"  # Should be converted to WGS84
-
 
 def test_create_dissolved_df_multipolygon(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with MultiPolygon geometries."""
@@ -733,7 +688,6 @@ def test_create_dissolved_df_multipolygon(silver_source: WaterProjectsSilver) ->
         assert result is not None
         assert isinstance(result, gGeo)
         assert len(result) == 2  # Should have 2 separate polygons
-
 
 def test_create_dissolved_df_invalid_geometries(
     silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
@@ -768,7 +722,6 @@ def test_create_dissolved_df_invalid_geometries(
 
         mock_explain_validity.assert_called()
 
-
 def test_create_dissolved_df_exception(
     silver_source: WaterProjectsSilver, sample_geodataframe: gGeo
 ) -> None:
@@ -782,7 +735,6 @@ def test_create_dissolved_df_exception(
             silver_source._create_dissolved_df(sample_geodataframe, "test_dataset")
 
         assert "Dissolve error" in str(excinfo.value)
-
 
 @pytest.mark.asyncio
 async def test_run_success(silver_source: WaterProjectsSilver) -> None:
@@ -830,7 +782,6 @@ async def test_run_success(silver_source: WaterProjectsSilver) -> None:
             ]
         )
 
-
 @pytest.mark.asyncio
 async def test_run_no_bronze_data(silver_source: WaterProjectsSilver) -> None:
     """Test run when no bronze data is available."""
@@ -840,7 +791,6 @@ async def test_run_no_bronze_data(silver_source: WaterProjectsSilver) -> None:
 
         # Verify method calls
         silver_source._read_bronze_data.assert_called_once()
-
 
 @pytest.mark.asyncio
 async def test_run_processing_failure(silver_source: WaterProjectsSilver) -> None:
@@ -864,7 +814,6 @@ async def test_run_processing_failure(silver_source: WaterProjectsSilver) -> Non
         silver_source._read_bronze_data.assert_called_once()
         silver_source._process_data.assert_called_once()
 
-
 def test_parse_geometry_missing_poslist(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with missing posList element."""
     xml_string = """
@@ -886,7 +835,6 @@ def test_parse_geometry_missing_poslist(silver_source: WaterProjectsSilver) -> N
     geom_elem = ET.fromstring(xml_string)
     result = silver_source._parse_geometry(geom_elem)
     assert result is None
-
 
 def test_parse_geometry_empty_poslist(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with empty posList text."""
@@ -910,7 +858,6 @@ def test_parse_geometry_empty_poslist(silver_source: WaterProjectsSilver) -> Non
     result = silver_source._parse_geometry(geom_elem)
     assert result is None
 
-
 def test_parse_geometry_general_exception(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_geometry with a general exception."""
     with patch.object(silver_source, "config") as mock_config:
@@ -924,7 +871,6 @@ def test_parse_geometry_general_exception(silver_source: WaterProjectsSilver) ->
 
         assert result is None
 
-
 def test_parse_feature_general_exception(silver_source: WaterProjectsSilver) -> None:
     """Test _parse_feature with a general exception."""
     # Create a mock feature that raises an exception when accessed
@@ -937,7 +883,6 @@ def test_parse_feature_general_exception(silver_source: WaterProjectsSilver) -> 
 
     # Verify the exception was handled correctly
     assert result is None
-
 
 def test_create_dissolved_df_invalid_single_polygon(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with an invalid single polygon."""
@@ -990,7 +935,6 @@ def test_create_dissolved_df_invalid_single_polygon(silver_source: WaterProjects
         # Verify result
         assert result is not None
 
-
 def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSilver) -> None:
     """Test _create_dissolved_df with an invalid single polygon."""
     # Create a Geo with a polygon
@@ -1041,7 +985,6 @@ def test_create_dissolved_df_invalid_polygon_case(silver_source: WaterProjectsSi
 
         # Verify result
         assert result is not None
-
 
 def test_create_dissolved_df_invalid_single_polygon_with_interiors(
     silver_source: WaterProjectsSilver,
@@ -1096,7 +1039,6 @@ def test_create_dissolved_df_invalid_single_polygon_with_interiors(
         # Verify the result
         assert result is not None
 
-
 def test_parse_geometry_no_polygon_correct(silver_source: WaterProjectsSilver) -> None:
     """Test parsing geometry with a surface_member that doesn't have a Polygon element."""
     # Create a MultiSurface element with a surfaceMember that doesn't have a Polygon
@@ -1132,7 +1074,6 @@ def test_parse_geometry_no_polygon_correct(silver_source: WaterProjectsSilver) -
     assert "wkt" in result
     assert "POLYGON" in result["wkt"]
     assert result["area_ha"] > 0
-
 
 def test_create_dissolved_df_invalid_polygon_with_interiors(
     silver_source: WaterProjectsSilver,

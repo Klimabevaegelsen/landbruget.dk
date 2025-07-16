@@ -22,7 +22,7 @@ import time
 import warnings
 from contextlib import contextmanager
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import duckdb
 import gcsfs
@@ -98,29 +98,61 @@ class ResourceMonitor:
 class GCSDataAccess:
     """Unified GCS data access optimized for maximum performance."""
 
-    def __init__(self):
+    def __init__(self, connection: Optional[duckdb.DuckDBPyConnection] = None):
+        """
+        Initialize GCS access with optional DuckDB connection.
+
+        Uses fsspec + gcsfs for optimal performance (5x faster than httpfs).
+        Based on DuckDB GitHub issue #15140 findings.
+
+        Args:
+            connection: Existing DuckDB connection to reuse. If None, creates new one.
+        """
         self.fs = get_gcs_filesystem()
-        # Create a fresh connection for this instance
-        self.duckdb_conn = duckdb.connect()
 
-        # Initialize logger for this instance
-        self.log = logger
-
-        # Configure DuckDB with spatial and gcsfs
-        try:
-            self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
-
-            # Register gcsfs filesystem
-            from fsspec import filesystem
-
-            fs = filesystem("gs")
-            self.duckdb_conn.register_filesystem(fs)
-
-            logger.info("✅ GCSDataAccess: DuckDB configured with gcsfs integration")
-        except Exception as e:
-            logger.warning(f"DuckDB configuration warning: {e}")
+        if connection:
+            self.duckdb_conn = connection
+            self.log = logger
+            self.log.info("✅ GCSDataAccess: Using provided DuckDB connection")
+        else:
+            # Create a fresh connection for this instance
+            self.duckdb_conn = duckdb.connect()
+            self.log = logger
+            self._configure_duckdb()
+            self.log.info("✅ GCSDataAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
+
+    def _configure_duckdb(self):
+        """
+        Configure DuckDB with optimal settings and gcsfs integration.
+
+        VERIFIED APPROACH: Uses fsspec + gcsfs instead of httpfs for 5x performance gain.
+        Reference: DuckDB GitHub issue #15140
+        """
+        try:
+            # Performance settings
+            self.duckdb_conn.execute("SET memory_limit = '12GB'")
+            self.duckdb_conn.execute("SET max_memory = '12GB'")
+            self.duckdb_conn.execute("SET threads = 4")
+            self.duckdb_conn.execute("SET enable_progress_bar = true")
+
+            # Install spatial extension
+            self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
+
+            # CRITICAL: Register gcsfs filesystem for optimal GCS performance
+            # This approach is 5x faster than httpfs according to benchmarks
+            from fsspec import filesystem
+
+            fs = filesystem("gs")  # Uses gcsfs under the hood
+            self.duckdb_conn.register_filesystem(fs)
+
+            logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
+            logger.info(
+                "✅ Using fsspec + gcsfs for optimal GCS performance (5x faster than httpfs)"
+            )
+        except Exception as e:
+            logger.warning(f"DuckDB configuration warning: {e}")
 
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""
@@ -228,7 +260,8 @@ class GCSDataAccess:
             # ✅ DIRECT: Create table without  conversion
             full_query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                {query} FROM read_parquet('{temp_file}')
+                {query}
+                FROM read_parquet('{temp_file}')
             """
             self.duckdb_conn.execute(full_query)
 
@@ -357,7 +390,8 @@ class GCSDataAccess:
             file_list = "', '".join(temp_files)
             self.duckdb_conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                {query} FROM read_parquet(['{file_list}'])
+                {query}
+                FROM read_parquet(['{file_list}'])
             """)
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -488,25 +522,47 @@ class GCSDataAccess:
             self.log.error(f"Failed to download JSON from {gcs_path}: {e}")
             raise
 
-    def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **parquet_options):
-        """Upload DuckDB table directly to GCS without DataFrame conversion."""
+    def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **format_options):
+        """Upload DuckDB table directly to GCS without DataFrame conversion.
+
+        Supports both Parquet and CSV formats based on file extension.
+        For CSV files, uses human-readable formatting with proper headers and delimiters.
+        """
         self.monitor.check_resources("start_duckdb_upload")
 
-        # Build COPY options for optimal Parquet export
-        copy_options = ["FORMAT PARQUET"]
+        # Detect format based on file extension
+        if gcs_path.lower().endswith(".csv"):
+            # CSV format with human-readable options
+            copy_options = ["FORMAT CSV"]
+            copy_options.append("HEADER true")  # Include column headers
+            copy_options.append("DELIMITER ','")  # Use comma delimiter
+            copy_options.append("QUOTE '\"'")  # Use double quotes for text fields
 
-        # Add compression (default to zstd for best balance of speed/size)
-        compression = parquet_options.get("compression", "zstd")
-        copy_options.append(f"COMPRESSION {compression}")
+            # Add any additional CSV options passed in
+            if "delimiter" in format_options:
+                copy_options[-2] = f"DELIMITER '{format_options['delimiter']}'"
+            if "quote" in format_options:
+                copy_options[-1] = f"QUOTE '{format_options['quote']}'"
 
-        # Add row group size for better performance
-        if "row_group_size" in parquet_options:
-            copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+            file_suffix = ".csv"
+        else:
+            # Default to Parquet format
+            copy_options = ["FORMAT PARQUET"]
+
+            # Add compression (default to zstd for best balance of speed/size)
+            compression = format_options.get("compression", "zstd")
+            copy_options.append(f"COMPRESSION {compression}")
+
+            # Add row group size for better performance
+            if "row_group_size" in format_options:
+                copy_options.append(f"ROW_GROUP_SIZE {format_options['row_group_size']}")
+
+            file_suffix = ".parquet"
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
-            # DuckDB writes directly to optimized parquet
+        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+            # DuckDB writes directly to the specified format
             self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS without loading into memory
@@ -515,27 +571,50 @@ class GCSDataAccess:
                     shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_duckdb_upload")
-        self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path}")
+        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path} ({format_type} format)")
 
-    def upload_from_duckdb_query(self, query: str, gcs_path: str, **parquet_options):
-        """Execute query and upload result directly to GCS without DataFrame conversion."""
+    def upload_from_duckdb_query(self, query: str, gcs_path: str, **format_options):
+        """Execute query and upload result directly to GCS without DataFrame conversion.
+
+        Supports both Parquet and CSV formats based on file extension.
+        For CSV files, uses human-readable formatting with proper headers and delimiters.
+        """
         self.monitor.check_resources("start_query_upload")
 
-        # Build COPY options for optimal Parquet export
-        copy_options = ["FORMAT PARQUET"]
+        # Detect format based on file extension
+        if gcs_path.lower().endswith(".csv"):
+            # CSV format with human-readable options
+            copy_options = ["FORMAT CSV"]
+            copy_options.append("HEADER true")  # Include column headers
+            copy_options.append("DELIMITER ','")  # Use comma delimiter
+            copy_options.append("QUOTE '\"'")  # Use double quotes for text fields
 
-        # Add compression (default to zstd for best balance of speed/size)
-        compression = parquet_options.get("compression", "zstd")
-        copy_options.append(f"COMPRESSION {compression}")
+            # Add any additional CSV options passed in
+            if "delimiter" in format_options:
+                copy_options[-2] = f"DELIMITER '{format_options['delimiter']}'"
+            if "quote" in format_options:
+                copy_options[-1] = f"QUOTE '{format_options['quote']}'"
 
-        # Add row group size for better performance
-        if "row_group_size" in parquet_options:
-            copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+            file_suffix = ".csv"
+        else:
+            # Default to Parquet format
+            copy_options = ["FORMAT PARQUET"]
+
+            # Add compression (default to zstd for best balance of speed/size)
+            compression = format_options.get("compression", "zstd")
+            copy_options.append(f"COMPRESSION {compression}")
+
+            # Add row group size for better performance
+            if "row_group_size" in format_options:
+                copy_options.append(f"ROW_GROUP_SIZE {format_options['row_group_size']}")
+
+            file_suffix = ".parquet"
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
-            # DuckDB writes query result directly to optimized parquet
+        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+            # DuckDB writes query result directly to the specified format
             self.duckdb_conn.execute(f"COPY ({query}) TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS
@@ -544,7 +623,8 @@ class GCSDataAccess:
                     shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_query_upload")
-        self.log.info(f"Uploaded query result to {gcs_path}")
+        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded query result to {gcs_path} ({format_type} format)")
 
     def create_table_from_gcs(self, table_name: str, gcs_path: str):
         """Create a DuckDB table directly from GCS parquet file."""
@@ -562,6 +642,33 @@ class GCSDataAccess:
         files = self.fs.glob(pattern_without_gs)
         return [f"gs://{f}" for f in files]
 
+    def list_files_with_timestamps(self, gcs_pattern: str) -> List[tuple]:
+        """
+        List files matching pattern with their timestamps.
+
+        Returns list of tuples: (file_path, timestamp)
+        Useful for finding the most recent files in GitHub Actions workflows.
+        """
+        import datetime
+
+        pattern_without_gs = gcs_pattern.replace("gs://", "")
+        files = self.fs.glob(pattern_without_gs)
+
+        files_with_timestamps = []
+        for file_path in files:
+            try:
+                # Get file info including timestamp
+                file_info = self.fs.info(file_path)
+                # Convert timestamp to datetime object
+                timestamp = datetime.datetime.fromtimestamp(file_info.get("mtime", 0))
+                files_with_timestamps.append((f"gs://{file_path}", timestamp))
+            except Exception as e:
+                self.log.warning(f"Could not get timestamp for {file_path}: {e}")
+                # Fall back to current time if timestamp unavailable
+                files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
+
+        return files_with_timestamps
+
     def file_exists(self, gcs_path: str) -> bool:
         """Check if file exists."""
         path_without_gs = gcs_path.replace("gs://", "")
@@ -576,6 +683,52 @@ class GCSDataAccess:
         """Get detailed file information."""
         path_without_gs = gcs_path.replace("gs://", "")
         return self.fs.info(path_without_gs)
+
+    def list_files_with_metadata(self, bucket_name: str, prefix: str = "") -> List[Any]:
+        """
+        List files with metadata in GCS bucket with optional prefix.
+
+        Returns list of file objects with metadata compatible with Google Cloud Storage client.
+        Each file object has a 'name' attribute with the full path.
+
+        Args:
+            bucket_name: GCS bucket name
+            prefix: Optional prefix to filter files
+
+        Returns:
+            List of file objects with metadata
+        """
+        try:
+            # Build the pattern for gcsfs
+            if prefix:
+                pattern = f"{bucket_name}/{prefix}*"
+            else:
+                pattern = f"{bucket_name}/*"
+
+            # Get file paths
+            files = self.fs.glob(pattern)
+
+            # Create file objects with metadata
+            file_objects = []
+            for file_path in files:
+                # Skip directories
+                if self.fs.isdir(file_path):
+                    continue
+
+                # Create a simple file object with name attribute
+                class FileObject:
+                    def __init__(self, name):
+                        self.name = name
+
+                # The file path from gcsfs.glob() doesn't include gs:// prefix
+                # but the calling code expects the full path without gs://
+                file_objects.append(FileObject(file_path))
+
+            return file_objects
+
+        except Exception as e:
+            self.log.error(f"Error listing files with metadata for {bucket_name}/{prefix}: {e}")
+            return []
 
     def handle_oversized_files(self, gcs_path: str):
         """Strategies for files exceeding runner capabilities."""

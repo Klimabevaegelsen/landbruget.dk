@@ -24,7 +24,6 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -111,15 +110,13 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
     4. Save raw WFS responses to Google Cloud Storage
     """
 
-    def __init__(self, config: JordbrugsanalyserBronzeConfig, gcs_util: GCSUtil):
+    def __init__(self, config: JordbrugsanalyserBronzeConfig):
         """
         Initialize the JordbrugsanalyserBronze source.
 
         Args:
-            config (JordbrugsanalyserBronzeConfig): Configuration for the data source
-            gcs_util (GCSUtil): Utility for Google Cloud Storage operations
-        """
-        super().__init__(config, gcs_util)
+            config (JordbrugsanalyserBronzeConfig): Configuration for the data source"""
+        super().__init__(config)
 
     def _get_layer_name(self, year: int) -> str:
         """
@@ -355,7 +352,11 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 if self.config.batch_size == 0:
                     self.log.info(f"Year {year}: Downloading full dataset in single request")
                     raw_response = await self._fetch_chunk(session, layer_name, 0)
-                    return [raw_response] if raw_response else []
+                    if raw_response:
+                        # 🧹 CLEANUP: Return single response immediately, don't hold in memory
+                        return [raw_response]
+                    else:
+                        return []
 
                 # Otherwise, use chunked downloading
                 tasks = []
@@ -365,8 +366,13 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 # Execute all tasks and collect results
                 raw_responses = await asyncio.gather(*tasks)
 
+                # 🧹 CLEANUP: Filter and return immediately, don't hold invalid responses
                 valid_responses = [resp for resp in raw_responses if resp]
                 self.log.info(f"Year {year}: Collected {len(valid_responses)} valid responses")
+
+                # 🧹 CLEANUP: Clear the original raw_responses list to free memory
+                raw_responses.clear()
+                raw_responses = None
 
                 return valid_responses
 
@@ -402,6 +408,14 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 for year in range(self.config.start_year, self.config.end_year + 1):
                     try:
                         self.log.info(f"Processing year {year}")
+
+                        # 🧹 CLEANUP: Log memory usage before processing each year
+                        memory_info = self.get_memory_usage()
+                        if "system" in memory_info:
+                            self.log.info(
+                                f"Year {year}: Memory usage before processing: {memory_info['system']['used_gb']:.1f}GB ({memory_info['system']['percent']:.1f}%)"
+                            )
+
                         raw_responses = await self._process_year_data(session, year)
 
                         if raw_responses:
@@ -413,8 +427,36 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                             )
                             self.log.info(f"Year {year}: Data saved successfully")
 
-                            # Store data for in-memory passing
-                            all_year_data[str(year)] = raw_responses
+                            # 🧹 CLEANUP: Only store data for in-memory passing if save_local is True
+                            # On GitHub runners, we don't need to accumulate all data in memory
+                            if self.config.save_local:
+                                # Store data for in-memory passing (local development)
+                                all_year_data[str(year)] = raw_responses
+                            else:
+                                # 🧹 CLEANUP: For GitHub runners, immediately clear raw_responses to free memory
+                                self.log.info(
+                                    f"Year {year}: Clearing raw responses from memory (GitHub runner optimization)"
+                                )
+                                raw_responses.clear()
+                                raw_responses = None
+
+                                # 🧹 CLEANUP: Force garbage collection to free memory immediately
+                                import gc
+
+                                gc.collect()
+
+                                # Store minimal reference for in-memory passing (just the year)
+                                all_year_data[str(year)] = [f"saved_to_gcs_{dataset_name}"]
+
+                            # 🧹 CLEANUP: Clean up any temporary tables and force memory cleanup after each year
+                            self.cleanup_resources()
+
+                            # 🧹 CLEANUP: Log memory usage after cleanup
+                            memory_info = self.get_memory_usage()
+                            if "system" in memory_info:
+                                self.log.info(
+                                    f"Year {year}: Memory usage after cleanup: {memory_info['system']['used_gb']:.1f}GB ({memory_info['system']['percent']:.1f}%)"
+                                )
                         else:
                             self.log.warning(f"Year {year}: No data to save")
 

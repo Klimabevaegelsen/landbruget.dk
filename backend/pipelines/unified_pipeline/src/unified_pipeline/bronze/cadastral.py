@@ -13,10 +13,8 @@ from pydantic import ConfigDict
 
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 
 logger = logging.getLogger(__name__)
-
 
 def clean_value(value):
     """Clean string values"""
@@ -24,7 +22,6 @@ def clean_value(value):
         return value
     value = value.strip()
     return value if value else None
-
 
 class CadastralBronzeConfig(BaseJobConfig):
     """Configuration for the Cadastral Bronze source."""
@@ -51,10 +48,9 @@ class CadastralBronzeConfig(BaseJobConfig):
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
 
-
 class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
-    def __init__(self, config: CadastralBronzeConfig, gcs_util: GCSUtil) -> None:
-        super().__init__(config, gcs_util)
+    def __init__(self, config: CadastralBronzeConfig) -> None:
+        super().__init__(config)
         self.last_request_time = {}
         self.requests_per_second = int(os.getenv("CADASTRAL_REQUESTS_PER_SECOND", "2"))
 

@@ -55,6 +55,7 @@ backend/pipelines/sync_secrets.sh
 backend/pipelines/vetstat.p12
 
 # Data files
+*.csv
 *.geojson
 *.parquet
 *.shp
@@ -62,6 +63,7 @@ backend/pipelines/vetstat.p12
 *.dbf
 *.prj
 *.zip
+*.pmtiles
 backend/data/
 data/bronze/
 temp_data/
@@ -142,3 +144,6 @@ devenv.nix
 devenv.yaml
 devenv.lock
 .direnv
+# PMTiles (generated files, should be stored in GCS)
+pmtiles/
+*.pmtiles

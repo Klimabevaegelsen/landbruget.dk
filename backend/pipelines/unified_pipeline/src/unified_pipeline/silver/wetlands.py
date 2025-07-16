@@ -21,8 +21,6 @@ from typing import Any, Optional
 # # ✅ MIGRATION: Removed shapely import - using DuckDB-spatial for geometry operations
 # from shapely import Polygon
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 
@@ -68,29 +66,19 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
     3. Analyzing and logging geometry statistics for data quality assessment
     """
 
-    def __init__(self, config: WetlandsSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: WetlandsSilverConfig):
         """
         Initialize the WetlandsSilver processor.
 
         Args:
             config (WetlandsSilverConfig): Configuration object containing settings
-                                            for the processor.
-            gcs_util (GCSUtil): Utility for interacting with Google Cloud Storage.
-        """
-        super().__init__(config, gcs_util)
+                                            for the processor."""
+        super().__init__(config)
 
-        # ✅ MIGRATION: Add optimized GCS access
-        self.gcs_access = GCSDataAccess()
-
-        # ✅ MIGRATION: Setup DuckDB with spatial extensions
-        self._setup_duckdb()
-
-    def _setup_duckdb(self):
-        """Setup DuckDB connection with spatial extensions."""
-        # Install and load spatial extension
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
-        self.log.info("✅ DuckDB-spatial initialized for wetlands processing")
+        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # No need to create another instance or setup DuckDB again
+        self.log.info("✅ WetlandsSilver: Using unified GCS access and DuckDB connection")
+        self.log.info("✅ Optimized for DuckDB-spatial v1.2.2+ with SPATIAL_JOIN operator")
 
     def analyze_geometry(self, geometry_wkt: str) -> dict[str, Any]:
         """
@@ -143,11 +131,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
     def log_geometry_statistics(self, table_name: str) -> None:
         """
-        Analyze and log statistics about the geometries in a DuckDB table.
+        Log detailed geometry statistics for a DuckDB table.
 
-        This method calculates and logs various statistics about the geometries,
-        including total features, dimensions, grid alignment, and area coverage.
-        The statistics help understand the nature and quality of the dataset.
+        This method analyzes geometry properties including dimensions, area,
+        vertex count, and grid alignment for data quality assessment.
 
         Args:
             table_name (str): Name of the DuckDB table containing geometries to analyze
@@ -157,21 +144,33 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         """
         conn = self.conn
 
+        # Check which geometry column exists in the table
+        columns = conn.execute(f"DESCRIBE {table_name}").fetchall()
+        column_names = [col[0] for col in columns]
+
+        if "geometry_original" in column_names:
+            geometry_col = "geometry_original"
+        elif "geometry" in column_names:
+            geometry_col = "geometry"
+        else:
+            self.log.error(f"No geometry column found in table {table_name}")
+            return
+
         # Get geometry statistics using DuckDB-spatial
         stats_data = conn.execute(f"""
             SELECT 
-                (ST_XMax(geometry) - ST_XMin(geometry)) * (ST_YMax(geometry) - ST_YMin(geometry)) as area,
-                ST_NPoints(geometry) as vertices,
-                ST_XMax(geometry) - ST_XMin(geometry) as width,
-                ST_YMax(geometry) - ST_YMin(geometry) as height,
+                (ST_XMax({geometry_col}) - ST_XMin({geometry_col})) * (ST_YMax({geometry_col}) - ST_YMin({geometry_col})) as area,
+                ST_NPoints({geometry_col}) as vertices,
+                ST_XMax({geometry_col}) - ST_XMin({geometry_col}) as width,
+                ST_YMax({geometry_col}) - ST_YMin({geometry_col}) as height,
                 CASE 
-                    WHEN ABS(ROUND((ST_XMax(geometry) - ST_XMin(geometry)) / 10) * 10 - (ST_XMax(geometry) - ST_XMin(geometry))) < 0.01
-                         AND ABS(ROUND((ST_YMax(geometry) - ST_YMin(geometry)) / 10) * 10 - (ST_YMax(geometry) - ST_YMin(geometry))) < 0.01
+                    WHEN ABS(ROUND((ST_XMax({geometry_col}) - ST_XMin({geometry_col})) / 10) * 10 - (ST_XMax({geometry_col}) - ST_XMin({geometry_col}))) < 0.01
+                         AND ABS(ROUND((ST_YMax({geometry_col}) - ST_YMin({geometry_col})) / 10) * 10 - (ST_YMax({geometry_col}) - ST_YMin({geometry_col}))) < 0.01
                     THEN true 
                     ELSE false 
                 END as grid_aligned
             FROM {table_name}
-            WHERE geometry IS NOT NULL
+            WHERE {geometry_col} IS NOT NULL
         """).fetchall()
 
         # Unique dimensions analysis
@@ -179,9 +178,19 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
         self.log.info("Geometry Statistics:")
         self.log.info(f"Total features: {len(stats_data)}")
-        self.log.info("\nUnique dimensions (width x height, count):")
-        for (width, height), count in dimensions.most_common():
+        self.log.info(f"Unique dimension combinations: {len(dimensions)}")
+        self.log.info("\nTop 10 most common dimensions (width x height, count):")
+        for (width, height), count in dimensions.most_common(10):
             self.log.info(f"{width:.1f}m x {height:.1f}m: {count} features")
+
+        if len(dimensions) > 10:
+            remaining_count = len(dimensions) - 10
+            remaining_features = sum(
+                count for (width, height), count in dimensions.most_common()[10:]
+            )
+            self.log.info(
+                f"... and {remaining_count} other dimension combinations ({remaining_features} features)"
+            )
 
         non_grid_aligned = sum(1 for row in stats_data if not row[4])  # grid_aligned is index 4
         avg_vertices = (
@@ -212,7 +221,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         try:
             pos_list = geom_elem.find(".//gml:posList", self.config.namespaces)
             if pos_list is None or pos_list.text is None:
-                self.log.error("Missing posList in geometry element")
+                self.log.debug(
+                    "Missing posList in geometry element"
+                )  # Changed to debug to reduce noise
                 return None
             coords_str = pos_list.text.split()
             coords = [
@@ -279,7 +290,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         try:
             polygon = feature.find(".//gml:Polygon", self.config.namespaces)
             if polygon is None:
-                self.log.error("Missing Polygon in feature")
+                self.log.debug("Missing Polygon in feature")  # Changed to debug to reduce noise
                 return None
             geom_wkt = self._parse_geometry(polygon)
             if not geom_wkt:
@@ -287,13 +298,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             gridcode_str = self._get_attribute(feature, "natur:gridcode")
             if gridcode_str is None:
-                self.log.error("Missing gridcode in feature")
+                self.log.debug("Missing gridcode in feature")  # Changed to debug to reduce noise
                 return None
             gridcode = int(gridcode_str)
 
             toerv_pct = self._get_attribute(feature, "natur:toerv_pct")
             if toerv_pct is None:
-                self.log.error("Missing toerv_pct in feature")
+                self.log.debug("Missing toerv_pct in feature")  # Changed to debug to reduce noise
                 return None
 
             return {
@@ -404,6 +415,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 self.log.info(f"Inserted {i + batch_size:,} features into temp table")
 
         # Create spatial table with proper geometry column
+        # ✅ COORDINATE FIX: Keep original geometry for adjacency detection
         table_name = "wetlands_processed"
         conn.execute(f"""
             CREATE TABLE {table_name} AS
@@ -411,26 +423,49 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 id,
                 gridcode,
                 toerv_pct,
-                ST_Transform(
-                    ST_GeomFromText(geometry_wkt), 
-                    'EPSG:25832', 
-                    'EPSG:4326'
-                ) as geometry
+                ST_GeomFromText(geometry_wkt) as geometry,
+                geometry_wkt as geometry_wkt_original
             FROM temp_features
             WHERE geometry_wkt IS NOT NULL
         """)
 
         self.log.info(f"Created DuckDB table '{table_name}' with {len(features):,} features")
+
+        # ✅ CRITICAL: Perform adjacency detection BEFORE coordinate transformation
+        # Grid cells are perfectly adjacent in original coordinate system (EPSG:25832)
+        # but may have tiny gaps after transformation to EPSG:4326
+        dissolved_table_name = self._create_dissolved_df_before_transform(
+            table_name, self.config.dataset
+        )
+
+        # ✅ COORDINATE FIX: Apply geometry validation and transformation AFTER adjacency detection
+        from unified_pipeline.common.geometry_validator import (
+            validate_and_transform_geometries_duckdb,
+        )
+
+        # Transform the original non-dissolved table
+        validate_and_transform_geometries_duckdb(
+            conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
+        )
+
+        # Transform the dissolved table
+        validate_and_transform_geometries_duckdb(
+            conn,
+            dissolved_table_name,
+            f"silver.{self.config.dataset}_dissolved",
+            geometry_column="geometry",
+        )
+
         return table_name
 
-    @timed(name="Creating dissolved DuckDB table")  # type: ignore
-    def _create_dissolved_df(self, input_table_name: str, dataset: str) -> str:
+    @timed(name="Creating dissolved DuckDB table in original coordinates")  # type: ignore
+    def _create_dissolved_df_before_transform(self, input_table_name: str, dataset: str) -> str:
         """
         Create a dissolved (merged) version of the wetlands dataset using DuckDB-spatial.
 
-        This method merges adjacent wetland polygons using DuckDB-spatial operations
-        for significantly better performance than the previous GeoPandas approach.
-        Uses SPATIAL_JOIN operator for efficient spatial operations.
+        CRITICAL: This method works on the original coordinate system (EPSG:25832)
+        BEFORE transformation to EPSG:4326. This preserves perfect grid adjacency
+        relationships that would be lost after coordinate transformation.
 
         Args:
             input_table_name (str): Name of the input DuckDB table with wetland features
@@ -443,96 +478,244 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             Exception: If there are errors during the dissolve operation
         """
         try:
+            # Clean up any existing tables from previous runs
+            conn = self.conn
+            tables_to_cleanup = [
+                "wetlands_spatial",
+                "wetland_adjacency_raw",
+                "wetland_adjacency_dedup",
+                "wetland_adjacency",
+                "wetland_groups",
+                "wetland_groups_final",
+                "wetlands_dissolved_temp",
+            ]
+            for table in tables_to_cleanup:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+
             # Log statistics of input table
             self.log_geometry_statistics(input_table_name)
 
-            conn = self.conn
             feature_count = conn.execute(f"SELECT COUNT(*) FROM {input_table_name}").fetchone()[0]
-            self.log.info(f"Starting DuckDB-spatial merge of {feature_count:,} features...")
+            self.log.info(
+                f"Starting DuckDB-spatial merge of {feature_count:,} features in original coordinates..."
+            )
 
-            # Create spatial table with wetland IDs if not already present
+            # Create spatial table with wetland IDs using ORIGINAL geometry (before transformation)
             conn.execute(f"""
                 CREATE TABLE wetlands_spatial AS
                 SELECT 
                     ROW_NUMBER() OVER () as wetland_id,
-                    *
+                    id,
+                    gridcode,
+                    toerv_pct,
+                    geometry  -- Use geometry before transformation to preserve grid adjacency
                 FROM {input_table_name}
             """)
 
-            # Verify SPATIAL_JOIN usage for adjacency detection
+            # ✅ DuckDB-spatial optimization: No explicit indexing needed
+            # DuckDB spatial extension automatically creates temporary spatial indexes
+            # for SPATIAL_JOIN operations when query structure is optimized
+            self.log.info("✅ DuckDB spatial table created - automatic indexing will be used")
+
+            # ✅ OPTIMIZED: Absolute simplest SPATIAL_JOIN query for DuckDB-spatial v1.2.2+
+            # Based on PR #545: SPATIAL_JOIN operator requires:
+            # 1. Direct table joins (no CTEs)
+            # 2. ONLY ONE spatial predicate in JOIN condition
+            # 3. Simple SELECT without ANY calculations or complex WHERE conditions
+            # 4. Deduplication handled separately AFTER spatial join
             adjacency_query = """
                 SELECT 
                     w1.wetland_id as id1,
-                    w2.wetland_id as id2,
-                    ST_Touches(w1.geometry, w2.geometry) as is_adjacent
+                    w2.wetland_id as id2
                 FROM wetlands_spatial w1
-                JOIN wetlands_spatial w2 ON ST_Intersects(w1.geometry, w2.geometry)
-                WHERE w1.wetland_id < w2.wetland_id
-                    AND ST_Touches(w1.geometry, w2.geometry)
-                    AND ST_Length(ST_Intersection(w1.geometry, w2.geometry)) >= 10
+                INNER JOIN wetlands_spatial w2 ON ST_Touches(w1.geometry, w2.geometry)
             """
 
             # Verify SPATIAL_JOIN is being used
             from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
 
-            verify_spatial_join_usage(conn, adjacency_query)
+            spatial_join_detected = verify_spatial_join_usage(conn, adjacency_query)
+            if spatial_join_detected:
+                self.log.info("✅ Using optimized SPATIAL_JOIN operator for adjacency detection")
+            else:
+                self.log.warning(
+                    "⚠️ SPATIAL_JOIN not detected - query may use fallback nested loop join"
+                )
 
-            # Create adjacency table using SPATIAL_JOIN
+            # Create adjacency table using optimized SPATIAL_JOIN (single condition only)
             self.log.info("Finding adjacent wetlands using SPATIAL_JOIN...")
             conn.execute(f"""
-                CREATE TABLE wetland_adjacency AS
+                CREATE TABLE wetland_adjacency_raw AS
                 {adjacency_query}
             """)
 
-            adjacency_count = conn.execute("SELECT COUNT(*) FROM wetland_adjacency").fetchone()[0]
-            self.log.info(f"Found {adjacency_count:,} adjacent wetland pairs")
+            raw_adjacency_count = conn.execute(
+                "SELECT COUNT(*) FROM wetland_adjacency_raw"
+            ).fetchone()[0]
+            self.log.info(
+                f"Found {raw_adjacency_count:,} touching wetland pairs (including self-joins)"
+            )
 
+            # Deduplicate and remove self-joins AFTER spatial join to maintain SPATIAL_JOIN compliance
+            self.log.info("Removing self-joins and deduplicating pairs...")
+            conn.execute("""
+                CREATE TABLE wetland_adjacency_dedup AS
+                SELECT DISTINCT
+                    LEAST(id1, id2) as id1,
+                    GREATEST(id1, id2) as id2
+                FROM wetland_adjacency_raw
+                WHERE id1 != id2
+            """)
+
+            conn.execute("DROP TABLE wetland_adjacency_raw")
+            conn.execute("ALTER TABLE wetland_adjacency_dedup RENAME TO wetland_adjacency_raw")
+
+            dedup_adjacency_count = conn.execute(
+                "SELECT COUNT(*) FROM wetland_adjacency_raw"
+            ).fetchone()[0]
+            self.log.info(f"After deduplication: {dedup_adjacency_count:,} unique adjacent pairs")
+
+            # Apply edge length filter AFTER spatial join to maintain SPATIAL_JOIN operator usage
+            self.log.info("Filtering for meaningful shared edges (length >= 10m)...")
+            conn.execute("""
+                CREATE TABLE wetland_adjacency AS
+                SELECT DISTINCT
+                    LEAST(wa.id1, wa.id2) as id1,
+                    GREATEST(wa.id1, wa.id2) as id2
+                FROM wetland_adjacency_raw wa
+                JOIN wetlands_spatial w1 ON wa.id1 = w1.wetland_id
+                JOIN wetlands_spatial w2 ON wa.id2 = w2.wetland_id
+                WHERE ST_Length(ST_Intersection(w1.geometry, w2.geometry)) >= 10
+            """)
+
+            conn.execute("DROP TABLE wetland_adjacency_raw")
+
+            adjacency_count = conn.execute("SELECT COUNT(*) FROM wetland_adjacency").fetchone()[0]
+            self.log.info(
+                f"Filtered to {adjacency_count:,} adjacent wetland pairs with meaningful edges"
+            )
+
+            # Continue with connected components if we found adjacent wetlands
             if adjacency_count > 0:
                 # Create connected components for merging
                 self.log.info("Creating connected components for merging...")
 
-                # Simple approach: merge all wetlands that are connected
-                # This is a simplified version - in practice, you might want more sophisticated grouping
+                # Simplified connected components using DuckDB
+                # Start with each wetland in its own group
                 conn.execute("""
                     CREATE TABLE wetland_groups AS
-                    WITH RECURSIVE connected_components AS (
-                        -- Base case: each wetland starts in its own group
-                        SELECT wetland_id, wetland_id as group_id
-                        FROM wetlands_spatial
-                        
-                        UNION ALL
-                        
-                        -- Recursive case: merge adjacent wetlands into same group
-                        SELECT 
-                            cc.wetland_id,
-                            LEAST(cc.group_id, adj.id2) as group_id
-                        FROM connected_components cc
-                        JOIN wetland_adjacency adj ON cc.wetland_id = adj.id1
-                        WHERE cc.group_id > adj.id2
-                    )
-                    SELECT wetland_id, MIN(group_id) as final_group_id
-                    FROM connected_components
-                    GROUP BY wetland_id
+                    SELECT wetland_id, wetland_id as group_id
+                    FROM wetlands_spatial
                 """)
 
-                # Create dissolved geometries using ST_Union_Agg
-                self.log.info("Creating dissolved geometries using ST_Union_Agg...")
+                # Iteratively merge groups based on adjacency
+                # This is more similar to the GeoPandas approach
+                iteration = 0
+                changes_made = True
+                while changes_made and iteration < 100:  # Safety limit
+                    iteration += 1
+
+                    # Update group IDs based on adjacency
+                    rows_updated = conn.execute("""
+                        UPDATE wetland_groups 
+                        SET group_id = (
+                            SELECT MIN(LEAST(wg1.group_id, wg2.group_id))
+                            FROM wetland_adjacency adj
+                            JOIN wetland_groups wg1 ON adj.id1 = wg1.wetland_id
+                            JOIN wetland_groups wg2 ON adj.id2 = wg2.wetland_id
+                            WHERE wetland_groups.wetland_id IN (adj.id1, adj.id2)
+                        )
+                        WHERE wetland_id IN (
+                            SELECT DISTINCT UNNEST([id1, id2]) 
+                            FROM wetland_adjacency
+                        )
+                    """).rowcount
+
+                    changes_made = rows_updated > 0
+                    if changes_made:
+                        self.log.info(
+                            f"Iteration {iteration}: Updated {rows_updated} group assignments"
+                        )
+
+                # Normalize group IDs to be sequential
                 conn.execute("""
-                    CREATE TABLE wetlands_dissolved AS
+                    CREATE TABLE wetland_groups_final AS
                     SELECT 
-                        ROW_NUMBER() OVER () as wetland_id,
-                        final_group_id,
-                        COUNT(*) as merged_count,
-                        ST_Union_Agg(ws.geometry) as geometry
-                    FROM wetland_groups wg
-                    JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
-                    GROUP BY final_group_id
+                        wetland_id,
+                        DENSE_RANK() OVER (ORDER BY group_id) as final_group_id
+                    FROM wetland_groups
                 """)
+
+                conn.execute("DROP TABLE wetland_groups")
+                conn.execute("ALTER TABLE wetland_groups_final RENAME TO wetland_groups")
+
+                # Check number of groups for progress tracking
+                group_count = conn.execute("""
+                    SELECT COUNT(DISTINCT final_group_id) FROM wetland_groups
+                """).fetchone()[0]
+
+                self.log.info(f"Found {group_count:,} connected components to dissolve")
+
+                # Create dissolved geometries using ST_Union_Agg with progress tracking
+                self.log.info("Creating dissolved geometries using ST_Union_Agg...")
+
+                # Process in batches if we have many groups (>1000) to avoid memory issues
+                if group_count > 1000:
+                    self.log.info(
+                        f"Processing {group_count:,} groups in batches for memory efficiency"
+                    )
+
+                    # Create empty result table
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
+                    conn.execute("""
+                        CREATE TABLE wetlands_dissolved_temp (
+                            wetland_id INTEGER,
+                            final_group_id INTEGER,
+                            merged_count INTEGER,
+                            geometry GEOMETRY
+                        )
+                    """)
+
+                    # Process in batches of 100 groups
+                    batch_size = 100
+                    for offset in range(0, group_count, batch_size):
+                        batch_end = min(offset + batch_size, group_count)
+                        self.log.info(
+                            f"Processing groups {offset + 1}-{batch_end} of {group_count:,}"
+                        )
+
+                        conn.execute(f"""
+                            INSERT INTO wetlands_dissolved_temp
+                            SELECT 
+                                ROW_NUMBER() OVER () + {offset} as wetland_id,
+                                final_group_id,
+                                COUNT(*) as merged_count,
+                                ST_Union_Agg(ws.geometry) as geometry
+                            FROM wetland_groups wg
+                            JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
+                            WHERE final_group_id >= {offset + 1} AND final_group_id <= {batch_end}
+                            GROUP BY final_group_id
+                        """)
+                else:
+                    # Process all at once for smaller datasets
+                    conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
+                    conn.execute("""
+                        CREATE TABLE wetlands_dissolved_temp AS
+                        SELECT 
+                            ROW_NUMBER() OVER () as wetland_id,
+                            final_group_id,
+                            COUNT(*) as merged_count,
+                            ST_Union_Agg(ws.geometry) as geometry
+                        FROM wetland_groups wg
+                        JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
+                        GROUP BY final_group_id
+                    """)
             else:
                 # No adjacent wetlands found, keep original geometries
                 self.log.info("No adjacent wetlands found, keeping original geometries...")
+                conn.execute("DROP TABLE IF EXISTS wetlands_dissolved_temp")
                 conn.execute("""
-                    CREATE TABLE wetlands_dissolved AS
+                    CREATE TABLE wetlands_dissolved_temp AS
                     SELECT 
                         wetland_id,
                         wetland_id as final_group_id,
@@ -543,12 +726,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             # Create final dissolved table
             dissolved_table_name = f"{dataset}_dissolved"
+            conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
             conn.execute(f"""
                 CREATE TABLE {dissolved_table_name} AS
                 SELECT 
                     wetland_id,
                     geometry
-                FROM wetlands_dissolved
+                FROM wetlands_dissolved_temp
                 ORDER BY wetland_id
             """)
 
@@ -561,21 +745,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             self.log.info("Analyzing dissolved geometries:")
             self.log_geometry_statistics(dissolved_table_name)
 
-            # Final validation using DuckDB-spatial geometry validator
-            self.log.info("Final validation using DuckDB-spatial...")
-
-            # Use DuckDB-spatial validator
-            from unified_pipeline.common.geometry_validator import (
-                validate_and_transform_geometries_duckdb,
-            )
-
-            validate_and_transform_geometries_duckdb(
-                conn, dissolved_table_name, f"silver.{dataset}_dissolved"
-            )
-
             self.log.info(
                 f"Dissolved {feature_count:,} features into "
-                f"{dissolved_count:,} geometries using DuckDB-spatial"
+                f"{dissolved_count:,} geometries using DuckDB-spatial in original coordinates"
             )
             return dissolved_table_name
 
@@ -658,7 +830,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 self.log.error("Failed to process raw data")
                 return
             self.log.info("Processed raw data successfully")
-            dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
+
+            # Note: Dissolved table is created within _process_xml_data before coordinate transformation
+            dissolved_table_name = f"{self.config.dataset}_dissolved"
 
             # ✅ MIGRATION: Save both tables to GCS using optimized save methods
             self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")

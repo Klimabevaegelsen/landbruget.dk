@@ -36,7 +36,7 @@ def get_latest_bronze_dir(base_dir: Path) -> Path:
     return latest_dir
 
 
-def run_xml_parser(input_xml: Path, output_jsonl: Path) -> None:
+def run_xml_parser(input_xml: Path, output_jsonl: Path) -> bool:
     """Runs the parse_vetstat_xml.py script using the same Python interpreter."""
     # Use config.PIPELINE_DIR instead of PIPELINE_DIR
     parser_script = config.PIPELINE_DIR / "parse_vetstat_xml.py"
@@ -55,6 +55,7 @@ def run_xml_parser(input_xml: Path, output_jsonl: Path) -> None:
             logging.debug(f"XML parser stdout:\n{result.stdout.strip()}")
         if result.stderr:
             logging.warning(f"XML parser stderr:\n{result.stderr.strip()}")
+        return True  # Return True on successful execution
     except subprocess.CalledProcessError as e:
         logging.error(f"XML parser script failed with exit code {e.returncode}")
         logging.error(f"Command: {' '.join(map(str, e.cmd))}")  # Ensure command parts are strings
@@ -63,13 +64,13 @@ def run_xml_parser(input_xml: Path, output_jsonl: Path) -> None:
         stdout_output = e.stdout.strip() if e.stdout else "N/A"
         logging.error(f"Stderr: {stderr_output}")
         logging.error(f"Stdout: {stdout_output}")
-        raise RuntimeError("XML parsing failed.")
+        return False  # Return False on subprocess failure
     except Exception as e:
         logging.error(
             f"An unexpected error occurred while running the XML parser: {e}",
             exc_info=True,
         )
-        raise
+        return False  # Return False on unexpected error
 
 
 def _sanitize_string(col):

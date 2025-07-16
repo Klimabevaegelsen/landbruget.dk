@@ -10,10 +10,94 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import duckdb
-from bronze.export import GCSStorage
 
 # Configure module logger
 logger = logging.getLogger("bmd_pipeline.silver.transform")
+
+
+def _get_optimized_gcs_access():
+    """
+    Get optimized GCS access with robust import handling.
+
+    Returns GCSDataAccess if available, otherwise None for fallback.
+    """
+    try:
+        # Primary import path - should work when unified_pipeline is properly installed
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        logger.info("✅ Successfully imported optimized GCSDataAccess")
+        return GCSDataAccess
+    except ImportError as e:
+        logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        return None
+
+
+# Get optimized GCS access class or None if not available
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
+
+class OptimizedGCSStorage:
+    """Optimized GCS storage for BMD silver layer with fallback support."""
+
+    def __init__(self, bucket_name: str, prefix: str = "silver/bmd"):
+        self.bucket_name = bucket_name
+        self.prefix = prefix
+        self.use_optimized = False
+
+        # Try to use optimized storage
+        if OptimizedGCSDataAccess:
+            try:
+                self.gcs_access = OptimizedGCSDataAccess()
+                self.use_optimized = True
+                logger.info(f"✅ BMD Silver: Using optimized GCS access for bucket: {bucket_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                self._init_fallback(bucket_name)
+        else:
+            self._init_fallback(bucket_name)
+
+    def _init_fallback(self, bucket_name: str):
+        """Initialize fallback GCS storage."""
+        try:
+            from google.cloud import storage
+
+            self.gcs_client = storage.Client()
+            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
+            logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
+        except ImportError:
+            raise ImportError("google-cloud-storage is required but not available")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+
+    def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
+        """Upload file to GCS with optimized or fallback method."""
+        try:
+            if gcs_path is None:
+                timestamp = local_path.parent.name
+                filename = local_path.name
+                gcs_path = f"{self.prefix}/{timestamp}/{filename}"
+
+            if self.use_optimized:
+                # Use optimized upload
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                with open(local_path, "rb") as file_obj:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
+                        import shutil
+
+                        shutil.copyfileobj(file_obj, gcs_file)
+                logger.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized)")
+            else:
+                # Use fallback upload
+                blob = self.gcs_bucket.blob(gcs_path)
+                blob.upload_from_filename(str(local_path))
+                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to upload to GCS: {e}")
+            return False
 
 
 class BMDTransformer:
@@ -66,21 +150,38 @@ class BMDTransformer:
             # Add more mappings as needed
         }
 
-        # PFAS active ingredients list from https://www.dn.dk/media/115884/forbrug-af-pfas-pesticider-23-24.pdf
+        # PFAS active ingredients list - Danish official list of PFAS pesticides
+        # Sources:
+        # - Danish Parliament response on PFAS pesticides: https://www.ft.dk/samling/20222/almdel/mof/spm/65/svar/1938502/2674771/index.htm
+        # - PAN Europe report "Europe's Toxic Harvest": https://www.pan-europe.info/sites/pan-europe.info/files/public/resources/reports/PFAS%20Pesticides%20report%20November%202023.pdf
         self.pfas_active_ingredients = {
-            "fluazinam",
-            "fluopyram",
+            # Group 1: Primary PFAS active ingredients
             "diflufenican",
-            "mefentrifluconazol",
-            "tau-fluvalinat",
-            "lambda-cyhalothrin",
-            "pyroxsulam",
-            "oxathiapiprolin",
             "flonicamid",
+            "fluazinam",
             "fludioxonil",
-            "triflusulfuron-methyl",
+            "fluopyram",
             "gamma-cyhalothrin",
+            "lambda-cyhalothrin",
+            "mefentrifluconazol",
+            "oxathiapiprolin",
             "picolinafen",
+            "pyroxsulam",
+            "tau-fluvalinat",
+            "tefluthrin",
+            "triflusulfuron-methyl",
+            # Group 2: Additional PFAS active ingredients
+            "fipronil",
+            "fluazifop-butyl",
+            "fluazifop-p-butyl",
+            "flupyrsulfuron-methyl",
+            "flurprimidol",
+            "fluvalinate",
+            "haloxyfop-ethoxyethyl",
+            "indoxacarb",
+            "mefluidid",
+            "picoxystrobin",
+            "trifluralin",
         }
 
         # Create the DuckDB connection to be used throughout the transformation
@@ -433,7 +534,7 @@ class BMDTransformer:
 
             pfas_check_sql = " OR ".join(pfas_conditions)
 
-            # Create new table with PFAS indicator
+            # Create new table with PFAS, diquat, and glyphosate indicators
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
@@ -441,15 +542,37 @@ class BMDTransformer:
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
-                    END AS contains_pfas
+                    END AS contains_pfas,
+                    CASE 
+                        WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
+                        WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
+                        ELSE false
+                    END AS contains_diquat,
+                    CASE 
+                        WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        ELSE false
+                    END AS contains_glyphosate
                 FROM {table_name};
             """)
 
-            # Log PFAS detection statistics
+            # Log detection statistics
             pfas_count = self.conn.execute("""
                 SELECT COUNT(*) 
                 FROM pfas_enhanced 
                 WHERE contains_pfas = true
+            """).fetchone()[0]
+
+            diquat_count = self.conn.execute("""
+                SELECT COUNT(*) 
+                FROM pfas_enhanced 
+                WHERE contains_diquat = true
+            """).fetchone()[0]
+
+            glyphosate_count = self.conn.execute("""
+                SELECT COUNT(*) 
+                FROM pfas_enhanced 
+                WHERE contains_glyphosate = true
             """).fetchone()[0]
 
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
@@ -457,14 +580,30 @@ class BMDTransformer:
             logger.info(
                 f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
             )
+            logger.info(
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+            )
+            logger.info(
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+            )
 
-            # Store PFAS detection metadata
-            self.silver_metadata["pfas_detection"] = {
-                "pfas_ingredients_checked": list(self.pfas_active_ingredients),
-                "active_ingredient_column": active_ingredient_col,
-                "pfas_products_count": pfas_count,
+            # Store detection metadata
+            self.silver_metadata["substance_detection"] = {
+                "pfas_detection": {
+                    "pfas_ingredients_checked": list(self.pfas_active_ingredients),
+                    "active_ingredient_column": active_ingredient_col,
+                    "pfas_products_count": pfas_count,
+                    "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
+                "diquat_detection": {
+                    "diquat_products_count": diquat_count,
+                    "diquat_percentage": round(diquat_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
+                "glyphosate_detection": {
+                    "glyphosate_products_count": glyphosate_count,
+                    "glyphosate_percentage": round(glyphosate_count / total_count * 100, 2) if total_count > 0 else 0,
+                },
                 "total_products_count": total_count,
-                "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
             }
 
             return "pfas_enhanced"
@@ -618,15 +757,15 @@ def upload_to_gcs(local_path: Path, bucket_name: str) -> bool:
         True if upload successful, False otherwise
     """
     try:
-        storage = GCSStorage(bucket_name=bucket_name, prefix="silver/bmd")
+        storage = OptimizedGCSStorage(bucket_name=bucket_name, prefix="silver/bmd")
 
         # Upload the Parquet file
-        success = storage.upload_file(str(local_path))
+        success = storage.upload_file(local_path)
 
         # Upload the metadata file
         metadata_path = local_path.parent / "metadata.json"
         if metadata_path.exists():
-            storage.upload_file(str(metadata_path))
+            storage.upload_file(metadata_path)
 
         return success
     except Exception as e:

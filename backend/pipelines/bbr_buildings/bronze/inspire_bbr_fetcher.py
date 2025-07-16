@@ -25,6 +25,7 @@ from urllib.parse import urljoin, urlparse
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 import requests
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 from config import Settings
 
@@ -109,6 +110,10 @@ class InspireBBRFetcher:
 
             # Save metadata
             self._save_metadata(run_dir, file_info, download_url, sample_size, pipeline_start_time)
+
+            # Save data for GitHub Actions artifacts (in addition to timestamped directory)
+            if processed_data and "building_ids" in processed_data:
+                self._save_for_github_actions(processed_data)
 
             self.logger.info("Successfully processed INSPIRE BBR data with GraphQL enrichment")
 
@@ -538,73 +543,91 @@ class InspireBBRFetcher:
         if not self.settings.datafordeler_graphql_api_key:
             self.logger.warning("No GraphQL API key configured")
 
-        for batch_idx in range(0, len(uuids), batch_size):
-            batch_uuids = uuids[batch_idx : batch_idx + batch_size]
-            batch_num = (batch_idx // batch_size) + 1
+        # Initialize tqdm progress bar for GraphQL batches
+        progress_bar = tqdm(
+            total=total_batches,
+            desc=f"GraphQL {category_name}",
+            unit="batch",
+            ncols=80,
+            disable=False,  # Always show progress for API calls
+        )
 
-            # Only log progress for larger batches to reduce output
-            if total_batches > 10 and batch_num % 10 == 0:
-                self.logger.info(f"  Progress: {batch_num}/{total_batches} batches")
+        try:
+            for batch_idx in range(0, len(uuids), batch_size):
+                batch_uuids = uuids[batch_idx : batch_idx + batch_size]
+                batch_num = (batch_idx // batch_size) + 1
 
-            # Create GraphQL query with IN operator for efficient batching
-            uuids_list = '["' + '","'.join(batch_uuids) + '"]'
-            batch_query = f"""
-            {{
-              BBR_Bygning(
-                registreringstid: "{current_timestamp}",
-                where: {{
-                  id_lokalId: {{ in: {uuids_list} }}
+                # Create GraphQL query with IN operator for efficient batching
+                uuids_list = '["' + '","'.join(batch_uuids) + '"]'
+                batch_query = f"""
+                {{
+                  BBR_Bygning(
+                    registreringstid: "{current_timestamp}",
+                    where: {{
+                      id_lokalId: {{ in: {uuids_list} }}
+                    }}
+                  ) {{
+                    nodes {{ 
+                      id_lokalId 
+                      byg021BygningensAnvendelse 
+                    }}
+                  }}
                 }}
-              ) {{
-                nodes {{ 
-                  id_lokalId 
-                  byg021BygningensAnvendelse 
-                }}
-              }}
-            }}
-            """
+                """
 
-            try:
-                response = requests.post(
-                    graphql_url,
-                    headers={"Content-Type": "application/json"},
-                    json={"query": batch_query},
-                    timeout=60,  # Longer timeout for batch queries
-                )
-
-                if response.status_code != 200:
-                    self.logger.warning(f"HTTP Error for batch {batch_num}: {response.status_code}")
-                    continue
-
-                data = response.json()
-
-                if "errors" in data:
-                    self.logger.warning(
-                        f"GraphQL Errors for batch {batch_num}: {len(data['errors'])} errors"
+                try:
+                    response = requests.post(
+                        graphql_url,
+                        headers={"Content-Type": "application/json"},
+                        json={"query": batch_query},
+                        timeout=60,  # Longer timeout for batch queries
                     )
+
+                    if response.status_code != 200:
+                        self.logger.warning(
+                            f"HTTP Error for batch {batch_num}: {response.status_code}"
+                        )
+                        continue
+
+                    data = response.json()
+
+                    if "errors" in data:
+                        self.logger.warning(
+                            f"GraphQL Errors for batch {batch_num}: {len(data['errors'])} errors"
+                        )
+                        continue
+
+                    if (
+                        "data" not in data
+                        or not data["data"]
+                        or not data["data"].get("BBR_Bygning")
+                    ):
+                        continue
+
+                    batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
+                    batch_results = [
+                        {
+                            "building_uuid": b["id_lokalId"],
+                            "bbr_code": b.get("byg021BygningensAnvendelse"),
+                        }
+                        for b in batch_buildings
+                        if b.get("byg021BygningensAnvendelse")
+                    ]
+
+                    all_results.extend(batch_results)
+
+                    # Rate limiting between batch requests (much less frequent now)
+                    time.sleep(0.5)
+
+                except Exception as e:
+                    self.logger.warning(f"Error for batch {batch_num}: {e}")
                     continue
+                finally:
+                    # Update progress bar after each batch
+                    progress_bar.update(1)
 
-                if "data" not in data or not data["data"] or not data["data"].get("BBR_Bygning"):
-                    continue
-
-                batch_buildings = data["data"]["BBR_Bygning"]["nodes"]
-                batch_results = [
-                    {
-                        "building_uuid": b["id_lokalId"],
-                        "bbr_code": b.get("byg021BygningensAnvendelse"),
-                    }
-                    for b in batch_buildings
-                    if b.get("byg021BygningensAnvendelse")
-                ]
-
-                all_results.extend(batch_results)
-
-                # Rate limiting between batch requests (much less frequent now)
-                time.sleep(0.5)
-
-            except Exception as e:
-                self.logger.warning(f"Error for batch {batch_num}: {e}")
-                continue
+        finally:
+            progress_bar.close()
 
         self.logger.info(
             f"GraphQL API results for {category_name}: {len(all_results)} buildings with BBR codes"
@@ -619,29 +642,79 @@ class InspireBBRFetcher:
         sample_size: int | None,
         pipeline_start_time: datetime,
     ) -> None:
-        """
-        Save metadata about the fetched data.
-
-        Args:
-            output_dir: Directory to save metadata
-            file_info: File information from FTP page
-            download_url: URL used for download
-            sample_size: Sample size if used for testing
-        """
+        """Save metadata about the INSPIRE BBR fetch."""
         metadata = {
-            "timestamp": pipeline_start_time.isoformat(),
-            "source_url": self.settings.sdfe_ftp_base_url,
+            "timestamp": pipeline_start_time.isoformat()
+            if pipeline_start_time
+            else datetime.now().isoformat(),
             "download_url": download_url,
             "file_info": file_info,
             "sample_size": sample_size,
-            "pipeline_version": "1.0.0",
+            "processing_completed": True,
         }
 
         metadata_path = output_dir / "metadata.json"
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
 
-        self.logger.info(f"Saved metadata to {metadata_path}")
+        self.logger.info(f"Metadata saved to {metadata_path}")
+
+    def _save_for_github_actions(self, processed_data: dict) -> None:
+        """
+        Save processed data to a data directory for GitHub Actions compatibility.
+
+        This method creates a standardized data directory and saves the building
+        attributes data in a format that can be easily accessed by GitHub Actions
+        workflows and artifacts.
+
+        Args:
+            processed_data: Dictionary containing processed building data with 'building_ids' key
+        """
+        try:
+            # Create data directory for GitHub Actions compatibility
+            data_root = Path("data")
+            data_root.mkdir(exist_ok=True)
+
+            # Extract building attributes from processed data
+            building_ids = processed_data.get("building_ids", [])
+            if not building_ids:
+                self.logger.warning(
+                    "No building IDs found in processed data for GitHub Actions save"
+                )
+                return
+
+            self.logger.info(
+                f"💾 Saving {len(building_ids):,} building attributes for GitHub Actions compatibility..."
+            )
+
+            # Save building attributes as JSON for GitHub Actions
+            attributes_file = data_root / "inspire_attributes.json"
+            with open(attributes_file, "w", encoding="utf-8") as f:
+                json.dump(building_ids, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(
+                f"✅ Saved building attributes to {attributes_file} for GitHub Actions"
+            )
+
+            # Also save a summary metadata file
+            summary_metadata = {
+                "total_buildings": len(building_ids),
+                "timestamp": datetime.now().isoformat(),
+                "source": "INSPIRE BBR",
+                "format": "json",
+                "description": "Building attributes data for GitHub Actions compatibility",
+            }
+
+            metadata_file = data_root / "inspire_metadata.json"
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(summary_metadata, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(f"✅ Saved metadata to {metadata_file} for GitHub Actions")
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to save data for GitHub Actions: {e}")
+            # Don't raise the exception as this is a non-critical operation
+            # The main pipeline should continue even if GitHub Actions save fails
 
     def _parse_ftp_page(self) -> tuple[str | None, dict]:
         """
@@ -752,7 +825,7 @@ class InspireBBRFetcher:
 
     def _download_file(self, url: str, output_path: Path, expected_size: int | None = None) -> None:
         """
-        Download a file from the given URL.
+        Download a file from the given URL with tqdm progress bar.
 
         Args:
             url: URL to download from
@@ -778,22 +851,30 @@ class InspireBBRFetcher:
                         self.logger.warning(
                             f"File size mismatch: expected {expected_size}, got {file_size}"
                         )
+                else:
+                    file_size = None
 
-                # Download with progress tracking
+                # Initialize tqdm progress bar
+                progress_bar = tqdm(
+                    total=file_size,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    desc="Downloading INSPIRE BBR",
+                    ncols=80,
+                    disable=False,  # Always show progress for downloads
+                )
+
                 downloaded = 0
-                progress_interval = 200 * 1024 * 1024  # Log every 200MB instead of 100MB
-                last_logged = 0
-
-                with open(output_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-
-                            # Log progress less frequently for GitHub Actions
-                            if downloaded - last_logged >= progress_interval:
-                                self.logger.info(f"Downloaded {downloaded / (1024**2):.0f} MB")
-                                last_logged = downloaded
+                try:
+                    with open(output_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                progress_bar.update(len(chunk))
+                finally:
+                    progress_bar.close()
 
                 self.logger.info(f"Download completed: {downloaded / (1024**2):.2f} MB")
 
@@ -1001,116 +1082,84 @@ class InspireBBRFetcher:
 
     def _enrich_and_stream_category(self, building_uuids, category_name, building_queue, conn):
         """
-        Enrich a category of buildings with GraphQL API and stream results.
-
-        Args:
-            building_uuids: List of building UUIDs for this category
-            category_name: Category name ('agriculture' or 'publicServices')
-            building_queue: Queue to put enriched chunks
-            conn: DuckDB connection
+        Enrich buildings with GraphQL data and stream to queue in batches.
         """
-        self.logger.info(
-            f"Enriching {len(building_uuids)} {category_name} buildings with GraphQL API..."
-        )
+        if not building_uuids:
+            self.logger.info(f"No {category_name} buildings to process")
+            return
 
-        # Process in chunks of 50 (matching existing GraphQL batch size)
-        batch_size = 50
+        self.logger.info(f"Processing {len(building_uuids):,} {category_name} buildings...")
+
+        # Process in batches
+        batch_size = 1000  # Smaller batches for streaming
         total_batches = (len(building_uuids) + batch_size - 1) // batch_size
 
-        for i in range(0, len(building_uuids), batch_size):
-            batch_uuids = building_uuids[i : i + batch_size]
-            batch_num = (i // batch_size) + 1
+        # Initialize progress bar for category processing
+        progress_bar = tqdm(
+            total=total_batches,
+            desc=f"Processing {category_name}",
+            unit="batch",
+            ncols=80,
+            disable=False,
+        )
 
-            self.logger.info(
-                f"Processing {category_name} batch {batch_num}/{total_batches} ({len(batch_uuids)} buildings)"
-            )
+        try:
+            for i in range(0, len(building_uuids), batch_size):
+                batch_uuids = building_uuids[i : i + batch_size]
+                batch_num = (i // batch_size) + 1
 
-            try:
-                # Query GraphQL API for this batch
-                graphql_data = self._query_graphql_for_bbr_codes(
-                    batch_uuids, category_name, len(batch_uuids)
-                )
-
-                # Process the GraphQL response
-                enriched_attributes = []
-                for uuid in batch_uuids:
-                    # Find the GraphQL data for this UUID
-                    building_data = None
-                    if graphql_data and "data" in graphql_data and "bbr" in graphql_data["data"]:
-                        for building in graphql_data["data"]["bbr"]:
-                            if building.get("bygningId") == uuid:
-                                building_data = building
-                                break
-
-                    # Create enriched attribute record
-                    if building_data:
-                        usage_code = building_data.get("bygningAnvendelse")
-
-                        # Filter publicServices for education buildings only
-                        if category_name == "publicServices":
-                            if usage_code and 420 <= int(usage_code) <= 441:
-                                enriched_attributes.append(
-                                    {
-                                        "building_uuid": uuid,
-                                        "category": "publicServices",
-                                        "bbr_usage_code": usage_code,
-                                        "detailed_usage": f"education_{usage_code}",
-                                    }
-                                )
-                            # Skip non-education public services
-                        else:  # agriculture
-                            enriched_attributes.append(
-                                {
-                                    "building_uuid": uuid,
-                                    "category": "agriculture",
-                                    "bbr_usage_code": usage_code,
-                                    "detailed_usage": f"agriculture_{usage_code}"
-                                    if usage_code
-                                    else "agriculture_unknown",
-                                }
-                            )
-                    else:
-                        # No GraphQL data found, include with unknown details
-                        if category_name != "publicServices":  # Skip unknown publicServices
-                            enriched_attributes.append(
-                                {
-                                    "building_uuid": uuid,
-                                    "category": category_name,
-                                    "bbr_usage_code": None,
-                                    "detailed_usage": f"{category_name}_unknown",
-                                }
-                            )
-
-                # Stream this enriched batch if it has any valid buildings
-                if enriched_attributes:
-                    chunk_uuids = [attr["building_uuid"] for attr in enriched_attributes]
-                    building_queue.put((chunk_uuids, enriched_attributes))
-                    self.logger.info(
-                        f"Streamed {len(enriched_attributes)} enriched {category_name} building IDs to queue"
-                    )
-                else:
-                    self.logger.info(
-                        f"No valid buildings in {category_name} batch {batch_num} after filtering"
+                try:
+                    # Query GraphQL API for this batch
+                    graphql_data = self._query_graphql_for_bbr_codes(
+                        batch_uuids, category_name, len(batch_uuids)
                     )
 
-            except Exception as e:
-                self.logger.error(f"Failed to enrich {category_name} batch {batch_num}: {e}")
-                # Still stream the UUIDs without enrichment to avoid losing buildings
-                basic_attributes = []
-                for uuid in batch_uuids:
-                    if category_name != "publicServices":  # Skip unknown publicServices
-                        basic_attributes.append(
-                            {
-                                "building_uuid": uuid,
-                                "category": category_name,
-                                "bbr_usage_code": None,
-                                "detailed_usage": f"{category_name}_unknown",
-                            }
-                        )
+                    # Process the GraphQL response
+                    enriched_attributes = []
+                    for uuid in batch_uuids:
+                        # Find the GraphQL data for this UUID
+                        building_data = None
+                        if (
+                            graphql_data
+                            and "data" in graphql_data
+                            and "bbr" in graphql_data["data"]
+                        ):
+                            for building in graphql_data["data"]["bbr"]:
+                                if building.get("bygningId") == uuid:
+                                    building_data = building
+                                    break
 
-                if basic_attributes:
-                    chunk_uuids = [attr["building_uuid"] for attr in basic_attributes]
-                    building_queue.put((chunk_uuids, basic_attributes))
-                    self.logger.info(
-                        f"Streamed {len(basic_attributes)} fallback {category_name} building IDs to queue"
+                        # Create enriched record
+                        enriched_record = {
+                            "building_uuid": uuid,
+                            "category": category_name,
+                            "bbr_code": building_data.get("bbr_code") if building_data else None,
+                            "bbr_description": building_data.get("bbr_description")
+                            if building_data
+                            else None,
+                        }
+                        enriched_attributes.append(enriched_record)
+
+                    # Put batch into queue for geometry fetching
+                    building_queue.put(
+                        {
+                            "category": category_name,
+                            "batch": batch_uuids,
+                            "attributes": enriched_attributes,
+                        }
                     )
+
+                    # Update progress
+                    progress_bar.update(1)
+                    progress_bar.set_postfix(
+                        {"processed": f"{min(i + batch_size, len(building_uuids)):,}"}
+                    )
+
+                except Exception as e:
+                    self.logger.error(f"Error processing {category_name} batch {batch_num}: {e}")
+                    continue
+
+        finally:
+            progress_bar.close()
+
+        self.logger.info(f"Completed processing {category_name} buildings")

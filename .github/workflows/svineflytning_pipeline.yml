@@ -6,13 +6,26 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
+      stage:
+        description: 'Pipeline stage to run'
+        type: choice
+        required: true
+        options:
+          - all
+          - bronze
+          - silver
+        default: 'all'
       start_date:
         description: 'Start date (YYYY-MM-DD)'
-        required: true
+        required: false
         type: string
       end_date:
         description: 'End date (YYYY-MM-DD)'
-        required: true
+        required: false
+        type: string
+      bronze_timestamp:
+        description: 'Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)'
+        required: false
         type: string
       test_mode:
         description: 'Run in test mode'
@@ -66,7 +79,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/svineflytning_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install svineflytning pipeline dependencies
+        cd ../svineflytning_pipeline
         uv pip install --system -e .
 
     - id: 'auth'
@@ -91,9 +109,11 @@ jobs:
         echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
+        echo "SVINEFLYTNING_SILVER_OUTPUT_DIR=/tmp/data/silver/svineflytning" >> .env
         
         # Create data directories (using /tmp/data like other pipelines)
         mkdir -p /tmp/data/raw/svineflytning
+        mkdir -p /tmp/data/silver/svineflytning
 
     - name: Run Pipeline
       working-directory: backend/pipelines/svineflytning_pipeline
@@ -101,18 +121,35 @@ jobs:
         # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
         LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
         
-        # Build base command with common arguments
-        CMD="python main.py --log-level $LOG_LEVEL"
+        # Determine stage: use input if available (workflow_dispatch), otherwise default to all (schedule)
+        STAGE=${{ inputs.stage || 'all' }}
         
-        # Add date range arguments based on event type
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # For manual triggers, use provided dates
-          CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
-        else
-          # For scheduled runs, use 3-year range
-          END_DATE=$(date +%Y-%m-%d)
-          START_DATE=$(date -d "$END_DATE -3 years" +%Y-%m-%d)
-          CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
+        # Build base command with common arguments
+        CMD="python main.py --log-level $LOG_LEVEL --stage $STAGE"
+        
+        # Add bronze timestamp if provided (for silver-only runs)
+        if [ -n "${{ inputs.bronze_timestamp }}" ]; then
+          CMD="$CMD --bronze-timestamp ${{ inputs.bronze_timestamp }}"
+        fi
+        
+        # Add date range arguments based on event type (only needed for bronze stage)
+        if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # For manual triggers, use provided dates if available
+            if [ -n "${{ inputs.start_date }}" ] && [ -n "${{ inputs.end_date }}" ]; then
+              CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
+            else
+              # Default to 1 week for manual runs without dates
+              END_DATE=$(date +%Y-%m-%d)
+              START_DATE=$(date -d "$END_DATE -1 week" +%Y-%m-%d)
+              CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
+            fi
+          else
+            # For scheduled runs, use 3-year range
+            END_DATE=$(date +%Y-%m-%d)
+            START_DATE=$(date -d "$END_DATE -3 years" +%Y-%m-%d)
+            CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
+          fi
         fi
         
         # Add progress flag if enabled
@@ -120,18 +157,20 @@ jobs:
           CMD="$CMD --progress"
         fi
         
-        # Add test mode flag if enabled
-        if [ "${{ inputs.test_mode }}" = "true" ]; then
+        # Add test mode flag if enabled (only for bronze stage)
+        if [ "${{ inputs.test_mode }}" = "true" ] && ([ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]); then
           CMD="$CMD --test"
         fi
         
-        # Add resource control parameters
-        if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
-          CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
-        fi
-        
-        if [ -n "${{ inputs.buffer_size }}" ]; then
-          CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
+        # Add resource control parameters (only for bronze stage)
+        if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
+          if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
+            CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
+          fi
+          
+          if [ -n "${{ inputs.buffer_size }}" ]; then
+            CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
+          fi
         fi
         
         echo "Running command: $CMD"
@@ -143,10 +182,18 @@ jobs:
         echo "Pipeline failed. Please check the logs above for details."
         exit 1
 
-    - name: Upload artifacts
+    - name: Upload bronze artifacts
       uses: actions/upload-artifact@v4
       if: always()  # Upload even if the pipeline fails
       with:
-        name: pipeline-output
+        name: bronze-output
         path: /tmp/data/raw/svineflytning
+        retention-days: 7
+        
+    - name: Upload silver artifacts
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload even if the pipeline fails
+      with:
+        name: silver-output
+        path: /tmp/data/silver/svineflytning
         retention-days: 7 

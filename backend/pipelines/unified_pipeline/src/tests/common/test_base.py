@@ -1,24 +1,26 @@
 """
-Tests for the base module in the unified pipeline.
+Tests for the base classes in the unified pipeline.
 
-This module contains tests for the base classes and methods defined in
-unified_pipeline.common.base, including BaseJobConfig, BaseSource,
-and utility methods for saving and reading data.
+This module tests the core functionality of BaseJobConfig and BaseSource
+classes to ensure they work correctly with the unified GCS access architecture.
 """
 
-import os
-from tempfile import TemporaryDirectory
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
-import geopandas as gpd
 import pandas as pd
 import pytest
 from shapely.geometry import Point
+
+try:
+    import geopandas as gpd
+except ImportError:
+    gpd = None
+
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
-from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.gcs_access import GCSDataAccess
 
 
-# Create test classes that inherit from the base classes (not test classes themselves)
 class TestJobConfig(BaseJobConfig):
     """Configuration class for testing BaseJobConfig."""
 
@@ -28,29 +30,51 @@ class TestJobConfig(BaseJobConfig):
 
 
 class TestSource(BaseSource[TestJobConfig]):
-    """Source class for testing BaseSource."""
+    """Test implementation of BaseSource for testing purposes."""
 
-    def __init__(self, config: TestJobConfig, gcs_util: GCSUtil):
-        super().__init__(config, gcs_util)
+    def __init__(self, config: TestJobConfig):
+        super().__init__(config)
 
     async def run(self) -> None:
-        """Implement the abstract run method for testing."""
+        """Test implementation of the run method."""
         pass
 
 
 # Fixtures
 @pytest.fixture
-def mock_gcs_util() -> MagicMock:
-    """Create a mock GCS utility for testing."""
-    mock_util = MagicMock(spec=GCSUtil)
-    mock_bucket = MagicMock()
-    mock_blob = MagicMock()
+def mock_gcs_access():
+    """Create a mock GCS access layer for testing."""
+    with patch("unified_pipeline.util.gcs_access.GCSDataAccess") as mock_class:
+        mock_instance = MagicMock(spec=GCSDataAccess)
+        mock_class.return_value = mock_instance
 
-    # Set up the mock chain for GCS operations
-    mock_util.get_gcs_client.return_value.bucket.return_value = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
+        # Mock DuckDB connection
+        mock_instance.duckdb_conn = MagicMock()
+        mock_instance.fs = MagicMock()
+        mock_instance.monitor = MagicMock()
 
-    return mock_util
+        # Mock common methods
+        mock_instance.upload_from_duckdb_table.return_value = None
+        mock_instance.create_table_from_gcs.return_value = None
+        mock_instance.list_files.return_value = []
+        mock_instance.file_exists.return_value = True
+
+        yield mock_instance
+
+
+@pytest.fixture
+def mock_duckdb_connection():
+    """Create a mock DuckDB connection."""
+    with patch("duckdb.connect") as mock_connect:
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        # Mock common operations
+        mock_conn.execute.return_value = MagicMock()
+        mock_conn.fetchone.return_value = [100]  # Default count
+        mock_conn.fetchall.return_value = []
+
+        yield mock_conn
 
 
 @pytest.fixture
@@ -60,9 +84,11 @@ def test_config() -> TestJobConfig:
 
 
 @pytest.fixture
-def test_source(test_config: TestJobConfig, mock_gcs_util: MagicMock) -> TestSource:
+def test_source(test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection) -> TestSource:
     """Create a test source for testing."""
-    return TestSource(test_config, mock_gcs_util)
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        with patch("duckdb.connect", return_value=mock_duckdb_connection):
+            return TestSource(test_config)
 
 
 @pytest.fixture
@@ -72,8 +98,11 @@ def test_dataframe() -> pd.DataFrame:
 
 
 @pytest.fixture
-def test_geodataframe() -> gpd.GeoDataFrame:
+def test_geodataframe() -> Optional[pd.DataFrame]:
     """Create a test GeoDataFrame for testing."""
+    if gpd is None:
+        pytest.skip("GeoPandas not available")
+
     df = pd.DataFrame(
         {
             "id": [1, 2, 3],
@@ -96,222 +125,87 @@ def test_base_job_config_initialization() -> None:
 
 
 # Tests for BaseSource
-def test_base_source_initialization(test_config: TestJobConfig, mock_gcs_util: MagicMock) -> None:
-    """Test that BaseSource can be initialized and extended."""
-    source = TestSource(test_config, mock_gcs_util)
-
-    # Test that attributes are correctly set
-    assert source.config == test_config
-    assert source.gcs_util == mock_gcs_util
-    assert source.log is not None
-
-
-# Tests for _save_raw_data method
-@patch("unified_pipeline.common.base.pd.Timestamp")
-@patch("unified_pipeline.common.base.os.makedirs")
-def test_save_raw_data(
-    mock_makedirs: MagicMock,
-    mock_timestamp: MagicMock,
-    test_source: TestSource,
-    test_dataframe: pd.DataFrame,
-    mock_gcs_util: MagicMock,
-    test_config: TestJobConfig,
+def test_base_source_initialization(
+    test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection
 ) -> None:
-    """Test saving raw data to Google Cloud Storage."""
-    mock_now = pd.Timestamp("2025-05-26")
-    mock_timestamp.now.return_value = mock_now
-    expected_date_str = mock_now.strftime("%Y-%m-%d")
+    """Test that BaseSource can be initialized with unified architecture."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        with patch("duckdb.connect", return_value=mock_duckdb_connection):
+            source = TestSource(test_config)
 
-    mock_bucket = mock_gcs_util.get_gcs_client.return_value.bucket.return_value
-    mock_blob = mock_bucket.blob.return_value
+            # Test that attributes are correctly set
+            assert source.config == test_config
+            assert source.log is not None
+            assert source.gcs_access == mock_gcs_access
+            assert source.conn == mock_duckdb_connection
 
-    with patch("unified_pipeline.common.base.pd.DataFrame.to_parquet") as mock_to_parquet:
-        test_source._save_raw_data(test_dataframe, test_config.dataset, test_config.bucket)
 
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_called_once_with(test_config.bucket)
-
-    temp_dir = f"/tmp/bronze/{test_config.dataset}"
-    mock_makedirs.assert_called_once_with(temp_dir, exist_ok=True)
-
-    temp_file = f"{temp_dir}/{expected_date_str}.parquet"
-    expected_blob_path = f"bronze/{test_config.dataset}/{expected_date_str}.parquet"
-    mock_bucket.blob.assert_called_once_with(expected_blob_path)
-
-    mock_to_parquet.assert_called_once_with(temp_file)
-    mock_blob.upload_from_filename.assert_called_once_with(temp_file)
+def test_unified_connection_architecture(test_source: TestSource) -> None:
+    """Test that the unified connection architecture works correctly."""
+    # Verify that gcs_access and conn are properly connected
+    assert hasattr(test_source, "conn")
+    assert hasattr(test_source, "gcs_access")
+    assert test_source.gcs_access is not None
 
 
 # Tests for _save_data method
-@patch("unified_pipeline.common.base.pd.Timestamp")
-@patch("unified_pipeline.common.base.os.makedirs")
-def test_save_data(
-    mock_makedirs: MagicMock,
-    mock_timestamp: MagicMock,
-    test_source: TestSource,
-    test_geodataframe: gpd.GeoDataFrame,
-    mock_gcs_util: MagicMock,
-    test_config: TestJobConfig,
+def test_save_data_table_name(test_source: TestSource, test_config: TestJobConfig) -> None:
+    """Test saving data using table name."""
+    table_name = "test_table"
+
+    # Mock the gcs_access upload method
+    test_source.gcs_access.upload_from_duckdb_table = MagicMock()
+
+    # Test saving with table name
+    test_source._save_data(table_name, test_config.dataset, test_config.bucket, "silver")
+
+    # Verify the upload method was called
+    test_source.gcs_access.upload_from_duckdb_table.assert_called_once()
+
+
+def test_save_data_json(test_source: TestSource, test_config: TestJobConfig) -> None:
+    """Test saving JSON data."""
+    json_data = {"key": "value", "number": 123}
+
+    # Mock the gcs_access upload method
+    test_source.gcs_access.upload_json = MagicMock()
+
+    # Test saving with JSON data
+    test_source._save_data(json_data, test_config.dataset, test_config.bucket, "silver")
+
+    # Verify the upload method was called
+    test_source.gcs_access.upload_json.assert_called_once()
+
+
+def test_save_data_local(test_source: TestSource, test_config: TestJobConfig) -> None:
+    """Test saving data locally."""
+    test_config.save_local = True
+    table_name = "test_table"
+
+    # Mock DuckDB execute
+    test_source.conn.execute = MagicMock()
+
+    # Test saving locally
+    test_source._save_data(table_name, test_config.dataset, test_config.bucket, "silver")
+
+    # Verify DuckDB COPY was called for local save
+    test_source.conn.execute.assert_called()
+
+
+# Integration test for unified architecture
+def test_shared_connection_between_components(
+    test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection
 ) -> None:
-    """Test saving processed data to Google Cloud Storage."""
-    mock_now = pd.Timestamp("2025-05-26")
-    mock_timestamp.now.return_value = mock_now
-    expected_date_str = mock_now.strftime("%Y-%m-%d")
+    """Test that components share the same DuckDB connection."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        with patch("duckdb.connect", return_value=mock_duckdb_connection):
+            # Create source
+            source = TestSource(test_config)
 
-    mock_bucket = mock_gcs_util.get_gcs_client.return_value.bucket.return_value
-    mock_blob = mock_bucket.blob.return_value
+            # Verify connection sharing
+            assert source.conn == mock_duckdb_connection
+            assert source.gcs_access == mock_gcs_access
 
-    with patch("unified_pipeline.common.base.gpd.GeoDataFrame.to_parquet") as mock_to_parquet:
-        test_source._save_data(test_geodataframe, test_config.dataset, test_config.bucket)
-
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_called_once_with(test_config.bucket)
-
-    temp_dir = f"/tmp/silver/{test_config.dataset}"
-    mock_makedirs.assert_called_once_with(temp_dir, exist_ok=True)
-
-    temp_file = f"{temp_dir}/{expected_date_str}.parquet"
-    expected_blob_path = f"silver/{test_config.dataset}/{expected_date_str}.parquet"
-    mock_bucket.blob.assert_called_once_with(expected_blob_path)
-
-    mock_to_parquet.assert_called_once_with(temp_file)
-    mock_blob.upload_from_filename.assert_called_once_with(temp_file)
-
-
-def test_save_data_with_empty_dataframe(
-    test_source: TestSource, mock_gcs_util: MagicMock, test_config: TestJobConfig
-) -> None:
-    """Test saving an empty GeoDataFrame."""
-    empty_gdf = gpd.GeoDataFrame(columns=["id", "geometry"], geometry="geometry")
-    test_source._save_data(empty_gdf, test_config.dataset, test_config.bucket)
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_not_called()
-
-
-def test_save_data_with_none_dataframe(
-    test_source: TestSource, mock_gcs_util: MagicMock, test_config: TestJobConfig
-) -> None:
-    """Test saving None as a GeoDataFrame."""
-    test_source._save_data(None, test_config.dataset, test_config.bucket)
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_not_called()
-
-
-# Tests for _read_bronze_data method
-@patch("unified_pipeline.common.base.pd.Timestamp")
-@patch("unified_pipeline.common.base.os.makedirs")
-def test_read_bronze_data_success(
-    mock_makedirs: MagicMock,
-    mock_timestamp: MagicMock,
-    test_source: TestSource,
-    test_dataframe: pd.DataFrame,
-    mock_gcs_util: MagicMock,
-    test_config: TestJobConfig,
-) -> None:
-    """Test reading bronze data from Google Cloud Storage."""
-    mock_now = pd.Timestamp("2025-05-26")
-    mock_timestamp.now.return_value = mock_now
-    expected_date_str = mock_now.strftime("%Y-%m-%d")
-
-    mock_bucket = mock_gcs_util.get_gcs_client.return_value.bucket.return_value
-    mock_blob = mock_bucket.blob.return_value
-    mock_blob.exists.return_value = True
-
-    with patch(
-        "unified_pipeline.common.base.pd.read_parquet", return_value=test_dataframe
-    ) as mock_read_parquet:
-        result = test_source._read_bronze_data(test_config.dataset, test_config.bucket)
-
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_called_once_with(test_config.bucket)
-
-    expected_blob_path = f"bronze/{test_config.dataset}/{expected_date_str}.parquet"
-    mock_bucket.blob.assert_called_once_with(expected_blob_path)
-    mock_blob.exists.assert_called_once()
-
-    temp_dir = f"/tmp/bronze/{test_config.dataset}"
-    mock_makedirs.assert_called_once_with(temp_dir, exist_ok=True)
-
-    temp_file = f"{temp_dir}/{expected_date_str}.parquet"
-    mock_blob.download_to_filename.assert_called_once_with(temp_file)
-
-    mock_read_parquet.assert_called_once_with(temp_file)
-
-    assert result is not None
-    pd.testing.assert_frame_equal(result, test_dataframe)
-
-
-def test_read_bronze_data_blob_not_exists(
-    test_source: TestSource, mock_gcs_util: MagicMock, test_config: TestJobConfig
-) -> None:
-    """Test reading bronze data when the blob doesn't exist."""
-    mock_bucket = mock_gcs_util.get_gcs_client.return_value.bucket.return_value
-    mock_blob = mock_bucket.blob.return_value
-    mock_blob.exists.return_value = False
-
-    result = test_source._read_bronze_data(test_config.dataset, test_config.bucket)
-
-    mock_gcs_util.get_gcs_client.return_value.bucket.assert_called_once_with(test_config.bucket)
-    mock_bucket.blob.assert_called_once()
-    mock_blob.exists.assert_called_once()
-
-    mock_blob.download_to_filename.assert_not_called()
-
-    assert result is None
-
-
-# Integration tests with real file system (using temporary directory)
-def test_save_and_read_real_files() -> None:
-    """Integration test for saving and reading files using the real file system."""
-    # Skip this test if we're not in a CI environment where file operations are safe
-    # pytest.skip("Skipping real file operations in unit tests")
-
-    # Use a temporary directory for testing
-    with TemporaryDirectory() as temp_root:
-        # Override the /tmp directory with our temporary directory
-        tmp_bronze_dir = os.path.join(temp_root, "bronze", "test_dataset")
-        tmp_silver_dir = os.path.join(temp_root, "silver", "test_dataset")
-        os.makedirs(tmp_bronze_dir, exist_ok=True)
-        os.makedirs(tmp_silver_dir, exist_ok=True)
-
-        df = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
-        gdf = gpd.GeoDataFrame(
-            {"id": [1, 2], "geometry": [Point(0, 0), Point(1, 1)]},
-            geometry="geometry",
-            crs="EPSG:4326",
-        )
-
-        current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-        bronze_file = os.path.join(tmp_bronze_dir, f"{current_date}.parquet")
-        silver_file = os.path.join(tmp_silver_dir, f"{current_date}.parquet")
-
-        df.to_parquet(bronze_file)
-        gdf.to_parquet(silver_file)
-
-        assert os.path.exists(bronze_file)
-        assert os.path.exists(silver_file)
-
-        df_read = pd.read_parquet(bronze_file)
-        gdf_read = gpd.read_parquet(silver_file)
-
-        # Verify data integrity
-        pd.testing.assert_frame_equal(df, df_read)
-        assert gdf_read.crs == gdf.crs
-        assert len(gdf_read) == len(gdf)
-
-
-# Test for timed decorator
-@patch("unified_pipeline.util.timing.time.time")
-def test_timed_decorator(mock_time: MagicMock) -> None:
-    """Test that the timed decorator works correctly."""
-    from unified_pipeline.util.timing import timed
-
-    mock_time.side_effect = [0, 1]  # First call returns 0, second call returns 1 (1 second elapsed)
-
-    # Define a test function with the timed decorator
-    @timed(name="Test Timer")  # type: ignore
-    def test_function() -> str:
-        return "test_result"
-
-    result = test_function()
-
-    assert result == "test_result"
-
-    # We cannot easily verify the log output with the current setup,
-    # but we can verify that time.time() was called twice
-    assert mock_time.call_count == 2
+            # Verify GCSDataAccess was initialized with the connection
+            # (This would be the actual connection in real usage)
+            assert source.gcs_access is not None

@@ -10,7 +10,6 @@ from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class GCSConfig(BaseSettings):
     """
     Google Cloud Storage configuration settings.

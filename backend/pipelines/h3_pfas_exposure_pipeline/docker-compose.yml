@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  h3_pfas_exposure:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: development
+    volumes:
+      # Mount the code directory for development
+      - ./src:/app/src
+      - ./main.py:/app/main.py
+      # Mount data directories for persistence between runs
+      - ../../data/gold/h3_pfas_exposure:/data/gold/h3_pfas_exposure
+      # Mount GCS credentials if using local authentication
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+      
+      # GCS Configuration
+      - GCS_BUCKET=landbrugsdata-raw-data
+      
+      # H3 Configuration - Updated for refactored structure
+      - H3_RESOLUTION=10
+      - CHUNK_SIZE=10000  # Optimized for 16GB RAM
+      
+      # Processing Configuration - Updated for GitHub Actions specs
+      - MEMORY_LIMIT=14GB  # Optimized for 16GB available
+      - THREAD_COUNT=4     # Optimized for 4 CPU cores
+      
+      # Logging Configuration
+      - LOG_LEVEL=INFO
+      - ENABLE_PROGRESS_TRACKING=true
+      - LOG_CHUNK_DETAILS=false
+      - LOG_STAGE_TIMINGS=false
+      
+    # Default command using new CLI interface
+    command: ["python", "main.py", "--mode", "h3", "--verbose", "--memory-limit", "14GB", "--thread-count", "4", "--chunk-size", "10000"]
+    
+    # For development, uncomment to keep container running
+    # command: tail -f /dev/null
+    
+    # Resource limits - Updated for 16GB optimized settings
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '4'
+        reservations:
+          memory: 8G
+          cpus: '2'
+    
+    # Health check - Updated for new config structure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, '/app/src'); from h3_pfas_exposure.config import H3SpatialConfig; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s 

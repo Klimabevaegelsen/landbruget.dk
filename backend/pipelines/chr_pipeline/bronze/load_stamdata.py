@@ -161,11 +161,7 @@ if __name__ == "__main__":
         if combinations_raw:
             logger.info("Raw Species/Usage Combinations Response (Top Level):")
             # Save the raw data using keyword arguments
-            save_raw_data(
-                raw_response=combinations_raw,
-                data_type="stamdata_species_usage",  # Be specific
-                identifier="all",  # Identifier for this bulk data
-            )
+            save_raw_data(raw_response=combinations_raw, data_type="stamdata_species_usage", identifier="all")
 
             # Serialize and pretty print the raw response for inspection
             try:
