@@ -998,8 +998,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install uv
-          cd backend/pipelines/chr_pipeline
-          uv pip install --system -r requirements.lock
+          
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
 
       - name: Consolidate Monthly Animal Movement Files
         env:
