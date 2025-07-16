@@ -64,8 +64,8 @@ def main():
         print(f"🏢 Total GeoDanmark buildings downloaded: {total_count:,}")
 
         # Upload to GCS if in production environment
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if gcs_bucket and os.getenv("ENVIRONMENT") == "production":
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             gcs_path = f"bronze/bbr_buildings/geodanmark/{timestamp}/geodanmark_buildings_complete.geoparquet"
 
             success = upload_to_gcs(
@@ -82,6 +82,7 @@ def main():
         # Set GitHub Actions output
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"buildings-count={total_count}\n")
+            f.write(f"bronze-timestamp={timestamp}\n")
     except Exception as e:
         print(f"❌ Error counting buildings: {e}")
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
