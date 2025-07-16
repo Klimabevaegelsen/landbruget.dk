@@ -464,17 +464,21 @@ def main():
             if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                     f.write(f"buildings-count={building_count}\n")
+                    f.write(f"bronze-timestamp={timestamp}\n")
         else:
             print("❌ No INSPIRE BBR data fetched")
             if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                     f.write("buildings-count=0\n")
+                    f.write(f"bronze-timestamp={timestamp}\n")
     except Exception as e:
         print("❌ INSPIRE BBR fetch failed")
         print(f"Error: {e}")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if "GITHUB_OUTPUT" in os.environ:
             with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                 f.write("buildings-count=0\n")
+                f.write(f"bronze-timestamp={timestamp}\n")
         raise
 
 

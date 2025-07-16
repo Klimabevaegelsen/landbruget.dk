@@ -17,6 +17,10 @@ on:
         description: 'Sample size for testing (0 for full dataset)'
         type: number
         default: 0
+      bronze_timestamp:
+        description: 'Bronze timestamp for silver layer (e.g., 20250715_230139)'
+        type: string
+        required: false
       enhance_classification:
         description: 'Enhance building classification with additional data'
         type: boolean
@@ -47,6 +51,7 @@ jobs:
 
     outputs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
+      bronze-timestamp: ${{ steps.fetch-geodanmark.outputs.bronze-timestamp }}
 
     steps:
     - uses: actions/checkout@v4
@@ -143,6 +148,7 @@ jobs:
 
     outputs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
+      bronze-timestamp: ${{ steps.fetch-inspire.outputs.bronze-timestamp }}
 
     steps:
     - uses: actions/checkout@v4
@@ -216,7 +222,7 @@ jobs:
   process-silver:
     runs-on: ubuntu-latest
     needs: [fetch-geodanmark, fetch-inspire-bbr]
-    if: ${{ inputs.layer == 'silver' || inputs.layer == 'both' }}
+    if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') }}
     
     permissions:
       contents: 'read'
@@ -280,6 +286,13 @@ jobs:
         
         # Build silver command
         CMD="python main.py --layer silver"
+        
+        # Add bronze timestamp if available (prefer input, then GeoDanmark, then INSPIRE)
+        BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp || needs.fetch-geodanmark.outputs.bronze-timestamp || needs.fetch-inspire-bbr.outputs.bronze-timestamp }}"
+        if [[ -n "$BRONZE_TIMESTAMP" ]]; then
+          CMD="$CMD --bronze-timestamp $BRONZE_TIMESTAMP"
+          echo "🕐 Using bronze timestamp: $BRONZE_TIMESTAMP"
+        fi
         
         # Add enhancement flag
         if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
