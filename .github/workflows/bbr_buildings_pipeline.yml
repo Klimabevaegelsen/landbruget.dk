@@ -37,9 +37,37 @@ on:
         default: 'INFO'
 
 jobs:
+  # Generate shared timestamp for all bronze layer jobs
+  generate-timestamp:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
+    
+    outputs:
+      bronze-timestamp: ${{ steps.timestamp.outputs.timestamp }}
+    
+    steps:
+    - name: Generate bronze timestamp
+      id: timestamp
+      run: |
+        # Generate proper timestamp in YYYYMMDD_HHMMSS format like other pipelines
+        BRONZE_TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+        echo "timestamp=$BRONZE_TIMESTAMP" >> $GITHUB_OUTPUT
+        echo "Bronze timestamp: $BRONZE_TIMESTAMP"
+        
+        # Create timestamp file for artifact sharing
+        echo "$BRONZE_TIMESTAMP" > /tmp/bronze_timestamp.txt
+        
+    - name: Upload bronze timestamp artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bronze-timestamp
+        path: /tmp/bronze_timestamp.txt
+        retention-days: 1
+
   # Bronze layer: Parallel data fetching and direct GCS upload
   fetch-geodanmark:
     runs-on: ubuntu-latest
+    needs: [generate-timestamp]
     if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
     
     permissions:
@@ -51,10 +79,15 @@ jobs:
 
     outputs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
-      bronze-timestamp: ${{ steps.fetch-geodanmark.outputs.bronze-timestamp }}
 
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Download bronze timestamp artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: bronze-timestamp
+        path: /tmp/
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -137,6 +170,7 @@ jobs:
 
   fetch-inspire-bbr:
     runs-on: ubuntu-latest
+    needs: [generate-timestamp]
     if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
     
     permissions:
@@ -148,10 +182,15 @@ jobs:
 
     outputs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
-      bronze-timestamp: ${{ steps.fetch-inspire.outputs.bronze-timestamp }}
 
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Download bronze timestamp artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: bronze-timestamp
+        path: /tmp/
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -221,7 +260,7 @@ jobs:
   # Silver layer processing job - reads from GCS and processes everything
   process-silver:
     runs-on: ubuntu-latest
-    needs: [fetch-geodanmark, fetch-inspire-bbr]
+    needs: [generate-timestamp, fetch-geodanmark, fetch-inspire-bbr]
     if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') }}
     
     permissions:
@@ -287,8 +326,8 @@ jobs:
         # Build silver command
         CMD="python main.py --layer silver"
         
-        # Add bronze timestamp if available (prefer input, then GeoDanmark, then INSPIRE)
-        BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp || needs.fetch-geodanmark.outputs.bronze-timestamp || needs.fetch-inspire-bbr.outputs.bronze-timestamp }}"
+        # Add bronze timestamp if available (prefer input, then shared timestamp from generate-timestamp job)
+        BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp || needs.generate-timestamp.outputs.bronze-timestamp }}"
         if [[ -n "$BRONZE_TIMESTAMP" ]]; then
           CMD="$CMD --bronze-timestamp $BRONZE_TIMESTAMP"
           echo "🕐 Using bronze timestamp: $BRONZE_TIMESTAMP"
