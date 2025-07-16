@@ -710,6 +710,12 @@ def main():
     )
 
     parser.add_argument(
+        "--bronze-timestamp",
+        type=str,
+        help="Bronze timestamp to use for silver layer (e.g., 20250715_230139)",
+    )
+
+    parser.add_argument(
         "--enhance-classification",
         action="store_true",
         help="Enable enhanced building classification in silver layer",
@@ -731,8 +737,8 @@ def main():
             run_bronze_layer_bulk(args, settings, logger, pipeline_start_time)
 
         elif args.layer == "silver":
-            # Silver layer can work with bronze timestamp from GitHub Actions
-            bronze_timestamp = os.getenv("BRONZE_TIMESTAMP")
+            # Silver layer can work with bronze timestamp from CLI argument or GitHub Actions
+            bronze_timestamp = args.bronze_timestamp or os.getenv("BRONZE_TIMESTAMP")
             run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
 
         elif args.layer == "both":
@@ -1054,8 +1060,8 @@ def run_silver_layer(
     silver_output_dir = output_dir / timestamp
     silver_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Load bronze data from GCS
-    building_ids, attributes_df = _load_latest_inspire_bronze_data_from_gcs(logger)
+    # Step 1: Load bronze data from various sources
+    building_ids, attributes_df = _load_bronze_data(bronze_data, bronze_timestamp, logger)
 
     if not building_ids:
         logger.error("❌ No building IDs available for processing")
