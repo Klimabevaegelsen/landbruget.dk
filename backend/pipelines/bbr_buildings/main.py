@@ -197,8 +197,8 @@ def perform_uuid_join_optimized(
                 g.building_area_m2,
                 'uuid_matched' as join_status,
                 -- INSPIRE attributes
-                ia.currentUse as inspire_current_use,
-                ia.buildingNature as inspire_building_nature,
+                ia.current_use as inspire_current_use,
+                ia.building_nature as inspire_building_nature,
                 ia.construction_year as inspire_construction_year,
                 ia.floor_area as inspire_floor_area,
                 ia.floors as inspire_floors,
