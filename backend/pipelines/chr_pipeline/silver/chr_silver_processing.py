@@ -526,8 +526,16 @@ def process_chr_data_streaming(
                     try:
                         # Download and parse each JSON file
                         json_data = gcs_access.download_json(json_file)
+
+                        # Handle nested structure: list of lists of dictionaries
                         if isinstance(json_data, list):
-                            all_vetstat_data.extend(json_data)
+                            for item in json_data:
+                                if isinstance(item, list):
+                                    # Flatten nested lists
+                                    all_vetstat_data.extend(item)
+                                else:
+                                    # Direct dictionary
+                                    all_vetstat_data.append(item)
                         else:
                             all_vetstat_data.append(json_data)
                     except Exception as e:
