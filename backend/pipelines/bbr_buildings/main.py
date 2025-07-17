@@ -977,16 +977,9 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None
         logger.error("❌ GCS not available - cannot load GeoDanmark data")
         return None
 
-    bucket_name = os.getenv("GCS_BUCKET")
-    if not bucket_name:
-        logger.error("❌ GCS_BUCKET not set - cannot load GeoDanmark data")
-        return None
-
     try:
-        from google.cloud import storage
-
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
+        gcs_access = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
         # Determine which timestamp to use
         if timestamp:
@@ -995,43 +988,54 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None
             logger.info(f"📂 Loading GeoDanmark data from provided timestamp: {target_timestamp}")
         else:
             # Find the latest GeoDanmark data (fallback behavior)
-            prefix = "bronze/bbr_buildings/geodanmark/"
-            blobs = list(bucket.list_blobs(prefix=prefix))
+            prefix = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/"
 
-            if not blobs:
-                logger.error(f"❌ No GeoDanmark bronze data found in gs://{bucket_name}/{prefix}")
+            # List all files in the geodanmark directory
+            files = list(gcs_access.fs.ls(prefix))
+
+            if not files:
+                logger.error(f"❌ No GeoDanmark bronze data found in {prefix}")
                 return None
 
             # Get the latest timestamp folder
             timestamps = set()
-            for blob in blobs:
-                path_parts = blob.name.split("/")
-                if len(path_parts) >= 4:
-                    timestamps.add(path_parts[3])  # bronze/bbr_buildings/geodanmark/TIMESTAMP/
+            for file_path in files:
+                # Extract timestamp from path: gs://bucket/bronze/bbr_buildings/geodanmark/TIMESTAMP/
+                path_parts = file_path.replace(f"gs://{bucket_name}/", "").split("/")
+                if (
+                    len(path_parts) >= 4
+                    and path_parts[0] == "bronze"
+                    and path_parts[1] == "bbr_buildings"
+                ):
+                    timestamps.add(path_parts[3])
 
             if not timestamps:
-                logger.error(
-                    f"❌ No timestamped GeoDanmark data found in gs://{bucket_name}/{prefix}"
-                )
+                logger.error(f"❌ No timestamped GeoDanmark data found in {prefix}")
                 return None
 
             target_timestamp = max(timestamps)
             logger.info(f"📂 Loading GeoDanmark data from latest timestamp: {target_timestamp}")
 
-        # Download GeoDanmark geoparquet
-        geodanmark_gcs_path = f"bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
-        geodanmark_blob = bucket.blob(geodanmark_gcs_path)
+        # GeoDanmark file path in GCS
+        geodanmark_gcs_path = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
 
-        if not geodanmark_blob.exists():
-            logger.error(f"❌ GeoDanmark data not found: gs://{bucket_name}/{geodanmark_gcs_path}")
+        # Check if file exists
+        if not gcs_access.fs.exists(geodanmark_gcs_path):
+            logger.error(f"❌ GeoDanmark data not found: {geodanmark_gcs_path}")
             return None
 
         # Download to local temporary file
         local_path = "data/geodanmark_buildings_complete.geoparquet"
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-        logger.info("📥 Downloading GeoDanmark data from GCS...")
-        geodanmark_blob.download_to_filename(local_path)
+        logger.info(f"📥 Downloading GeoDanmark data from {geodanmark_gcs_path}...")
+
+        # Download using fsspec
+        with gcs_access.fs.open(geodanmark_gcs_path, "rb") as src:
+            with open(local_path, "wb") as dst:
+                import shutil
+
+                shutil.copyfileobj(src, dst)
 
         # Verify download
         if not os.path.exists(local_path):
