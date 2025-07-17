@@ -509,26 +509,39 @@ def process_chr_data_streaming(
                         logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
                         continue
 
-        # Handle VetStat XML data separately (if exists)
+        # Handle VetStat JSON data separately (if exists)
         vetstat_table_name = None
-        vetstat_gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.xml"
 
-        if gcs_access.file_exists(vetstat_gcs_path):
-            logging.info("Processing VetStat XML data...")
+        # Look for VetStat JSON file (consolidated from XML in bronze layer)
+        vetstat_json_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
+        vetstat_json_files = [vetstat_json_path] if gcs_access.file_exists(vetstat_json_path) else []
+
+        if vetstat_json_files:
+            logging.info(f"Processing VetStat JSON file: {vetstat_json_path}")
             try:
-                # Download VetStat XML to temporary file for processing
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_xml:
-                    temp_xml_path = Path(temp_xml.name)
+                # Create temporary files for all VetStat JSON data
+                all_vetstat_data = []
 
-                    # Download XML content
-                    with gcs_access.fs.open(vetstat_gcs_path.replace("gs://", ""), "r") as src:
-                        temp_xml.write(src.read())
+                for json_file in vetstat_json_files:
+                    try:
+                        # Download and parse each JSON file
+                        json_data = gcs_access.download_json(json_file)
+                        if isinstance(json_data, list):
+                            all_vetstat_data.extend(json_data)
+                        else:
+                            all_vetstat_data.append(json_data)
+                    except Exception as e:
+                        logging.warning(f"Failed to process VetStat JSON file {json_file}: {e}")
+                        continue
 
-                # Process XML to JSONL
-                temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
+                if all_vetstat_data:
+                    # Save consolidated JSON to temporary file
+                    temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
+                    with open(temp_jsonl_path, "w") as f:
+                        for record in all_vetstat_data:
+                            f.write(json.dumps(record) + "\n")
 
-                if run_xml_parser(temp_xml_path, temp_jsonl_path):
-                    # Load processed JSONL into DuckDB
+                    # Load consolidated JSONL into DuckDB
                     con.raw_sql(f"""
                         CREATE TABLE vetstat AS 
                         SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
@@ -538,7 +551,7 @@ def process_chr_data_streaming(
                     # Verify loading
                     count_result = con.raw_sql("SELECT COUNT(*) FROM vetstat").fetchone()
                     record_count = count_result[0] if count_result else 0
-                    logging.info(f"✅ Loaded vetstat: {record_count:,} records")
+                    logging.info(f"✅ Loaded vetstat: {record_count:,} records from {len(vetstat_json_files)} files")
 
                     vetstat_table_name = "vetstat"
                     loaded_tables["vetstat"] = vetstat_table_name
@@ -547,16 +560,12 @@ def process_chr_data_streaming(
                     if temp_jsonl_path.exists():
                         temp_jsonl_path.unlink()
                 else:
-                    logging.warning("⚠️ VetStat XML processing failed, proceeding without antibiotic data")
-
-                # Cleanup temporary XML
-                if temp_xml_path.exists():
-                    temp_xml_path.unlink()
+                    logging.warning("⚠️ No VetStat data found in JSON files, proceeding without antibiotic data")
 
             except Exception as e:
-                logging.warning(f"⚠️ Failed to process VetStat data: {e}")
+                logging.warning(f"⚠️ Failed to process VetStat JSON data: {e}")
         else:
-            logging.info("⚠️ VetStat XML file not found, proceeding without antibiotic data")
+            logging.info("⚠️ VetStat JSON files not found, proceeding without antibiotic data")
 
         # Check that essential tables were loaded
         essential_tables = ["bes_details", "ejendom_oplys"]
