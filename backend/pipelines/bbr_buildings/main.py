@@ -306,12 +306,47 @@ def perform_uuid_join_optimized(
 
             print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
 
+            # Final cleanup - use robust drop that handles both tables and views
+            def robust_drop(object_name: str):
+                """Drop a table or view, handling both types safely."""
+                try:
+                    # Check if it's a table or view by querying information schema
+                    result = conn.execute(f"""
+                        SELECT table_type FROM information_schema.tables 
+                        WHERE table_name = '{object_name}'
+                        UNION ALL
+                        SELECT 'VIEW' as table_type FROM information_schema.views 
+                        WHERE table_name = '{object_name}'
+                    """).fetchall()
+
+                    if result:
+                        object_type = result[0][0]
+                        if object_type == "VIEW":
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                        else:
+                            conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                    else:
+                        # Object doesn't exist, try both just in case
+                        try:
+                            conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                        except Exception:
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                except Exception:
+                    # Fallback: try both drop commands
+                    try:
+                        conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                    except Exception:
+                        try:
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                        except Exception:
+                            pass  # If both fail, just continue
+
             # Final cleanup
-            conn.execute("DROP TABLE IF EXISTS joined_results")
-            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings")
-            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings_filtered")  # Added this line
-            conn.execute("DROP TABLE IF EXISTS inspire_building_ids")
-            conn.execute("DROP TABLE IF EXISTS inspire_attributes")  # Clean up attributes table
+            robust_drop("joined_results")
+            robust_drop("geodanmark_buildings")
+            robust_drop("geodanmark_buildings_filtered")
+            robust_drop("inspire_building_ids")
+            robust_drop("inspire_attributes")
 
             gc.collect()
             check_memory_usage()
