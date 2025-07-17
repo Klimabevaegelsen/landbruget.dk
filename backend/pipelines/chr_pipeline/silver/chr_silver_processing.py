@@ -444,24 +444,36 @@ def process_chr_data_streaming(
                     file_size_mb = file_size_bytes / (1024 * 1024)
                     logging.info(f"📁 File size: {file_size_mb:.1f} MB")
 
-                    # Create table directly from GCS JSON file using streaming download
-                    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
-                        temp_path = Path(temp_file.name)
+                    # Detect file type and use appropriate DuckDB function
+                    file_extension = dataset_info["file"].split(".")[-1].lower()
 
-                        # Download JSON file to temp location
-                        with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
-                            with open(temp_path, "wb") as dst:
-                                shutil.copyfileobj(src, dst)
-
-                        # Load into DuckDB using read_json_auto for robust JSON parsing
+                    if file_extension == "parquet":
+                        # Load parquet file directly from GCS using read_parquet
+                        logging.info(f"Loading parquet file directly from GCS: {gcs_path}")
                         con.raw_sql(f"""
                             CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_json_auto('{str(temp_path)}', 
-                                                       maximum_object_size=1073741824)
+                            SELECT * FROM read_parquet('{gcs_path}')
                         """)
+                    else:
+                        # Download JSON/other files to temp location for processing
+                        file_suffix = f".{file_extension}" if file_extension else ".json"
+                        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as temp_file:
+                            temp_path = Path(temp_file.name)
 
-                        # Cleanup temp file
-                        temp_path.unlink()
+                            # Download file to temp location
+                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                                with open(temp_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+
+                            # Load into DuckDB using read_json_auto for robust JSON parsing
+                            con.raw_sql(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{str(temp_path)}', 
+                                                           maximum_object_size=1073741824)
+                            """)
+
+                            # Cleanup temp file
+                            temp_path.unlink()
 
                     # Get record count for verification
                     count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
