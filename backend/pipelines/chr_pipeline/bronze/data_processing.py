@@ -199,7 +199,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             movement_groups[key]["movement_date"] = movement_date
                             movement_groups[key]["counterparty_herd"] = dest_herd
                             movement_groups[key]["movement_type"] = "outgoing"
-                            movement_groups[key]["movement_reasons"].append(exit_reason)
+                            # Clean and validate the exit reason before adding
+                            clean_reason = str(exit_reason).strip() if exit_reason is not None else None
+                            if clean_reason:
+                                movement_groups[key]["movement_reasons"].append(clean_reason)
 
                             movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
                             movement_summaries["summary_stats"]["counterparty_herds"].add(dest_herd)
