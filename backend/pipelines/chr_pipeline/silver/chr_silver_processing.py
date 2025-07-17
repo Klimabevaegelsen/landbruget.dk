@@ -448,12 +448,24 @@ def process_chr_data_streaming(
                     file_extension = dataset_info["file"].split(".")[-1].lower()
 
                     if file_extension == "parquet":
-                        # Load parquet file directly from GCS using read_parquet
-                        logging.info(f"Loading parquet file directly from GCS: {gcs_path}")
-                        con.raw_sql(f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_parquet('{gcs_path}')
-                        """)
+                        # Download parquet file to temp location (DuckDB can't read directly from GCS)
+                        logging.info(f"Loading parquet file via temp download: {gcs_path}")
+                        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
+                            temp_path = Path(temp_file.name)
+
+                            # Download parquet file to temp location
+                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                                with open(temp_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+
+                            # Load into DuckDB using read_parquet
+                            con.raw_sql(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_parquet('{str(temp_path)}')
+                            """)
+
+                            # Cleanup temp file
+                            temp_path.unlink()
                     else:
                         # Download JSON/other files to temp location for processing
                         file_suffix = f".{file_extension}" if file_extension else ".json"
