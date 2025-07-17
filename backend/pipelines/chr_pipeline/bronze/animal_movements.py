@@ -299,7 +299,7 @@ def load_cattle_movement_summaries(
                         f"💾 Adding {len(chunk_movements)} movements from chunk {chunk_idx + 1} to consolidated table..."
                     )
                     try:
-                        from ..load_chr_dyr import add_to_consolidated_table
+                        from bronze.load_chr_dyr import add_to_consolidated_table
 
                         add_to_consolidated_table({"reporting_herd_number": herd_number, "movements": chunk_movements})
                         logger.debug(f"✅ Successfully added chunk {chunk_idx + 1} movements to consolidated table")
