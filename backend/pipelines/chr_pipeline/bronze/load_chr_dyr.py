@@ -79,6 +79,7 @@ def initialize_consolidated_processing():
                 movement_type VARCHAR,
                 animal_count INTEGER,
                 movement_reasons TEXT,  -- JSON array of reasons
+                cattle_type_breakdown TEXT,  -- JSON object containing cattle type breakdown (koen field)
                 data_source VARCHAR DEFAULT 'chr_dyr'
             )
         """)
@@ -112,8 +113,8 @@ def add_to_consolidated_table(movement_data):
                 """
                 INSERT INTO consolidated_movements 
                 (reporting_herd_number, movement_date, counterparty_herd, movement_type, 
-                 animal_count, movement_reasons)
-                VALUES (?, ?, ?, ?, ?, ?)
+                 animal_count, movement_reasons, cattle_type_breakdown)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
                 [
                     reporting_herd,
@@ -124,6 +125,7 @@ def add_to_consolidated_table(movement_data):
                     json.dumps(
                         [str(r) for r in movement.get("movement_reasons", []) if r is not None], ensure_ascii=False
                     ),
+                    json.dumps(movement.get("cattle_type_breakdown", {}), ensure_ascii=False),
                 ],
             )
 

@@ -388,11 +388,11 @@ def process_chr_data_streaming(
 
                     # Process files in batches to avoid memory issues (600 files is too many at once)
                     batch_size = 50  # Process 50 files at a time
-                    con.raw_sql(
-                        f"CREATE TABLE {table_name} AS SELECT * FROM (VALUES (NULL)) t(dummy) WHERE FALSE"
-                    )  # Create empty table
 
+                    # Create main table from first batch to get correct schema
+                    table_created = False
                     total_records = 0
+
                     for i in range(0, len(matching_files), batch_size):
                         batch_files = matching_files[i : i + batch_size]
                         batch_file_list = "', '".join(batch_files)
@@ -413,8 +413,13 @@ def process_chr_data_streaming(
                                 SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
                             """)
 
-                        # Insert batch data into main table
-                        con.raw_sql(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+                        # Create main table with correct schema from first batch
+                        if not table_created:
+                            con.raw_sql(f"CREATE TABLE {table_name} AS SELECT * FROM temp_batch")
+                            table_created = True
+                        else:
+                            # Insert batch data into main table
+                            con.raw_sql(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
 
                         # Count records in this batch
                         batch_count = con.raw_sql("SELECT COUNT(*) FROM temp_batch").fetchone()[0]
