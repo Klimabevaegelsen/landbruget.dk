@@ -677,9 +677,9 @@ def process_chr_data_streaming(
                             con, context.get("diko_flyt_table"), silver_dir
                         )
 
-                    # Process CHR_dyr cattle movements (optional)
+                    # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                     if context.get("cattle_movements_table") is not None:
-                        chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                        chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
                             con, context.get("cattle_movements_table"), silver_dir
                         )
                     else:
@@ -1361,9 +1361,9 @@ def process_chr_data(
                     con, context.get("diko_flyt_table"), silver_dir
                 )
 
-                # Process CHR_dyr cattle movements (optional - only if animal_movements bronze step was run)
+                # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                 if context.get("cattle_movements_table") is not None:
-                    chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                    chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
                         con, context.get("cattle_movements_table"), silver_dir
                     )
                 else:
