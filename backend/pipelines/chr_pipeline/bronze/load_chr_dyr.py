@@ -121,7 +121,9 @@ def add_to_consolidated_table(movement_data):
                     movement.get("counterparty_herd"),
                     movement.get("movement_type"),
                     movement.get("animal_count", 0),
-                    json.dumps(movement.get("movement_reasons", [])),
+                    json.dumps(
+                        [str(r) for r in movement.get("movement_reasons", []) if r is not None], ensure_ascii=False
+                    ),
                 ],
             )
 
