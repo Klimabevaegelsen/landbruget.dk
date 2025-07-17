@@ -606,7 +606,6 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 logging.debug(f"Could not check problematic herds: {e}")
 
         # Use the unified pipeline pattern for consolidated processing
-        from bronze.load_chr_dyr import _finalize_consolidated_processing, _initialize_consolidated_processing
 
         # Initialize tracking variables
         total_successful = 0
@@ -615,7 +614,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         failed_herds = []
 
         # Initialize consolidated DuckDB processing
-        if not _initialize_consolidated_processing():
+        if not initialize_consolidated_processing():
             logging.error("Failed to initialize consolidated processing - falling back to individual processing")
 
             # Fall back to individual processing if consolidated fails
@@ -678,7 +677,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
             # Finalize consolidated processing - saves all data to single parquet file
-            success = _finalize_consolidated_processing()
+            success = finalize_consolidated_processing()
             if success:
                 logging.info("✅ Consolidated processing completed - all data saved to single parquet file")
             else:
