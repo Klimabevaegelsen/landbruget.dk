@@ -739,7 +739,11 @@ def main():
         elif args.layer == "silver":
             # Silver layer can work with bronze timestamp from CLI argument or GitHub Actions
             bronze_timestamp = args.bronze_timestamp or os.getenv("BRONZE_TIMESTAMP")
-            run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
+            result = run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
+            if result is None:
+                logger.error("❌ Silver layer processing failed")
+                sys.exit(1)
+            logger.info("✅ Silver layer processing completed successfully")
 
         elif args.layer == "both":
             # Run bronze layer and get data in memory
@@ -751,7 +755,11 @@ def main():
             )
 
             # Run silver layer with in-memory data
-            run_silver_layer(args, settings, logger, bronze_data=bronze_data)
+            result = run_silver_layer(args, settings, logger, bronze_data=bronze_data)
+            if result is None:
+                logger.error("❌ Silver layer processing failed")
+                sys.exit(1)
+            logger.info("✅ Silver layer processing completed successfully")
 
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
@@ -963,7 +971,7 @@ def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[l
         return [], None
 
 
-def _load_geodanmark_data_from_gcs(logger: logging.Logger) -> str:
+def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None) -> str:
     """Load GeoDanmark data from GCS and return local path."""
     if not GCS_AVAILABLE:
         logger.error("❌ GCS not available - cannot load GeoDanmark data")
@@ -980,30 +988,38 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger) -> str:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
 
-        # Find the latest GeoDanmark data
-        prefix = "bronze/bbr_buildings/geodanmark/"
-        blobs = list(bucket.list_blobs(prefix=prefix))
+        # Determine which timestamp to use
+        if timestamp:
+            # Use provided timestamp
+            target_timestamp = timestamp
+            logger.info(f"📂 Loading GeoDanmark data from provided timestamp: {target_timestamp}")
+        else:
+            # Find the latest GeoDanmark data (fallback behavior)
+            prefix = "bronze/bbr_buildings/geodanmark/"
+            blobs = list(bucket.list_blobs(prefix=prefix))
 
-        if not blobs:
-            logger.error(f"❌ No GeoDanmark bronze data found in gs://{bucket_name}/{prefix}")
-            return None
+            if not blobs:
+                logger.error(f"❌ No GeoDanmark bronze data found in gs://{bucket_name}/{prefix}")
+                return None
 
-        # Get the latest timestamp folder
-        timestamps = set()
-        for blob in blobs:
-            path_parts = blob.name.split("/")
-            if len(path_parts) >= 4:
-                timestamps.add(path_parts[3])  # bronze/bbr_buildings/geodanmark/TIMESTAMP/
+            # Get the latest timestamp folder
+            timestamps = set()
+            for blob in blobs:
+                path_parts = blob.name.split("/")
+                if len(path_parts) >= 4:
+                    timestamps.add(path_parts[3])  # bronze/bbr_buildings/geodanmark/TIMESTAMP/
 
-        if not timestamps:
-            logger.error(f"❌ No timestamped GeoDanmark data found in gs://{bucket_name}/{prefix}")
-            return None
+            if not timestamps:
+                logger.error(
+                    f"❌ No timestamped GeoDanmark data found in gs://{bucket_name}/{prefix}"
+                )
+                return None
 
-        latest_timestamp = max(timestamps)
-        logger.info(f"📂 Loading GeoDanmark data from timestamp: {latest_timestamp}")
+            target_timestamp = max(timestamps)
+            logger.info(f"📂 Loading GeoDanmark data from latest timestamp: {target_timestamp}")
 
         # Download GeoDanmark geoparquet
-        geodanmark_gcs_path = f"{prefix}{latest_timestamp}/geodanmark_buildings_complete.geoparquet"
+        geodanmark_gcs_path = f"bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
         geodanmark_blob = bucket.blob(geodanmark_gcs_path)
 
         if not geodanmark_blob.exists():
@@ -1070,7 +1086,7 @@ def run_silver_layer(
     logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
 
     # Step 2: Load GeoDanmark data from GCS
-    geodanmark_path = _load_geodanmark_data_from_gcs(logger)
+    geodanmark_path = _load_geodanmark_data_from_gcs(logger, bronze_timestamp)
     if not geodanmark_path:
         logger.error("❌ GeoDanmark data not found in GCS")
         return None
@@ -1182,9 +1198,9 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         gcs_access = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-        # Load building IDs
+        # Load building IDs from INSPIRE subdirectory
         building_ids_path = (
-            f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
+            f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
         )
         building_ids_json = gcs_access.download_text(building_ids_path)
 
@@ -1193,12 +1209,10 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         building_ids = json.loads(building_ids_json)
         logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
 
-        # Try to load attributes
+        # Try to load attributes from INSPIRE subdirectory
         attributes_df = None
         try:
-            attributes_path = (
-                f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
-            )
+            attributes_path = f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
 
             import pandas as pd
 
