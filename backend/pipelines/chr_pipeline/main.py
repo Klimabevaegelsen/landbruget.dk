@@ -565,8 +565,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             return context
 
         # Import the smart aggregation function
-        from bronze.load_chr_dyr import create_soap_client as create_chr_dyr_client
-        from bronze.load_chr_dyr import load_cattle_movement_summaries
+        from bronze.animal_movements import load_cattle_movement_summaries
+        from bronze.auth import create_soap_client as create_chr_dyr_client
 
         # Create CHR_dyr client for smart aggregation
         if "chr_dyr" not in context["clients"]:
@@ -593,9 +593,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
             # Load and report problematic herds at the start
             try:
-                from bronze.load_chr_dyr import _load_problematic_herds, is_problematic_herd
+                from bronze.persistence import is_problematic_herd
 
-                _load_problematic_herds()  # Force load to get current count
+                # Problematic herds are loaded automatically when needed
 
                 problematic_count = sum(1 for herd_num, _ in cattle_herds.items() if is_problematic_herd(herd_num))
                 if problematic_count > 0:
@@ -708,14 +708,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 f"Completed consolidated processing. Success: {total_successful}/{len(cattle_movement_tasks)}, Failed: {len(failed_herds)}"
             )
 
-            # Save final problematic herds list
-            try:
-                from bronze.load_chr_dyr import _save_problematic_herds
-
-                _save_problematic_herds()
-                logging.info("Saved updated problematic herds list to persistent storage")
-            except Exception as e:
-                logging.warning(f"Could not save problematic herds: {e}")
+            # Problematic herds are saved automatically when added
+            logging.info("Problematic herds are automatically saved to persistent storage")
 
     elif step == "vetstat":
         if "chr_to_species" not in context:
