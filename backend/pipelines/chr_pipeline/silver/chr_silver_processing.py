@@ -321,10 +321,10 @@ def process_chr_data_streaming(
                 "description": "DIKO animal movements",
             },
             "cattle_movements": {
-                "file": "chr_dyr_movement_summaries_*.json",
+                "file": "chr_dyr_movement_summaries.parquet",
                 "table_name": "cattle_movements",
                 "required": False,
-                "description": "CHR cattle movements",
+                "description": "CHR cattle movements (consolidated parquet)",
             },
             "ejendom_oplys": {
                 "file": "ejendom_oplysninger.json",
@@ -382,18 +382,40 @@ def process_chr_data_streaming(
 
                     logging.info(f"📁 Found {len(matching_files)} files matching pattern: {pattern}")
 
-                    # Use DuckDB's read_json_auto with array of files (same as other pipelines)
-                    file_list_str = "', '".join(matching_files)
-                    con.raw_sql(f"""
-                        CREATE TABLE {table_name} AS 
-                        SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size=1073741824)
-                    """)
+                    # Process files in batches to avoid memory issues (600 files is too many at once)
+                    batch_size = 50  # Process 50 files at a time
+                    con.raw_sql(
+                        f"CREATE TABLE {table_name} AS SELECT * FROM (VALUES (NULL)) t(dummy) WHERE FALSE"
+                    )  # Create empty table
 
-                    # Get record count for verification
-                    count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-                    record_count = count_result[0] if count_result else 0
+                    total_records = 0
+                    for i in range(0, len(matching_files), batch_size):
+                        batch_files = matching_files[i : i + batch_size]
+                        batch_file_list = "', '".join(batch_files)
 
-                    logging.info(f"✅ Loaded {table_name}: {record_count:,} records from {len(matching_files)} files")
+                        logging.info(
+                            f"📦 Processing batch {i // batch_size + 1}/{(len(matching_files) + batch_size - 1) // batch_size} ({len(batch_files)} files)"
+                        )
+
+                        # Load batch into temporary table
+                        con.raw_sql(f"""
+                            CREATE OR REPLACE TABLE temp_batch AS 
+                            SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
+                        """)
+
+                        # Insert batch data into main table
+                        con.raw_sql(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+
+                        # Count records in this batch
+                        batch_count = con.raw_sql("SELECT COUNT(*) FROM temp_batch").fetchone()[0]
+                        total_records += batch_count
+
+                        # Cleanup temp table
+                        con.raw_sql("DROP TABLE temp_batch")
+
+                    logging.info(
+                        f"✅ Loaded {table_name}: {total_records:,} records from {len(matching_files)} files (processed in batches)"
+                    )
                     loaded_tables[dataset_key] = table_name
 
                 except Exception as e:
