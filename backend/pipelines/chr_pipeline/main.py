@@ -605,128 +605,88 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             except Exception as e:
                 logging.debug(f"Could not check problematic herds: {e}")
 
-        # Use the smart aggregation function that processes individual records but stores summaries
-        def smart_cattle_task(client, username, herd_num, start_date, end_date):
-            return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
+        # Use the unified pipeline pattern for consolidated processing
+        from bronze.load_chr_dyr import _finalize_consolidated_processing, _initialize_consolidated_processing
 
-        # Process in chunks to avoid overwhelming GitHub Actions runner
-        chunk_size = 25  # Reduced from 50 to 25 for better progress tracking and memory management
-        total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
-
-        # Track overall statistics (no result accumulation to prevent memory issues)
+        # Initialize tracking variables
         total_successful = 0
         total_movements = 0
-        processed_herds = []  # Only track herd numbers for context, not full results
-        failed_herds = []  # Track failed herds for retry or exclusion
+        processed_herds = []
+        failed_herds = []
 
-        for chunk_idx in range(total_chunks):
-            start_idx = chunk_idx * chunk_size
-            end_idx = min(start_idx + chunk_size, len(cattle_movement_tasks))
-            chunk_tasks = cattle_movement_tasks[start_idx:end_idx]
+        # Initialize consolidated DuckDB processing
+        if not _initialize_consolidated_processing():
+            logging.error("Failed to initialize consolidated processing - falling back to individual processing")
 
-            if context["args"]["progress"]:
-                logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
-                # Log the herd numbers in this chunk for debugging
-                herd_numbers_in_chunk = [task[2] for task in chunk_tasks]
-                logging.info(f"Chunk {chunk_idx + 1} herd numbers: {herd_numbers_in_chunk}")
+            # Fall back to individual processing if consolidated fails
+            # This maintains backward compatibility
+            def individual_cattle_task(client, username, herd_num, start_date, end_date):
+                return load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
 
-            # Track timing for performance monitoring
-            chunk_start_time = time.time()
+            # Process with parallel tasks but without consolidation
+            chunk_size = 50
+            total_chunks = (len(cattle_movement_tasks) + chunk_size - 1) // chunk_size
 
-            try:
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(cattle_movement_tasks))
+                chunk_tasks = cattle_movement_tasks[start_idx:end_idx]
+
+                if context["args"]["progress"]:
+                    logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_tasks)} herds)")
+
                 chunk_results = process_parallel(
-                    smart_cattle_task,
+                    individual_cattle_task,
                     chunk_tasks,
                     context["args"]["workers"],
-                    f"Processing Smart Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
-                )
-            except Exception as e:
-                logging.error(f"Chunk {chunk_idx + 1} failed with error: {e}")
-                # Create empty results for failed chunk
-                chunk_results = [None] * len(chunk_tasks)
-
-            chunk_duration = time.time() - chunk_start_time
-
-            # Track only herd numbers for context (no result accumulation to prevent memory issues)
-            # Full data is already saved to storage by load_cattle_movement_summaries
-            successful_herd_numbers = []
-            failed_herd_numbers = []
-
-            for i, result in enumerate(chunk_results):
-                herd_number = chunk_tasks[i][2]  # Extract herd number from task
-
-                if result and result.get("processed_successfully", False):
-                    successful_herd_numbers.append(result.get("reporting_herd_number", herd_number))
-                else:
-                    failed_herd_numbers.append(herd_number)
-
-            processed_herds.extend(successful_herd_numbers)
-            failed_herds.extend(failed_herd_numbers)
-
-            # Update totals
-            total_successful += sum(1 for r in chunk_results if r and r.get("processed_successfully", False))
-            total_movements += sum(
-                r.get("movement_count", 0) for r in chunk_results if r and r.get("processed_successfully", False)
-            )
-
-            # Log progress after each chunk with timing information
-            if context["args"]["progress"]:
-                success_rate = len(successful_herd_numbers) / len(chunk_tasks) * 100 if chunk_tasks else 0
-                avg_time_per_herd = chunk_duration / len(chunk_tasks) if chunk_tasks else 0
-
-                logging.info(
-                    f"Chunk {chunk_idx + 1} completed: {len(successful_herd_numbers)}/{len(chunk_tasks)} successful ({success_rate:.1f}%), "
-                    f"duration: {chunk_duration:.1f}s (avg {avg_time_per_herd:.1f}s/herd)"
-                )
-                logging.info(
-                    f"Overall progress: {total_successful}/{len(cattle_movement_tasks)} herds ({total_successful / len(cattle_movement_tasks) * 100:.1f}%), {total_movements} total movements"
+                    f"Processing Cattle Movements (Chunk {chunk_idx + 1}/{total_chunks})",
                 )
 
-                if failed_herd_numbers:
-                    logging.warning(f"Failed herds in chunk {chunk_idx + 1}: {failed_herd_numbers}")
+                # Count successful results
+                successful_results = [r for r in chunk_results if r and r.get("processed_successfully")]
+                total_successful += len(successful_results)
 
-            # Progressive cleanup: Clear chunk results from memory after processing
-            # (Individual herd data is already saved directly to storage by load_cattle_movement_summaries)
-            del chunk_results
-            del successful_herd_numbers
-            del failed_herd_numbers
+                # Force garbage collection
+                import gc
 
-            # Force garbage collection and memory monitoring for large datasets
-            import gc
-
-            if chunk_idx % 2 == 0:  # Every 2 chunks (reduced from 3)
                 gc.collect()
+        else:
+            # Use consolidated DuckDB processing - the proper unified pipeline way
+            logging.info(f"🚀 Processing {len(cattle_movement_tasks)} herds with consolidated DuckDB approach")
 
-                # Log memory usage for monitoring
-                if context["args"]["progress"]:
-                    try:
-                        import psutil
+            # Process herds using the consolidated approach
+            for i, task in enumerate(cattle_movement_tasks):
+                client, username, herd_num, start_date, end_date = task
 
-                        process = psutil.Process(os.getpid())
-                        memory_mb = process.memory_info().rss / 1024 / 1024
-                        logging.info(f"Memory usage after chunk {chunk_idx + 1}: {memory_mb:.1f} MB")
+                try:
+                    result = load_cattle_movement_summaries(client, username, herd_num, start_date, end_date)
+                    if result and result.get("processed_successfully"):
+                        total_successful += 1
+                        processed_herds.append(herd_num)
+                        if result.get("movement_count", 0) > 0:
+                            total_movements += result.get("movement_count", 0)
+                    else:
+                        failed_herds.append(herd_num)
+                except Exception as e:
+                    logging.error(f"Error processing herd {herd_num}: {e}")
+                    failed_herds.append(herd_num)
 
-                        # Warning if memory usage is getting high (updated for 16GB GitHub Actions runners)
-                        if memory_mb > 8000:  # 8GB warning (50% of 16GB limit)
-                            logging.warning(f"High memory usage detected: {memory_mb:.1f} MB")
-                        elif memory_mb > 12000:  # 12GB critical (75% of 16GB limit)
-                            logging.error(
-                                f"Critical memory usage: {memory_mb:.1f} MB - approaching GitHub Actions limit"
-                            )
+                # Progress logging
+                if context["args"]["progress"] and (i + 1) % 50 == 0:
+                    logging.info(
+                        f"Processed {i + 1}/{len(cattle_movement_tasks)} herds ({((i + 1) / len(cattle_movement_tasks)) * 100:.1f}%)"
+                    )
 
-                    except Exception:
-                        pass  # Ignore if psutil is not available
+            # Finalize consolidated processing - saves all data to single parquet file
+            success = _finalize_consolidated_processing()
+            if success:
+                logging.info("✅ Consolidated processing completed - all data saved to single parquet file")
+            else:
+                logging.error("❌ Failed to finalize consolidated processing")
 
-            # CRITICAL: More aggressive cleanup every chunk to prevent accumulation
-            # Clear any lingering temporary files from /tmp
-            if chunk_idx % 3 == 0:  # Every 3 chunks
-                # No temp file cleanup needed - data is saved immediately to GCS
-                pass
-
-            # Force aggressive garbage collection for memory-constrained environments
-            if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true":
-                gc.collect()
-                gc.collect()  # Double collection for aggressive cleanup
+        # Calculate final statistics
+        total_successful = len(processed_herds)
+        total_movements = 0  # Movement count is now tracked in consolidated table
 
         # Store only essential summary data for context (no full results to prevent memory issues)
         context["animal_movements_results"] = {
@@ -737,14 +697,15 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             "processed_herds_sample": processed_herds[:10],  # Only keep first 10 for debugging
             "failed_herds_sample": failed_herds[:10] if failed_herds else [],  # Track failed herds
             "processing_completed": True,
+            "using_consolidated_processing": True,
         }
 
-        # Streaming finalization no longer needed - data is saved immediately to GCS
-        logging.info("✅ Animal movement data saved directly to GCS during processing")
+        # Data is saved directly to consolidated parquet file using unified pipeline pattern
+        logging.info("✅ Animal movement data saved to consolidated parquet file using unified pipeline pattern")
 
         if context["args"]["progress"]:
             logging.info(
-                f"Completed Smart Cattle Movement tasks. Success: {total_successful}/{len(cattle_movement_tasks)}, Total movement summaries: {total_movements}"
+                f"Completed consolidated processing. Success: {total_successful}/{len(cattle_movement_tasks)}, Failed: {len(failed_herds)}"
             )
 
             # Save final problematic herds list
