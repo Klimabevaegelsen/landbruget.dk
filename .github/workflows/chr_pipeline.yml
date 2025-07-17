@@ -558,7 +558,7 @@ jobs:
           fi
           
           # Build command
-          CMD="python main.py --steps animal_movements --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
+          CMD="python -m main --steps animal_movements --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
           
           echo "Running animal movements command for month $MONTH: $CMD"
           
