@@ -22,7 +22,7 @@ def create_chr_dyr_movement_summaries_table(
 
     try:
         # Expected columns in aggregated format:
-        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons
+        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown
         required_columns = [
             "reporting_herd_number",
             "movement_date",
@@ -62,6 +62,13 @@ def create_chr_dyr_movement_summaries_table(
                 chr_dyr_summaries.movement_reasons.cast(dt.string).strip().nullif(""),
                 ibis.literal("[]"),
             ),
+            # Parse cattle_type_breakdown JSON if present, otherwise set to empty JSON object
+            cattle_type_breakdown=ibis.coalesce(
+                chr_dyr_summaries.cattle_type_breakdown.cast(dt.string).strip().nullif(""),
+                ibis.literal("{}"),
+            )
+            if "cattle_type_breakdown" in chr_dyr_summaries.columns
+            else ibis.literal("{}"),
         )
 
         # Filter out records with no animal count
@@ -76,6 +83,7 @@ def create_chr_dyr_movement_summaries_table(
             "movement_type",
             "animal_count",
             "movement_reasons",
+            "cattle_type_breakdown",
         ]
         movements_final = movements.select(*final_cols)
 

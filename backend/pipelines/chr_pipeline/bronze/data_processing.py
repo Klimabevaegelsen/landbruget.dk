@@ -142,6 +142,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "counterparty_herd": None,
                 "movement_type": None,
                 "movement_reasons": [],
+                "cattle_type_breakdown": defaultdict(int),
             }
         )
 
@@ -174,6 +175,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     source_herd = getattr(animal, "BesaetningsNummerFra", None)
                     dest_herd = getattr(animal, "BesaetningsNummerTil", None)
                     exit_reason = getattr(animal, "AarsagAfgaaet", None)
+                    cattle_type = getattr(animal, "Koen", None)  # Extract cattle type
 
                     movement_summaries["summary_stats"]["total_animals_processed"] += 1
 
@@ -187,6 +189,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             movement_groups[key]["counterparty_herd"] = source_herd
                             movement_groups[key]["movement_type"] = "incoming"
 
+                            # Track cattle type breakdown
+                            if cattle_type:
+                                movement_groups[key]["cattle_type_breakdown"][cattle_type] += 1
+
                             movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
                             movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
 
@@ -199,6 +205,11 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             movement_groups[key]["movement_date"] = movement_date
                             movement_groups[key]["counterparty_herd"] = dest_herd
                             movement_groups[key]["movement_type"] = "outgoing"
+
+                            # Track cattle type breakdown
+                            if cattle_type:
+                                movement_groups[key]["cattle_type_breakdown"][cattle_type] += 1
+
                             # Clean and validate the exit reason before adding
                             clean_reason = str(exit_reason).strip() if exit_reason is not None else None
                             if clean_reason:
@@ -240,6 +251,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "contact_type": "Fra" if movement_type == "outgoing" else "Til",
                 "movement_reasons": unique_reasons,
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
+                "cattle_type_breakdown": dict(group_data["cattle_type_breakdown"]),
                 "source_data": "chr_dyr_aggregated",
             }
             movement_summaries["movements"].append(movement_summary)

@@ -321,7 +321,7 @@ def process_chr_data_streaming(
                 "description": "DIKO animal movements",
             },
             "cattle_movements": {
-                "file": "chr_dyr_movement_summaries.parquet",
+                "file": "*chr_dyr_movement_summaries.parquet",
                 "table_name": "cattle_movements",
                 "required": False,
                 "description": "CHR cattle movements (consolidated parquet)",
@@ -368,9 +368,13 @@ def process_chr_data_streaming(
                     gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
                     all_files = gcs_access.list_files(gcs_list_pattern)
 
-                    # Filter files matching the pattern (simple prefix matching for chr_dyr_movement_summaries_*)
-                    pattern_prefix = pattern.replace("*", "").replace(".json", "")
-                    matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
+                    # Filter files matching the pattern (handle both .json and .parquet files)
+                    if pattern.endswith(".parquet"):
+                        pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
+                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".parquet")]
+                    else:
+                        pattern_prefix = pattern.replace("*", "").replace(".json", "")
+                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
 
                     if not matching_files:
                         if dataset_info["required"]:
@@ -397,11 +401,17 @@ def process_chr_data_streaming(
                             f"📦 Processing batch {i // batch_size + 1}/{(len(matching_files) + batch_size - 1) // batch_size} ({len(batch_files)} files)"
                         )
 
-                        # Load batch into temporary table
-                        con.raw_sql(f"""
-                            CREATE OR REPLACE TABLE temp_batch AS 
-                            SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
-                        """)
+                        # Load batch into temporary table - use appropriate reader based on file type
+                        if pattern.endswith(".parquet"):
+                            con.raw_sql(f"""
+                                CREATE OR REPLACE TABLE temp_batch AS 
+                                SELECT * FROM read_parquet(['{batch_file_list}'])
+                            """)
+                        else:
+                            con.raw_sql(f"""
+                                CREATE OR REPLACE TABLE temp_batch AS 
+                                SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
+                            """)
 
                         # Insert batch data into main table
                         con.raw_sql(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
@@ -1201,12 +1211,18 @@ def process_chr_data(
                         logging.info(
                             f"Loading {table_name} from {len(matching_files)} files matching pattern: {file_key}"
                         )
-                        # Use DuckDB's read_json_auto with array of files
+                        # Use appropriate DuckDB reader based on file type
                         file_list_str = "', '".join(matching_files)
-                        max_obj_size_bytes = 1073741824  # 1GB
-                        con.con.sql(
-                            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size={max_obj_size_bytes});"
-                        )
+
+                        if file_key.endswith(".parquet"):
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet(['{file_list_str}']);"
+                            )
+                        else:
+                            max_obj_size_bytes = 1073741824  # 1GB
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size={max_obj_size_bytes});"
+                            )
                         raw_tables[table_name] = con.table(table_name)
                         successfully_loaded = True
                         logging.info(f"Successfully loaded {table_name} from {len(matching_files)} files")
