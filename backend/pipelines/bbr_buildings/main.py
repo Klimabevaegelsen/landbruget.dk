@@ -32,7 +32,7 @@ except ImportError:
 
 # Add this import for GCS operations
 try:
-    from backend.common.storage_interface import GCSDataAccess
+    from unified_pipeline.util.gcs_access import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
