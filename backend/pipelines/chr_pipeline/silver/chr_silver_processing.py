@@ -526,6 +526,7 @@ def process_chr_data_streaming(
                     try:
                         # Download and parse each JSON file
                         json_data = gcs_access.download_json(json_file)
+                        logging.info(f"Downloaded VetStat JSON: {len(json_data)} top-level items")
 
                         # Handle nested structure: list of lists of dictionaries
                         if isinstance(json_data, list):
@@ -542,6 +543,8 @@ def process_chr_data_streaming(
                         logging.warning(f"Failed to process VetStat JSON file {json_file}: {e}")
                         continue
 
+                logging.info(f"Total VetStat records after flattening: {len(all_vetstat_data)}")
+
                 if all_vetstat_data:
                     # Save consolidated JSON to temporary file
                     temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
@@ -549,17 +552,29 @@ def process_chr_data_streaming(
                         for record in all_vetstat_data:
                             f.write(json.dumps(record) + "\n")
 
+                    logging.info(f"Saved {len(all_vetstat_data)} records to temporary JSONL file")
+
                     # Load consolidated JSONL into DuckDB
-                    con.raw_sql(f"""
-                        CREATE TABLE vetstat AS 
-                        SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
-                                                   maximum_object_size=1073741824)
-                    """)
+                    try:
+                        con.raw_sql(f"""
+                            CREATE TABLE vetstat AS 
+                            SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
+                                                       maximum_object_size=1073741824)
+                        """)
+                        logging.info("Successfully created VetStat table in DuckDB")
+                    except Exception as e:
+                        logging.error(f"Failed to create VetStat table in DuckDB: {e}")
+                        raise
 
                     # Verify loading
                     count_result = con.raw_sql("SELECT COUNT(*) FROM vetstat").fetchone()
                     record_count = count_result[0] if count_result else 0
                     logging.info(f"✅ Loaded vetstat: {record_count:,} records from {len(vetstat_json_files)} files")
+
+                    if record_count == 0:
+                        logging.warning(
+                            "VetStat table was created but contains 0 records - this may indicate a parsing issue"
+                        )
 
                     vetstat_table_name = "vetstat"
                     loaded_tables["vetstat"] = vetstat_table_name
