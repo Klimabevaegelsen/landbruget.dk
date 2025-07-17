@@ -1003,7 +1003,7 @@ def process_chr_data(
             "file_key": "besaetning_details.json",
         },
         "diko_flyt": {"mem_key": "diko_flytninger", "file_key": "diko_flytninger.json"},
-        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries*.json"},
+        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries.parquet"},
         "ejendom_oplys": {
             "mem_key": "ejendom_oplysninger",
             "file_key": "ejendom_oplysninger.json",
@@ -1166,11 +1166,18 @@ def process_chr_data(
                 if file_path.exists():
                     try:
                         logging.info(f"Loading {table_name} from file: {file_path}")
-                        # Use DuckDB's read_json_auto for robust JSON loading
-                        max_obj_size_bytes = 1073741824  # 1GB
-                        con.con.sql(
-                            f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
-                        )
+                        # Detect file type and use appropriate reader
+                        if file_path.suffix.lower() == ".parquet":
+                            # Use read_parquet for parquet files
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{str(file_path)}');"
+                            )
+                        else:
+                            # Use read_json_auto for JSON files
+                            max_obj_size_bytes = 1073741824  # 1GB
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
+                            )
                         raw_tables[table_name] = con.table(table_name)
                         successfully_loaded = True
                         logging.info(f"Successfully loaded {table_name} from file {file_path}")
