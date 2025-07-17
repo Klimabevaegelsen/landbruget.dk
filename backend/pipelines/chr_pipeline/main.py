@@ -606,6 +606,17 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 logging.debug(f"Could not check problematic herds: {e}")
 
         # Use the unified pipeline pattern for consolidated processing
+        # DEBUG: Test import before using functions
+        try:
+            from bronze.load_chr_dyr import finalize_consolidated_processing, initialize_consolidated_processing
+
+            logging.info("✅ Successfully imported consolidated processing functions")
+        except ImportError as e:
+            logging.error(f"❌ Failed to import consolidated processing functions: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"❌ Unexpected error importing consolidated processing functions: {e}")
+            raise
 
         # Initialize tracking variables
         total_successful = 0
