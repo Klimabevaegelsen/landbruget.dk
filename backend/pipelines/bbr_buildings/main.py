@@ -1202,11 +1202,7 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         building_ids_path = (
             f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
         )
-        building_ids_json = gcs_access.download_text(building_ids_path)
-
-        import json
-
-        building_ids = json.loads(building_ids_json)
+        building_ids = gcs_access.download_json(building_ids_path)
         logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
 
         # Try to load attributes from INSPIRE subdirectory
