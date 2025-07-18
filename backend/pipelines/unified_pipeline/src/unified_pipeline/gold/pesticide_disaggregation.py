@@ -1088,8 +1088,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "✅ Found field_uuid column in FVM data - using UUIDs as primary identifier"
             )
             # Use field_uuid directly, generate UUID for any missing values
-            field_uuid_select = "COALESCE(field_uuid, uuid()) as field_uuid"
-            primary_field_id_select = "COALESCE(field_uuid, uuid()) as primary_field_id"
+            field_uuid_select = "COALESCE(field_uuid, CAST(uuid() AS VARCHAR)) as field_uuid"
+            primary_field_id_select = (
+                "COALESCE(field_uuid, CAST(uuid() AS VARCHAR)) as primary_field_id"
+            )
         else:
             self.log.error(
                 "❌ No field_uuid column found in FVM data - this should not happen with current FVM data"
