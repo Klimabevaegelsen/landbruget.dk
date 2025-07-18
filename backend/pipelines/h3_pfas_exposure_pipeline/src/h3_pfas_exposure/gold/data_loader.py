@@ -372,7 +372,12 @@ class H3DataLoader:
                 {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                {geometry_field_select}
+                {geometry_field_select},
+                -- Add field UUID support with fallback to composite key
+                f.field_uuid,
+                COALESCE(f.field_uuid, 
+                         'legacy_' || CAST({"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} AS VARCHAR) || '_' || CAST({"f.block_id" if "block_id" in column_names else "f.block_number"} AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
+                ) as primary_field_id
             FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
                 {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
