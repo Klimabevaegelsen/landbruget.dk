@@ -726,7 +726,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     if (
                         len(path_parts) >= 7
                     ):  # gs://bucket/silver/fvm_marker_year/timestamp/filename
-                        timestamp_dir = path_parts[6]  # "20241201_123456"
+                        timestamp_dir = path_parts[5]  # "20241201_123456" (corrected index)
                         if latest_timestamp is None or timestamp_dir > latest_timestamp:
                             latest_timestamp = timestamp_dir
                             target_file = file_path
