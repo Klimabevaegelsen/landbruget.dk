@@ -1083,6 +1083,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         organic_farming_column = "false as organic_farming"
         self.log.info("Note: FVM marker data does not contain organic farming information")
 
+        # Check if field_uuid exists in the source data
+        has_field_uuid = "field_uuid" in temp_column_names
+
+        if has_field_uuid:
+            self.log.info("✅ Found field_uuid column in FVM data")
+            field_uuid_select = "field_uuid"
+            primary_field_id_select = f"COALESCE(field_uuid, 'legacy_' || CAST({cvr_column} AS VARCHAR) || '_' || CAST({block_id_column} AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)) as primary_field_id"
+        else:
+            self.log.warning(
+                "⚠️ No field_uuid column found in FVM data - using legacy composite key"
+            )
+            field_uuid_select = "NULL as field_uuid"
+            primary_field_id_select = f"'legacy_' || CAST({cvr_column} AS VARCHAR) || '_' || CAST({block_id_column} AS VARCHAR) || '_' || CAST(field_id AS VARCHAR) as primary_field_id"
+
         self.duckdb_conn.execute(f"""
             CREATE TABLE marker AS 
             SELECT 
@@ -1095,10 +1109,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 CAST({block_id_column} AS VARCHAR) as block_id,
                 year{geometry_select},
                 -- Add field UUID support with fallback to composite key
-                COALESCE(field_uuid, 
-                         'legacy_' || CAST({cvr_column} AS VARCHAR) || '_' || CAST({block_id_column} AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
-                ) as primary_field_id,
-                field_uuid
+                {primary_field_id_select},
+                {field_uuid_select}
             FROM marker_temp
         """)
 
