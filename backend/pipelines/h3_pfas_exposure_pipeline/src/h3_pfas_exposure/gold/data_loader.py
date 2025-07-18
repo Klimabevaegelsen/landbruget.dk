@@ -549,6 +549,8 @@ class H3DataLoader:
                 p.AllocatedArea,
                 p.AllocationMethod,
                 p.MatchConfidence,
+                p.field_uuid,
+                p.primary_field_id,
 
                 -- BMD substance detection data
                 b.active_ingredients,
