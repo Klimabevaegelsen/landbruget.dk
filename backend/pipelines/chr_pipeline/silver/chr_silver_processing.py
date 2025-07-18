@@ -268,8 +268,9 @@ def process_chr_data_streaming(
     """
     logging.info("--- Starting CHR Silver Processing (Streaming Mode) ---")
 
-    # Create silver directory if it doesn't exist
-    silver_dir.mkdir(parents=True, exist_ok=True)
+    # Create silver directory if it doesn't exist and if provided
+    if silver_dir is not None:
+        silver_dir.mkdir(parents=True, exist_ok=True)
 
     # Use bronze timestamp as export timestamp if not provided
     if export_timestamp is None:
