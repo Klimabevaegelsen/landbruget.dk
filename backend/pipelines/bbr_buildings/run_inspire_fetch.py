@@ -401,7 +401,16 @@ def main():
         inspire_fetcher = InspireBBRFetcher(settings, logger)
 
         pipeline_start_time = datetime.now()
-        timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+        # Get shared timestamp from artifact or generate new one
+        timestamp = None
+        if os.path.exists("/tmp/bronze_timestamp.txt"):
+            with open("/tmp/bronze_timestamp.txt") as f:
+                timestamp = f.read().strip()
+            print(f"Using shared bronze timestamp: {timestamp}")
+        else:
+            timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+            print(f"No shared timestamp found, generated: {timestamp}")
 
         # Use streaming approach for large datasets to avoid memory issues
         if sample_size and sample_size <= 10000:
@@ -464,17 +473,21 @@ def main():
             if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                     f.write(f"buildings-count={building_count}\n")
+                    f.write(f"bronze-timestamp={timestamp}\n")
         else:
             print("❌ No INSPIRE BBR data fetched")
             if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                     f.write("buildings-count=0\n")
+                    f.write(f"bronze-timestamp={timestamp}\n")
     except Exception as e:
         print("❌ INSPIRE BBR fetch failed")
         print(f"Error: {e}")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if "GITHUB_OUTPUT" in os.environ:
             with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                 f.write("buildings-count=0\n")
+                f.write(f"bronze-timestamp={timestamp}\n")
         raise
 
 

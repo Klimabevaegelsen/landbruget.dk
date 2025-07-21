@@ -32,7 +32,7 @@ except ImportError:
 
 # Add this import for GCS operations
 try:
-    from backend.common.storage_interface import GCSDataAccess
+    from unified_pipeline.util.gcs_access import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -197,8 +197,8 @@ def perform_uuid_join_optimized(
                 g.building_area_m2,
                 'uuid_matched' as join_status,
                 -- INSPIRE attributes
-                ia.currentUse as inspire_current_use,
-                ia.buildingNature as inspire_building_nature,
+                ia.current_use as inspire_current_use,
+                ia.building_nature as inspire_building_nature,
                 ia.construction_year as inspire_construction_year,
                 ia.floor_area as inspire_floor_area,
                 ia.floors as inspire_floors,
@@ -306,12 +306,47 @@ def perform_uuid_join_optimized(
 
             print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
 
+            # Final cleanup - use robust drop that handles both tables and views
+            def robust_drop(object_name: str):
+                """Drop a table or view, handling both types safely."""
+                try:
+                    # Check if it's a table or view by querying information schema
+                    result = conn.execute(f"""
+                        SELECT table_type FROM information_schema.tables 
+                        WHERE table_name = '{object_name}'
+                        UNION ALL
+                        SELECT 'VIEW' as table_type FROM information_schema.views 
+                        WHERE table_name = '{object_name}'
+                    """).fetchall()
+
+                    if result:
+                        object_type = result[0][0]
+                        if object_type == "VIEW":
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                        else:
+                            conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                    else:
+                        # Object doesn't exist, try both just in case
+                        try:
+                            conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                        except Exception:
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                except Exception:
+                    # Fallback: try both drop commands
+                    try:
+                        conn.execute(f"DROP TABLE IF EXISTS {object_name}")
+                    except Exception:
+                        try:
+                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
+                        except Exception:
+                            pass  # If both fail, just continue
+
             # Final cleanup
-            conn.execute("DROP TABLE IF EXISTS joined_results")
-            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings")
-            conn.execute("DROP TABLE IF EXISTS geodanmark_buildings_filtered")  # Added this line
-            conn.execute("DROP TABLE IF EXISTS inspire_building_ids")
-            conn.execute("DROP TABLE IF EXISTS inspire_attributes")  # Clean up attributes table
+            robust_drop("joined_results")
+            robust_drop("geodanmark_buildings")
+            robust_drop("geodanmark_buildings_filtered")
+            robust_drop("inspire_building_ids")
+            robust_drop("inspire_attributes")
 
             gc.collect()
             check_memory_usage()
@@ -710,6 +745,12 @@ def main():
     )
 
     parser.add_argument(
+        "--bronze-timestamp",
+        type=str,
+        help="Bronze timestamp to use for silver layer (e.g., 20250715_230139)",
+    )
+
+    parser.add_argument(
         "--enhance-classification",
         action="store_true",
         help="Enable enhanced building classification in silver layer",
@@ -731,9 +772,13 @@ def main():
             run_bronze_layer_bulk(args, settings, logger, pipeline_start_time)
 
         elif args.layer == "silver":
-            # Silver layer can work with bronze timestamp from GitHub Actions
-            bronze_timestamp = os.getenv("BRONZE_TIMESTAMP")
-            run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
+            # Silver layer can work with bronze timestamp from CLI argument or GitHub Actions
+            bronze_timestamp = args.bronze_timestamp or os.getenv("BRONZE_TIMESTAMP")
+            result = run_silver_layer(args, settings, logger, bronze_timestamp=bronze_timestamp)
+            if result is None:
+                logger.error("❌ Silver layer processing failed")
+                sys.exit(1)
+            logger.info("✅ Silver layer processing completed successfully")
 
         elif args.layer == "both":
             # Run bronze layer and get data in memory
@@ -745,7 +790,11 @@ def main():
             )
 
             # Run silver layer with in-memory data
-            run_silver_layer(args, settings, logger, bronze_data=bronze_data)
+            result = run_silver_layer(args, settings, logger, bronze_data=bronze_data)
+            if result is None:
+                logger.error("❌ Silver layer processing failed")
+                sys.exit(1)
+            logger.info("✅ Silver layer processing completed successfully")
 
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
@@ -894,7 +943,7 @@ def _upload_bronze_data_to_gcs(
         logger.warning("Silver layer will need to process locally")
 
 
-def _load_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
+def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
     """Load INSPIRE BBR bronze data from GCS."""
     if not GCS_AVAILABLE:
         logger.error("❌ GCS not available - cannot load bronze data")
@@ -957,59 +1006,71 @@ def _load_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
         return [], None
 
 
-def _load_geodanmark_data_from_gcs(logger: logging.Logger) -> str:
+def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None) -> str:
     """Load GeoDanmark data from GCS and return local path."""
     if not GCS_AVAILABLE:
         logger.error("❌ GCS not available - cannot load GeoDanmark data")
         return None
 
-    bucket_name = os.getenv("GCS_BUCKET")
-    if not bucket_name:
-        logger.error("❌ GCS_BUCKET not set - cannot load GeoDanmark data")
-        return None
-
     try:
-        from google.cloud import storage
+        gcs_access = GCSDataAccess()
+        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
+        # Determine which timestamp to use
+        if timestamp:
+            # Use provided timestamp
+            target_timestamp = timestamp
+            logger.info(f"📂 Loading GeoDanmark data from provided timestamp: {target_timestamp}")
+        else:
+            # Find the latest GeoDanmark data (fallback behavior)
+            prefix = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/"
 
-        # Find the latest GeoDanmark data
-        prefix = "bronze/bbr_buildings/geodanmark/"
-        blobs = list(bucket.list_blobs(prefix=prefix))
+            # List all files in the geodanmark directory
+            files = list(gcs_access.fs.ls(prefix))
 
-        if not blobs:
-            logger.error(f"❌ No GeoDanmark bronze data found in gs://{bucket_name}/{prefix}")
-            return None
+            if not files:
+                logger.error(f"❌ No GeoDanmark bronze data found in {prefix}")
+                return None
 
-        # Get the latest timestamp folder
-        timestamps = set()
-        for blob in blobs:
-            path_parts = blob.name.split("/")
-            if len(path_parts) >= 4:
-                timestamps.add(path_parts[3])  # bronze/bbr_buildings/geodanmark/TIMESTAMP/
+            # Get the latest timestamp folder
+            timestamps = set()
+            for file_path in files:
+                # Extract timestamp from path: gs://bucket/bronze/bbr_buildings/geodanmark/TIMESTAMP/
+                path_parts = file_path.replace(f"gs://{bucket_name}/", "").split("/")
+                if (
+                    len(path_parts) >= 4
+                    and path_parts[0] == "bronze"
+                    and path_parts[1] == "bbr_buildings"
+                ):
+                    timestamps.add(path_parts[3])
 
-        if not timestamps:
-            logger.error(f"❌ No timestamped GeoDanmark data found in gs://{bucket_name}/{prefix}")
-            return None
+            if not timestamps:
+                logger.error(f"❌ No timestamped GeoDanmark data found in {prefix}")
+                return None
 
-        latest_timestamp = max(timestamps)
-        logger.info(f"📂 Loading GeoDanmark data from timestamp: {latest_timestamp}")
+            target_timestamp = max(timestamps)
+            logger.info(f"📂 Loading GeoDanmark data from latest timestamp: {target_timestamp}")
 
-        # Download GeoDanmark geoparquet
-        geodanmark_gcs_path = f"{prefix}{latest_timestamp}/geodanmark_buildings_complete.geoparquet"
-        geodanmark_blob = bucket.blob(geodanmark_gcs_path)
+        # GeoDanmark file path in GCS
+        geodanmark_gcs_path = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
 
-        if not geodanmark_blob.exists():
-            logger.error(f"❌ GeoDanmark data not found: gs://{bucket_name}/{geodanmark_gcs_path}")
+        # Check if file exists
+        if not gcs_access.fs.exists(geodanmark_gcs_path):
+            logger.error(f"❌ GeoDanmark data not found: {geodanmark_gcs_path}")
             return None
 
         # Download to local temporary file
         local_path = "data/geodanmark_buildings_complete.geoparquet"
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-        logger.info("📥 Downloading GeoDanmark data from GCS...")
-        geodanmark_blob.download_to_filename(local_path)
+        logger.info(f"📥 Downloading GeoDanmark data from {geodanmark_gcs_path}...")
+
+        # Download using fsspec
+        with gcs_access.fs.open(geodanmark_gcs_path, "rb") as src:
+            with open(local_path, "wb") as dst:
+                import shutil
+
+                shutil.copyfileobj(src, dst)
 
         # Verify download
         if not os.path.exists(local_path):
@@ -1054,8 +1115,8 @@ def run_silver_layer(
     silver_output_dir = output_dir / timestamp
     silver_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Load bronze data from GCS
-    building_ids, attributes_df = _load_bronze_data_from_gcs(logger)
+    # Step 1: Load bronze data from various sources
+    building_ids, attributes_df = _load_bronze_data(bronze_data, bronze_timestamp, logger)
 
     if not building_ids:
         logger.error("❌ No building IDs available for processing")
@@ -1064,7 +1125,7 @@ def run_silver_layer(
     logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
 
     # Step 2: Load GeoDanmark data from GCS
-    geodanmark_path = _load_geodanmark_data_from_gcs(logger)
+    geodanmark_path = _load_geodanmark_data_from_gcs(logger, bronze_timestamp)
     if not geodanmark_path:
         logger.error("❌ GeoDanmark data not found in GCS")
         return None
@@ -1176,23 +1237,17 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         gcs_access = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-        # Load building IDs
+        # Load building IDs from INSPIRE subdirectory
         building_ids_path = (
-            f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
+            f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
         )
-        building_ids_json = gcs_access.download_text(building_ids_path)
-
-        import json
-
-        building_ids = json.loads(building_ids_json)
+        building_ids = gcs_access.download_json(building_ids_path)
         logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
 
-        # Try to load attributes
+        # Try to load attributes from INSPIRE subdirectory
         attributes_df = None
         try:
-            attributes_path = (
-                f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
-            )
+            attributes_path = f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
 
             import pandas as pd
 

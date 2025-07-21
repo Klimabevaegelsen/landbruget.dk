@@ -372,7 +372,12 @@ class H3DataLoader:
                 {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                {geometry_field_select}
+                {geometry_field_select},
+                -- Add field UUID support with fallback to composite key
+                f.field_uuid,
+                COALESCE(f.field_uuid, 
+                         'legacy_' || CAST({"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} AS VARCHAR) || '_' || CAST({"f.block_id" if "block_id" in column_names else "f.block_number"} AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
+                ) as primary_field_id
             FROM {temp_table} f
             INNER JOIN pesticide_field_lookup p ON (
                 {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
@@ -481,6 +486,10 @@ class H3DataLoader:
         self.log.info(f"   Dosage quantity: {dosage_quantity_column}")
         self.log.info(f"   Dosage unit: {dosage_unit_column}")
 
+        # Check if field_uuid and primary_field_id columns exist in source data
+        has_field_uuid = "field_uuid" in pest_column_names
+        has_primary_field_id = "primary_field_id" in pest_column_names
+
         # Process pesticide data with correct field names and CVR + block_id + field_id extraction
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
@@ -498,7 +507,10 @@ class H3DataLoader:
                 MatchConfidence,
                 -- Extract field_id and block_id for matching
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
-                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
+                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id,
+                -- Add field UUID support with fallback logic
+                {"field_uuid" if has_field_uuid else "NULL as field_uuid"},
+                {"primary_field_id" if has_primary_field_id else "COALESCE(" + ("field_uuid" if has_field_uuid else "NULL") + ", 'legacy_' || CAST(" + cvr_column + " AS VARCHAR) || '_' || CAST(REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) AS VARCHAR) || '_' || CAST(REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) AS VARCHAR)) as primary_field_id"}
             FROM temp_pesticides_raw
             WHERE MatchedFieldID IS NOT NULL
             AND MatchedBlockID IS NOT NULL
@@ -537,6 +549,8 @@ class H3DataLoader:
                 p.AllocatedArea,
                 p.AllocationMethod,
                 p.MatchConfidence,
+                p.field_uuid,
+                p.primary_field_id,
 
                 -- BMD substance detection data
                 b.active_ingredients,

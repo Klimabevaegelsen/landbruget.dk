@@ -10,11 +10,114 @@ from . import export
 # Import helpers (assuming helpers.py is in the same directory)
 
 
+def create_chr_dyr_movement_summaries_table(
+    con: ibis.BaseBackend, chr_dyr_summaries: ibis.Table | None, silver_dir: Path
+) -> ibis.Table | None:
+    """Creates the chr_dyr_movement_summaries table from aggregated CHR_dyr movement data."""
+    logging.info("Starting creation of chr_dyr_movement_summaries table from aggregated data.")
+
+    if chr_dyr_summaries is None:
+        logging.warning("Cannot create chr_dyr_movement_summaries: input table is None.")
+        return None
+
+    try:
+        # Expected columns in aggregated format:
+        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown
+        required_columns = [
+            "reporting_herd_number",
+            "movement_date",
+            "counterparty_herd",
+            "movement_type",
+            "animal_count",
+        ]
+
+        # Check for required columns
+        missing_columns = [col for col in required_columns if col not in chr_dyr_summaries.columns]
+        if missing_columns:
+            logging.warning(f"Cannot create chr_dyr_movement_summaries: Missing required columns: {missing_columns}")
+            return None
+
+        # Process the aggregated movement data
+        movements = chr_dyr_summaries.select(
+            movement_summary_id=ibis.uuid(),  # Generate UUID for each summary record
+            reporting_herd_number=ibis.coalesce(
+                chr_dyr_summaries.reporting_herd_number.cast(dt.int64),
+                ibis.null().cast(dt.int64),
+            ),
+            movement_date=ibis.coalesce(
+                chr_dyr_summaries.movement_date.cast(dt.date),
+                ibis.null().cast(dt.date),
+            ),
+            counterparty_herd=ibis.coalesce(
+                chr_dyr_summaries.counterparty_herd.cast(dt.int64),
+                ibis.null().cast(dt.int64),
+            ),
+            movement_type=chr_dyr_summaries.movement_type.cast(dt.string).strip().nullif(""),
+            animal_count=ibis.coalesce(
+                chr_dyr_summaries.animal_count.cast(dt.int64),
+                ibis.literal(0).cast(dt.int64),
+            ),
+            # Parse movement_reasons JSON if present, otherwise set to empty string
+            movement_reasons=ibis.coalesce(
+                chr_dyr_summaries.movement_reasons.cast(dt.string).strip().nullif(""),
+                ibis.literal("[]"),
+            ),
+            # Parse cattle_type_breakdown JSON if present, otherwise set to empty JSON object
+            cattle_type_breakdown=ibis.coalesce(
+                chr_dyr_summaries.cattle_type_breakdown.cast(dt.string).strip().nullif(""),
+                ibis.literal("{}"),
+            )
+            if "cattle_type_breakdown" in chr_dyr_summaries.columns
+            else ibis.literal("{}"),
+        )
+
+        # Filter out records with no animal count
+        movements = movements.filter(movements.animal_count > 0)
+
+        # Select final columns in desired order
+        final_cols = [
+            "movement_summary_id",
+            "reporting_herd_number",
+            "movement_date",
+            "counterparty_herd",
+            "movement_type",
+            "animal_count",
+            "movement_reasons",
+            "cattle_type_breakdown",
+        ]
+        movements_final = movements.select(*final_cols)
+
+        # --- Save to Parquet ---
+        output_path = silver_dir / "chr_dyr_movement_summaries.parquet"
+        rows = movements_final.count().execute()
+        if rows == 0:
+            logging.warning("CHR_dyr movement summaries table is empty after processing.")
+            return None
+
+        logging.info(f"Saving chr_dyr_movement_summaries table with {rows} rows.")
+        # Pass Ibis table directly
+        saved_path = export.save_table(output_path, movements_final, is_geo=False)
+        if saved_path is None:
+            logging.error("Failed to save chr_dyr_movement_summaries table - no path returned")
+            return None
+
+        logging.info(f"Successfully saved CHR_dyr movement summaries to {saved_path}")
+        return movements_final
+
+    except Exception as e:
+        logging.error(f"Error creating chr_dyr_movement_summaries table: {e}", exc_info=True)
+        return None
+
+
 def create_chr_dyr_animal_movements_table(
     con: ibis.BaseBackend, chr_dyr_raw: ibis.Table | None, silver_dir: Path
 ) -> ibis.Table | None:
-    """Creates the chr_dyr_animal_movements table from CHR_dyr service besListAktOms responses."""
-    logging.info("Starting creation of chr_dyr_animal_movements table.")
+    """Creates the chr_dyr_animal_movements table from CHR_dyr service besListAktOms responses.
+
+    NOTE: This function handles the old individual animal records format.
+    For aggregated movement summaries, use create_chr_dyr_movement_summaries_table instead.
+    """
+    logging.info("Starting creation of chr_dyr_animal_movements table (individual records format).")
 
     # Check for nested structure
     if chr_dyr_raw is None or "Response" not in chr_dyr_raw.columns:

@@ -601,14 +601,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             years = set()
 
             for file_path in files:
-                # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
-                match = re.search(r"fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_path)
+                # Look for files like "silver/fvm_marker_2021/timestamp/data.parquet"
+                match = re.search(r"fvm_marker_(\d{4})/.*?/data\.parquet", file_path)
                 if match:
-                    year1 = int(match.group(1))
-                    year2 = int(match.group(2))
-                    # Ensure both years match (sanity check)
-                    if year1 == year2:
-                        years.add(year1)
+                    year = int(match.group(1))
+                    years.add(year)
 
             return sorted(list(years))
         except Exception as e:
@@ -722,14 +719,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             target_file = None
             latest_timestamp = None
             for file_path in files:
-                # Look for files like "fvm_marker_2021.parquet" instead of "data.parquet"
-                if file_path.endswith(f"fvm_marker_{year}.parquet"):
-                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
+                # Look for files like "data.parquet" (standard silver layer format)
+                if file_path.endswith("data.parquet"):
+                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/data.parquet"
                     path_parts = file_path.split("/")
                     if (
                         len(path_parts) >= 7
                     ):  # gs://bucket/silver/fvm_marker_year/timestamp/filename
-                        timestamp_dir = path_parts[6]  # "20241201_123456"
+                        timestamp_dir = path_parts[5]  # "20241201_123456" (corrected index)
                         if latest_timestamp is None or timestamp_dir > latest_timestamp:
                             latest_timestamp = timestamp_dir
                             target_file = file_path
@@ -1083,6 +1080,26 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         organic_farming_column = "false as organic_farming"
         self.log.info("Note: FVM marker data does not contain organic farming information")
 
+        # Check if field_uuid exists in the source data
+        has_field_uuid = "field_uuid" in temp_column_names
+
+        if has_field_uuid:
+            self.log.info(
+                "✅ Found field_uuid column in FVM data - using UUIDs as primary identifier"
+            )
+            # Use field_uuid directly, generate UUID for any missing values
+            field_uuid_select = "COALESCE(field_uuid, CAST(uuid() AS VARCHAR)) as field_uuid"
+            primary_field_id_select = (
+                "COALESCE(field_uuid, CAST(uuid() AS VARCHAR)) as primary_field_id"
+            )
+        else:
+            self.log.error(
+                "❌ No field_uuid column found in FVM data - this should not happen with current FVM data"
+            )
+            raise ValueError(
+                "field_uuid column is required but not found in FVM data. Please check data pipeline configuration."
+            )
+
         self.duckdb_conn.execute(f"""
             CREATE TABLE marker AS 
             SELECT 
@@ -1095,10 +1112,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 CAST({block_id_column} AS VARCHAR) as block_id,
                 year{geometry_select},
                 -- Add field UUID support with fallback to composite key
-                COALESCE(field_uuid, 
-                         'legacy_' || CAST({cvr_column} AS VARCHAR) || '_' || CAST({block_id_column} AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
-                ) as primary_field_id,
-                field_uuid
+                {primary_field_id_select},
+                {field_uuid_select}
             FROM marker_temp
         """)
 
@@ -1584,8 +1599,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         m.field_id as FieldID,
                         m.area_ha as FieldArea,
                         m.field_id as FieldIdentifier,
-                        m.field_uuid,
-                        m.primary_field_id
+                        ANY_VALUE(m.field_uuid) as field_uuid,
+                        ANY_VALUE(m.primary_field_id) as primary_field_id
                     FROM marker m
                     WHERE m.cvr_number IS NOT NULL 
                       AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 

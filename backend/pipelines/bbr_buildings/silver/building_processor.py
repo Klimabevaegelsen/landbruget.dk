@@ -82,8 +82,8 @@ class BuildingProcessor:
                 CREATE OR REPLACE TABLE enriched_buildings AS
                 SELECT 
                     jb.*,
-                    ia.currentUse,
-                    ia.buildingNature,
+                    ia.current_use,
+                    ia.building_nature,
                     ia.construction_year,
                     ia.floor_area,
                     ia.floors,
@@ -112,13 +112,13 @@ class BuildingProcessor:
                 building_area_m2 as building_floor_area_sqm,
                 join_status,
                 CASE 
-                    WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
-                    WHEN currentUse = 'agriculture' THEN 'agricultural'
-                    WHEN currentUse = 'publicServices' THEN 'educational'
+                    WHEN current_use IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                    WHEN current_use = 'agriculture' THEN 'agricultural'
+                    WHEN current_use = 'publicServices' THEN 'educational'
                     ELSE 'other'
                 END as building_usage_category,
-                currentUse as inspire_current_use,
-                buildingNature as inspire_building_nature,
+                current_use as inspire_current_use,
+                building_nature as inspire_building_nature,
                 construction_year as inspire_construction_year,
                 floor_area as inspire_floor_area,
                 floors as inspire_floors,
