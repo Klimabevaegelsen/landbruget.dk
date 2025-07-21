@@ -458,8 +458,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                     -- Winter vegetation cover (W code) from Bilag 8.5
                     CASE
+                        -- Specific case for grass plowed in autumn for beets/hemp
+                        WHEN h.crop_t_minus_1 IN (2, 3) AND h.crop_t IN (13, 14) THEN 'W8'
                         -- Winter cereal sown after grass
                         WHEN h.crop_t IN (2, 3, 21) AND h.crop_t_plus_1 IN (1, 5, 6, 19, 23) THEN 'W7'
+                        -- Weeds/volunteers after cereals
+                        WHEN h.crop_t IN (1, 4, 5, 6, 17, 18, 19, 20, 23) AND h.crop_t_plus_1 NOT IN (7, 22) THEN 'W5'
                         -- Grass, beets, or followed by grass/winter rape -> long growing season or green cover
                         WHEN h.crop_t IN (2, 3, 13, 14, 21) OR h.crop_t_plus_1 IN (2, 3, 7) THEN 'W6'
                         -- Followed by winter cereals
@@ -479,25 +483,53 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         ELSE 'MP2' -- Other crops
                     END as mp_code,
 
-                    -- Previous winter vegetation (WP code) from Bilag 8.3
+                    -- Previous winter vegetation (WP code) from Bilag 8.3 (2D Matrix)
                     CASE
-                        -- Grass plowed in autumn before winter crop
-                        WHEN h.crop_t_minus_1 IN (2, 3) AND h.crop_t IN (1, 5, 6, 7, 19, 20, 23) THEN 'WP10'
-                        -- Grass plowed in spring before spring crop
-                        WHEN h.crop_t_minus_1 IN (2, 3) AND h.crop_t NOT IN (1, 5, 6, 7, 19, 20, 23) THEN 'WP9'
-                        WHEN h.crop_t_minus_1 = 7 THEN 'WP8' -- Prev crop was winter rape
-                        WHEN h.crop_t_minus_1 IN (9, 12) THEN 'WP7' -- Prev crop was maize/potato
-                        WHEN h.crop_t_minus_1 IN (13, 14) THEN 'WP6' -- Prev crop was beets
-                        WHEN h.crop_t_minus_1 IN (10, 21) THEN 'WP5' -- Prev crop was fallow/seed grass
-                        WHEN h.crop_t_minus_1 = 22 THEN 'WP4' -- Prev crop was catch crop
-                        WHEN h.crop_t IN (2, 3, 21) THEN 'WP3' -- Current crop is grass
-                        WHEN h.crop_t IN (1, 5, 6, 7, 19, 23) THEN 'WP1' -- Current crop is winter cereal/rape
-                        ELSE 'WP2' -- Default to bare soil
+                        -- Row 1: Forfrugt = Vintercereal eller Vinterraps
+                        WHEN h.crop_t_minus_1 IN (5, 6, 7, 19, 23) THEN
+                            CASE
+                                WHEN h.crop_t IN (1, 5, 6, 19, 23) THEN 'WP1'
+                                WHEN h.crop_t = 7 THEN 'WP8'
+                                ELSE 'WP2'
+                            END
+                        -- Row 2: Forfrugt = Vårsæd
+                        WHEN h.crop_t_minus_1 IN (1, 4, 8, 17, 18, 20) THEN
+                            CASE
+                                WHEN h.crop_t IN (1, 5, 6, 19, 23) THEN 'WP1'
+                                WHEN h.crop_t = 7 THEN 'WP8'
+                                ELSE 'WP2'
+                            END
+                        -- Row 3: Forfrugt = Majs eller kartofler
+                        WHEN h.crop_t_minus_1 IN (9, 12) THEN
+                            CASE
+                                WHEN h.crop_t IN (1, 5, 6, 19, 23) THEN 'WP1'
+                                WHEN h.crop_t = 7 THEN 'WP8'
+                                ELSE 'WP7'
+                            END
+                        -- Row 4: Forfrugt = Roer eller hamp
+                        WHEN h.crop_t_minus_1 IN (13, 14) THEN 'WP6'
+                        -- Row 5: Forfrugt = Græs i omdrift, permanent græs
+                        WHEN h.crop_t_minus_1 IN (2, 3) THEN
+                            CASE
+                                WHEN h.crop_t NOT IN (1, 5, 6, 7, 19, 20, 23) THEN 'WP9' -- plowed in spring
+                                ELSE 'WP10' -- plowed in autumn
+                            END
+                        -- Row 6: Forfrugt = Frøgræs, brak
+                        WHEN h.crop_t_minus_1 IN (10, 21) THEN 'WP5'
+                        -- Row 7: Forfrugt = Efterafgrøde
+                        WHEN h.crop_t_minus_1 = 22 THEN 'WP4'
+                        -- Row 8: Forfrugt = Grøntsager
+                        WHEN h.crop_t_minus_1 = 11 THEN
+                            CASE
+                                WHEN h.crop_t = 7 THEN 'WP8'
+                                ELSE 'WP2'
+                            END
+                        ELSE 'WP2' -- Default
                     END as wp_code,
 
                     -- Winter crop group (WC code) for theta from Bilag 8.6
                     CASE
-                        WHEN h.crop_t IN (2, 3, 13, 14, 21) OR h.crop_t_plus_1 = 7 THEN 'WC1'
+                        WHEN w_code IN ('W4', 'W6', 'W7', 'W8') THEN 'WC1'
                         ELSE 'WC2'
                     END as wc_code
                 FROM full_crop_history h
