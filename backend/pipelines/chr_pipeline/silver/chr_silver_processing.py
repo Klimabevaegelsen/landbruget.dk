@@ -80,7 +80,7 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
             "besaetning_list.json",
             "besaetning_details.json",
             "diko_flytninger.json",
-            "chr_dyr_movement_summaries.json",  # Added: CHR cattle movement data
+            "chr_dyr_movement_summaries*.json",  # Added: CHR cattle movement data (streaming files)
             "ejendom_oplysninger.json",
             "ejendom_vet_events.json",
             "spf_su_herds.json",
@@ -268,8 +268,9 @@ def process_chr_data_streaming(
     """
     logging.info("--- Starting CHR Silver Processing (Streaming Mode) ---")
 
-    # Create silver directory if it doesn't exist
-    silver_dir.mkdir(parents=True, exist_ok=True)
+    # Create silver directory if it doesn't exist and if provided
+    if silver_dir is not None:
+        silver_dir.mkdir(parents=True, exist_ok=True)
 
     # Use bronze timestamp as export timestamp if not provided
     if export_timestamp is None:
@@ -321,10 +322,10 @@ def process_chr_data_streaming(
                 "description": "DIKO animal movements",
             },
             "cattle_movements": {
-                "file": "chr_dyr_movement_summaries.json",
+                "file": "*chr_dyr_movement_summaries.parquet",
                 "table_name": "cattle_movements",
                 "required": False,
-                "description": "CHR cattle movements",
+                "description": "CHR cattle movements (consolidated parquet)",
             },
             "ejendom_oplys": {
                 "file": "ejendom_oplysninger.json",
@@ -351,98 +352,245 @@ def process_chr_data_streaming(
 
         # Process each dataset individually
         for dataset_key, dataset_info in datasets_config.items():
-            gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
             table_name = dataset_info["table_name"]
-
             logging.info(f"Processing {dataset_info['description']}: {dataset_info['file']}")
 
-            # Check if file exists in GCS
-            if not gcs_access.file_exists(gcs_path):
-                if dataset_info["required"]:
-                    logging.error(f"❌ Required file not found: {gcs_path}")
-                    return False
-                else:
-                    logging.info(f"⚠️ Optional file not found, skipping: {gcs_path}")
-                    continue
+            # Handle pattern matching for streaming files (cattle_movements)
+            if "*" in dataset_info["file"]:
+                # This is a pattern for streaming files
+                pattern = dataset_info["file"]
+                gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
 
-            try:
-                # Get file size for logging
-                file_size_bytes = gcs_access.get_file_size(gcs_path)
-                file_size_mb = file_size_bytes / (1024 * 1024)
-                logging.info(f"📁 File size: {file_size_mb:.1f} MB")
+                logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
 
-                # Create table directly from GCS JSON file using streaming download
-                # Note: GCSDataAccess.create_table_from_gcs only supports parquet, so we implement JSON loading here
-                with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as temp_file:
-                    temp_path = Path(temp_file.name)
+                try:
+                    # Use the same pattern as other successful pipelines
+                    # Use gcs_access.list_files() with full GCS pattern including wildcards
+                    gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
+                    all_files = gcs_access.list_files(gcs_list_pattern)
 
-                    # Download JSON file to temp location
-                    with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
-                        with open(temp_path, "wb") as dst:
-                            shutil.copyfileobj(src, dst)
+                    # Filter files matching the pattern (handle both .json and .parquet files)
+                    if pattern.endswith(".parquet"):
+                        pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
+                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".parquet")]
+                    else:
+                        pattern_prefix = pattern.replace("*", "").replace(".json", "")
+                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
 
-                    # Load into DuckDB using read_json_auto for robust JSON parsing
-                    con.raw_sql(f"""
-                        CREATE TABLE {table_name} AS 
-                        SELECT * FROM read_json_auto('{str(temp_path)}', 
-                                                   maximum_object_size=1073741824)
-                    """)
+                    if not matching_files:
+                        if dataset_info["required"]:
+                            logging.error(f"❌ No files found matching required pattern: {pattern}")
+                            return False
+                        else:
+                            logging.info(f"⚠️ No files found matching optional pattern: {pattern} - skipping")
+                            continue
 
-                    # Cleanup temp file
-                    temp_path.unlink()
+                    logging.info(f"📁 Found {len(matching_files)} files matching pattern: {pattern}")
 
-                # Get record count for verification
-                count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-                record_count = count_result[0] if count_result else 0
+                    # Process files in batches to avoid memory issues (600 files is too many at once)
+                    batch_size = 50  # Process 50 files at a time
 
-                logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
-                loaded_tables[dataset_key] = table_name
+                    # Create main table from first batch to get correct schema
+                    table_created = False
+                    total_records = 0
 
-                # Force garbage collection after large datasets
-                if file_size_mb > 50:  # For files > 50MB
-                    import gc
+                    for i in range(0, len(matching_files), batch_size):
+                        batch_files = matching_files[i : i + batch_size]
+                        batch_file_list = "', '".join(batch_files)
 
-                    gc.collect()
-                    logging.debug(f"Forced garbage collection after loading {file_size_mb:.1f}MB file")
+                        logging.info(
+                            f"📦 Processing batch {i // batch_size + 1}/{(len(matching_files) + batch_size - 1) // batch_size} ({len(batch_files)} files)"
+                        )
 
-            except Exception as e:
-                if dataset_info["required"]:
-                    logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
-                    return False
-                else:
-                    logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
-                    continue
+                        # Load batch into temporary table - use appropriate reader based on file type
+                        if pattern.endswith(".parquet"):
+                            con.raw_sql(f"""
+                                CREATE OR REPLACE TABLE temp_batch AS 
+                                SELECT * FROM read_parquet(['{batch_file_list}'])
+                            """)
+                        else:
+                            con.raw_sql(f"""
+                                CREATE OR REPLACE TABLE temp_batch AS 
+                                SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
+                            """)
 
-        # Handle VetStat XML data separately (if exists)
+                        # Create main table with correct schema from first batch
+                        if not table_created:
+                            con.raw_sql(f"CREATE TABLE {table_name} AS SELECT * FROM temp_batch")
+                            table_created = True
+                        else:
+                            # Insert batch data into main table
+                            con.raw_sql(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+
+                        # Count records in this batch
+                        batch_count = con.raw_sql("SELECT COUNT(*) FROM temp_batch").fetchone()[0]
+                        total_records += batch_count
+
+                        # Cleanup temp table
+                        con.raw_sql("DROP TABLE temp_batch")
+
+                    logging.info(
+                        f"✅ Loaded {table_name}: {total_records:,} records from {len(matching_files)} files (processed in batches)"
+                    )
+                    loaded_tables[dataset_key] = table_name
+
+                except Exception as e:
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
+                        return False
+                    else:
+                        logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
+                        continue
+            else:
+                # Single file processing (original logic)
+                gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
+
+                # Check if file exists in GCS
+                if not gcs_access.file_exists(gcs_path):
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Required file not found: {gcs_path}")
+                        return False
+                    else:
+                        logging.info(f"⚠️ Optional file not found, skipping: {gcs_path}")
+                        continue
+
+                try:
+                    # Get file size for logging
+                    file_size_bytes = gcs_access.get_file_size(gcs_path)
+                    file_size_mb = file_size_bytes / (1024 * 1024)
+                    logging.info(f"📁 File size: {file_size_mb:.1f} MB")
+
+                    # Detect file type and use appropriate DuckDB function
+                    file_extension = dataset_info["file"].split(".")[-1].lower()
+
+                    if file_extension == "parquet":
+                        # Download parquet file to temp location (DuckDB can't read directly from GCS)
+                        logging.info(f"Loading parquet file via temp download: {gcs_path}")
+                        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
+                            temp_path = Path(temp_file.name)
+
+                            # Download parquet file to temp location
+                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                                with open(temp_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+
+                            # Load into DuckDB using read_parquet
+                            con.raw_sql(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_parquet('{str(temp_path)}')
+                            """)
+
+                            # Cleanup temp file
+                            temp_path.unlink()
+                    else:
+                        # Download JSON/other files to temp location for processing
+                        file_suffix = f".{file_extension}" if file_extension else ".json"
+                        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as temp_file:
+                            temp_path = Path(temp_file.name)
+
+                            # Download file to temp location
+                            with gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src:
+                                with open(temp_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+
+                            # Load into DuckDB using read_json_auto for robust JSON parsing
+                            con.raw_sql(f"""
+                                CREATE TABLE {table_name} AS 
+                                SELECT * FROM read_json_auto('{str(temp_path)}', 
+                                                           maximum_object_size=1073741824)
+                            """)
+
+                            # Cleanup temp file
+                            temp_path.unlink()
+
+                    # Get record count for verification
+                    count_result = con.raw_sql(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                    record_count = count_result[0] if count_result else 0
+
+                    logging.info(f"✅ Loaded {table_name}: {record_count:,} records")
+                    loaded_tables[dataset_key] = table_name
+
+                    # Force garbage collection after large datasets
+                    if file_size_mb > 50:  # For files > 50MB
+                        import gc
+
+                        gc.collect()
+                        logging.debug(f"Forced garbage collection after loading {file_size_mb:.1f}MB file")
+
+                except Exception as e:
+                    if dataset_info["required"]:
+                        logging.error(f"❌ Failed to load required dataset {dataset_key}: {e}")
+                        return False
+                    else:
+                        logging.warning(f"⚠️ Failed to load optional dataset {dataset_key}: {e}")
+                        continue
+
+        # Handle VetStat JSON data separately (if exists)
         vetstat_table_name = None
-        vetstat_gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.xml"
 
-        if gcs_access.file_exists(vetstat_gcs_path):
-            logging.info("Processing VetStat XML data...")
+        # Look for VetStat JSON file (consolidated from XML in bronze layer)
+        vetstat_json_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
+        vetstat_json_files = [vetstat_json_path] if gcs_access.file_exists(vetstat_json_path) else []
+
+        if vetstat_json_files:
+            logging.info(f"Processing VetStat JSON file: {vetstat_json_path}")
             try:
-                # Download VetStat XML to temporary file for processing
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_xml:
-                    temp_xml_path = Path(temp_xml.name)
+                # Create temporary files for all VetStat JSON data
+                all_vetstat_data = []
 
-                    # Download XML content
-                    with gcs_access.fs.open(vetstat_gcs_path.replace("gs://", ""), "r") as src:
-                        temp_xml.write(src.read())
+                for json_file in vetstat_json_files:
+                    try:
+                        # Download and parse each JSON file
+                        json_data = gcs_access.download_json(json_file)
+                        logging.info(f"Downloaded VetStat JSON: {len(json_data)} top-level items")
 
-                # Process XML to JSONL
-                temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
+                        # Handle nested structure: list of lists of dictionaries
+                        if isinstance(json_data, list):
+                            for item in json_data:
+                                if isinstance(item, list):
+                                    # Flatten nested lists
+                                    all_vetstat_data.extend(item)
+                                else:
+                                    # Direct dictionary
+                                    all_vetstat_data.append(item)
+                        else:
+                            all_vetstat_data.append(json_data)
+                    except Exception as e:
+                        logging.warning(f"Failed to process VetStat JSON file {json_file}: {e}")
+                        continue
 
-                if run_xml_parser(temp_xml_path, temp_jsonl_path):
-                    # Load processed JSONL into DuckDB
-                    con.raw_sql(f"""
-                        CREATE TABLE vetstat AS 
-                        SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
-                                                   maximum_object_size=1073741824)
-                    """)
+                logging.info(f"Total VetStat records after flattening: {len(all_vetstat_data)}")
+
+                if all_vetstat_data:
+                    # Save consolidated JSON to temporary file
+                    temp_jsonl_path = silver_dir / "_intermediate_vetstat.jsonl"
+                    with open(temp_jsonl_path, "w") as f:
+                        for record in all_vetstat_data:
+                            f.write(json.dumps(record) + "\n")
+
+                    logging.info(f"Saved {len(all_vetstat_data)} records to temporary JSONL file")
+
+                    # Load consolidated JSONL into DuckDB
+                    try:
+                        con.raw_sql(f"""
+                            CREATE TABLE vetstat AS 
+                            SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
+                                                       maximum_object_size=1073741824)
+                        """)
+                        logging.info("Successfully created VetStat table in DuckDB")
+                    except Exception as e:
+                        logging.error(f"Failed to create VetStat table in DuckDB: {e}")
+                        raise
 
                     # Verify loading
                     count_result = con.raw_sql("SELECT COUNT(*) FROM vetstat").fetchone()
                     record_count = count_result[0] if count_result else 0
-                    logging.info(f"✅ Loaded vetstat: {record_count:,} records")
+                    logging.info(f"✅ Loaded vetstat: {record_count:,} records from {len(vetstat_json_files)} files")
+
+                    if record_count == 0:
+                        logging.warning(
+                            "VetStat table was created but contains 0 records - this may indicate a parsing issue"
+                        )
 
                     vetstat_table_name = "vetstat"
                     loaded_tables["vetstat"] = vetstat_table_name
@@ -451,16 +599,12 @@ def process_chr_data_streaming(
                     if temp_jsonl_path.exists():
                         temp_jsonl_path.unlink()
                 else:
-                    logging.warning("⚠️ VetStat XML processing failed, proceeding without antibiotic data")
-
-                # Cleanup temporary XML
-                if temp_xml_path.exists():
-                    temp_xml_path.unlink()
+                    logging.warning("⚠️ No VetStat data found in JSON files, proceeding without antibiotic data")
 
             except Exception as e:
-                logging.warning(f"⚠️ Failed to process VetStat data: {e}")
+                logging.warning(f"⚠️ Failed to process VetStat JSON data: {e}")
         else:
-            logging.info("⚠️ VetStat XML file not found, proceeding without antibiotic data")
+            logging.info("⚠️ VetStat JSON files not found, proceeding without antibiotic data")
 
         # Check that essential tables were loaded
         essential_tables = ["bes_details", "ejendom_oplys"]
@@ -605,9 +749,9 @@ def process_chr_data_streaming(
                             con, context.get("diko_flyt_table"), silver_dir
                         )
 
-                    # Process CHR_dyr cattle movements (optional)
+                    # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                     if context.get("cattle_movements_table") is not None:
-                        chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                        chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
                             con, context.get("cattle_movements_table"), silver_dir
                         )
                     else:
@@ -931,7 +1075,7 @@ def process_chr_data(
             "file_key": "besaetning_details.json",
         },
         "diko_flyt": {"mem_key": "diko_flytninger", "file_key": "diko_flytninger.json"},
-        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries.json"},
+        "cattle_movements": {"mem_key": "chr_dyr_movement_summaries", "file_key": "chr_dyr_movement_summaries.parquet"},
         "ejendom_oplys": {
             "mem_key": "ejendom_oplysninger",
             "file_key": "ejendom_oplysninger.json",
@@ -1058,24 +1202,68 @@ def process_chr_data(
         # --- Attempt 2: Load from Files (when not using memory) --- #
         if not successfully_loaded and not load_from_memory and bronze_dir:
             logging.info(f"Attempting to load '{table_name}' from bronze files...")
-            file_path = bronze_dir / source_info["file_key"]
+            file_key = source_info["file_key"]
 
-            if file_path.exists():
-                try:
-                    logging.info(f"Loading {table_name} from file: {file_path}")
-                    # Use DuckDB's read_json_auto for robust JSON loading
-                    max_obj_size_bytes = 1073741824  # 1GB
-                    con.con.sql(
-                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
-                    )
-                    raw_tables[table_name] = con.table(table_name)
-                    successfully_loaded = True
-                    logging.info(f"Successfully loaded {table_name} from file {file_path}")
+            # Handle pattern matching for streaming files
+            if "*" in file_key:
+                # This is a pattern for streaming files
+                import glob
 
-                except Exception as e_file:
-                    logging.error(f"Failed to load '{table_name}' from file {file_path}: {e_file}")
+                pattern_path = bronze_dir / file_key
+                matching_files = glob.glob(str(pattern_path))
+
+                if matching_files:
+                    try:
+                        logging.info(
+                            f"Loading {table_name} from {len(matching_files)} files matching pattern: {file_key}"
+                        )
+                        # Use appropriate DuckDB reader based on file type
+                        file_list_str = "', '".join(matching_files)
+
+                        if file_key.endswith(".parquet"):
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet(['{file_list_str}']);"
+                            )
+                        else:
+                            max_obj_size_bytes = 1073741824  # 1GB
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size={max_obj_size_bytes});"
+                            )
+                        raw_tables[table_name] = con.table(table_name)
+                        successfully_loaded = True
+                        logging.info(f"Successfully loaded {table_name} from {len(matching_files)} files")
+
+                    except Exception as e_file:
+                        logging.error(f"Failed to load '{table_name}' from pattern {file_key}: {e_file}")
+                else:
+                    logging.warning(f"No files found matching pattern for '{table_name}': {pattern_path}")
             else:
-                logging.warning(f"File not found for '{table_name}': {file_path}")
+                # Single file processing (original logic)
+                file_path = bronze_dir / file_key
+
+                if file_path.exists():
+                    try:
+                        logging.info(f"Loading {table_name} from file: {file_path}")
+                        # Detect file type and use appropriate reader
+                        if file_path.suffix.lower() == ".parquet":
+                            # Use read_parquet for parquet files
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{str(file_path)}');"
+                            )
+                        else:
+                            # Use read_json_auto for JSON files
+                            max_obj_size_bytes = 1073741824  # 1GB
+                            con.con.sql(
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
+                            )
+                        raw_tables[table_name] = con.table(table_name)
+                        successfully_loaded = True
+                        logging.info(f"Successfully loaded {table_name} from file {file_path}")
+
+                    except Exception as e_file:
+                        logging.error(f"Failed to load '{table_name}' from file {file_path}: {e_file}")
+                else:
+                    logging.warning(f"File not found for '{table_name}': {file_path}")
 
         if not successfully_loaded:
             # Check if this is an optional table that can be skipped
@@ -1258,9 +1446,9 @@ def process_chr_data(
                     con, context.get("diko_flyt_table"), silver_dir
                 )
 
-                # Process CHR_dyr cattle movements (optional - only if animal_movements bronze step was run)
+                # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                 if context.get("cattle_movements_table") is not None:
-                    chr_dyr_movements_table = animal_movements.create_chr_dyr_animal_movements_table(
+                    chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
                         con, context.get("cattle_movements_table"), silver_dir
                     )
                 else:

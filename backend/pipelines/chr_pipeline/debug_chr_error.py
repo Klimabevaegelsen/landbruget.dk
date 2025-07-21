@@ -44,7 +44,8 @@ def load_env_credentials():
 def test_chr_pipeline():
     """Test the CHR pipeline with problematic herds"""
     try:
-        from bronze.load_chr_dyr import create_soap_client, load_animal_movements
+        from bronze.animal_movements import load_animal_movements
+        from bronze.auth import create_soap_client
 
         print("=== CHR Pipeline Debug Test ===")
 
@@ -90,10 +91,10 @@ def test_chr_pipeline():
                 # Let's also test the raw SOAP call to see what we get
                 print(f"\n--- Testing raw SOAP call for herd {test_herd} ---")
                 try:
-                    from bronze.load_chr_dyr import _create_base_request
+                    from bronze.utils import create_base_request
 
                     # Create the request
-                    request = _create_base_request(username)
+                    request = create_base_request(username)
                     request.update(
                         {
                             "BesaetningsNummer": test_herd,
