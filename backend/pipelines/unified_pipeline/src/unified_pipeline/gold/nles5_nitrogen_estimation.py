@@ -512,6 +512,119 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.error(f"Error preparing crop sequences: {e}")
             raise
 
+    @timed(name="Preparing nitrogen inputs")
+    def _prepare_nitrogen_inputs(self, agricultural_fields_table: str, fertilizer_table: Optional[str]) -> str:
+        """
+        Prepare all nitrogen inputs including current, previous years, and N-fixation.
+
+        Args:
+            agricultural_fields_table: Name of the table with yearly field data.
+            fertilizer_table: Name of the table with fertilizer accounts data, if available.
+
+        Returns:
+            Table name with all required nitrogen data for each field and year.
+        """
+        try:
+            self.log.info("Preparing N-fixation and fertilizer history data.")
+
+            # Step 1: Prepare N-fixation data
+            n_fixation_mapping_sql = """
+            CREATE OR REPLACE TABLE n_fixation_mapping AS
+            SELECT unnest(codes) as glr_code, fixation_rate
+            FROM (VALUES
+                (200, [18, 25, 30, 31, 32, 35, 36, 54, 217, 326, 424]),
+                (100, [7]),
+                (70, [214, 234]),
+                (140, [215]),
+                (140, [171, 173, 273, 277, 288]),
+                (200, [120, 121]),
+                (120, [170, 172, 174, 255, 256, 260, 261, 262, 272, 274, 284, 306]),
+                (60, [247, 258, 266, 267, 268, 276, 285, 286, 287]),
+                (5, [248, 249, 250, 251, 252, 253, 254, 257, 259, 263, 264, 265, 269, 275, 278, 279, 305, 315, 350, 488]),
+                (20, [943, 944, 945, 946, 960, 961, 962, 963, 964, 965, 966, 975])
+            ) AS t(fixation_rate, codes);
+            """
+            self.conn.execute(n_fixation_mapping_sql)
+
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE n_fixation_history AS
+                WITH n_fixation_by_field_year AS (
+                    SELECT
+                        a.field_id,
+                        a.year,
+                        COALESCE(fix.fixation_rate, 2.0) as nfix_ha -- Default to 2 kg N/ha
+                    FROM {agricultural_fields_table} a
+                    LEFT JOIN n_fixation_mapping fix ON a.crop_code = fix.glr_code
+                )
+                SELECT
+                    field_id,
+                    year,
+                    nfix_ha,
+                    (
+                        COALESCE(LAG(nfix_ha, 1) OVER (PARTITION BY field_id ORDER BY year), 0.0) +
+                        COALESCE(LAG(nfix_ha, 2) OVER (PARTITION BY field_id ORDER BY year), 0.0)
+                    ) / 2.0 as nfix_prev
+                FROM n_fixation_by_field_year;
+            """)
+
+            # Step 2: Prepare fertilizer history data
+            if fertilizer_table:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE fertilizer_history AS
+                    SELECT
+                        cvr_number,
+                        year,
+                        mineral_n_foraar,
+                        mineral_n_eft,
+                        mineral_n_udb,
+                        organic_n_hus,
+                        -- Calculate average of previous 2 years for mineral and organic N
+                        (
+                            COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
+                            COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
+                        ) / 2.0 as mineral_n_prev,
+                        (
+                            COALESCE(LAG(organic_n_hus, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
+                            COALESCE(LAG(organic_n_hus, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
+                        ) / 2.0 as organic_n_prev
+                    FROM {fertilizer_table};
+                """)
+            else:
+                self.log.warning("Fertilizer data not available, will use defaults for all fertilizer inputs.")
+                # Create an empty table so the join doesn't fail
+                self.conn.execute("CREATE OR REPLACE TABLE fertilizer_history (cvr_number BIGINT, year INT);")
+
+            # Step 3: Combine all data into a final input table
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE full_nles5_input_data AS
+                SELECT
+                    f.*,
+                    -- Soil N from soil join
+                    f.tn_t_ha,
+                    -- N-fixation data
+                    COALESCE(nfix.nfix_ha, 2.0) as nfix_ha,
+                    COALESCE(nfix.nfix_prev, 2.0) as nfix_prev,
+                    -- Fertilizer data
+                    COALESCE(fert.mineral_n_foraar, 100.0) as mineral_n_foraar,
+                    COALESCE(fert.mineral_n_eft, 10.0) as mineral_n_eft,
+                    COALESCE(fert.mineral_n_udb, 5.0) as mineral_n_udb,
+                    COALESCE(fert.organic_n_hus, 40.0) as organic_n_hus,
+                    COALESCE(fert.mineral_n_prev, 120.0) as mineral_n_prev,
+                    COALESCE(fert.organic_n_prev, 40.0) as organic_n_prev
+                FROM fields_with_climate_soil_crops f
+                LEFT JOIN n_fixation_history nfix ON f.field_id = nfix.field_id AND f.year = nfix.year
+                LEFT JOIN fertilizer_history fert ON f.cvr_number = fert.cvr_number AND f.year = fert.year;
+            """)
+
+            count = self.conn.execute("SELECT COUNT(*) FROM full_nles5_input_data").fetchone()[0]
+            self.log.info(f"Prepared full nitrogen inputs for {count:,} field-years.")
+
+            return "full_nles5_input_data"
+
+        except Exception as e:
+            self.log.error(f"Error preparing nitrogen inputs: {e}")
+            raise
+
     @timed(name="Loading agricultural fields data")
     def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
         """
@@ -1012,77 +1125,20 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     @timed(name="Spatial join fields with climate data")
     def _spatial_join_fields_climate(self) -> str:
-        """
-        Perform spatial join between agricultural fields and climate data.
-
-        Returns:
-            Table name containing fields joined with climate data
-        """
+        """Spatially join fields with nearest climate data point."""
         try:
-            self.log.info("Performing spatial join between fields and climate data")
+            self.log.info("Performing spatial join between fields and nearest climate data point")
 
-            # Find the geometry column in agricultural_fields table
-            columns_result = self.conn.execute("DESCRIBE agricultural_fields").fetchall()
-            column_names = [row[0] for row in columns_result]
+            # Create a spatial index on climate data for performance
+            self.conn.execute("CREATE INDEX climate_geom_idx ON climate_percolation(geometry);")
 
-            # Look for common geometry column names
-            geometry_column = None
-            geometry_format = None  # 'wkt' or 'wkb'
-
-            for col_name in ['geometry_wkt', 'geometry', 'wkb_geometry', 'the_geom', 'geom']:
-                if col_name in column_names:
-                    geometry_column = col_name
-                    if col_name == 'geometry_wkt':
-                        geometry_format = 'wkt'
-                    else:
-                        geometry_format = 'wkb'
-                    break
-
-            if not geometry_column:
-                self.log.error(f"No geometry column found in agricultural_fields. Available columns: {column_names}")
-                raise ValueError("No geometry column found in agricultural fields data")
-
-            self.log.info(f"Using geometry column: {geometry_column} (format: {geometry_format})")
-
-            # Convert geometries to proper spatial objects first
-            if geometry_format == 'wkt':
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE agricultural_fields_spatial AS
-                    SELECT
-                        *,
-                        ST_GeomFromText({geometry_column}) as geometry_spatial
-                    FROM agricultural_fields
-                    WHERE {geometry_column} IS NOT NULL
-                        AND CAST(area_ha AS DOUBLE) > 0
-                """)
-            else:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE agricultural_fields_spatial AS
-                    SELECT
-                        *,
-                        ST_GeomFromWKB({geometry_column}) as geometry_spatial
-                    FROM agricultural_fields
-                    WHERE {geometry_column} IS NOT NULL
-                        AND CAST(area_ha AS DOUBLE) > 0
-                """)
-
-            # Now validate the spatial geometries
-            validate_and_transform_geometries_duckdb(
-                self.conn, "agricultural_fields_spatial", "agricultural_fields_spatial", geometry_column="geometry_spatial"
-            )
-
-            # Create spatial join using the spatial table
-            self.conn.execute(f"""
+            # Use QUALIFY to find the single nearest climate grid point for each field centroid.
+            # This is a highly efficient, DuckDB- idiomatic way to perform a nearest-neighbor join.
+            # We use ST_DWithin to limit the search space for performance.
+            self.conn.execute("""
                 CREATE OR REPLACE TABLE fields_with_climate AS
                 SELECT
-                    f.field_id,
-                    f.cvr_number,
-                    CAST(f.area_ha AS DOUBLE) as area_ha,
-                    COALESCE(f.crop_name, f.crop_code) as crop_type,
-                    f.organic_farming,
-                    f.year,
-                    ST_AsText(f.geometry_spatial) as field_geometry_wkt,
-                    -- Climate data from nearest grid point
+                    f.*,
                     c.perco_apr_aug_current,
                     c.perco_sep_mar_current,
                     c.perco_sep_mar_previous,
@@ -1090,77 +1146,31 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     c.avg_precipitation,
                     c.avg_evaporation,
                     c.sufficient_climate_data,
-                    -- Calculate distance to climate grid point for quality assessment
-                    ST_Distance(
-                        f.geometry_spatial,
-                        c.geometry
-                    ) as climate_distance_m
+                    ST_Distance(f.centroid_geom, c.geometry) as climate_distance_m
                 FROM agricultural_fields_spatial f
                 LEFT JOIN climate_percolation c
-                    ON ST_DWithin(
-                        f.geometry_spatial,
-                        c.geometry,
-                        5000  -- 5km search radius for climate data
-                    )
+                    ON ST_DWithin(f.centroid_geom, c.geometry, 50000) -- 50km search radius
                 QUALIFY ROW_NUMBER() OVER (
                     PARTITION BY f.field_id
-                    ORDER BY ST_Distance(f.geometry_spatial, c.geometry)
-                ) = 1
+                    ORDER BY ST_Distance(f.centroid_geom, c.geometry) ASC
+                ) = 1;
             """)
 
+            # Drop the centroid_geom column as it's no longer needed
+            self.conn.execute("ALTER TABLE fields_with_climate DROP centroid_geom;")
+
             count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
-            climate_matched = self.conn.execute(
-                "SELECT COUNT(*) FROM fields_with_climate WHERE total_percolation IS NOT NULL"
-            ).fetchone()[0]
-
-            self.log.info(f"Spatial join complete: {count:,} fields, {climate_matched:,} with climate data")
-
-            # If no climate data matched, create a fallback version with default climate values
-            if climate_matched == 0:
-                self.log.warning("No climate data matched to fields, using default climate values")
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE fields_with_climate AS
-                    SELECT
-                        f.field_id,
-                        f.cvr_number,
-                        CAST(f.area_ha AS DOUBLE) as area_ha,
-                        COALESCE(f.crop_name, f.crop_code) as crop_type,
-                        f.organic_farming,
-                        f.year,
-                        ST_AsText(f.geometry_spatial) as field_geometry_wkt,
-                        -- Default climate data
-                        300.0 as perco_apr_aug_current,
-                        400.0 as perco_sep_mar_current,
-                        400.0 as perco_sep_mar_previous,
-                        900.0 as total_percolation,
-                        800.0 as avg_precipitation,
-                        300.0 as avg_evaporation,
-                        true as sufficient_climate_data,
-                        0.0 as climate_distance_m
-                    FROM agricultural_fields_spatial f
-                """)
-
-                fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
-                self.log.info(f"Created fallback fields_with_climate: {fallback_count:,} fields with default climate data")
-
+            self.log.info(f"Spatially joined {count:,} fields with nearest climate data")
             return "fields_with_climate"
 
         except Exception as e:
-            self.log.error(f"Error in spatial join: {e}")
-            # Create a minimal fallback version
-            self.log.warning("Creating minimal fallback fields_with_climate due to spatial join error")
+            self.log.error(f"Error in spatial join with climate data: {e}")
+            self.log.info("Creating fallback climate data for all fields")
             try:
-                self.conn.execute(f"""
+                self.conn.execute("""
                     CREATE OR REPLACE TABLE fields_with_climate AS
                     SELECT
-                        f.field_id,
-                        f.cvr_number,
-                        CAST(f.area_ha AS DOUBLE) as area_ha,
-                        COALESCE(f.crop_name, f.crop_code) as crop_type,
-                        f.organic_farming,
-                        f.year,
-                        ST_AsText(f.geometry_spatial) as field_geometry_wkt,
-                        -- Default climate data
+                        *,
                         300.0 as perco_apr_aug_current,
                         400.0 as perco_sep_mar_current,
                         400.0 as perco_sep_mar_previous,
@@ -1168,42 +1178,67 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         800.0 as avg_precipitation,
                         300.0 as avg_evaporation,
                         true as sufficient_climate_data,
-                        0.0 as climate_distance_m
-                    FROM agricultural_fields_spatial f
+                        -1.0 as climate_distance_m
+                    FROM agricultural_fields_spatial
                 """)
-
-                fallback_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate").fetchone()[0]
-                self.log.info(f"Created emergency fallback fields_with_climate: {fallback_count:,} fields")
                 return "fields_with_climate"
-            except Exception as fallback_error:
-                self.log.error(f"Even fallback creation failed: {fallback_error}")
+            except Exception as fallback_e:
+                self.log.error(f"Fallback climate data creation failed: {fallback_e}")
                 raise
 
     @timed(name="Joining with soil data")
     def _join_with_soil_data(self) -> str:
         """
-        Join fields with soil type data.
-
-        Returns:
-            Table name containing fields with climate and soil data
+        Spatially join fields with soil data using largest intersection area.
+        Also joins with pre-calculated crop classifications.
         """
         try:
-            self.log.info("Joining fields with soil type data")
+            self.log.info("Spatially joining fields with soil data (largest overlap)...")
+            # Create a spatial index on soil data for performance
+            self.conn.execute(f"CREATE INDEX soil_geom_idx ON soil_types_spatial(geometry_spatial);")
 
-            # Convert soil geometries to proper spatial objects first
+            # Find all intersections between fields and soil types, calculate the area of overlap,
+            # and rank them to find the soil type with the largest intersection for each field.
+            # This is a robust way to assign a single, most-representative soil type to each field.
             self.conn.execute("""
-                CREATE OR REPLACE TABLE soil_types_spatial AS
+                CREATE OR REPLACE TABLE fields_with_climate_soil AS
+                WITH field_soil_intersections AS (
+                    SELECT
+                        f.field_id,
+                        s.soil_code,
+                        s.soil_description,
+                        s.clay_content,
+                        s.total_n_content,
+                        ST_Area(ST_Intersection(f.geom, s.geometry_spatial)) as intersection_area
+                    FROM fields_with_climate f
+                    JOIN soil_types_spatial s ON ST_Intersects(f.geom, s.geometry_spatial)
+                ),
+                ranked_intersections AS (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER(PARTITION BY field_id ORDER BY intersection_area DESC) as rn
+                    FROM field_soil_intersections
+                )
                 SELECT
-                    *,
-                    ST_GeomFromWKB(geometry) as geometry_spatial
-                FROM soil_types
-                WHERE geometry IS NOT NULL
+                    f.*,
+                    COALESCE(s.soil_code, '5') as soil_code,
+                    COALESCE(s.soil_description, 'Medium clay soil') as soil_description,
+                    COALESCE(s.clay_content, 15.0) as clay_content,
+                    COALESCE(s.total_n_content, 5.0) as tn_t_ha,
+                    CASE
+                        WHEN COALESCE(s.soil_code, '5') IN ('1', '2', '3', '4') THEN 'sand'
+                        ELSE 'clay'
+                    END as soil_type_category,
+                    s.soil_code IS NOT NULL as has_soil_data
+                FROM fields_with_climate f
+                LEFT JOIN ranked_intersections s ON f.field_id = s.field_id AND s.rn = 1;
             """)
 
-            # Now validate the spatial geometries
-            validate_and_transform_geometries_duckdb(
-                self.conn, "soil_types_spatial", "soil_types_spatial", geometry_column="geometry_spatial"
-            )
+            count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil").fetchone()[0]
+            soil_matched = self.conn.execute(
+                "SELECT COUNT(*) FROM fields_with_climate_soil WHERE has_soil_data = true"
+            ).fetchone()[0]
+            self.log.info(f"Soil join complete: {count:,} fields, {soil_matched:,} with soil data")
 
             # Join with crop classifications
             self.conn.execute("""
@@ -1227,8 +1262,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         except Exception as e:
             self.log.error(f"Error joining soil data: {e}")
-            # Create a fallback version with default soil values
-            self.log.warning("Creating fallback fields_with_climate_soil_crops due to soil join error")
+            self.log.warning("Creating fallback with default soil and crop data due to error")
             try:
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
@@ -2158,6 +2192,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     FROM fields_with_climate_and_crops f_c
                 """)
                 fields_complete_table = "fields_with_climate_soil_crops"
+
+            # Prepare all nitrogen inputs (fertilizer, fixation, history)
+            nitrogen_input_table = self._prepare_nitrogen_inputs(
+                loaded_tables["agricultural_fields"],
+                loaded_tables.get(self.config.fertilizer_dataset)
+            )
 
             # Calculate NLES5 nitrogen estimates
             estimates_table = self._calculate_nles5_estimates()
