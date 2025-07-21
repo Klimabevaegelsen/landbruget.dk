@@ -342,6 +342,8 @@ def execute(cli_config: cli.CliConfig) -> int:
                 # Note: This requires silver datasets to be available:
                 # agricultural_fields, soil_types, dmi (climate data)
                 (NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig),
+            ],
+        },
         cli.Source.cvr_enrichment: {
             cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
             cli.Stage.all: [
@@ -486,9 +488,3 @@ def run_cli(
     print(app_config)
     exit_code = execute(app_config)
     exit(exit_code)
-
-
-def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
-    """Run a specific pipeline by name and stage."""
-    pipeline_jobs = get_pipeline_jobs(pipeline_name)
-    asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))
