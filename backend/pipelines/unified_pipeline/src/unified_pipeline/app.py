@@ -106,14 +106,7 @@ async def execute_pipeline_jobs(
         log.info(f"Running {job_cls.__name__} for stage {stage}")
 
         # Create config instance and pass CLI config for FVM WFS filtering
-        if config_cls == NLES5NitrogenEstimationGoldConfig:
-            # Create NLES5 config with test mode parameters
-            config_instance = config_cls(
-                test_mode=cli_config.test_mode,
-                max_test_records=cli_config.max_test_records
-            )
-        else:
-            config_instance = config_cls()
+        config_instance = config_cls()
 
         if hasattr(config_instance, "apply_cli_filters"):
             config_instance.apply_cli_filters(cli_config)
@@ -436,27 +429,13 @@ def execute(cli_config: cli.CliConfig) -> int:
     help="Year filter for FVM matrix jobs (e.g., 2024).",
     required=False,
 )
-@click.option(
-    "--test-mode",
-    "test_mode",
-    is_flag=True,
-    help="Enable test mode to process only a small subset of data for local development.",
-)
-@click.option(
-    "--max-test-records",
-    "max_test_records",
-    type=int,
-    default=1000,
-    help="Maximum number of records to process in test mode (default: 1000).",
-)
+
 def run_cli(
     env: str,
     source: str,
     stage: str,
     fvm_layer_type: str = None,
     fvm_year: int = None,
-    test_mode: bool = False,
-    max_test_records: int = 1000,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -482,8 +461,6 @@ def run_cli(
         stage=cli.Stage(stage),
         fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
         fvm_year=fvm_year,
-        test_mode=test_mode,
-        max_test_records=max_test_records,
     )
     print(app_config)
     exit_code = execute(app_config)

@@ -10,7 +10,7 @@ from unified_pipeline.gold.nles5_nitrogen_estimation import (
     NLES5NitrogenEstimationGold,
     NLES5NitrogenEstimationGoldConfig,
 )
-from unified_pipeline.util.gcs_util import GCSUtil
+from unified_pipeline.util.gcs_access import GCSDataAccess
 
 
 class TestNLES5NitrogenEstimationGold:
@@ -29,7 +29,7 @@ class TestNLES5NitrogenEstimationGold:
     @pytest.fixture
     def mock_gcs_util(self):
         """Create mock GCS utility."""
-        return Mock(spec=GCSUtil)
+        return Mock(spec=GCSDataAccess)
 
     @pytest.fixture
     def sample_agricultural_fields(self):
