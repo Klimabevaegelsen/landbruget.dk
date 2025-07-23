@@ -46,7 +46,6 @@ from pydantic import ConfigDict
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
@@ -64,7 +63,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Input silver datasets
     soil_types_dataset: str = "soil_types"
     dmi_dataset: str = "dmi"
-    fertilizer_dataset: str = "fertilizer_accounts"  # Add fertilizer data
+    fertilizer_dataset: str = "fertiliser"  # Add fertilizer data from silver layer
     field_plan_dataset: str = "field_plan"  # Add field plan data
     catch_crops_dataset: str = "catch_crops"  # Add catch crop data (optional)
 
@@ -73,13 +72,13 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     max_year_lag: int = 1  # Maximum years between field and climate data
     climate_data_days: int = 365  # Days of climate data to analyze
 
-    # Test mode configuration for local development
-    test_mode: bool = False  # Enable test mode to process only a subset of data
-    max_test_records: int = 1000  # Maximum number of records to process in test mode
-    test_years: Optional[List[int]] = [2022]  # Years to process in test mode (single year)
+
 
     # FVM marker years to process (will be auto-discovered if not specified)
-    target_years: Optional[List[int]] = [2022, 2023, 2024, 2025]  # Test with 2022 and forwards
+    target_years: Optional[List[int]] = None
+
+    # Limit years for testing/memory management (None = no limit)
+    max_years_to_process: Optional[int] = 5  # Default to 5 years for memory management
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
@@ -205,23 +204,26 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     discovers available years or processes specified target years.
     """
 
-    def __init__(self, config: NLES5NitrogenEstimationGoldConfig, gcs_util: GCSUtil):
-        super().__init__(config, gcs_util)
+    def __init__(self, config: NLES5NitrogenEstimationGoldConfig):
+        super().__init__(config)
         self.log = Logger.get_logger()
-
-        # Initialize optimized GCS access
+        self.phase_times: Dict[str, float] = {}
         self.gcs_access = GCSDataAccess()
-
-        # Use the optimized DuckDB connection from GCS access
         self.conn = self.gcs_access.duckdb_conn
         self._configure_duckdb()
 
     def _configure_duckdb(self):
         """Configure DuckDB for optimal spatial operations."""
-        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        # Increase memory limit and add temp management for large datasets
+        self.conn.execute("SET memory_limit = '16GB'")  # Increase for large datasets
         self.conn.execute("SET threads = 4")  # Use all available CPU cores
         self.conn.execute("SET enable_progress_bar = true")
         self.conn.execute("SET preserve_insertion_order = false")
+        self.conn.execute("SET temp_directory = '/tmp/duckdb_nles5'")  # Dedicated temp dir
+
+        # Configure for memory efficiency with large datasets
+        self.conn.execute("SET max_memory = '16GB'")
+        self.conn.execute("SET checkpoint_threshold = '1GB'")  # More frequent checkpoints
 
         # Spatial extensions already loaded by GCSDataAccess
         # Verify SPATIAL_JOIN operator availability
@@ -240,6 +242,36 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         except Exception as e:
             self.log.warning(f"Could not verify spatial extension version: {e}")
 
+    def _cleanup_temp_files(self):
+        """Clean up temporary files to manage disk space."""
+        try:
+            import os
+            import shutil
+            import glob
+
+            temp_patterns = [
+                "/tmp/duckdb*",
+                "/tmp/gcs_temp*",
+                "/tmp/temp_*"
+            ]
+
+            for pattern in temp_patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                    except Exception as e:
+                        self.log.warning(f"Could not remove temp file {file_path}: {e}")
+
+            # Force garbage collection
+            import gc
+            gc.collect()
+
+        except Exception as e:
+            self.log.warning(f"Error during temp file cleanup: {e}")
+
     def _get_available_fvm_marker_years(self) -> List[int]:
         """
         Get all available fvm_marker years from GCS storage.
@@ -248,22 +280,27 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             List of available years for fvm_marker datasets
         """
         try:
-            # List all files in silver layer to find fvm_marker directories with actual data
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix="silver/fvm_marker_"
+            # List all parquet files in fvm_marker directories
+            files = self.gcs_access.list_files(
+                f"gs://{self.config.bucket}/silver/fvm_marker_*/*/*"
             )
             years = set()
 
-            for file_blob in files:
-                # Look for files like "silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
+            for file_path in files:
+                # Look for files like "gs://bucket/silver/fvm_marker_2021/timestamp/fvm_marker_2021.parquet"
+                # or "gs://bucket/silver/fvm_marker_2021/timestamp/data.parquet"
                 match = re.search(
-                    r"silver/fvm_marker_(\d{4})/.*?/fvm_marker_(\d{4})\.parquet", file_blob.name
+                    r"silver/fvm_marker_(\d{4})/.*?/(?:fvm_marker_(\d{4})\.parquet|data\.parquet)", file_path
                 )
                 if match:
-                    year1 = int(match.group(1))
-                    year2 = int(match.group(2))
-                    # Ensure both years match (sanity check)
-                    if year1 == year2:
+                    year1 = int(match.group(1))  # Year from directory
+                    year2 = match.group(2)       # Year from filename (or None for data.parquet)
+
+                    if year2:  # fvm_marker_YYYY.parquet format
+                        year2 = int(year2)
+                        if year1 == year2:  # Ensure directory and filename years match
+                            years.add(year1)
+                    else:  # data.parquet format - trust the directory year
                         years.add(year1)
 
             return sorted(list(years))
@@ -285,24 +322,25 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             dataset_name = f"fvm_marker_{year}"
             self.log.info(f"Reading FVM marker data for year {year}")
 
-            # Look for the latest timestamped directory
-            files = self.gcs_util.list_files(
-                bucket_name=self.config.bucket, prefix=f"silver/{dataset_name}/"
+            # Look for parquet files in timestamped subdirectories
+            files = self.gcs_access.list_files(
+                f"gs://{self.config.bucket}/silver/{dataset_name}/*/*"
             )
 
-            # Find the parquet file in timestamped subdirectories
+            # Find the latest parquet file (either fvm_marker_YYYY.parquet or data.parquet)
             target_file = None
             latest_timestamp = None
-            for file_blob in files:
-                # Look for files like "fvm_marker_2021.parquet"
-                if file_blob.name.endswith(f"{dataset_name}.parquet"):
-                    # Extract timestamp from path like "silver/fvm_marker_2021/20241201_123456/fvm_marker_2021.parquet"
-                    path_parts = file_blob.name.split("/")
+            for file_path in files:
+                # Accept both naming conventions: fvm_marker_YYYY.parquet and data.parquet
+                if file_path.endswith(f"{dataset_name}.parquet") or file_path.endswith("data.parquet"):
+                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/file.parquet"
+                    clean_path = file_path.replace(f"gs://{self.config.bucket}/", "")
+                    path_parts = clean_path.split("/")
                     if len(path_parts) >= 3:
                         timestamp_dir = path_parts[2]  # "20241201_123456"
                         if latest_timestamp is None or timestamp_dir > latest_timestamp:
                             latest_timestamp = timestamp_dir
-                            target_file = file_blob.name
+                            target_file = clean_path
 
             if target_file:
                 # Read the data using GCS access with proper authentication
@@ -312,21 +350,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                                 # Use authenticated temporary download pattern (consistent with other gold processors)
                 try:
                     with self.gcs_access._temp_download(gcs_path) as temp_file:
-                        if self.config.test_mode:
-                            # In test mode, limit the number of records
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE {table_name} AS
-                                SELECT * FROM read_parquet('{temp_file}')
-                                LIMIT {self.config.max_test_records}
-                            """)
-                        else:
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE {table_name} AS
-                                SELECT * FROM read_parquet('{temp_file}')
-                            """)
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            SELECT * FROM read_parquet('{temp_file}')
+                        """)
 
                     count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                    self.log.info(f"Loaded {count:,} fields for year {year}")
+                    self.log.info(f"Loaded {count:,} FVM fields for year {year}")
 
                     return table_name
                 except Exception as e:
@@ -337,7 +367,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 return None
 
         except Exception as e:
-            self.log.error(f"Error reading fields data for year {year}: {e}")
+            self.log.error(f"Error reading FVM marker data for year {year}: {e}")
             return None
 
     @timed(name="Preparing crop sequence data")
@@ -544,118 +574,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.error(f"Error preparing crop sequences: {e}")
             raise
 
-    @timed(name="Preparing nitrogen inputs")
-    def _prepare_nitrogen_inputs(self, agricultural_fields_table: str, fertilizer_table: Optional[str]) -> str:
-        """
-        Prepare all nitrogen inputs including current, previous years, and N-fixation.
 
-        Args:
-            agricultural_fields_table: Name of the table with yearly field data.
-            fertilizer_table: Name of the table with fertilizer accounts data, if available.
-
-        Returns:
-            Table name with all required nitrogen data for each field and year.
-        """
-        try:
-            self.log.info("Preparing N-fixation and fertilizer history data.")
-
-            # Step 1: Prepare N-fixation data
-            n_fixation_mapping_sql = """
-            CREATE OR REPLACE TABLE n_fixation_mapping AS
-            SELECT unnest(codes) as glr_code, fixation_rate
-            FROM (VALUES
-                (200, [18, 25, 30, 31, 32, 35, 36, 54, 217, 326, 424]),
-                (100, [7]),
-                (70, [214, 234]),
-                (140, [215]),
-                (140, [171, 173, 273, 277, 288]),
-                (200, [120, 121]),
-                (120, [170, 172, 174, 255, 256, 260, 261, 262, 272, 274, 284, 306]),
-                (60, [247, 258, 266, 267, 268, 276, 285, 286, 287]),
-                (5, [248, 249, 250, 251, 252, 253, 254, 257, 259, 263, 264, 265, 269, 275, 278, 279, 305, 315, 350, 488]),
-                (20, [943, 944, 945, 946, 960, 961, 962, 963, 964, 965, 966, 975])
-            ) AS t(fixation_rate, codes);
-            """
-            self.conn.execute(n_fixation_mapping_sql)
-
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE n_fixation_history AS
-                WITH n_fixation_by_field_year AS (
-                    SELECT
-                        a.field_id,
-                        a.year,
-                        COALESCE(fix.fixation_rate, 2.0) as nfix_ha -- Default to 2 kg N/ha
-                    FROM {agricultural_fields_table} a
-                    LEFT JOIN n_fixation_mapping fix ON a.crop_code = fix.glr_code
-                )
-                SELECT
-                    field_id,
-                    year,
-                    nfix_ha,
-                    (
-                        COALESCE(LAG(nfix_ha, 1) OVER (PARTITION BY field_id ORDER BY year), 0.0) +
-                        COALESCE(LAG(nfix_ha, 2) OVER (PARTITION BY field_id ORDER BY year), 0.0)
-                    ) / 2.0 as nfix_prev
-                FROM n_fixation_by_field_year;
-            """)
-
-            # Step 2: Prepare fertilizer history data
-            if fertilizer_table:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE fertilizer_history AS
-                    SELECT
-                        cvr_number,
-                        year,
-                        mineral_n_foraar,
-                        mineral_n_eft,
-                        mineral_n_udb,
-                        organic_n_hus,
-                        -- Calculate average of previous 2 years for mineral and organic N
-                        (
-                            COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
-                            COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
-                        ) / 2.0 as mineral_n_prev,
-                        (
-                            COALESCE(LAG(organic_n_hus, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
-                            COALESCE(LAG(organic_n_hus, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
-                        ) / 2.0 as organic_n_prev
-                    FROM {fertilizer_table};
-                """)
-            else:
-                self.log.warning("Fertilizer data not available, will use defaults for all fertilizer inputs.")
-                # Create an empty table so the join doesn't fail
-                self.conn.execute("CREATE OR REPLACE TABLE fertilizer_history (cvr_number BIGINT, year INT);")
-
-            # Step 3: Combine all data into a final input table
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE full_nles5_input_data AS
-                SELECT
-                    f.*,
-                    -- Soil N from soil join
-                    f.tn_t_ha,
-                    -- N-fixation data
-                    COALESCE(nfix.nfix_ha, 2.0) as nfix_ha,
-                    COALESCE(nfix.nfix_prev, 2.0) as nfix_prev,
-                    -- Fertilizer data
-                    COALESCE(fert.mineral_n_foraar, 100.0) as mineral_n_foraar,
-                    COALESCE(fert.mineral_n_eft, 10.0) as mineral_n_eft,
-                    COALESCE(fert.mineral_n_udb, 5.0) as mineral_n_udb,
-                    COALESCE(fert.organic_n_hus, 40.0) as organic_n_hus,
-                    COALESCE(fert.mineral_n_prev, 120.0) as mineral_n_prev,
-                    COALESCE(fert.organic_n_prev, 40.0) as organic_n_prev
-                FROM fields_with_climate_soil_crops f
-                LEFT JOIN n_fixation_history nfix ON f.field_id = nfix.field_id AND f.year = nfix.year
-                LEFT JOIN fertilizer_history fert ON f.cvr_number = fert.cvr_number AND f.year = fert.year;
-            """)
-
-            count = self.conn.execute("SELECT COUNT(*) FROM full_nles5_input_data").fetchone()[0]
-            self.log.info(f"Prepared full nitrogen inputs for {count:,} field-years.")
-
-            return "full_nles5_input_data"
-
-        except Exception as e:
-            self.log.error(f"Error preparing nitrogen inputs: {e}")
-            raise
 
     @timed(name="Loading agricultural fields data")
     def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
@@ -669,24 +588,33 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             Table name containing combined agricultural fields data
         """
         # Determine which years to process
-        if self.config.test_mode:
-            years_to_process = self.config.test_years
-            self.log.info(f"🧪 TEST MODE: Processing {len(years_to_process)} years with max {self.config.max_test_records:,} records per year")
-        elif self.config.target_years:
+        if self.config.target_years:
             years_to_process = self.config.target_years
             self.log.info(f"Processing specified years: {years_to_process}")
         else:
-            years_to_process = self._get_available_fvm_marker_years()
-            self.log.info(f"Auto-discovered years: {years_to_process}")
+            all_available_years = self._get_available_fvm_marker_years()
+            # Apply year limit for memory management
+            if self.config.max_years_to_process:
+                # Take the most recent years up to the limit
+                years_to_process = sorted(all_available_years)[-self.config.max_years_to_process:]
+                self.log.info(f"Auto-discovered {len(all_available_years)} years, processing most recent {len(years_to_process)}: {years_to_process}")
+            else:
+                years_to_process = all_available_years
+                self.log.info(f"Auto-discovered years (no limit): {years_to_process}")
 
         if not years_to_process:
             self.log.error("No FVM marker years found to process")
-            raise ValueError("No agricultural fields data available")
+            raise ValueError("No FVM marker data available")
 
         # Process each year and collect table names
         yearly_tables = []
-        for year in years_to_process:
+        for i, year in enumerate(years_to_process):
             try:
+                # Clean up temp files every few years to manage disk space
+                if i > 0 and i % 3 == 0:
+                    self.log.info(f"Cleaning up temporary files after processing {i} years...")
+                    self._cleanup_temp_files()
+
                 # Check if data is available in silver_data dict
                 year_dataset = f"fvm_marker_{year}"
                 if silver_data and year_dataset in silver_data:
@@ -701,21 +629,52 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         yearly_tables.append(table_name)
             except Exception as e:
                 self.log.warning(f"Failed to load data for year {year}: {e}")
+                # Clean up on error to free space
+                self._cleanup_temp_files()
                 continue
 
         if not yearly_tables:
             self.log.error("No agricultural fields data could be loaded")
             raise ValueError("Failed to load any agricultural fields data")
 
-        # Combine all yearly tables into a single table
-        self.log.info(f"Combining {len(yearly_tables)} yearly datasets")
+                # Combine all yearly tables into a single table
+        self.log.info(f"Combining {len(yearly_tables)} yearly FVM marker datasets")
 
-        # Create UNION query for all tables
+        # First, collect all unique columns across all tables
+        all_columns = set()
+        table_schemas = {}
+
+        for table_name in yearly_tables:
+            columns_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_info = {row[0]: row[1] for row in columns_result}  # {name: type}
+            table_schemas[table_name] = column_info
+            all_columns.update(column_info.keys())
+
+            # Standardize crop_code as integer for reliable joins later
+            if 'crop_code' in column_info:
+                self.conn.execute(f"ALTER TABLE {table_name} ALTER crop_code TYPE INT;")
+
+        # Sort columns for consistent ordering
+        all_columns = sorted(list(all_columns))
+        self.log.info(f"Found {len(all_columns)} unique columns across all years")
+
+        # Create UNION query with standardized column selection
         union_queries = []
         for table_name in yearly_tables:
-            # Ensure crop_code is standardized as integer for reliable joins later
-            self.conn.execute(f"ALTER TABLE {table_name} ALTER crop_code TYPE INT;")
-            union_queries.append(f"SELECT * FROM {table_name}")
+            table_columns = table_schemas[table_name]
+
+            # Build SELECT clause with proper column handling
+            select_columns = []
+            for col in all_columns:
+                if col in table_columns:
+                    select_columns.append(f"{col}")
+                else:
+                    # Add NULL for missing columns with appropriate type
+                    # Default to VARCHAR for unknown columns
+                    select_columns.append(f"NULL::VARCHAR AS {col}")
+
+            select_clause = ", ".join(select_columns)
+            union_queries.append(f"SELECT {select_clause} FROM {table_name}")
 
         combined_query = " UNION ALL ".join(union_queries)
 
@@ -804,12 +763,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             source_table = storage_result['table_name']
 
                             # Copy data to our connection
-                            if self.config.test_mode and dataset_name == self.config.soil_types_dataset:
-                                # In test mode, limit soil data too
-                                data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
-                                self.log.info(f"🧪 TEST MODE: Loaded limited {dataset_name} data ({len(data_df)} records)")
-                            else:
-                                data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
+                            data_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
                             self.conn.register(table_name, data_df)
                             loaded_tables[dataset_name] = table_name
                         else:
@@ -845,50 +799,99 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Try to load precipitation data
             precip_loaded = False
             try:
-                precip_result = self._read_silver_data("dmi_acc_precip_dmi_acc_precip")
-                if precip_result and isinstance(precip_result, dict):
-                    gcs_access = precip_result['gcs_access']
-                    source_table = precip_result['table_name']
-                    if self.config.test_mode:
-                        # In test mode, limit DMI data too
-                        precip_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
-                        self.log.info(f"🧪 TEST MODE: Loaded limited DMI precipitation data ({len(precip_df)} records)")
+                precip_table = self._read_silver_data("dmi_acc_precip_dmi_acc_precip")
+                if precip_table and isinstance(precip_table, str):
+                    # Data is already loaded into our connection, just copy it to the expected table name
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE dmi_precip_temp AS
+                        SELECT * FROM {precip_table}
+                    """)
+                    precip_count = self.conn.execute("SELECT COUNT(*) FROM dmi_precip_temp").fetchone()[0]
+                    if precip_count > 0:
+                        precip_loaded = True
+                        self.log.info(f"Successfully loaded DMI precipitation data ({precip_count:,} records)")
                     else:
-                        precip_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
-                    self.conn.register("dmi_precip_temp", precip_df)
-                    precip_loaded = True
-                    self.log.info("Successfully loaded DMI precipitation data")
+                        self.log.warning("DMI precipitation table is empty")
+                else:
+                    self.log.warning(f"Could not load precipitation data - invalid result: {precip_table}")
             except Exception as e:
                 self.log.warning(f"Could not load precipitation data: {e}")
+                import traceback
+                self.log.warning(f"Stack trace: {traceback.format_exc()}")
 
             # Try to load evaporation data
             evap_loaded = False
             try:
-                evap_result = self._read_silver_data("dmi_pot_evaporation_makkink_dmi_pot_evaporation_makkink")
-                if evap_result and isinstance(evap_result, dict):
-                    gcs_access = evap_result['gcs_access']
-                    source_table = evap_result['table_name']
-                    if self.config.test_mode:
-                        # In test mode, limit DMI data too
-                        evap_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table} LIMIT {self.config.max_test_records}").fetchdf()
-                        self.log.info(f"🧪 TEST MODE: Loaded limited DMI evaporation data ({len(evap_df)} records)")
+                evap_table = self._read_silver_data("dmi_pot_evaporation_makkink_dmi_pot_evaporation_makkink")
+                if evap_table and isinstance(evap_table, str):
+                    # Data is already loaded into our connection, just copy it to the expected table name
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE dmi_evap_temp AS
+                        SELECT * FROM {evap_table}
+                    """)
+                    evap_count = self.conn.execute("SELECT COUNT(*) FROM dmi_evap_temp").fetchone()[0]
+                    if evap_count > 0:
+                        evap_loaded = True
+                        self.log.info(f"Successfully loaded DMI evaporation data ({evap_count:,} records)")
                     else:
-                        evap_df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {source_table}").fetchdf()
-                    self.conn.register("dmi_evap_temp", evap_df)
-                    evap_loaded = True
-                    self.log.info("Successfully loaded DMI evaporation data")
+                        self.log.warning("DMI evaporation table is empty")
+                else:
+                    self.log.warning(f"Could not load evaporation data - invalid result: {evap_table}")
             except Exception as e:
                 self.log.warning(f"Could not load evaporation data: {e}")
+                import traceback
+                self.log.warning(f"Stack trace: {traceback.format_exc()}")
 
             if not precip_loaded and not evap_loaded:
                 self.log.warning("No DMI data could be loaded")
                 return False
 
             # Combine the data into unified dmi_data table
-            if precip_loaded and evap_loaded:
-                # Both datasets available - combine them
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE dmi_data AS
+            try:
+                # First, ensure we drop any existing dmi_data objects
+                self.conn.execute("DROP TABLE IF EXISTS dmi_data")
+                self.conn.execute("DROP VIEW IF EXISTS dmi_data")
+
+                if precip_loaded and evap_loaded:
+                    # Both datasets available - combine them
+                    self.conn.execute("""
+                        CREATE TABLE dmi_data AS
+                        SELECT
+                            avg_value,
+                            centroid_geometry,
+                            valid_time,
+                            'acc_precip' as parameter_id,
+                            min_value,
+                            max_value,
+                            count,
+                            stddev_value,
+                            bbox_geometry,
+                            processing_time,
+                            source_crs,
+                            target_crs,
+                            original_feature_count
+                        FROM dmi_precip_temp
+                        UNION ALL
+                        SELECT
+                            avg_value,
+                            centroid_geometry,
+                            valid_time,
+                            'pot_evaporation_makkink' as parameter_id,
+                            min_value,
+                            max_value,
+                            count,
+                            stddev_value,
+                            bbox_geometry,
+                            processing_time,
+                            source_crs,
+                            target_crs,
+                            original_feature_count
+                        FROM dmi_evap_temp
+                    """)
+                elif precip_loaded:
+                    # Only precipitation available
+                    self.conn.execute("""
+                        CREATE TABLE dmi_data AS
                     SELECT
                         avg_value,
                         centroid_geometry,
@@ -904,7 +907,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         target_crs,
                         original_feature_count
                     FROM dmi_precip_temp
-                    UNION ALL
+                    """)
+                elif evap_loaded:
+                    # Only evaporation available
+                    self.conn.execute("""
+                        CREATE TABLE dmi_data AS
                     SELECT
                         avg_value,
                         centroid_geometry,
@@ -920,58 +927,22 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         target_crs,
                         original_feature_count
                     FROM dmi_evap_temp
-                """)
-            elif precip_loaded:
-                # Only precipitation available
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE dmi_data AS
-                    SELECT
-                        avg_value,
-                        centroid_geometry,
-                        valid_time,
-                        'acc_precip' as parameter_id,
-                        min_value,
-                        max_value,
-                        count,
-                        stddev_value,
-                        bbox_geometry,
-                        processing_time,
-                        source_crs,
-                        target_crs,
-                        original_feature_count
-                    FROM dmi_precip_temp
-                """)
-            elif evap_loaded:
-                # Only evaporation available
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE dmi_data AS
-                    SELECT
-                        avg_value,
-                        centroid_geometry,
-                        valid_time,
-                        'pot_evaporation_makkink' as parameter_id,
-                        min_value,
-                        max_value,
-                        count,
-                        stddev_value,
-                        bbox_geometry,
-                        processing_time,
-                        source_crs,
-                        target_crs,
-                        original_feature_count
-                    FROM dmi_evap_temp
-                """)
+                    """)
 
-            # Clean up temporary views (registered dataframes create views, not tables)
-            if precip_loaded:
-                self.conn.execute("DROP VIEW IF EXISTS dmi_precip_temp")
-            if evap_loaded:
-                self.conn.execute("DROP VIEW IF EXISTS dmi_evap_temp")
+                # Clean up temporary tables
+                self.conn.execute("DROP TABLE IF EXISTS dmi_precip_temp")
+                self.conn.execute("DROP TABLE IF EXISTS dmi_evap_temp")
 
-            return True
+                count = self.conn.execute("SELECT COUNT(*) FROM dmi_data").fetchone()[0]
+                self.log.info(f"Successfully combined DMI data with {count:,} total records")
+
+                return True
+            except Exception as e:
+                self.log.error(f"Error combining DMI data: {e}")
+                return False
 
         except Exception as e:
-            self.log.error(f"Error combining DMI data: {e}")
+            self.log.error(f"Error loading DMI data: {e}")
             return False
 
     @timed(name="Processing DMI climate data")
@@ -1222,10 +1193,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     def _join_with_soil_data(self) -> str:
         """
         Spatially join fields with soil data using largest intersection area.
-        Also joins with pre-calculated crop classifications.
+        Also joins with pre-calculated crop classifications and nitrogen inputs.
         """
         try:
             self.log.info("Spatially joining fields with soil data (largest overlap)...")
+
+            # First prepare nitrogen inputs (fixation and fertilizer data)
+            self._prepare_nitrogen_inputs_tables()
+
             # Create a spatial index on soil data for performance
             self.conn.execute(f"CREATE INDEX soil_geom_idx ON soil_types_spatial(geometry_spatial);")
 
@@ -1272,19 +1247,33 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             ).fetchone()[0]
             self.log.info(f"Soil join complete: {count:,} fields, {soil_matched:,} with soil data")
 
-            # Join with crop classifications
+            # Join with crop classifications and prepare nitrogen inputs
             self.conn.execute("""
                 CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
                 SELECT
                     f_s.*,
-                    c_c.m_code,
-                    c_c.w_code,
-                    c_c.mp_code,
-                    c_c.wp_code,
-                    c_c.wc_code
+                    COALESCE(c_c.m_code, 'M2') as m_code,
+                    COALESCE(c_c.w_code, 'W2') as w_code,
+                    COALESCE(c_c.mp_code, 'MP2') as mp_code,
+                    COALESCE(c_c.wp_code, 'WP2') as wp_code,
+                    COALESCE(c_c.wc_code, 'WC2') as wc_code,
+                    -- Add nitrogen fixation data
+                    COALESCE(nfix.nfix_ha, 2.0) as nfix_ha,
+                    COALESCE(nfix.nfix_prev, 2.0) as nfix_prev,
+                    -- Add fertilizer data (use defaults if not available)
+                    COALESCE(fert.mineral_n_foraar, 100.0) as mineral_n_foraar,
+                    COALESCE(fert.mineral_n_eft, 10.0) as mineral_n_eft,
+                    COALESCE(fert.mineral_n_udb, 5.0) as mineral_n_udb,
+                    COALESCE(fert.organic_n_hus, 40.0) as organic_n_hus,
+                    COALESCE(fert.mineral_n_prev, 120.0) as mineral_n_prev,
+                    COALESCE(fert.organic_n_prev, 40.0) as organic_n_prev
                 FROM fields_with_climate_soil f_s
                 LEFT JOIN fields_with_crop_classifications c_c
                     ON f_s.field_id = c_c.field_id AND f_s.year = c_c.year
+                LEFT JOIN n_fixation_history nfix
+                    ON f_s.field_id = nfix.field_id AND f_s.year = nfix.year
+                LEFT JOIN fertilizer_history fert
+                    ON f_s.cvr_number = fert.cvr_number AND f_s.year = fert.year
             """)
 
             count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil_crops").fetchone()[0]
@@ -1380,29 +1369,27 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         -- Soil effect calculation (using positive coefficient as per report, EXP will handle it)
                         EXP({0.001849} * f.clay_content) as soil_effect,
 
-                        -- Fertilizer data (TODO: replace defaults with real data)
-                        COALESCE(fa.total_nitrogen_kg_ha, 5.0) as tn_t_ha, -- Total N in topsoil (Mg N/ha). Using 5.0 as placeholder
-                        COALESCE(fa.mineral_n_foraar, 100.0) as mineral_n_foraar,
-                        COALESCE(fa.mineral_n_eft, 10.0) as mineral_n_eft,
-                        COALESCE(fa.mineral_n_udb, 5.0) as mineral_n_udb,
-                        COALESCE(fa.organic_n_hus, 40.0) as organic_n_hus,
-                        COALESCE(fa.niveau, 120.0) as mineral_n_prev, -- Placeholder for avg mineral N previous 2 years
-                        COALESCE(fa.nfix_ha, 20.0) as nfix_ha,
-                        COALESCE(fa.nfix_ha, 20.0) as nfix_prev, -- Placeholder for avg N fixation previous 2 years
-                        COALESCE(fa.organic_n_hus, 40.0) as organic_n_prev, -- Placeholder for avg organic N previous 2 years
+                        -- Fertilizer and nitrogen data (now properly prepared)
+                        f.tn_t_ha, -- Total N in topsoil (Mg N/ha)
+                        f.mineral_n_foraar,
+                        f.mineral_n_eft,
+                        f.mineral_n_udb,
+                        f.organic_n_hus,
+                        f.mineral_n_prev,
+                        f.nfix_ha,
+                        f.nfix_prev,
+                        f.organic_n_prev
 
                         -- Trend effect (dynamic based on field year)
                         -0.1108 * (f.year - 1991) as trend_effect
 
                     FROM fields_with_climate_soil_crops f
-                    -- TODO: The crop codes (M1, W1 etc.) need to be derived from crop sequence data.
-                    -- Using f.crop_type for all joins is a placeholder.
+                    -- Join with NLES5 parameter lookup tables
                     LEFT JOIN crop_params cp ON f.m_code = cp.code
                     LEFT JOIN winter_veg_params wvp ON f.w_code = wvp.code
                     LEFT JOIN prev_crop_params pcp ON f.mp_code = pcp.code
                     LEFT JOIN prev_winter_veg_params pwvp ON f.wp_code = pwvp.code
                     LEFT JOIN theta_factors th ON f.wc_code = th.code
-                    LEFT JOIN fertilizer_accounts fa ON f.cvr_number = fa.cvr_number AND f.year = fa.year -- Placeholder join
                     WHERE f.total_percolation IS NOT NULL
                         AND f.total_percolation > 0
                 ),
@@ -2181,12 +2168,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """Run NLES5 nitrogen estimation gold processing with real climate data."""
         try:
-            if self.config.test_mode:
-                self.log.info("🧪 TEST MODE: Starting NLES5 nitrogen estimation with limited data")
-                self.log.info(f"🧪 TEST MODE: Max records per dataset: {self.config.max_test_records:,}")
-                self.log.info(f"🧪 TEST MODE: Processing years: {self.config.test_years}")
-            else:
-                self.log.info("Starting NLES5 nitrogen estimation with real DMI climate data")
+            self.log.info("Starting NLES5 nitrogen estimation with real DMI climate data")
 
             # Load required silver datasets
             loaded_tables = self._load_required_silver_datasets(silver_data)
@@ -2194,6 +2176,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             if len(loaded_tables) < 2:  # At least agricultural_fields and one other dataset
                 self.log.error("Insufficient data loaded - need at least agricultural fields and climate data")
                 return
+
+            # Create spatial tables and parameter lookup tables
+            self._create_spatial_tables()
+            self._create_nles5_parameter_tables()
 
             # Process climate data to calculate percolation
             climate_table = self._process_climate_data()
@@ -2213,23 +2199,21 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         '5' as soil_code,
                         'Medium clay soil' as soil_description,
                         15.0 as clay_content,
+                        5.0 as tn_t_ha,
                         'clay' as soil_type_category,
                         false as has_soil_data,
-                        -- crop codes from previous step
-                        f_c.m_code,
-                        f_c.w_code,
-                        f_c.mp_code,
-                        f_c.wp_code,
-                        f_c.wc_code
-                    FROM fields_with_climate_and_crops f_c
+                        -- Default crop codes (will be overridden by crop classification)
+                        'M2' as m_code,
+                        'W2' as w_code,
+                        'MP2' as mp_code,
+                        'WP2' as wp_code,
+                        'WC2' as wc_code
+                    FROM fields_with_climate f_c
                 """)
                 fields_complete_table = "fields_with_climate_soil_crops"
 
-            # Prepare all nitrogen inputs (fertilizer, fixation, history)
-            nitrogen_input_table = self._prepare_nitrogen_inputs(
-                loaded_tables["agricultural_fields"],
-                loaded_tables.get(self.config.fertilizer_dataset)
-            )
+            # Note: Nitrogen inputs are prepared as part of the join_with_soil_data method
+            # which creates the final fields_with_climate_soil_crops table
 
             # Calculate NLES5 nitrogen estimates
             estimates_table = self._calculate_nles5_estimates()
@@ -2265,4 +2249,254 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         except Exception as e:
             self.log.error(f"Error in NLES5 processing: {e}")
             self.log.exception(e)
+            raise
+
+    @timed(name="Creating NLES5 parameter lookup tables")
+    def _create_nles5_parameter_tables(self) -> None:
+        """Create all NLES5 parameter lookup tables needed for calculations."""
+        try:
+            self.log.info("Creating NLES5 parameter lookup tables")
+
+            # Create crop parameters table (from config.crop_parameters)
+            crop_params_values = [
+                f"('{code}', {value})"
+                for code, value in self.config.crop_parameters.items()
+            ]
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE crop_params AS
+                SELECT * FROM VALUES
+                {', '.join(crop_params_values)}
+                AS t(code, param)
+            """)
+
+            # Create winter vegetation parameters table
+            winter_veg_values = [
+                f"('{code}', {value})"
+                for code, value in self.config.winter_veg_parameters.items()
+            ]
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE winter_veg_params AS
+                SELECT * FROM VALUES
+                {', '.join(winter_veg_values)}
+                AS t(code, param)
+            """)
+
+            # Create previous crop parameters table
+            prev_crop_values = [
+                f"('{code}', {value})"
+                for code, value in self.config.prev_crop_parameters.items()
+            ]
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE prev_crop_params AS
+                SELECT * FROM VALUES
+                {', '.join(prev_crop_values)}
+                AS t(code, param)
+            """)
+
+            # Create previous winter vegetation parameters table
+            prev_winter_veg_values = [
+                f"('{code}', {value})"
+                for code, value in self.config.prev_winter_veg_parameters.items()
+            ]
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE prev_winter_veg_params AS
+                SELECT * FROM VALUES
+                {', '.join(prev_winter_veg_values)}
+                AS t(code, param)
+            """)
+
+            # Create theta factors table
+            theta_values = [
+                f"('{code}', {value})"
+                for code, value in self.config.theta_factors.items()
+            ]
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE theta_factors AS
+                SELECT * FROM VALUES
+                {', '.join(theta_values)}
+                AS t(code, factor)
+            """)
+
+            self.log.info("✅ Created all NLES5 parameter lookup tables")
+
+        except Exception as e:
+            self.log.error(f"Error creating NLES5 parameter tables: {e}")
+            raise
+
+    @timed(name="Creating spatial tables")
+    def _create_spatial_tables(self) -> None:
+        """Create spatial tables with proper geometry processing for spatial operations."""
+        try:
+            self.log.info("Creating spatial tables for agricultural fields and soil types")
+
+                        # Create agricultural_fields_spatial table with proper geometry
+            # Based on available columns: ['geometry', 'field_id', 'field_uuid', ...]
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE agricultural_fields_spatial AS
+                SELECT
+                    *,
+                    -- Use the available geometry column (WKB format)
+                    geometry as geom,
+                    -- Create centroid for nearest neighbor operations
+                    ST_Centroid(geometry) as centroid_geom
+                FROM agricultural_fields
+                WHERE geometry IS NOT NULL
+                    AND ST_IsValid(geometry) = true
+            """)
+
+            # Validate and transform geometries for agricultural fields
+            fields_count = validate_and_transform_geometries_duckdb(
+                self.conn, "agricultural_fields_spatial", "geom"
+            )
+            self.log.info(f"Processed {fields_count:,} agricultural fields with valid geometries")
+
+            # Create soil_types_spatial table if soil data is available
+            soil_table_exists = False
+            try:
+                # Check if soil_types table exists
+                soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+                if soil_count > 0:
+                    self.conn.execute("""
+                        CREATE OR REPLACE TABLE soil_types_spatial AS
+                        SELECT
+                            *,
+                            -- Use available geometry column
+                            geometry as geometry_spatial
+                        FROM soil_types
+                        WHERE geometry IS NOT NULL
+                            AND ST_IsValid(geometry) = true
+                    """)
+
+                    # Validate and transform soil geometries
+                    soil_geom_count = validate_and_transform_geometries_duckdb(
+                        self.conn, "soil_types_spatial", "geometry_spatial"
+                    )
+                    self.log.info(f"Processed {soil_geom_count:,} soil type geometries")
+                    soil_table_exists = True
+                else:
+                    self.log.warning("No soil types data available")
+            except Exception as e:
+                self.log.warning(f"Could not create soil_types_spatial table: {e}")
+
+            if not soil_table_exists:
+                # Create dummy soil_types_spatial table for fallback
+                self.log.info("Creating fallback soil_types_spatial table")
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE soil_types_spatial AS
+                    SELECT
+                        '5' as soil_code,
+                        'Medium clay soil' as soil_description,
+                        15.0 as clay_content,
+                        5.0 as total_n_content,
+                        ST_GeomFromText('POLYGON((8 54, 15 54, 15 58, 8 58, 8 54))') as geometry_spatial
+                """)
+
+            self.log.info("✅ Created spatial tables successfully")
+
+        except Exception as e:
+            self.log.error(f"Error creating spatial tables: {e}")
+            raise
+
+    @timed(name="Preparing nitrogen input tables")
+    def _prepare_nitrogen_inputs_tables(self) -> None:
+        """
+        Prepare nitrogen fixation and fertilizer history tables needed for NLES5 calculations.
+        """
+        try:
+            self.log.info("Preparing nitrogen fixation and fertilizer history tables")
+
+            # Step 1: Create N-fixation mapping table (from NLES5 documentation)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE n_fixation_mapping AS
+                SELECT unnest(codes) as glr_code, fixation_rate
+                FROM (VALUES
+                    (200, [18, 25, 30, 31, 32, 35, 36, 54, 217, 326, 424]),
+                    (100, [7]),
+                    (70, [214, 234]),
+                    (140, [215]),
+                    (140, [171, 173, 273, 277, 288]),
+                    (200, [120, 121]),
+                    (120, [170, 172, 174, 255, 256, 260, 261, 262, 272, 274, 284, 306]),
+                    (60, [247, 258, 266, 267, 268, 276, 285, 286, 287]),
+                    (5, [248, 249, 250, 251, 252, 253, 254, 257, 259, 263, 264, 265, 269, 275, 278, 279, 305, 315, 350, 488]),
+                    (20, [943, 944, 945, 946, 960, 961, 962, 963, 964, 965, 966, 975])
+                ) AS t(fixation_rate, codes)
+            """)
+
+            # Step 2: Create N-fixation history table
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE n_fixation_history AS
+                WITH n_fixation_by_field_year AS (
+                    SELECT
+                        a.field_id,
+                        a.year,
+                        COALESCE(fix.fixation_rate, 2.0) as nfix_ha -- Default to 2 kg N/ha
+                    FROM agricultural_fields a
+                    LEFT JOIN n_fixation_mapping fix ON a.crop_code = fix.glr_code
+                )
+                SELECT
+                    field_id,
+                    year,
+                    nfix_ha,
+                    (
+                        COALESCE(LAG(nfix_ha, 1) OVER (PARTITION BY field_id ORDER BY year), 0.0) +
+                        COALESCE(LAG(nfix_ha, 2) OVER (PARTITION BY field_id ORDER BY year), 0.0)
+                    ) / 2.0 as nfix_prev
+                FROM n_fixation_by_field_year
+            """)
+
+            # Step 3: Create fertilizer history table (if fertilizer data is available)
+            fertilizer_table_exists = False
+            try:
+                fertilizer_count = self.conn.execute("SELECT COUNT(*) FROM fertilizer_accounts").fetchone()[0]
+                if fertilizer_count > 0:
+                    self.conn.execute("""
+                        CREATE OR REPLACE TABLE fertilizer_history AS
+                        SELECT
+                            cvr_number,
+                            year,
+                            mineral_n_foraar,
+                            mineral_n_eft,
+                            mineral_n_udb,
+                            organic_n_hus,
+                            -- Calculate average of previous 2 years for mineral and organic N
+                            (
+                                COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
+                                COALESCE(LAG(mineral_n_foraar + mineral_n_eft + mineral_n_udb, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
+                            ) / 2.0 as mineral_n_prev,
+                            (
+                                COALESCE(LAG(organic_n_hus, 1) OVER (PARTITION BY cvr_number ORDER BY year), 0.0) +
+                                COALESCE(LAG(organic_n_hus, 2) OVER (PARTITION BY cvr_number ORDER BY year), 0.0)
+                            ) / 2.0 as organic_n_prev
+                        FROM fertilizer_accounts
+                    """)
+                    fertilizer_table_exists = True
+                    self.log.info("Created fertilizer history table from fertilizer_accounts data")
+                else:
+                    self.log.warning("No fertilizer accounts data available")
+            except Exception as e:
+                self.log.warning(f"Could not create fertilizer history table: {e}")
+
+            if not fertilizer_table_exists:
+                # Create empty fertilizer history table for graceful degradation
+                self.log.info("Creating empty fertilizer history table (will use defaults)")
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE fertilizer_history AS
+                    SELECT
+                        CAST(NULL AS BIGINT) as cvr_number,
+                        CAST(NULL AS INT) as year,
+                        CAST(NULL AS DOUBLE) as mineral_n_foraar,
+                        CAST(NULL AS DOUBLE) as mineral_n_eft,
+                        CAST(NULL AS DOUBLE) as mineral_n_udb,
+                        CAST(NULL AS DOUBLE) as organic_n_hus,
+                        CAST(NULL AS DOUBLE) as mineral_n_prev,
+                        CAST(NULL AS DOUBLE) as organic_n_prev
+                    WHERE 1=0  -- Empty table with proper schema
+                """)
+
+            nfix_count = self.conn.execute("SELECT COUNT(*) FROM n_fixation_history").fetchone()[0]
+            self.log.info(f"✅ Prepared nitrogen input tables: {nfix_count:,} N-fixation records")
+
+        except Exception as e:
+            self.log.error(f"Error preparing nitrogen input tables: {e}")
             raise
