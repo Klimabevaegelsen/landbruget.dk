@@ -39,6 +39,7 @@ OUTPUT:
 
 import os
 import re
+import json
 from typing import Any, Dict, List, Optional
 
 from pydantic import ConfigDict
@@ -86,7 +87,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Each year of FVM marker data is ~1-2GB, so 2 years ≈ 2-4GB temp space needed
     # For production: set max_years_to_process = None to process all available years
     # Can be overridden by setting the MAX_YEARS_TO_PROCESS environment variable.
-    max_years_to_process: Optional[int] = None
+    max_years_to_process: Optional[int] = int(os.getenv('MAX_YEARS_TO_PROCESS')) if os.getenv('MAX_YEARS_TO_PROCESS') else None
 
     # Geographic bounds for testing (WGS84 coordinates: [min_lon, min_lat, max_lon, max_lat])
     # Set to None to process entire Denmark, or specify bounds for testing
@@ -94,7 +95,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # This reduces dataset size by ~98% while maintaining representative agricultural data
     # To disable geographic filtering, set test_bounds = None
     # Can be overridden by setting the TEST_BOUNDS environment variable as a JSON string, e.g., '[10.0, 55.9, 10.3, 56.2]'.
-    test_bounds: Optional[List[float]] = None
+    test_bounds: Optional[List[float]] = json.loads(os.getenv('TEST_BOUNDS')) if os.getenv('TEST_BOUNDS') else None
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
