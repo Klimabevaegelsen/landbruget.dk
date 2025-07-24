@@ -85,14 +85,16 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Limit years for testing/memory management (None = no limit)
     # Each year of FVM marker data is ~1-2GB, so 2 years ≈ 2-4GB temp space needed
     # For production: set max_years_to_process = None to process all available years
-    max_years_to_process: Optional[int] = 2  # Conservative for testing on limited disk space
+    # Can be overridden by setting the MAX_YEARS_TO_PROCESS environment variable.
+    max_years_to_process: Optional[int] = None
 
     # Geographic bounds for testing (WGS84 coordinates: [min_lon, min_lat, max_lon, max_lat])
     # Set to None to process entire Denmark, or specify bounds for testing
     # Test area: Small area around Aarhus city (minimal disk space usage)
     # This reduces dataset size by ~98% while maintaining representative agricultural data
     # To disable geographic filtering, set test_bounds = None
-    test_bounds: Optional[List[float]] = [10.0, 55.9, 10.3, 56.2]  # Small Aarhus area (~30km x 30km)
+    # Can be overridden by setting the TEST_BOUNDS environment variable as a JSON string, e.g., '[10.0, 55.9, 10.3, 56.2]'.
+    test_bounds: Optional[List[float]] = None
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
