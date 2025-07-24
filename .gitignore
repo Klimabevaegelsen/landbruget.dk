@@ -147,3 +147,8 @@ devenv.lock
 # PMTiles (generated files, should be stored in GCS)
 pmtiles/
 *.pmtiles
+
+# Caching
+.pytest_cache/
+.ruff_cache/
+data_cache/
