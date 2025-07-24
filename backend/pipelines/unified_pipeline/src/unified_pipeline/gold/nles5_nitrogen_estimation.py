@@ -40,6 +40,7 @@ OUTPUT:
 import os
 import re
 import json
+import time
 from typing import Any, Dict, List, Optional
 
 from pydantic import ConfigDict
@@ -718,54 +719,30 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     def _create_simplified_crop_classification(self, agricultural_fields_table: str) -> str:
         """
-        Create simplified crop classification when full data is not available.
-
-        Args:
-            agricultural_fields_table: Name of the agricultural fields table
-
-        Returns:
-            Table name with simplified classifications
+        Create a simplified crop classification table from the field plan data.
+        This version splits multipolygons using ST_Dump for optimal spatial join performance.
         """
-        try:
-            self.log.info("🔧 Creating simplified crop classification (fallback mode)")
+        self.log.info("Creating simplified crop classification table with ST_Dump optimization...")
+        gcs_path = self.gcs_access.get_latest_silver_path(self.config.field_plan_dataset)
+        if not gcs_path:
+            raise FileNotFoundError(f"No silver data found for dataset: {self.config.field_plan_dataset}")
 
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE fields_with_crop_classifications AS
-                SELECT
-                    field_id,
-                    year,
-                    COALESCE(crop_name, 'Unknown') as current_crop_name,
-                    'Unknown' as prev_crop_name,
-                    -- Use simplified default codes based on crop names if available
-                    CASE
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%hvede%' THEN 'M1'    -- Wheat
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%byg%' THEN 'M2'      -- Barley
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%rape%' THEN 'M9'     -- Rape
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%majs%' THEN 'M8'     -- Maize
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%græs%' THEN 'M4'     -- Grass
-                        WHEN LOWER(COALESCE(crop_name, '')) LIKE '%brak%' THEN 'M6'     -- Set-aside
-                        ELSE 'M2'  -- Default to spring cereal
-                    END as m_code,
-                    'W2' as w_code,   -- Default to bare soil
-                    'MP2' as mp_code, -- Default to other crops
-                    'WP2' as wp_code, -- Default to bare soil previous
-                    'WC2' as wc_code, -- Default to low N uptake in autumn
-                    true as has_current_crop,
-                    false as has_previous_crop,
-                    false as has_two_year_history
-                FROM {agricultural_fields_table}
-            """)
+        # This query now unnests multipolygons into single polygons, which is critical
+        # for the SPATIAL_JOIN operator to work efficiently.
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE field_plan_simplified AS
+            SELECT
+                fp.year,
+                fp.crop_code,
+                fp.crop_code_simplified,
+                (unnest(ST_Dump(ST_GeomFromWKB(fp.geometry)))).geom AS geom
+            FROM read_parquet('{gcs_path}/*/*.parquet') fp
+            WHERE fp.geometry IS NOT NULL;
+        """)
 
-            count = self.conn.execute("SELECT COUNT(*) FROM fields_with_crop_classifications").fetchone()[0]
-            self.log.info(f"✅ Created simplified crop classifications for {count:,} fields")
-
-            return "fields_with_crop_classifications"
-
-        except Exception as e:
-            self.log.error(f"❌ Error creating simplified crop classification: {e}")
-            raise
-
-
+        simplified_count = self.conn.execute("SELECT COUNT(*) FROM field_plan_simplified").fetchone()[0]
+        self.log.info(f"✅ Created {simplified_count:,} simplified and split crop plan geometries.")
+        return "field_plan_simplified"
 
     @timed(name="Loading agricultural fields data")
     def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
@@ -1606,237 +1583,135 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             return self._create_fallback_complete_fields()
 
     def _join_fields_with_soil(self):
-        """Join fields with soil data using largest intersection area with memory optimization."""
+        """Optimized join of fields with soil data using a spatial join."""
+        self.log.info(f"Optimized: Joining fields with soil data for table: {self.temp_fields_table_name}")
+        start_time = time.time()
+
+        # Optimized spatial join using QUALIFY to find the soil type with the largest overlap.
+        # This is significantly more performant than the previous correlated subquery approach.
+        temp_join_table = f"{self.temp_fields_table_name}_soil_join"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {temp_join_table} AS
+            SELECT
+                f.*,
+                s.soil_type
+            FROM {self.temp_fields_table_name} f
+            LEFT JOIN soil_types_prepared s ON ST_Intersects(f.geom, s.geom)
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY f.field_uuid
+                ORDER BY ST_Area(ST_Intersection(f.geom, s.geom)) DESC
+            ) = 1
+        """)
+
+        # Replace the original table with the joined table
+        self.conn.execute(f"DROP TABLE {self.temp_fields_table_name}")
+        self.conn.execute(f"ALTER TABLE {temp_join_table} RENAME TO {self.temp_fields_table_name}")
+
+        duration = time.time() - start_time
+        self.log.info(f"✅ Finished joining with soil data in {duration:.2f} seconds.")
+
+        # Validate that the join was successful
         try:
-            # Create spatial index for performance
-            if self.config.enable_spatial_indexing:
-                try:
-                    self.conn.execute("CREATE INDEX IF NOT EXISTS soil_geom_idx ON soil_types_spatial USING RTREE(geometry_spatial)")
-                    self.log.info("✅ Created spatial index on soil data")
-                except Exception as e:
-                    self.log.warning(f"Could not create soil spatial index: {e}")
-
-            # Memory-optimized soil join using chunked processing
-            field_count = self.conn.execute("SELECT COUNT(*) FROM current_fields").fetchone()[0]
-            chunk_size = min(self.config.batch_size, 2000)  # Smaller chunks for memory efficiency
-
-            if field_count > chunk_size:
-                self.log.info(f"Processing {field_count:,} fields in chunks of {chunk_size:,} for memory efficiency")
-
-                # Create empty result table
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE fields_with_soil (
-                        field_id VARCHAR, cvr_number VARCHAR, area_ha DOUBLE, crop_code INTEGER,
-                        crop_name VARCHAR, field_uuid VARCHAR, geometry GEOMETRY, year INTEGER,
-                        perco_sep_nov_current DOUBLE, perco_dec_feb_current DOUBLE, perco_mar_aug_current DOUBLE,
-                        perco_sep_nov_previous DOUBLE, perco_dec_feb_previous DOUBLE, perco_mar_aug_previous DOUBLE,
-                        total_percolation DOUBLE, avg_precipitation DOUBLE, avg_evaporation DOUBLE,
-                        sufficient_climate_data BOOLEAN, climate_distance_m DOUBLE, climate_data_quality VARCHAR,
-                        soil_code VARCHAR, soil_description VARCHAR, clay_content DOUBLE,
-                        total_soil_n_mg_ha DOUBLE, soil_type_category VARCHAR, has_soil_data BOOLEAN
-                    )
-                """)
-
-                # Process in chunks
-                for offset in range(0, field_count, chunk_size):
-                    self.log.info(f"Processing soil join chunk: {offset:,} to {offset + chunk_size:,}")
-
-                    self.conn.execute(f"""
-                        INSERT INTO fields_with_soil
-                        WITH chunk_fields AS (
-                            SELECT * FROM current_fields
-                            LIMIT {chunk_size} OFFSET {offset}
-                        ),
-                        soil_intersections AS (
-                            SELECT
-                                f.field_id,
-                                s.soil_code,
-                                s.soil_description,
-                                s.clay_content,
-                                s.total_n_content,
-                                ST_Area_Spheroid(ST_Intersection(f.geom, s.geometry_spatial)) as intersection_area,
-                                ROW_NUMBER() OVER(
-                                    PARTITION BY f.field_id
-                                    ORDER BY ST_Area_Spheroid(ST_Intersection(f.geom, s.geometry_spatial)) DESC
-                                ) as rn
-                            FROM chunk_fields f
-                            JOIN soil_types_spatial s ON ST_Intersects(f.geom, s.geometry_spatial)
-                        )
-                        SELECT
-                            f.*,
-                            COALESCE(si.soil_code, '5') as soil_code,
-                            COALESCE(si.soil_description, 'Medium clay soil') as soil_description,
-                            COALESCE(si.clay_content, 15.0) as clay_content,
-                            COALESCE(si.total_n_content, 5.0) as total_soil_n_mg_ha,
-                            CASE
-                                WHEN COALESCE(si.soil_code, '5') IN ('1', '2', '3', '4') THEN 'sand'
-                                ELSE 'clay'
-                            END as soil_type_category,
-                            si.soil_code IS NOT NULL as has_soil_data
-                        FROM chunk_fields f
-                        LEFT JOIN soil_intersections si ON f.field_id = si.field_id AND si.rn = 1
-                    """)
+            soil_col_check = self.conn.execute(f"SELECT soil_type FROM {self.temp_fields_table_name} LIMIT 1").fetchone()
+            if soil_col_check is None:
+                self.log.warning("The 'soil_type' column does not exist after the join.")
             else:
-                # Single batch processing for smaller datasets
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE fields_with_soil AS
-                    WITH soil_intersections AS (
-                        SELECT
-                            f.field_id,
-                            s.soil_code,
-                            s.soil_description,
-                            s.clay_content,
-                            s.total_n_content,
-                            ST_Area_Spheroid(ST_Intersection(f.geom, s.geometry_spatial)) as intersection_area,
-                            ROW_NUMBER() OVER(
-                                PARTITION BY f.field_id
-                                ORDER BY ST_Area_Spheroid(ST_Intersection(f.geom, s.geometry_spatial)) DESC
-                            ) as rn
-                        FROM current_fields f
-                        JOIN soil_types_spatial s ON ST_Intersects(f.geom, s.geometry_spatial)
-                    )
-                    SELECT
-                        f.*,
-                        COALESCE(si.soil_code, '5') as soil_code,
-                        COALESCE(si.soil_description, 'Medium clay soil') as soil_description,
-                        COALESCE(si.clay_content, 15.0) as clay_content,
-                        COALESCE(si.total_n_content, 5.0) as total_soil_n_mg_ha,
-                        CASE
-                            WHEN COALESCE(si.soil_code, '5') IN ('1', '2', '3', '4') THEN 'sand'
-                            ELSE 'clay'
-                        END as soil_type_category,
-                        si.soil_code IS NOT NULL as has_soil_data
-                    FROM current_fields f
-                    LEFT JOIN soil_intersections si ON f.field_id = si.field_id AND si.rn = 1
-                """)
-
-            # Update current_fields for next step
-            self.conn.execute("DROP TABLE current_fields")
-            self.conn.execute("CREATE TABLE current_fields AS SELECT * FROM fields_with_soil")
-
-            soil_stats = self.conn.execute("""
-                SELECT COUNT(*) as total, COUNT(CASE WHEN has_soil_data THEN 1 END) as with_soil
-                FROM current_fields
-            """).fetchone()
-            self.log.info(f"✅ Soil join: {soil_stats[0]:,} fields, {soil_stats[1]:,} with soil data")
-
+                null_count = self.conn.execute(f"SELECT COUNT(*) FROM {self.temp_fields_table_name} WHERE soil_type IS NULL").fetchone()[0]
+                self.log.info(f"Fields with null soil_type after join: {null_count}")
         except Exception as e:
-            self.log.warning(f"Soil join failed, using defaults: {e}")
-            # Create a comprehensive fallback table with a matching schema
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE fields_with_soil AS
-                SELECT
-                    *,
-                    -- Soil data fallbacks
-                    '5' as soil_code,
-                    'Medium clay soil' as soil_description,
-                    15.0 as clay_content,
-                    5.0 as total_soil_n_mg_ha,
-                    'clay' as soil_type_category,
-                    false as has_soil_data,
-                    -- Crop classification fallbacks
-                    'M2' as m_code,
-                    'W2' as w_code,
-                    'MP2' as mp_code,
-                    'WP2' as wp_code,
-                    'WC2' as wc_code,
-                    false as has_crop_classifications,
-                    -- Nitrogen input fallbacks
-                    2.0 as nfix_ha,
-                    2.0 as nfix_prev,
-                    80.0 as mineral_n_spring_kg_ha,
-                    8.0 as mineral_n_autumn_kg_ha,
-                    3.0 as mineral_n_grazing_kg_ha,
-                    35.0 as organic_n_manure_kg_ha,
-                    150.0 as total_n_quota_kg_ha,
-                    90.0 as mineral_n_prev_kg_ha,
-                    30.0 as organic_n_prev_kg_ha,
-                    false as has_fertilizer_data,
-                    false as has_real_spring_n,
-                    false as has_real_organic_n
-                FROM current_fields
-            """)
-            self.conn.execute("DROP TABLE current_fields")
-            self.conn.execute("CREATE TABLE current_fields AS SELECT * FROM fields_with_soil")
+            self.log.error(f"Validation failed after soil join: {e}")
 
     def _join_fields_with_crops(self):
-        """Join fields with crop classifications."""
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE fields_with_crops AS
+        """Optimized join of fields with simplified crop classifications."""
+        self.log.info("Optimized: Joining fields with simplified crop classifications...")
+        start_time = time.time()
+
+        self.conn.execute(f"ALTER TABLE {self.temp_fields_table_name} ADD COLUMN IF NOT EXISTS crop_code VARCHAR;")
+
+        # Create a temporary table with the crop codes to update, finding the crop with the largest overlap
+        # for each field. This avoids slow row-by-row updates with correlated subqueries.
+        update_table = "crop_codes_to_update"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {update_table} AS
+            WITH intersections AS (
+                -- This subquery uses a single spatial predicate, allowing DuckDB
+                -- to use the optimized SPATIAL_JOIN operator per PR #545.
+                SELECT
+                    f.field_uuid,
+                    f.year as field_year,
+                    c.crop_code_simplified,
+                    c.year as crop_year,
+                    ST_Area(ST_Intersection(f.geom, c.geom)) as intersection_area
+                FROM {self.temp_fields_table_name} f
+                JOIN field_plan_simplified c ON ST_Intersects(f.geom, c.geom)
+            )
             SELECT
-                f.*,
-                COALESCE(cc.m_code, 'M2') as m_code,
-                COALESCE(cc.w_code, 'W2') as w_code,
-                COALESCE(cc.mp_code, 'MP2') as mp_code,
-                COALESCE(cc.wp_code, 'WP2') as wp_code,
-                COALESCE(cc.wc_code, 'WC2') as wc_code,
-                cc.field_id IS NOT NULL as has_crop_classifications
-            FROM current_fields f
-            LEFT JOIN fields_with_crop_classifications cc
-                ON f.field_id = cc.field_id AND f.year = cc.year
+                field_uuid,
+                crop_code_simplified
+            FROM intersections
+            WHERE field_year = crop_year
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY field_uuid
+                ORDER BY intersection_area DESC
+            ) = 1;
         """)
 
-        # Update current_fields for next step
-        self.conn.execute("DROP TABLE current_fields")
-        self.conn.execute("CREATE TABLE current_fields AS SELECT * FROM fields_with_crops")
+        # Update the main table from the temporary update table
+        self.conn.execute(f"""
+            UPDATE {self.temp_fields_table_name}
+            SET crop_code = u.crop_code_simplified
+            FROM {update_table} u
+            WHERE {self.temp_fields_table_name}.field_uuid = u.field_uuid;
+        """)
 
-        crop_stats = self.conn.execute("""
-            SELECT COUNT(*) as total, COUNT(CASE WHEN has_crop_classifications THEN 1 END) as with_crops
-            FROM current_fields
-        """).fetchone()
-        self.log.info(f"✅ Crop join: {crop_stats[0]:,} fields, {crop_stats[1]:,} with real classifications")
+        self.conn.execute(f"DROP TABLE {update_table};")
 
+        duration = time.time() - start_time
+        null_count = self.conn.execute(f"SELECT COUNT(*) FROM {self.temp_fields_table_name} WHERE crop_code IS NULL").fetchone()[0]
+        self.log.info(f"✅ Finished joining with crop data in {duration:.2f} seconds. Fields with null crop_code: {null_count}")
+
+    @timed(name="Joining with nitrogen data")
     def _join_fields_with_nitrogen(self) -> str:
-        """Join fields with nitrogen inputs (fixation and fertilizer data)."""
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
+        """Optimized join of fields with fertilizer data."""
+        self.log.info("Optimized: Joining fields with fertilizer data...")
+
+        try:
+            self.conn.execute("SELECT 1 FROM fertilizer_data_prepared LIMIT 1")
+        except Exception:
+            self.log.warning("`fertilizer_data_prepared` not found. Skipping nitrogen data join.")
+            return self.temp_fields_table_name
+
+        nitrogen_columns = [
+            "tn_t_ha", "mineral_n_foraar", "mineral_n_eft",
+            "mineral_n_udb", "organic_n_hus", "nfix_ha"
+        ]
+        select_cols = ", ".join([f"n.{col}" for col in nitrogen_columns])
+
+        temp_join_table = f"{self.temp_fields_table_name}_nitro_join"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {temp_join_table} AS
             SELECT
                 f.*,
-                -- Nitrogen fixation data
-                COALESCE(nf.nfix_ha, 2.0) as nfix_ha,
-                COALESCE(nf.nfix_prev, 2.0) as nfix_prev,
-                -- Fertilizer data with intelligent fallbacks
-                COALESCE(fh.mineral_n_foraar,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 50.0 ELSE 80.0 END) as mineral_n_spring_kg_ha,
-                COALESCE(fh.mineral_n_eft,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 5.0 ELSE 8.0 END) as mineral_n_autumn_kg_ha,
-                COALESCE(fh.mineral_n_udb,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 2.0 ELSE 3.0 END) as mineral_n_grazing_kg_ha,
-                COALESCE(fh.organic_n_hus,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 25.0 ELSE 35.0 END) as organic_n_manure_kg_ha,
-                COALESCE(fh.tn_t_ha,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 120.0 ELSE 150.0 END) as total_n_quota_kg_ha,
-                COALESCE(fh.mineral_n_prev,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 60.0 ELSE 90.0 END) as mineral_n_prev_kg_ha,
-                COALESCE(fh.organic_n_prev,
-                    CASE WHEN fh.cvr_number IS NOT NULL THEN 20.0 ELSE 30.0 END) as organic_n_prev_kg_ha,
-                -- Data quality flags
-                fh.cvr_number IS NOT NULL as has_fertilizer_data,
-                fh.mineral_n_foraar IS NOT NULL as has_real_spring_n,
-                fh.organic_n_hus IS NOT NULL as has_real_organic_n
-            FROM current_fields f
-            LEFT JOIN n_fixation_history nf ON f.field_id = nf.field_id AND f.year = nf.year
-            LEFT JOIN fertilizer_history fh ON f.cvr_number = fh.cvr_number AND f.year = fh.year
+                {select_cols}
+            FROM {self.temp_fields_table_name} f
+            LEFT JOIN fertilizer_data_prepared n ON f.cvr_nummer = n.cvr_number AND f.year = n.year
         """)
 
-        # Clean up intermediate table
-        self.conn.execute("DROP TABLE IF EXISTS current_fields")
+        # Replace the original table
+        self.conn.execute(f"DROP TABLE {self.temp_fields_table_name}")
+        self.conn.execute(f"ALTER TABLE {temp_join_table} RENAME TO {self.temp_fields_table_name}")
 
-        nitrogen_stats = self.conn.execute("""
-            SELECT
-                COUNT(*) as total,
-                COUNT(CASE WHEN has_fertilizer_data THEN 1 END) as with_fertilizer,
-                AVG(mineral_n_spring_kg_ha) as avg_spring_n,
-                AVG(organic_n_manure_kg_ha) as avg_organic_n
-            FROM fields_with_climate_soil_crops
-        """).fetchone()
-        self.log.info(f"✅ Nitrogen join: {nitrogen_stats[0]:,} fields, {nitrogen_stats[1]:,} with fertilizer data")
-        self.log.info(f"   Avg spring N: {nitrogen_stats[2]:.1f} kg/ha, avg organic N: {nitrogen_stats[3]:.1f} kg/ha")
+        # Fill NULLs with 0 for all nitrogen columns that were just added
+        for col in nitrogen_columns:
+            self.conn.execute(f"""
+                UPDATE {self.temp_fields_table_name} SET {col} = 0 WHERE {col} IS NULL;
+            """)
 
-        return "fields_with_climate_soil_crops"
+        self.log.info("✅ Finished joining with nitrogen data.")
+        return self.temp_fields_table_name
 
     def _log_spatial_join_summary(self, final_table: str):
-        """Log comprehensive spatial join summary."""
+        """Log a summary of the spatial join results."""
         summary = self.conn.execute(f"""
             SELECT
                 COUNT(*) as total_fields,
@@ -3366,132 +3241,40 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     @timed(name="Creating spatial tables")
     def _create_spatial_tables(self) -> None:
-        """Create production-optimized spatial tables with proper geometry processing."""
-        try:
-            self.log.info("Creating production-optimized spatial tables for agricultural fields and soil types")
+        """
+        Prepare spatial tables by converting WKB to geometry and splitting multipolygons
+        for optimal spatial join performance.
+        """
+        self.log.info("Preparing spatial tables with ST_Dump optimization...")
+        # Prepare DMI climate data
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE dmi_climate_prepared AS
+            SELECT
+                station_id,
+                time,
+                mean_temp,
+                max_temp,
+                min_temp,
+                precipitation,
+                evaporation,
+                ST_GeomFromWKB(geometry) as geom
+            FROM dmi_climate_raw
+            WHERE ST_IsValid(ST_GeomFromWKB(geometry));
+        """)
 
-            # Create agricultural_fields_spatial table with production optimizations
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE agricultural_fields_spatial AS
-                SELECT
-                    *,
-                    -- Use validated geometry (production pattern)
-                    CASE
-                        WHEN geometry IS NOT NULL AND ST_IsValid(geometry) THEN geometry
-                        ELSE NULL
-                    END as geom,
-                    -- Create centroid for spatial joins
-                    CASE
-                        WHEN geometry IS NOT NULL AND ST_IsValid(geometry) THEN ST_Centroid(geometry)
-                        ELSE NULL
-                    END as centroid_geom,
-                    -- Calculate field area using spheroid for accuracy (like field_area_analysis.py)
-                    CASE
-                        WHEN geometry IS NOT NULL AND ST_IsValid(geometry) THEN ST_Area_Spheroid(geometry)
-                        ELSE NULL
-                    END as field_area_m2
-                FROM agricultural_fields
-                WHERE geometry IS NOT NULL
-                    AND ST_IsValid(geometry) = true
-            """)
-
-            # Create spatial indexes for production performance
-            if self.config.enable_spatial_indexing:
-                try:
-                    self.conn.execute("CREATE INDEX IF NOT EXISTS idx_fields_geom ON agricultural_fields_spatial USING RTREE(geom)")
-                    self.conn.execute("CREATE INDEX IF NOT EXISTS idx_fields_centroid ON agricultural_fields_spatial USING RTREE(centroid_geom)")
-                    self.log.info("✅ Created spatial indexes for agricultural fields")
-                except Exception as e:
-                    self.log.warning(f"Could not create spatial indexes: {e}")
-
-            # Validate and transform geometries for agricultural fields
-            fields_count = validate_and_transform_geometries_duckdb(
-                self.conn, "agricultural_fields_spatial", "geom"
-            )
-
-            # Log production-ready statistics
-            field_stats = self.conn.execute("""
-                SELECT
-                    COUNT(*) as total_fields,
-                    COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as fields_with_geometry,
-                    COUNT(CASE WHEN field_area_m2 > 0 THEN 1 END) as fields_with_area,
-                    AVG(field_area_m2) as avg_area_m2,
-                    SUM(field_area_m2) as total_area_m2
-                FROM agricultural_fields_spatial
-            """).fetchone()
-
-            total, with_geom, with_area, avg_area, total_area = field_stats
-            self.log.info(f"✅ Processed {total:,} agricultural fields with valid geometries")
-            if avg_area:
-                self.log.info(f"   Average field area: {avg_area/10000:.1f} hectares")
-                self.log.info(f"   Total processing area: {total_area/1000000:.0f} km²")
-
-            # Create soil_types_spatial table if soil data is available
-            soil_table_exists = False
-
-            # Try different possible soil table names
-            possible_soil_tables = ["data_soil_types_silver", "soil_types", "data_soil_types"]
-            soil_table_name = None
-
-            for table_name in possible_soil_tables:
-                try:
-                    soil_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                    if soil_count > 0:
-                        soil_table_name = table_name
-                        self.log.info(f"Found soil data in table: {table_name} ({soil_count:,} records)")
-                        break
-                except Exception:
-                    continue  # Table doesn't exist, try next one
-
-            if soil_table_name:
-                try:
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE soil_types_spatial AS
-                        SELECT
-                            *,
-                            -- Use available geometry column
-                            geometry as geometry_spatial
-                        FROM {soil_table_name}
-                        WHERE geometry IS NOT NULL
-                            AND ST_IsValid(geometry) = true
-                    """)
-
-                    # Validate and transform soil geometries
-                    soil_geom_count = validate_and_transform_geometries_duckdb(
-                        self.conn, "soil_types_spatial", "geometry_spatial"
-                    )
-                    self.log.info(f"Processed {soil_geom_count:,} soil type geometries")
-                    soil_table_exists = True
-                except Exception as e:
-                    self.log.warning(f"Could not create soil_types_spatial table from {soil_table_name}: {e}")
-            else:
-                self.log.warning("No soil types data found in any expected table")
-
-            if not soil_table_exists:
-                # Create dummy soil_types_spatial table for fallback
-                self.log.info("Creating fallback soil_types_spatial table")
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE soil_types_spatial AS
-                    SELECT
-                        '5' as soil_code,
-                        'Medium clay soil' as soil_description,
-                        15.0 as clay_content,
-                        5.0 as total_n_content,
-                        ST_GeomFromText('POLYGON((8 54, 15 54, 15 58, 8 58, 8 54))') as geometry_spatial
-                """)
-
-            self.log.info("✅ Created spatial tables successfully")
-
-        except Exception as e:
-            self.log.error(f"Error creating spatial tables: {e}")
-            raise
+        # Prepare soil types data, splitting multipolygons with ST_Dump.
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE soil_types_prepared AS
+            SELECT
+                raw.soil_type,
+                (unnest(ST_Dump(ST_GeomFromWKB(raw.geometry)))).geom as geom
+            FROM soil_types_raw raw
+            WHERE raw.geometry IS NOT NULL;
+        """)
 
     @timed(name="Preparing nitrogen input tables")
     def _prepare_nitrogen_inputs_tables(self) -> None:
-        """
-        Prepare nitrogen fixation and fertilizer history tables needed for NLES5 calculations.
-        Prioritizes real fertilizer data over defaults.
-        """
+        """Prepares tables related to nitrogen inputs, including fertilizer and N-fixation."""
         try:
             self.log.info("Preparing nitrogen fixation and fertilizer history tables with real data")
 
