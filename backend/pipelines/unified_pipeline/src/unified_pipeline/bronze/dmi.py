@@ -57,7 +57,7 @@ class DMIBronzeConfig(BaseJobConfig):
     parameters: List[str] = ["pot_evaporation_makkink", "acc_precip"]
     api_base_url: str = "https://dmigw.govcloud.dk/v2/climateData"
     max_concurrent_fetches: int = 5
-    days_back: int = 30
+    days_back: int = 1095
 
     model_config = ConfigDict(frozen=True)
 
