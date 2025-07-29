@@ -7,10 +7,10 @@ clean, harmonized silver layer data following the medallion architecture.
 
 The module contains:
 - DMISilverConfig: Configuration class for the DMI silver transformation
-- DMISilver: Implementation class for transforming DMI data using DuckDB
+- DMISilver: Implementation class for transforming DMI monthly data using DuckDB
 
 The data transformation includes geospatial processing, CRS transformation,
-and statistical aggregation for multiple climate parameters.
+and statistical aggregation for multiple climate parameters on monthly timescales.
 """
 
 import json
@@ -24,7 +24,7 @@ class DMISilverConfig(BaseJobConfig):
     """
     Configuration for DMI Silver data processing.
 
-    This configuration defines parameters for transforming DMI data
+    This configuration defines parameters for transforming DMI monthly climate data
     from raw (bronze) to structured (silver) format, including dataset names,
     storage parameters, and geospatial configurations.
 
@@ -44,7 +44,7 @@ class DMISilverConfig(BaseJobConfig):
 
 class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     """
-    Silver layer processor for DMI climate data using DuckDB-spatial.
+    Silver layer processor for DMI monthly climate data using DuckDB-spatial.
 
     This class transforms raw DMI climate data from the bronze layer into
     structured spatial data using DuckDB for all data operations and spatial
@@ -52,10 +52,10 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     parameters with CRS transformation and statistical aggregation.
 
     The processing includes:
-    1. Reading raw data from GCS or in-memory bronze data
+    1. Reading raw monthly data from GCS or in-memory bronze data
     2. Extracting GeoJSON features from API responses
     3. Transforming CRS using DuckDB spatial functions
-    4. Calculating statistical aggregations
+    4. Calculating statistical aggregations by month and parameter
     5. Saving processed data to GCS
     """
 
@@ -138,10 +138,10 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     @timed(name="Transforming DMI climate data")
     def _transform_climate_data(self, raw_data: Dict, parameter_id: str) -> Optional[Any]:
         """
-        Transform raw climate data into processed statistics using DuckDB-spatial.
+        Transform raw monthly climate data into processed statistics using DuckDB-spatial.
 
         Args:
-            raw_data (Dict): Raw climate data from DMI API
+            raw_data (Dict): Raw monthly climate data from DMI API
             parameter_id (str): Climate parameter identifier
 
         Returns:
@@ -275,17 +275,17 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             """)
 
             self.log.info(
-                f"Successfully transformed {len(raw_data['features'])} records for parameter {parameter_id}"
+                f"Successfully transformed {len(raw_data['features'])} monthly records for parameter {parameter_id}"
             )
             return processed_result
 
         except Exception as e:
-            self.log.error(f"Error transforming data for parameter {parameter_id}: {e}")
+            self.log.error(f"Error transforming monthly data for parameter {parameter_id}: {e}")
             return None
 
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
-        Run silver processing for DMI data.
+        Run silver processing for DMI monthly data.
 
         Args:
             bronze_data: Optional data from bronze stage. If None,
@@ -296,12 +296,12 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                           or None if processing fails.
         """
         try:
-            self.log.info("Starting DMI silver processing")
+            self.log.info("Starting DMI silver processing for monthly climate data")
 
             all_processed_data = {}
 
             for parameter_id in self.config.parameters:
-                self.log.info(f"Processing DMI parameter {parameter_id}")
+                self.log.info(f"Processing DMI monthly parameter {parameter_id}")
 
                 # Get bronze data for this parameter
                 parameter_bronze_data = await self._find_latest_bronze_data(
@@ -372,7 +372,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
 
                         all_processed_data[parameter_id] = final_table_name
                         self.log.info(
-                            f"Successfully processed {row_count} records for parameter {parameter_id}"
+                            f"Successfully processed {row_count} monthly records for parameter {parameter_id}"
                         )
                     else:
                         self.log.warning(
@@ -385,7 +385,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 self.log.error("No DMI parameters were successfully processed")
                 return None
 
-            self.log.info(f"Successfully processed {len(all_processed_data)} DMI parameters")
+            self.log.info(f"Successfully processed {len(all_processed_data)} DMI monthly parameters")
             return all_processed_data
 
         except Exception as e:
