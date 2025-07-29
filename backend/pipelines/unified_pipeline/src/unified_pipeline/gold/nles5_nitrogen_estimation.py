@@ -1035,6 +1035,40 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Fall back to default method
             return self._get_latest_silver_path(self.config.fertilizer_dataset)
 
+    def _get_field_plan_data_path(self) -> str:
+        """
+        Get the specific path for field plan data (Markplan_med_Gødningsoplysninger) from fertiliser directory.
+        
+        Priority order:
+        1. GKEA2024_Markplan_med_Gødningsoplysninger.parquet (most recent field plan)
+        2. Most recent Markplan_med_Gødningsoplysninger [year].parquet file  
+        3. None found - raise exception
+        """
+        try:
+            # Priority 1: GKEA 2024 field plan data
+            gkea_pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA2024_Markplan_med_Gødningsoplysninger.parquet"
+            gkea_files = self.gcs_access.list_files(gkea_pattern)
+            
+            if gkea_files:
+                selected_file = sorted(gkea_files)[-1]  # Get most recent timestamp
+                self.log.info(f"📋 Selected 2024 field plan data: {selected_file}")
+                return selected_file
+            
+            # Priority 2: Historical Markplan files
+            historical_pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA*_Markplan_med_Gødningsoplysninger*.parquet"
+            historical_files = self.gcs_access.list_files(historical_pattern)
+            
+            if historical_files:
+                selected_file = sorted(historical_files)[-1]  # Get most recent
+                self.log.info(f"📅 Selected historical field plan data: {selected_file}")
+                return selected_file
+            
+            raise ValueError("No field plan (Markplan_med_Gødningsoplysninger) files found in fertiliser directory")
+            
+        except Exception as e:
+            self.log.error(f"Error selecting field plan data: {e}")
+            raise ValueError(f"Cannot find field plan data: {e}")
+
     def _get_catch_crops_data_path(self) -> str:
         """
         Get the specific path for catch crops data (Efterafgrøder) from fertiliser directory.
@@ -1177,6 +1211,26 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                 # For critical fertilizer data, don't fall back - fail clearly
                                 self.log.error(f"❌ Failed to load critical fertilizer data {dataset_name}: {e}")
                                 continue
+                        
+                        # Special handling for field plan data from fertiliser directory
+                        elif dataset_name == self.config.field_plan_dataset:
+                            try:
+                                field_plan_path = self._get_field_plan_data_path()
+                                self.log.info(f"Using field plan file from fertiliser directory: {field_plan_path}")
+                                success = self._read_silver_data_from_path(dataset_name, field_plan_path, table_name)
+                                if success:
+                                    loaded_tables[dataset_name] = table_name
+                                    self.log.info(f"✅ Successfully loaded field plan data: {dataset_name}")
+                                    continue
+                                else:
+                                    self.log.error(f"❌ Failed to load field plan data {dataset_name}")
+                                    continue
+                            except Exception as e:
+                                self.log.error(f"Failed to load field plan data: {e}")
+                                # Field plan data is important - log clearly but continue with defaults
+                                self.log.warning(f"⚠️  Field plan data not available, will use defaults: {e}")
+                                continue
+                        
                         # Special handling for catch crops data from fertiliser directory 
                         elif dataset_name == self.config.catch_crops_dataset:
                             try:
@@ -4263,23 +4317,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         
         # 5. Check Optional Datasets (warn only, don't fail)
         
-        # Check for field plan data (may be embedded in GKEA Markplan files)
+        # Check for field plan data (embedded in GKEA Markplan files in fertiliser directory)
         try:
-            field_plan_path = self._get_latest_silver_path(self.config.field_plan_dataset)
-            if not self.gcs_access.file_exists(field_plan_path):
-                # Check if field plan data is available in GKEA Markplan files
-                try:
-                    fertilizer_path = self._get_fertilizer_data_path()
-                    if fertilizer_path and "Markplan" in fertilizer_path:
-                        self.log.info(f"✅ Field plan data: Available in GKEA Markplan files: {fertilizer_path}")
-                    else:
-                        missing_optional.append("Field plan data - will use defaults")
-                except Exception:
-                    missing_optional.append("Field plan data - will use defaults")
-            else:
-                self.log.info(f"✅ Field plan data: {field_plan_path}")
-        except Exception:
-            missing_optional.append("Field plan data - will use defaults")
+            field_plan_path = self._get_field_plan_data_path()
+            self.log.info(f"✅ Field plan data: {field_plan_path}")
+        except Exception as e:
+            missing_optional.append(f"Field plan data - {e}")
         
         # Check for catch crops data (Efterafgrøder) in fertiliser directory
         try:
