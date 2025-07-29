@@ -25,6 +25,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import timed
 
+
 class DMIBronzeConfig(BaseJobConfig):
     """
     Configuration for the DMI Bronze source.
@@ -43,21 +44,23 @@ class DMIBronzeConfig(BaseJobConfig):
         parameters (List[str]): List of climate parameters to fetch
         api_base_url (str): Base URL for DMI GovCloud API
         max_concurrent_fetches (int): Maximum number of concurrent API requests
-        days_back (int): Number of days back to fetch data
+        start_year (int): Starting year for historical data (DMI data available from 2011)
+        temporal_resolution (str): Temporal resolution for data fetching (monthly/daily)
     """
 
     name: str = "Danish Meteorological Institute"
     dataset: str = "dmi"
     type: str = "api"
-    description: str = "DMI climate data from GovCloud API"
-    frequency: str = "daily"
+    description: str = "DMI monthly climate data from GovCloud API (2011-present)"
+    frequency: str = "monthly"
     bucket: str = "landbrugsdata-raw-data"
 
     # DMI-specific configuration
     parameters: List[str] = ["pot_evaporation_makkink", "acc_precip"]
     api_base_url: str = "https://dmigw.govcloud.dk/v2/climateData"
     max_concurrent_fetches: int = 5
-    days_back: int = 1095
+    start_year: int = 2011  # DMI grid data available from 2011
+    temporal_resolution: str = "monthly"  # Changed from daily to monthly
 
     model_config = ConfigDict(frozen=True)
 
@@ -113,10 +116,16 @@ class DMIApiClient:
         start_time: datetime,
         end_time: datetime,
     ) -> Dict:
-        """Fetch raw climate grid data and return as JSON"""
+        """
+        Fetch raw climate grid data and return as JSON.
+
+        For monthly data, the API will return monthly aggregated values when the
+        datetime range spans multiple months. The DMI API automatically handles
+        temporal aggregation based on the time span requested.
+        """
         params = {
             "parameterId": parameter_id,
-            "limit": 1000,
+            "limit": 10000,  # Increased limit for monthly data spanning many years
             "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
         }
 
@@ -131,6 +140,7 @@ class DMIApiClient:
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
                 "feature_count": len(data["features"]),
+                "temporal_resolution": "monthly",
             }
 
         except Exception as e:
@@ -152,8 +162,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
     Processing flow:
     1. Initialize API client with configuration
-    2. Calculate time range for data fetching
-    3. Fetch data for each parameter concurrently
+    2. Calculate time range for data fetching (2011 to present)
+    3. Fetch monthly aggregated data for each parameter concurrently
     4. Store raw responses in GCS
     5. Return structured data for in-memory passing to silver stage
     """
@@ -169,13 +179,16 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
     def _calculate_time_range(self) -> tuple[datetime, datetime]:
         """
-        Calculate the time range for data fetching based on configuration.
+        Calculate the time range for data fetching from start_year to present.
+
+        For monthly data, we fetch from January 1st of start_year to the current date.
+        This maximizes the historical data coverage available from DMI.
 
         Returns:
             tuple[datetime, datetime]: Start and end datetime for data fetching
         """
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=self.config.days_back)
+        start_time = datetime(self.config.start_year, 1, 1)  # Start from January 1, 2011
         return start_time, end_time
 
     @timed(name="Fetching DMI parameter data")
@@ -200,7 +213,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
                                     or None if fetching fails
         """
         try:
-            self.log.info(f"Fetching DMI data for parameter {parameter_id}")
+            self.log.info(f"Fetching DMI monthly data for parameter {parameter_id}")
 
             # Fetch parameter data
             parameter_data = await self.api_client.fetch_grid_data(
@@ -208,7 +221,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
             )
 
             if not parameter_data:
-                self.log.error(f"Could not fetch data for parameter {parameter_id}")
+                self.log.error(f"Could not fetch monthly data for parameter {parameter_id}")
                 return None
 
             # Create metadata
@@ -219,6 +232,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
                 "api_base_url": self.config.api_base_url,
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
+                "temporal_resolution": self.config.temporal_resolution,
+                "years_span": end_time.year - start_time.year + 1,
                 "feature_count": parameter_data.get("feature_count", 0),
                 "has_error": "error" in parameter_data,
             }
@@ -233,7 +248,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
             }
 
         except Exception as e:
-            self.log.error(f"Error fetching data for parameter {parameter_id}: {e}")
+            self.log.error(f"Error fetching monthly data for parameter {parameter_id}: {e}")
             return None
 
     def _save_parameter_data(
@@ -277,12 +292,13 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"Starting DMI bronze processing for parameters: {self.config.parameters}"
+                f"Starting DMI bronze processing for monthly data - parameters: {self.config.parameters}"
             )
 
             # Calculate time range
             start_time, end_time = self._calculate_time_range()
-            self.log.info(f"Fetching DMI data from {start_time} to {end_time}")
+            years_span = end_time.year - start_time.year + 1
+            self.log.info(f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)")
 
             # Create semaphore to limit concurrent requests
             semaphore = asyncio.Semaphore(self.config.max_concurrent_fetches)
@@ -295,7 +311,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             # Fetch data for all parameters concurrently
             async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=300, connect=60, sock_read=180)
+                timeout=aiohttp.ClientTimeout(total=600, connect=60, sock_read=300)  # Increased timeout for larger monthly datasets
             ) as session:
                 tasks = [
                     fetch_with_semaphore(session, parameter_id)
@@ -311,20 +327,20 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
                 if isinstance(result, Exception):
                     self.log.error(
-                        f"Exception fetching data for parameter {parameter_id}: {result}"
+                        f"Exception fetching monthly data for parameter {parameter_id}: {result}"
                     )
                     continue
 
                 if result:
                     results[parameter_id] = result
                 else:
-                    self.log.warning(f"Failed to fetch data for parameter {parameter_id}")
+                    self.log.warning(f"Failed to fetch monthly data for parameter {parameter_id}")
 
             if not results:
                 self.log.error("No DMI parameters were successfully processed")
                 return None
 
-            self.log.info(f"Successfully processed {len(results)} DMI parameters")
+            self.log.info(f"Successfully processed {len(results)} DMI parameters with monthly data")
             return results
 
         except Exception as e:
