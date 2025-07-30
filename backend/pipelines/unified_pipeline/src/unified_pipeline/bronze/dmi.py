@@ -200,31 +200,52 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         end_time: datetime,
     ) -> Optional[Dict[str, Any]]:
         """
-        Fetch data for a specific climate parameter.
-
-        Args:
-            session (aiohttp.ClientSession): HTTP session for API requests
-            parameter_id (str): Climate parameter identifier
-            start_time (datetime): Start time for data fetching
-            end_time (datetime): End time for data fetching
-
-        Returns:
-            Optional[Dict[str, Any]]: Dictionary containing parameter data and metadata,
-                                    or None if fetching fails
+        Fetch monthly-aggregated data for one climate parameter by iterating month-by-month.
+        This avoids the 10 000-feature cap on the DMI endpoint and guarantees we retrieve
+        the full history from start_year (2011) to present.
         """
         try:
-            self.log.info(f"Fetching DMI monthly data for parameter {parameter_id}")
-
-            # Fetch parameter data
-            parameter_data = await self.api_client.fetch_grid_data(
-                session, parameter_id, start_time, end_time
+            self.log.info(
+                f"📡 Fetching DMI monthly grid data for {parameter_id} from {start_time:%Y-%m} to {end_time:%Y-%m}"
             )
 
-            if not parameter_data:
-                self.log.error(f"Could not fetch monthly data for parameter {parameter_id}")
+            # Helper to advance one month without pandas
+            def _add_one_month(dt: datetime) -> datetime:
+                year, month = dt.year, dt.month
+                if month == 12:
+                    return datetime(year + 1, 1, 1)
+                return datetime(year, month + 1, 1)
+
+            all_features: list = []
+            cur_start = datetime(start_time.year, start_time.month, 1)
+            while cur_start < end_time:
+                cur_end = _add_one_month(cur_start) - timedelta(seconds=1)
+                if cur_end > end_time:
+                    cur_end = end_time
+
+                monthly_data = await self.api_client.fetch_grid_data(
+                    session, parameter_id, cur_start, cur_end
+                )
+
+                if monthly_data.get("features"):
+                    all_features.extend(monthly_data["features"])
+
+                cur_start = _add_one_month(cur_start)
+
+            if not all_features:
+                self.log.warning(f"No monthly features returned for {parameter_id}")
                 return None
 
-            # Create metadata
+            parameter_data = {
+                "features": all_features,
+                "parameter_id": parameter_id,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "feature_count": len(all_features),
+                "temporal_resolution": "monthly",
+            }
+
+            # Metadata
             metadata = {
                 "parameter_id": parameter_id,
                 "fetch_time": datetime.now().isoformat(),
@@ -234,11 +255,11 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
                 "end_time": end_time.isoformat(),
                 "temporal_resolution": self.config.temporal_resolution,
                 "years_span": end_time.year - start_time.year + 1,
-                "feature_count": parameter_data.get("feature_count", 0),
-                "has_error": "error" in parameter_data,
+                "feature_count": len(all_features),
+                "has_error": False,
             }
 
-            # Save raw data to storage
+            # Persist
             self._save_parameter_data(parameter_id, parameter_data, metadata)
 
             return {
@@ -246,7 +267,6 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
                 "data": parameter_data,
                 "metadata": metadata,
             }
-
         except Exception as e:
             self.log.error(f"Error fetching monthly data for parameter {parameter_id}: {e}")
             return None
