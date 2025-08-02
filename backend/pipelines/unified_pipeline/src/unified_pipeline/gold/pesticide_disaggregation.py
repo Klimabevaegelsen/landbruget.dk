@@ -1969,7 +1969,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     JOIN FilteredFields f2 ON 
                         f1.CVR_Str = f2.CVR_Str 
                         AND f1.Crop_Str = f2.Crop_Str
-                        AND f1.field_id != f2.field_id
+                        AND f1.field_uuid != f2.field_uuid
                         AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
