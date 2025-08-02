@@ -165,6 +165,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     p.block_id,
                     p.cvr_number,
                     p.year,
+                    p.field_uuid,
                     p.bfe_number,
                     p.intersection_area_m2,
                     p.field_area_share_pct,
