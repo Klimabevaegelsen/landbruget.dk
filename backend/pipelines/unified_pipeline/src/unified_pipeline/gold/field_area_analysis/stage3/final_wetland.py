@@ -173,9 +173,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 FROM field_property_intersections p
                 WHERE EXISTS (
                     SELECT 1 FROM fields_batch b 
-                    WHERE p.field_id = b.field_id 
-                    AND p.block_id = b.block_id 
-                    AND p.cvr_number = b.cvr_number
+                    WHERE p.field_uuid = b.field_uuid 
+                    AND p.year = b.year
                 )
             """)
 

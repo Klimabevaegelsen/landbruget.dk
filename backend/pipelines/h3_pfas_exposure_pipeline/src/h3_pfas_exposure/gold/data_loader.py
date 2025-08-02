@@ -373,22 +373,17 @@ class H3DataLoader:
                 f.crop_code,
                 f.crop_name,
                 {geometry_field_select},
-                -- Add field UUID support with fallback to composite key
+                -- Add field UUID support
                 f.field_uuid,
-                COALESCE(f.field_uuid, 
-                         'legacy_' || CAST({"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} AS VARCHAR) || '_' || CAST({"f.block_id" if "block_id" in column_names else "f.block_number"} AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
-                ) as primary_field_id
+                f.field_uuid as primary_field_id
             FROM {temp_table} f
-            INNER JOIN pesticide_field_lookup p ON (
-                {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
-                AND f.field_id = p.field_id
-                AND {"f.block_id" if "block_id" in column_names else "f.block_number"} = p.block_id
-            )
+            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid 
+                AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
             WHERE {geometry_column} IS NOT NULL
             AND {geometry_validation}
             AND {"CAST(f.area_ha AS DOUBLE)" if "area_ha" in column_names else "CAST(f.field_area_ha AS DOUBLE)"} > 0
             AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} IS NOT NULL
-            AND {"f.block_id" if "block_id" in column_names else "f.block_number"} IS NOT NULL
+            AND f.field_uuid IS NOT NULL
         """)
 
         # Clean up temporary table
@@ -486,9 +481,8 @@ class H3DataLoader:
         self.log.info(f"   Dosage quantity: {dosage_quantity_column}")
         self.log.info(f"   Dosage unit: {dosage_unit_column}")
 
-        # Check if field_uuid and primary_field_id columns exist in source data
+        # Check if field_uuid column exists in source data
         has_field_uuid = "field_uuid" in pest_column_names
-        has_primary_field_id = "primary_field_id" in pest_column_names
 
         # Process pesticide data with correct field names and CVR + block_id + field_id extraction
         self.conn.execute(f"""
@@ -508,14 +502,13 @@ class H3DataLoader:
                 -- Extract field_id and block_id for matching
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id,
-                -- Add field UUID support with fallback logic
+                -- Add field UUID support
                 {"field_uuid" if has_field_uuid else "NULL as field_uuid"},
-                {"primary_field_id" if has_primary_field_id else "COALESCE(" + ("field_uuid" if has_field_uuid else "NULL") + ", 'legacy_' || CAST(" + cvr_column + " AS VARCHAR) || '_' || CAST(REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) AS VARCHAR) || '_' || CAST(REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) AS VARCHAR)) as primary_field_id"}
+                {"field_uuid as primary_field_id" if has_field_uuid else "NULL as primary_field_id"}
             FROM temp_pesticides_raw
-            WHERE MatchedFieldID IS NOT NULL
-            AND MatchedBlockID IS NOT NULL
-            AND {cvr_column} IS NOT NULL
+            WHERE {cvr_column} IS NOT NULL
             AND {pesticide_reg_column} IS NOT NULL
+            {"AND field_uuid IS NOT NULL" if has_field_uuid else ""}
         """)
 
         # Clean up temporary table

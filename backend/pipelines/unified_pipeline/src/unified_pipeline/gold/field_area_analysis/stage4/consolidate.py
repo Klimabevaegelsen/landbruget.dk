@@ -114,9 +114,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT bfe_number 
                     FROM field_property_intersections fp2 
-                    WHERE fp2.field_id = fp.field_id 
-                    AND fp2.block_id = fp.block_id 
-                    AND fp2.cvr_number = fp.cvr_number
+                    WHERE fp2.field_uuid = fp.field_uuid 
                     AND fp2.year = fp.year
                     ORDER BY fp2.intersection_area_m2 DESC 
                     LIMIT 1
