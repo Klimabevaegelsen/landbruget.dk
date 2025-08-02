@@ -98,21 +98,23 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         
         self.log.info(f"Loading worker safety data from: {silver_path}")
         
-        # Load both parquet files
+        # Load both parquet files using temp download pattern (like field_production.py)
         mv_path = f"{silver_path}/worker_safety_2020-2024_mv.parquet"
         skadeart_path = f"{silver_path}/worker_safety_2020-2024_skadeart.parquet"
         
         # Load main injury data (total by CVR and year)
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE worker_safety_raw AS 
-            SELECT * FROM read_parquet('{mv_path}')
-        """)
+        with self.gcs_access._temp_download(mv_path) as temp_mv_file:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE worker_safety_raw AS 
+                SELECT * FROM read_parquet('{temp_mv_file}')
+            """)
         
         # Load injury type data (detailed by CVR, year, and injury type) 
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS 
-            SELECT * FROM read_parquet('{skadeart_path}')
-        """)
+        with self.gcs_access._temp_download(skadeart_path) as temp_skadeart_file:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS 
+                SELECT * FROM read_parquet('{temp_skadeart_file}')
+            """)
         
         self.log.info("✅ Silver data loaded successfully")
 
