@@ -32,6 +32,7 @@ on:
           - worker_safety
           - dst
           - dmi
+          - cvr_enrichment
       agricultural_fields_year:
         description: 'Agricultural fields year (for field_area_analysis only)'
         required: false

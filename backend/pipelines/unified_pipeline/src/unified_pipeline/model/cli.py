@@ -137,3 +137,7 @@ class CliConfig(BaseModel):
     stage: Stage
     fvm_layer_type: Optional[FVMLayerType] = None
     fvm_year: Optional[int] = None
+    # CVR enrichment specific parameters
+    test_limit: Optional[int] = None
+    parse_financial_xml: bool = True
+    max_financial_documents: int = 10

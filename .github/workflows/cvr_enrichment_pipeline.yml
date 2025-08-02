@@ -1,0 +1,116 @@
+# CVR Enrichment Pipeline
+# Runs weekly on Tuesdays to enrich CVR data using existing CVR collections from previous pipeline runs
+# This pipeline does NOT rerun other pipelines - it uses existing CVR collections in GCS
+
+name: CVR Enrichment Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 1-7 * 2'  # First Tuesday of each month at 2 AM UTC (uses existing CVR collections from weekend runs)
+  workflow_dispatch:
+    # Allow manual triggering
+    inputs:
+      test_limit:
+        description: 'Limit number of CVR numbers to process (for testing)'
+        required: false
+        type: number
+        default: null
+      parse_financial_xml:
+        description: 'Whether to download and parse XML financial documents'
+        required: false
+        type: boolean
+        default: true
+      max_financial_documents:
+        description: 'Maximum number of financial documents to fetch per company'
+        required: false
+        type: number
+        default: 10
+
+jobs:
+  cvr-enrichment:
+    name: CVR Enrichment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Authenticate to Google Cloud
+        id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Configure CVR API credentials
+        run: |
+          echo "CVR_USERNAME=${{ secrets.CVR_USERNAME }}" >> $GITHUB_ENV
+          echo "CVR_PASSWORD=${{ secrets.CVR_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Run CVR Enrichment Pipeline
+        run: |
+          # Set test parameters if provided
+          TEST_LIMIT_ARG=""
+          if [ "${{ github.event.inputs.test_limit }}" != "" ] && [ "${{ github.event.inputs.test_limit }}" != "null" ]; then
+            TEST_LIMIT_ARG="--test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          PARSE_XML_ARG="--parse-financial-xml"
+          if [ "${{ github.event.inputs.parse_financial_xml }}" == "false" ]; then
+            PARSE_XML_ARG="--no-parse-financial-xml"
+          fi
+          
+          MAX_DOCS_ARG="--max-financial-documents ${{ github.event.inputs.max_financial_documents || 10 }}"
+          
+          # Run the CVR enrichment pipeline
+          uv run python -m unified_pipeline \
+            --env prod \
+            --source cvr_enrichment \
+            --stage gold \
+            $TEST_LIMIT_ARG \
+            $PARSE_XML_ARG \
+            $MAX_DOCS_ARG
+
+      - name: Upload pipeline logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cvr-enrichment-logs
+          path: |
+            *.log
+            logs/
+          retention-days: 7
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ CVR Enrichment Pipeline failed!"
+          echo "Check the logs for details."
+          exit 1
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ CVR Enrichment Pipeline completed successfully!"
+          echo "🎯 Danish business intelligence data has been enriched using existing CVR collections."
+          echo "📊 Financial documents, leadership data, and employment history have been processed and saved to GCS."

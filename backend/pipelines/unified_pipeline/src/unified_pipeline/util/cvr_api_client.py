@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from requests.auth import HTTPBasicAuth
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tqdm import tqdm
 
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
@@ -162,7 +163,7 @@ class CVRAPIClient:
             raw_data = self._make_request(self.company_endpoint, query)
 
             if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
-                self.log.warning(f"No data found for CVR: {cvr_number}")
+                self.log.debug(f"No data found for CVR: {cvr_number}")
                 return None
 
             # Parse comprehensive data
@@ -172,7 +173,6 @@ class CVRAPIClient:
                 self.log.error(f"Failed to parse company data for CVR: {cvr_number}")
                 return None
 
-            self.log.debug(f"Successfully fetched company data for CVR: {cvr_number}")
             return parsed_data
 
         except Exception as e:
@@ -193,7 +193,7 @@ class CVRAPIClient:
         Returns:
             List of financial document data
         """
-        self.log.debug(f"Fetching financial documents for CVR: {cvr_number}")
+
 
         # Validate CVR number format
         if not cvr_number or len(cvr_number) != 8 or not cvr_number.isdigit():
@@ -212,7 +212,7 @@ class CVRAPIClient:
 
             # Check if documents were found
             if data.get("hits", {}).get("total", 0) == 0:
-                self.log.info(f"No financial documents found for CVR: {cvr_number}")
+                self.log.debug(f"No financial documents found for CVR: {cvr_number}")
                 return []
 
             # Parse documents
@@ -528,6 +528,65 @@ class CVRAPIClient:
             )
         parsed_data["subsidiaries"] = subsidiaries
 
+        # Extract comprehensive employment data
+        employment_data = {
+            "annual_employment": [],
+            "quarterly_employment": [],
+            "monthly_employment": [],
+            "replacement_monthly_employment": []
+        }
+        
+        # Annual employment (aarsbeskaeftigelse)
+        for entry in company.get("aarsbeskaeftigelse", []):
+            employment_data["annual_employment"].append({
+                "year": entry.get("aar"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "employees_including_owners": entry.get("antalInklusivEjere"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+        
+        # Quarterly employment (kvartalsbeskaeftigelse)  
+        for entry in company.get("kvartalsbeskaeftigelse", []):
+            employment_data["quarterly_employment"].append({
+                "year": entry.get("aar"),
+                "quarter": entry.get("kvartal"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+            
+        # Monthly employment (maanedsbeskaeftigelse)
+        for entry in company.get("maanedsbeskaeftigelse", []):
+            employment_data["monthly_employment"].append({
+                "year": entry.get("aar"),
+                "month": entry.get("maaned"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+            
+        # Replacement monthly employment (erstMaanedsbeskaeftigelse)
+        for entry in company.get("erstMaanedsbeskaeftigelse", []):
+            employment_data["replacement_monthly_employment"].append({
+                "year": entry.get("aar"),
+                "month": entry.get("maaned"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+        
+        parsed_data["employment_data"] = employment_data
+
         # Extract lifecycle information (founding/dissolution dates)
         lifecycle_events = company.get("livsforloeb", [])
         if lifecycle_events:
@@ -680,7 +739,7 @@ class CVRAPIClient:
         successful = 0
         failed = 0
 
-        for cvr_number in cvr_numbers:
+        for cvr_number in tqdm(cvr_numbers, desc="Fetching company data", unit="company"):
             try:
                 company_data = self.get_company_data(cvr_number, fetch_all_fields)
                 if company_data:
@@ -688,7 +747,7 @@ class CVRAPIClient:
                     successful += 1
                 else:
                     failed += 1
-                    self.log.warning(f"No data found for CVR: {cvr_number}")
+                    self.log.debug(f"No data found for CVR: {cvr_number}")
 
             except Exception as e:
                 failed += 1
@@ -823,7 +882,7 @@ class CVRAPIClient:
         Returns:
             Enriched company data with financial information
         """
-        self.log.debug(f"Fetching enriched company data for CVR: {cvr_number}")
+
 
         # Get basic company data
         company_data = self.get_company_data(cvr_number)
