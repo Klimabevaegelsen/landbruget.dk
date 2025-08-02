@@ -30,6 +30,15 @@ on:
           - pesticide_disaggregation
           - dst
           - dmi
+      agricultural_fields_year:
+        description: 'Agricultural fields year (for field_area_analysis only)'
+        required: false
+        type: choice
+        options:
+          - '2024'
+          - '2025'
+          - 'both'
+        default: 'both'
 
 jobs:
   run-unified-pipeline:
@@ -159,6 +168,16 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
               -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
             echo "FVM WFS matrix workflow triggered successfully with stage=all"
+          elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
+            # Field Area Analysis - trigger the dedicated matrix workflow
+            SELECTED_YEAR="${{ github.event.inputs.agricultural_fields_year || 'both' }}"
+            echo "Field Area Analysis detected - triggering dedicated matrix workflow with year: $SELECTED_YEAR"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"$SELECTED_YEAR\"}}"
+            echo "Field Area Analysis matrix workflow triggered successfully with year: $SELECTED_YEAR"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }}"
