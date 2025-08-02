@@ -246,16 +246,16 @@ class CVRCollectionManager:
         if not timestamps:
             raise ValueError("No timestamps provided")
         
-        # Separate different timestamp formats
+        # Separate different timestamp formats and filter out non-timestamp folders
         standard_timestamps = []  # Format: YYYYMMDD_HHMMSS
         run_timestamps = []       # Format: run_XX_XXXXXXXXXX
         
         for ts in timestamps:
             if ts.startswith('run_'):
                 run_timestamps.append(ts)
-            else:
-                # Assume standard format
+            elif self._is_standard_timestamp(ts):
                 standard_timestamps.append(ts)
+            # Skip non-timestamp folders like 'test', 'temp', etc.
         
         # Prefer standard timestamps (they're more recent format)
         if standard_timestamps:
@@ -269,8 +269,31 @@ class CVRCollectionManager:
                     return 0
             return sorted(run_timestamps, key=extract_run_number)[-1]
         else:
-            # Fallback to simple string sorting
-            return sorted(timestamps)[-1]
+            # If no valid timestamps found, raise an error
+            raise ValueError(f"No valid timestamp folders found in: {timestamps}")
+
+    def _is_standard_timestamp(self, timestamp: str) -> bool:
+        """
+        Check if a string matches the standard timestamp format YYYYMMDD_HHMMSS.
+        
+        Args:
+            timestamp: String to check
+            
+        Returns:
+            True if it matches the standard format
+        """
+        if len(timestamp) != 15 or timestamp[8] != '_':
+            return False
+        
+        try:
+            # Check if date part (YYYYMMDD) and time part (HHMMSS) are numeric
+            date_part = timestamp[:8]
+            time_part = timestamp[9:]
+            int(date_part)  # Should be 8 digits
+            int(time_part)  # Should be 6 digits
+            return len(date_part) == 8 and len(time_part) == 6
+        except ValueError:
+            return False
 
 
 def extract_cvr_numbers_from_table(
