@@ -65,6 +65,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 field_geometry as geometry,
                 field_area_m2,
                 
@@ -83,7 +84,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 ) as primary_bfe_number
                 
             FROM field_property_intersections fp
-            GROUP BY field_id, block_id, cvr_number, year, field_geometry, field_area_m2
+            GROUP BY field_id, block_id, cvr_number, year, field_uuid, field_geometry, field_area_m2
         """)
 
         all_fields_count = self.conn.execute(
@@ -162,6 +163,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             f.block_id,
             f.cvr_number,
             f.year,
+            f.field_uuid,
             f.geometry,
             f.field_area_m2,
             
