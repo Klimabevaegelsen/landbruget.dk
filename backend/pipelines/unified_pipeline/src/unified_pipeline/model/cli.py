@@ -48,6 +48,7 @@ class Source(Enum):
         pesticide_disaggregation: Pesticide disaggregation gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
+        arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
     """
 
     bnbo = "bnbo"
@@ -67,6 +68,8 @@ class Source(Enum):
     cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
+    arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
+    worker_safety = "worker_safety"
 
 
 class Stage(Enum):

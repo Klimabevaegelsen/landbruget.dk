@@ -28,6 +28,8 @@ on:
           - field_production
           - field_area_analysis
           - pesticide_disaggregation
+          - arbejdstilsynet_inspections
+          - worker_safety
           - dst
           - dmi
       agricultural_fields_year:
@@ -60,9 +62,9 @@ jobs:
                {"source":"fvm_wfs","layer_type":"organic_areas","year":2012},{"source":"fvm_wfs","layer_type":"organic_areas","year":2013},{"source":"fvm_wfs","layer_type":"organic_areas","year":2014},{"source":"fvm_wfs","layer_type":"organic_areas","year":2015},{"source":"fvm_wfs","layer_type":"organic_areas","year":2016},{"source":"fvm_wfs","layer_type":"organic_areas","year":2017},{"source":"fvm_wfs","layer_type":"organic_areas","year":2018},{"source":"fvm_wfs","layer_type":"organic_areas","year":2019},{"source":"fvm_wfs","layer_type":"organic_areas","year":2020},{"source":"fvm_wfs","layer_type":"organic_areas","year":2021},{"source":"fvm_wfs","layer_type":"organic_areas","year":2022},{"source":"fvm_wfs","layer_type":"organic_areas","year":2023},{"source":"fvm_wfs","layer_type":"organic_areas","year":2024}
              ]')) ||
             (github.event_name == 'schedule' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
