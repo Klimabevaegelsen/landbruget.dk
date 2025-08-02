@@ -109,6 +109,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 
@@ -324,6 +325,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     b.block_id,
                     b.cvr_number,
                     b.year,
+                    b.field_uuid,
                     b.geometry,
                     b.field_area_m2,
                     
