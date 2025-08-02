@@ -22,25 +22,28 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load all field-property intersections, soil data, and environmental analyses from previous stages."""
+        # Get year-aware output dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
-        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
 
         # Load field-soil intersections from Stage 1B
-        stage1b_dataset = CONFIG.stage_outputs["field_soil_intersections"]
+        stage1b_dataset = updated_outputs["field_soil_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
 
         # Load final BNBO analysis from Stage 3A (only fields with BNBO)
-        stage3a_dataset = CONFIG.stage_outputs["final_bnbo"]
+        stage3a_dataset = updated_outputs["final_bnbo"]
         stage3a_path = self._get_latest_gold_path(stage3a_dataset)
         self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
 
         # Load final wetland analysis from Stage 3B (only fields with wetlands)
-        stage3b_dataset = CONFIG.stage_outputs["final_wetland"]
+        stage3b_dataset = updated_outputs["final_wetland"]
         stage3b_path = self._get_latest_gold_path(stage3b_dataset)
         self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
 

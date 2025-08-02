@@ -25,7 +25,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load field data and water project wetland intersections from Stage 1."""
         # Load agricultural fields (still from silver - this is the BUILD side)
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "fields_raw")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "fields_raw")
 
         # Load Stage 0 pre-filtered wetlands data for field intersections (PROBE side optimization)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
