@@ -22,57 +22,85 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load all field-property intersections, soil data, and environmental analyses from previous stages."""
+        # Debug: Log the current configuration
+        self.log.info(
+            f"🔍 DEBUG: Using agricultural_fields_year = {CONFIG.agricultural_fields_year}"
+        )
+        
         # Get year-aware output dataset names
         updated_outputs = CONFIG.update_outputs_for_year()
+        self.log.info(f"🔍 DEBUG: Updated dataset outputs: {updated_outputs}")
         
         # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
-        stage1c_dataset = updated_outputs["field_property_intersections"]
-        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
-            stage1c_path, "SELECT *", "field_property_intersections"
-        )
+        stage1c_dataset = updated_outputs["field_property_intersections"] 
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1c_dataset}")
+        try:
+            stage1c_path = self._get_latest_gold_path(stage1c_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage1c_path}")
+            self.gcs_access.query_parquet_direct(
+                stage1c_path, "SELECT *", "field_property_intersections"
+            )
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage1c_dataset}: {e}")
+            raise
 
         # Load field-soil intersections from Stage 1B
         stage1b_dataset = updated_outputs["field_soil_intersections"]
-        stage1b_path = self._get_latest_gold_path(stage1b_dataset)
-        self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1b_dataset}")
+        try:
+            stage1b_path = self._get_latest_gold_path(stage1b_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage1b_path}")
+            self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage1b_dataset}: {e}")
+            raise
 
         # Load final BNBO analysis from Stage 3A (only fields with BNBO)
         stage3a_dataset = updated_outputs["final_bnbo"]
-        stage3a_path = self._get_latest_gold_path(stage3a_dataset)
-        self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage3a_dataset}")
+        try:
+            stage3a_path = self._get_latest_gold_path(stage3a_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage3a_path}")
+            self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage3a_dataset}: {e}")
+            raise
         
         # DEBUG: Check how many BNBO records were loaded
         bnbo_count = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
-        self.log.info(f"🔍 DEBUG: Loaded {bnbo_count:,} final BNBO analysis records from {stage3a_path}")
+        self.log.info(
+            f"🔍 DEBUG: Loaded {bnbo_count:,} final BNBO analysis records from {stage3a_path}"
+        )
 
         # Load final wetland analysis from Stage 3B (only fields with wetlands)
         stage3b_dataset = updated_outputs["final_wetland"]
-        stage3b_path = self._get_latest_gold_path(stage3b_dataset)
-        self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage3b_dataset}")
+        try:
+            stage3b_path = self._get_latest_gold_path(stage3b_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage3b_path}")
+            self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage3b_dataset}: {e}")
+            raise
         
         # DEBUG: Check how many wetland records were loaded
         wetland_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
-        self.log.info(f"🔍 DEBUG: Loaded {wetland_count:,} final wetland analysis records from {stage3b_path}")
+        self.log.info(
+            f"🔍 DEBUG: Loaded {wetland_count:,} final wetland analysis records from {stage3b_path}"
+        )
         
         # DEBUG: Check if we have UUID fields and what the schemas look like
         if bnbo_count > 0:
-            bnbo_sample = self.conn.execute("SELECT * FROM final_bnbo_analysis LIMIT 1").fetchone()
             bnbo_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_bnbo_analysis)").fetchall()]
             self.log.info(f"🔍 DEBUG: BNBO table columns: {bnbo_columns}")
             if 'field_uuid' in bnbo_columns:
                 self.log.info("✅ BNBO table has field_uuid - should use UUID-based JOINs!")
         
         if wetland_count > 0:
-            wetland_sample = self.conn.execute("SELECT * FROM final_wetland_analysis LIMIT 1").fetchone()
             wetland_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_wetland_analysis)").fetchall()]
             self.log.info(f"🔍 DEBUG: Wetland table columns: {wetland_columns}")
             if 'field_uuid' in wetland_columns:
                 self.log.info("✅ Wetland table has field_uuid - should use UUID-based JOINs!")
-        
-        # Check foundation table structure too
-        foundation_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(all_fields_with_properties)").fetchall()]
-        self.log.info(f"🔍 DEBUG: Foundation table columns: {foundation_columns}")
         
         # Check soil data structure 
         soil_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(field_soil_areas)").fetchall()]
@@ -275,9 +303,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.conn.execute(consolidation_query)
 
         # Log results
-        result_count = self.conn.execute(
+        final_result_count = self.conn.execute(
             "SELECT COUNT(*) FROM field_area_analysis_final"
         ).fetchone()[0]
+        self.log.info(f"✅ Created final analysis table with {final_result_count:,} fields")
 
         # Get comprehensive statistics including property-environmental relationships
         stats = self.conn.execute("""
