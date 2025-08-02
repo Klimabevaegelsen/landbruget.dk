@@ -574,11 +574,11 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
     # Define data source patterns - no hardcoded file names!
     data_source_patterns = [
         ("chr_properties", "silver/chr/*/*properties*.parquet"),
-        ("animal_welfare", "silver/drive_data_pipeline/*/*animal_welfare*.parquet"),
-        ("pig_tail_cutting", "silver/drive_data_pipeline/*/*pig_tail*.parquet"),
+        ("animal_welfare", "silver/animal welfare/*/**.parquet"),
+        ("pig_tail_cutting", "silver/pig tail cutting/*/**.parquet"),
         ("property_vet_events", "silver/chr/*/*property_vet*.parquet"),
         ("spf_su_herds", "silver/chr/*/*spf_su_herds*.parquet"),
-        ("stable_fires", "silver/drive_data_pipeline/*/*stable_fire*.parquet"),
+        ("stable_fires", "silver/stable fires/*/**.parquet"),
     ]
     
     for table_name, pattern in data_source_patterns:
@@ -783,13 +783,13 @@ def process_veterinary_timeline(export_timestamp: str,
             # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
             if gcs_access and migrate_save_data_pattern:
                 bucket = "landbrugsdata-raw-data"
-                # Tables are already in gcs_access.duckdb_conn, so migrate_save_data_pattern will find them
-                migrate_save_data_pattern(gcs_access, "veterinary_timeline", "chr", bucket, "gold", export_timestamp)
+                # Use subdataset parameter to create separate filenames
+                migrate_save_data_pattern(gcs_access, "veterinary_timeline", "chr", bucket, "gold", export_timestamp, "veterinary_timeline")
                 
                 # Check if timeline_summary was created
                 try:
                     gcs_access.duckdb_conn.execute("SELECT COUNT(*) FROM timeline_summary")
-                    migrate_save_data_pattern(gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp)
+                    migrate_save_data_pattern(gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp, "timeline_summary")
                 except:
                     logger.info("ℹ️ No timeline_summary table to export")
             else:
