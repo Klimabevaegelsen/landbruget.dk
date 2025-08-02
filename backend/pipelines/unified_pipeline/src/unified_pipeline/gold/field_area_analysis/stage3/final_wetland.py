@@ -249,6 +249,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.block_id,
                         pw.cvr_number,
                         pw.year,
+                        pw.field_uuid,
                         pw.bfe_number,
                         pw.toerv_pct,
                         pw.property_wetland_area_m2,
@@ -276,6 +277,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         block_id,
                         cvr_number,
                         year,
+                        field_uuid,
                         -- Create JSON breakdown: {bfe_number: {wetland_area_m2, covered_m2, uncovered_m2}}
                         '{' || STRING_AGG(
                             '"' || bfe_number || '": {' ||
@@ -293,14 +295,14 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         STRING_AGG(DISTINCT bfe_number, ', ') as property_wetland_owners
                     FROM (
                         SELECT 
-                            field_id, block_id, cvr_number, year, bfe_number,
+                            field_id, block_id, cvr_number, year, field_uuid, bfe_number,
                             SUM(property_wetland_area_m2) as total_wetland_area,
                             SUM(property_wetland_covered_m2) as total_covered,
                             SUM(property_wetland_uncovered_m2) as total_uncovered
                         FROM batch_property_wetland_water
-                        GROUP BY field_id, block_id, cvr_number, year, bfe_number
+                        GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
                     ) property_totals
-                    GROUP BY field_id, block_id, cvr_number, year
+                    GROUP BY field_id, block_id, cvr_number, year, field_uuid
                 """)
 
                 breakdown_count = self.conn.execute(
@@ -312,7 +314,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE batch_property_breakdown AS
                     SELECT 
-                        field_id, block_id, cvr_number, year,
+                        field_id, block_id, cvr_number, year, field_uuid,
                         '{}' as property_wetland_breakdown,
                         0 as property_wetland_total_m2,
                         0 as property_wetland_water_covered_m2,
