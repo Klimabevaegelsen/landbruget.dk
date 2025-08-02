@@ -72,7 +72,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
 
     # Testing configuration
     test_limit: Optional[int] = Field(
-        default=10, description="Limit number of CVR numbers to process for testing (None = no limit)"
+        default=None, description="Limit number of CVR numbers to process for testing (None = no limit)"
     )
     
     parse_financial_xml: bool = Field(
