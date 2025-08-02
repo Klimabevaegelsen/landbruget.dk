@@ -43,6 +43,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 geometry,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_raw
@@ -107,6 +108,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 f.block_id,
                 f.cvr_number,
                 f.year,
+                f.field_uuid,
                 f.field_area_m2,
                 s.soil_id,
                 s.soil_code,
@@ -140,6 +142,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 field_area_m2,
                 soil_id,
                 soil_code,
@@ -180,6 +183,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 soil_id,  -- Foundation data: enables ID-based joins in later stages
                 soil_code,
                 soil_description,
@@ -189,7 +193,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 field_area_m2,
                 intersection_geometry  -- Preserve for property-level analysis
             FROM field_soil_meaningful
-            ORDER BY field_id, block_id, cvr_number, soil_intersection_area_m2 DESC
+            ORDER BY field_uuid, year, soil_intersection_area_m2 DESC
         """)
 
         # STEP 4: Create simplified areas table (backward compatibility)
@@ -200,6 +204,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 soil_code,
                 soil_description,
                 soil_type_category,

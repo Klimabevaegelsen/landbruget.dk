@@ -122,11 +122,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS DOUBLE) as field_wetland_total_m2,
                 CAST(NULL AS DOUBLE) as field_wetland_water_covered_m2,
-
                 CAST(NULL AS DOUBLE) as field_wetland_water_covered_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_wetland_coverage_pct
@@ -141,6 +141,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS VARCHAR) as toerv_pct,
                 CAST(NULL AS GEOMETRY) as field_wetland_intersection_geometry,
                 CAST(NULL AS DOUBLE) as field_wetland_intersection_area_m2,
@@ -180,6 +181,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
                     w.wetland_id,
@@ -198,6 +200,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     field_geometry,
                     field_area_m2,
                     wetland_id,
@@ -216,6 +219,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     toerv_pct,
                     field_wetland_intersection_geometry,
                     field_wetland_area_m2 as field_wetland_intersection_area_m2,
@@ -284,6 +288,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.field_geometry as geometry,
                     f.field_area_m2,
                     
@@ -299,7 +304,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     AND f.cvr_number = c.cvr_number 
                     AND f.year = c.year
                     AND f.toerv_pct = c.toerv_pct
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_geometry, f.field_area_m2
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
             """)
 
             # Calculate percentages and final metrics

@@ -120,6 +120,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS DOUBLE) as field_bnbo_total_m2,
@@ -138,6 +139,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS VARCHAR) as status_category,
                 CAST(NULL AS GEOMETRY) as field_bnbo_intersection_geometry,
                 CAST(NULL AS DOUBLE) as field_bnbo_intersection_area_m2,
@@ -177,6 +179,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
                     b.bnbo_id,
@@ -195,6 +198,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     field_geometry,
                     field_area_m2,
                     bnbo_id,
@@ -213,6 +217,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     status_category,
                     field_bnbo_intersection_geometry,
                     field_bnbo_area_m2 as field_bnbo_intersection_area_m2,
@@ -279,6 +284,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.field_geometry as geometry,
                     f.field_area_m2,
                     
@@ -294,7 +300,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     AND f.cvr_number = c.cvr_number 
                     AND f.year = c.year
                     AND f.status_category = c.status_category
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_geometry, f.field_area_m2
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
             """)
 
             # Calculate percentages and final metrics

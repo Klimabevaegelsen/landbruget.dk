@@ -41,11 +41,47 @@ class ConsolidateResults(FieldAnalysisStageBase):
         stage3a_dataset = updated_outputs["final_bnbo"]
         stage3a_path = self._get_latest_gold_path(stage3a_dataset)
         self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+        
+        # DEBUG: Check how many BNBO records were loaded
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
+        self.log.info(f"🔍 DEBUG: Loaded {bnbo_count:,} final BNBO analysis records from {stage3a_path}")
 
         # Load final wetland analysis from Stage 3B (only fields with wetlands)
         stage3b_dataset = updated_outputs["final_wetland"]
         stage3b_path = self._get_latest_gold_path(stage3b_dataset)
         self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+        
+        # DEBUG: Check how many wetland records were loaded
+        wetland_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
+        self.log.info(f"🔍 DEBUG: Loaded {wetland_count:,} final wetland analysis records from {stage3b_path}")
+        
+        # DEBUG: Check if we have UUID fields and what the schemas look like
+        if bnbo_count > 0:
+            bnbo_sample = self.conn.execute("SELECT * FROM final_bnbo_analysis LIMIT 1").fetchone()
+            bnbo_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_bnbo_analysis)").fetchall()]
+            self.log.info(f"🔍 DEBUG: BNBO table columns: {bnbo_columns}")
+            if 'field_uuid' in bnbo_columns:
+                self.log.info("✅ BNBO table has field_uuid - should use UUID-based JOINs!")
+        
+        if wetland_count > 0:
+            wetland_sample = self.conn.execute("SELECT * FROM final_wetland_analysis LIMIT 1").fetchone()
+            wetland_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_wetland_analysis)").fetchall()]
+            self.log.info(f"🔍 DEBUG: Wetland table columns: {wetland_columns}")
+            if 'field_uuid' in wetland_columns:
+                self.log.info("✅ Wetland table has field_uuid - should use UUID-based JOINs!")
+        
+        # Check foundation table structure too
+        foundation_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(all_fields_with_properties)").fetchall()]
+        self.log.info(f"🔍 DEBUG: Foundation table columns: {foundation_columns}")
+        
+        # Check soil data structure 
+        soil_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(field_soil_areas)").fetchall()]
+        self.log.info(f"🔍 DEBUG: Soil data columns: {soil_columns}")
+        if 'field_uuid' in soil_columns:
+            self.log.info("✅ Soil data has field_uuid - consider updating soil JOINs to use UUID too!")
+        
+        if bnbo_count > 0 or wetland_count > 0:
+            self.log.info("✅ FIXED: Updated environmental JOINs to use field_uuid instead of composite keys!")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -100,10 +136,13 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_summary AS
             SELECT 
+                field_uuid,
+                year,
+                
+                -- Keep composite keys for debugging/reference
                 field_id,
                 block_id,
                 cvr_number,
-                year,
                 
                 -- Soil type diversity metrics
                 COUNT(DISTINCT soil_type_category) as soil_type_count,
@@ -113,9 +152,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT soil_type_category 
                     FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_id = fsa.field_id 
-                    AND fsa2.block_id = fsa.block_id 
-                    AND fsa2.cvr_number = fsa.cvr_number 
+                    WHERE fsa2.field_uuid = fsa.field_uuid 
                     AND fsa2.year = fsa.year
                     ORDER BY fsa2.soil_area_m2 DESC 
                     LIMIT 1
@@ -125,9 +162,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT soil_area_share_pct 
                     FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_id = fsa.field_id 
-                    AND fsa2.block_id = fsa.block_id 
-                    AND fsa2.cvr_number = fsa.cvr_number 
+                    WHERE fsa2.field_uuid = fsa.field_uuid 
                     AND fsa2.year = fsa.year
                     ORDER BY fsa2.soil_area_m2 DESC 
                     LIMIT 1
@@ -146,7 +181,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 ) || '}' as soil_type_breakdown
                 
             FROM field_soil_areas fsa
-            GROUP BY field_id, block_id, cvr_number, year
+            GROUP BY field_uuid, year, field_id, block_id, cvr_number
         """)
 
         soil_fields_count = self.conn.execute("SELECT COUNT(*) FROM field_soil_summary").fetchone()[
@@ -233,18 +268,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
             END as has_property_environmental_relationships
             
         FROM all_fields_with_properties f
-        LEFT JOIN field_soil_summary s ON f.field_id = s.field_id 
-            AND f.block_id = s.block_id 
-            AND f.cvr_number = s.cvr_number 
+        LEFT JOIN field_soil_summary s ON f.field_uuid = s.field_uuid 
             AND f.year = s.year
-        LEFT JOIN final_bnbo_analysis b ON f.field_id = b.field_id 
-            AND f.block_id = b.block_id 
-            AND f.cvr_number = b.cvr_number 
-            AND f.year = b.year
-        LEFT JOIN final_wetland_analysis w ON f.field_id = w.field_id 
-            AND f.block_id = w.block_id 
-            AND f.cvr_number = w.cvr_number 
-            AND f.year = w.year
+        LEFT JOIN final_bnbo_analysis b ON f.field_uuid = b.field_uuid
+        LEFT JOIN final_wetland_analysis w ON f.field_uuid = w.field_uuid
         """
 
         self.conn.execute(consolidation_query)
@@ -390,13 +417,13 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Average coverage percentages:")
-        self.log.info(f"     BNBO: {avg_bnbo_pct:.2f}%")
-        self.log.info(f"     Wetlands: {avg_wetland_pct:.2f}%")
-        self.log.info(f"     Property-environmental: {avg_prop_env_pct:.2f}%")
-        self.log.info(f"     Properties per field: {avg_props_per_field:.1f}")
-        self.log.info(f"     Dominant soil type coverage: {avg_dominant_soil_pct:.1f}%")
-        self.log.info(f"     Total soil coverage: {avg_total_soil_pct:.1f}%")
-        self.log.info(f"     Soil types per field: {avg_soil_types_per_field:.1f}")
+        self.log.info(f"     BNBO: {avg_bnbo_pct:.2f}%" if avg_bnbo_pct is not None else "     BNBO: 0.00%")
+        self.log.info(f"     Wetlands: {avg_wetland_pct:.2f}%" if avg_wetland_pct is not None else "     Wetlands: 0.00%")
+        self.log.info(f"     Property-environmental: {avg_prop_env_pct:.2f}%" if avg_prop_env_pct is not None else "     Property-environmental: 0.00%")
+        self.log.info(f"     Properties per field: {avg_props_per_field:.1f}" if avg_props_per_field is not None else "     Properties per field: 0.0")
+        self.log.info(f"     Dominant soil type coverage: {avg_dominant_soil_pct:.1f}%" if avg_dominant_soil_pct is not None else "     Dominant soil type coverage: 0.0%")
+        self.log.info(f"     Total soil coverage: {avg_total_soil_pct:.1f}%" if avg_total_soil_pct is not None else "     Total soil coverage: 0.0%")
+        self.log.info(f"     Soil types per field: {avg_soil_types_per_field:.1f}" if avg_soil_types_per_field is not None else "     Soil types per field: 0.0")
 
         self.log.info("   Property-environmental spatial relationships:")
         self.log.info(f"     Total BNBO-property relationships: {total_bnbo_prop_relationships:,}")
@@ -408,9 +435,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Water project coverage:")
-        self.log.info(f"     BNBO areas: {avg_bnbo_water:.1f}%")
-        self.log.info(f"     Wetland areas: {avg_wetland_water:.1f}%")
-        self.log.info(f"     Property wetland areas: {avg_property_wetland_water:.1f}%")
+        self.log.info(f"     BNBO areas: {avg_bnbo_water:.1f}%" if avg_bnbo_water is not None else "     BNBO areas: 0.0%")
+        self.log.info(f"     Wetland areas: {avg_wetland_water:.1f}%" if avg_wetland_water is not None else "     Wetland areas: 0.0%")
+        self.log.info(f"     Property wetland areas: {avg_property_wetland_water:.1f}%" if avg_property_wetland_water is not None else "     Property wetland areas: 0.0%")
 
         self.log.info("   Total areas:")
         self.log.info(f"     Fields: {total_area_km2:.1f} km²")
@@ -438,8 +465,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
         self.log.info("   Environmental category breakdown:")
         for category, count, avg_props, avg_env, avg_prop_env, total_relationships in env_breakdown:
+            avg_props_str = f"{avg_props:.1f}" if avg_props is not None else "0.0"
+            avg_env_str = f"{avg_env:.1f}" if avg_env is not None else "0.0"
             self.log.info(
-                f"     {category}: {count:,} fields ({(count / total_fields) * 100:.1f}%), {avg_props:.1f} avg properties, {avg_env:.1f}% env coverage, {total_relationships:,} property relationships"
+                f"     {category}: {count:,} fields ({(count / total_fields) * 100:.1f}%), {avg_props_str} avg properties, {avg_env_str}% env coverage, {total_relationships:,} property relationships"
             )
 
         return {
