@@ -51,6 +51,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 geometry,
+                field_uuid,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_full
         """)
@@ -111,6 +112,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS VARCHAR) as bfe_number,
                 CAST(NULL AS DOUBLE) as property_area_m2,
@@ -166,6 +168,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.field_area_m2,
                     p.bestemtFastEjendomBFENr as bfe_number,
                     p.property_area_m2,
@@ -192,6 +195,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         block_id,
                         cvr_number,
                         year,
+                        field_uuid,
                         field_area_m2,
                         bfe_number,
                         property_area_m2,
