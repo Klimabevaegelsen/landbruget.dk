@@ -250,19 +250,13 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.log.info(f"   Final field-property relationships: {final_count:,}")
         self.log.info("   ⚡ 13x faster than original due to Stage 0 pre-filtering!")
 
-        # Export results using standard pipeline pattern
-        output_path = self.save_data_direct(
-            "field_property_intersections",
-            CONFIG.stage_outputs["field_property_intersections"],
-            CONFIG.bucket,
-            "gold",
-        )
+        # Export results using year-aware pipeline pattern
+        self._save_stage_output("field_property_intersections", "field_property_intersections")
 
         return {
             "total_raw_intersections": total_intersections,
             "meaningful_intersections": total_meaningful,
             "final_intersections": final_count,
-            "output_path": output_path,
             "optimization_impact": "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)",
         }
 
