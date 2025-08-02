@@ -269,7 +269,7 @@ def extract_cvr_numbers_from_table(
 def save_pipeline_cvr_numbers(
     pipeline_name: str,
     cvr_numbers: List[str],
-    gcs_access: GCSDataAccess,
+    gcs_access: Optional[GCSDataAccess] = None,
     bucket: str = "landbrugsdata-raw-data",
     timestamp: Optional[str] = None,
 ) -> str:
@@ -279,12 +279,17 @@ def save_pipeline_cvr_numbers(
     Args:
         pipeline_name: Name of the pipeline
         cvr_numbers: List of CVR numbers to save
-        gcs_access: GCS data access instance
+        gcs_access: GCS data access instance (creates default if None)
         bucket: GCS bucket name
         timestamp: Optional timestamp
 
     Returns:
         GCS path where data was saved
     """
+    # Create default GCS access if none provided
+    if gcs_access is None:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+        gcs_access = GCSDataAccess()
+    
     manager = CVRCollectionManager(gcs_access, bucket)
     return manager.save_pipeline_cvr_numbers(pipeline_name, cvr_numbers, timestamp)
