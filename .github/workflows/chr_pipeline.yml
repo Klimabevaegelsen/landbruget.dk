@@ -20,6 +20,8 @@ on:
           - bronze_data_collection
           - silver_processing
           - gold_processing
+          - veterinary_timeline
+          - transportation_analysis
           - stamdata
           - herds
           - herd_details
@@ -1111,11 +1113,11 @@ jobs:
           echo "📊 Processing data directly from GCS without local downloads"
           $CMD
 
-  # Job 6: Gold Processing (Veterinary Timeline)
+  # Job 6: Gold Processing (Veterinary Timeline + Transportation Analysis)
   gold-processing:
     runs-on: ubuntu-latest
     needs: [silver-processing]
-    if: ${{ always() && !cancelled() && (needs.silver-processing.result == 'success' || inputs.step == 'gold_processing') && ((inputs.step || 'all') == 'all' || inputs.step == 'gold_processing') }}
+    if: ${{ always() && !cancelled() && (needs.silver-processing.result == 'success' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') && ((inputs.step || 'all') == 'all' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') }}
     
     permissions:
       contents: 'read'
@@ -1237,7 +1239,7 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GITHUB_ACTIONS: "true"
         run: |
-          echo "🥇 Starting Gold Processing (Veterinary Timeline)..."
+          echo "🥇 Starting Gold Processing (Veterinary Timeline + Transportation Analysis)..."
           echo "Using silver timestamp: $SILVER_TIMESTAMP"
           
           # Generate gold timestamp
@@ -1292,6 +1294,17 @@ jobs:
             else
               echo "⚠️ Veterinary timeline not found in gold output"
             fi
+            
+            # Check for transportation analysis specifically
+            if gsutil ls "${GOLD_PATH}*/transportation_analysis.parquet" > /dev/null 2>&1; then
+              echo "✅ Transportation analysis successfully created"
+              
+              # Get file size
+              TRANSPORT_SIZE=$(gsutil ls -la "${GOLD_PATH}*/transportation_analysis.parquet" | awk '{print $1}' | tail -1)
+              echo "📊 Transportation analysis file size: $TRANSPORT_SIZE bytes"
+            else
+              echo "⚠️ Transportation analysis not found in gold output"
+            fi
           else
             echo "⚠️ No gold output found in GCS"
           fi
@@ -1299,7 +1312,7 @@ jobs:
   # Job 7: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -1487,7 +1500,7 @@ jobs:
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
           echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
           echo "| Silver Processing | ${{ needs.silver-processing.result || 'skipped' }} |"
-          echo "| Gold Processing (Veterinary Timeline) | ${{ needs.gold-processing.result || 'skipped' }} |"
+          echo "| Gold Processing (Vet Timeline + Transport Analysis) | ${{ needs.gold-processing.result || 'skipped' }} |"
           echo ""
           
           # Determine overall success

@@ -949,6 +949,10 @@ def main():
             else:
                 bronze_steps_to_run = []  # Skip bronze steps for silver-only with existing data
             run_silver = True
+        elif requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+            # Gold layer processing - no bronze steps needed, but run silver if no existing silver data
+            bronze_steps_to_run = []
+            run_silver = True  # Always run silver before gold to ensure we have fresh silver data
         elif args.get("skip_dependencies", False):
             # Skip dependencies - only run the specific step (for parallel job execution)
             bronze_steps_to_run = [requested_step]
@@ -1055,22 +1059,30 @@ def main():
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
                 
                 # --- Gold Layer Processing ---
-                try:
-                    logging.warning("🥇 Starting Gold Layer Processing...")
-                    gold_success = run_gold_processing(
-                        export_timestamp=EXPORT_TIMESTAMP,
-                        silver_dir=silver_dir
-                    )
-                    
-                    if gold_success:
-                        logging.warning("✅ Gold processing completed successfully")
-                    else:
-                        logging.error("❌ Gold processing failed")
-                        # Don't fail the entire pipeline for gold processing failure
+                # Run gold processing if this is an "all" run or a specific gold step
+                if requested_step in ["all", "gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                    try:
+                        logging.warning("🥇 Starting Gold Layer Processing...")
+                        gold_success = run_gold_processing(
+                            export_timestamp=EXPORT_TIMESTAMP,
+                            silver_dir=silver_dir,
+                            step=requested_step
+                        )
                         
-                except Exception as e:
-                    logging.error(f"❌ Gold processing failed: {e}", exc_info=True)
-                    # Don't fail the entire pipeline for gold processing failure
+                        if gold_success:
+                            logging.warning("✅ Gold processing completed successfully")
+                        else:
+                            logging.error("❌ Gold processing failed")
+                            # For gold-specific steps, fail the pipeline if gold processing fails
+                            if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                                raise RuntimeError("Gold processing failed")
+                                
+                    except Exception as e:
+                        logging.error(f"❌ Gold processing failed: {e}", exc_info=True)
+                        # For gold-specific steps, fail the pipeline if gold processing fails
+                        if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                            raise
+                        # For "all" runs, don't fail the entire pipeline for gold processing failure
                     
             except Exception as e:
                 logging.error(f"❌ Silver processing failed: {e}", exc_info=True)
