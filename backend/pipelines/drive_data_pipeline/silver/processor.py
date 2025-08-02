@@ -58,6 +58,9 @@ class SilverProcessor:
 
         # Initialize schema manager if schema_dir is provided
         self.schema_manager = SchemaManager(schema_dir=schema_dir)
+        
+        # Store the silver run path for later access
+        self.silver_run_path = None
 
         # Initialize schema adapter
         self.schema_adapter = SchemaAdapter()
@@ -125,6 +128,7 @@ class SilverProcessor:
 
             # Create a new run directory in the Silver layer
             silver_run_path = self.silver_storage.create_run_directory()
+            self.silver_run_path = silver_run_path  # Store for later access
             processed_count = 0
 
             # Process each file from memory
@@ -201,6 +205,7 @@ class SilverProcessor:
 
             # Create a new run directory in the Silver layer
             silver_run_path = self.silver_storage.create_run_directory()
+            self.silver_run_path = silver_run_path  # Store for later access
             processed_count = 0
 
             # List all files in the Bronze run directory

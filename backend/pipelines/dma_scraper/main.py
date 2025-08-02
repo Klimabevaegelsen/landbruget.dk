@@ -291,21 +291,16 @@ def _save_discovered_cvr_numbers(data, timestamp: str):
         unique_cvr_numbers = sorted(list(set(cvr_numbers)))
 
         if unique_cvr_numbers:
-            # Use optimized GCS access if available
-            if OptimizedGCSDataAccess:
-                gcs_access = OptimizedGCSDataAccess()
+            # Save CVR numbers using the collection utility (with automatic GCS access initialization)
+            gcs_path = save_pipeline_cvr_numbers(
+                pipeline_name="dma_scraper",
+                cvr_numbers=unique_cvr_numbers,
+                gcs_access=None,  # Will create default GCS access
+                bucket="landbrugsdata-raw-data",
+                timestamp=timestamp,
+            )
 
-                gcs_path = save_pipeline_cvr_numbers(
-                    pipeline_name="dma_scraper",
-                    cvr_numbers=unique_cvr_numbers,
-                    gcs_access=gcs_access,
-                    bucket="landbrugsdata-raw-data",
-                    timestamp=timestamp,
-                )
-
-                print(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
-            else:
-                print(f"⚠️ Found {len(unique_cvr_numbers)} CVR numbers but cannot save without optimized GCS access")
+            print(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
         else:
             print("⚠️ No CVR numbers found in DMA scraper data")
 
