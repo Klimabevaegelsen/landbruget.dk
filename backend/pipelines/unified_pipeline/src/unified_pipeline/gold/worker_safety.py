@@ -265,7 +265,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         
         # Upload to GCS
         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-        await self.gcs_data_access.upload_file(local_temp, full_gcs_path)
+        await self.gcs_access.upload_file(local_temp, full_gcs_path)
         
         # Clean up local file
         if os.path.exists(local_temp):
@@ -274,21 +274,25 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
 
     def _get_latest_silver_path(self, dataset: str) -> Optional[str]:
-        """Get the latest silver data path for a dataset."""
+        """Get the latest silver data directory path for a dataset."""
         try:
-            # List all directories for the dataset
-            base_path = f"gs://{self.config.bucket}/silver/{dataset}/"
+            # Look for the specific worker safety files
+            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
+            files = self.gcs_access.list_files(pattern)
             
-            # Use gcs_data_access to list directories
-            directories = self.gcs_data_access.list_directories(f"silver/{dataset}/")
-            
-            if not directories:
-                self.log.warning(f"No directories found for silver dataset: {dataset}")
+            if not files:
+                self.log.warning(f"No worker safety files found for dataset: {dataset}")
                 return None
             
-            # Get the latest timestamp directory
-            latest_dir = max(directories)
-            return f"{base_path}{latest_dir}"
+            # Get the latest file and extract its directory
+            latest_file = sorted(files)[-1]
+            # Extract directory from file path
+            # Example: gs://bucket/silver/worker safety/20240802_224643/worker_safety_2020-2024_mv.parquet
+            # Should return: gs://bucket/silver/worker safety/20240802_224643
+            directory_path = '/'.join(latest_file.split('/')[:-1])
+            
+            self.log.info(f"Found latest worker safety silver data directory: {directory_path}")
+            return directory_path
             
         except Exception as e:
             self.log.error(f"Error finding latest silver path for {dataset}: {e}")
