@@ -70,6 +70,7 @@ class Source(Enum):
     dmi = "dmi"
     arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
     worker_safety = "worker_safety"
+    work_permits = "work_permits"
 
 
 class Stage(Enum):

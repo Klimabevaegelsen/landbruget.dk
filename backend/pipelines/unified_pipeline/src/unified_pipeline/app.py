@@ -53,6 +53,10 @@ from unified_pipeline.gold.worker_safety import (
     WorkerSafetyGold,
     WorkerSafetyGoldConfig,
 )
+from unified_pipeline.gold.work_permits import (
+    WorkPermitsGold,
+    WorkPermitsGoldConfig,
+)
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
@@ -368,6 +372,13 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.all: [
                 # Note: This requires worker safety silver data to be available
                 (WorkerSafetyGold, WorkerSafetyGoldConfig),
+            ],
+        },
+        cli.Source.work_permits: {
+            cli.Stage.gold: [(WorkPermitsGold, WorkPermitsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires work permits silver data from drive pipeline to be available
+                (WorkPermitsGold, WorkPermitsGoldConfig),
             ],
         },
     }
