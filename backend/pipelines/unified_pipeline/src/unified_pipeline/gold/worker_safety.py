@@ -259,20 +259,10 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
     async def _save_table_to_gcs(self, table_name: str, gcs_path: str) -> None:
         """Save a DuckDB table to GCS as parquet."""
         
-        # Create local temp file
-        local_temp = f"/tmp/{table_name}_{self.date_pattern}.parquet"
-        
-        # Export table to local parquet
-        self.conn.execute(f"COPY {table_name} TO '{local_temp}' (FORMAT PARQUET)")
-        
-        # Upload to GCS
+        # Upload directly from DuckDB table to GCS (more efficient)
         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-        await self.gcs_access.upload_file(local_temp, full_gcs_path)
+        self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
         
-        # Clean up local file
-        if os.path.exists(local_temp):
-            os.remove(local_temp)
-            
         self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
 
     def _get_latest_silver_path(self, dataset: str) -> Optional[str]:
