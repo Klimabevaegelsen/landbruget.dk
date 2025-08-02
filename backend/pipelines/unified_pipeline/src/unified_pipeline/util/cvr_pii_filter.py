@@ -31,7 +31,7 @@ def filter_cvr_pii(raw_cvr_data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Filtered CVR data with PII removed
     """
-    logger.info("Filtering PII from CVR data")
+    logger.debug("Filtering PII from CVR data")
 
     # Create a deep copy to avoid modifying original data
     filtered_data = copy.deepcopy(raw_cvr_data)
@@ -45,7 +45,7 @@ def filter_cvr_pii(raw_cvr_data: Dict[str, Any]) -> Dict[str, Any]:
     # Company addresses and contact info are kept (business information)
     # Only deltager (personal) data is filtered
 
-    logger.info("CVR PII filtering completed")
+    logger.debug("CVR PII filtering completed")
     return filtered_data
 
 
