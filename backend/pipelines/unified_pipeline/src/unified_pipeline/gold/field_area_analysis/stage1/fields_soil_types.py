@@ -32,7 +32,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered soil types."""
         # Load agricultural fields (600K fields)
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_raw")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw")
 
         # Keep agricultural fields as original multipolygons for consistency with other stages
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")

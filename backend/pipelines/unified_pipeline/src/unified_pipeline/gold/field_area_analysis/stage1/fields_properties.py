@@ -25,7 +25,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         """Load agricultural fields and Stage 0 pre-filtered properties."""
         # Load agricultural fields (600K fields)
         self.log.info("Loading agricultural fields dataset...")
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_full")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_full")
 
         # Load Stage 0 pre-filtered properties (MASSIVE OPTIMIZATION!)
         self.log.info("Loading Stage 0 pre-filtered properties (500K instead of 6.5M)...")

@@ -57,14 +57,16 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
             table_name: DuckDB table name to export
             output_key: Key in CONFIG.stage_outputs for the output dataset name
         """
-        output_dataset = CONFIG.stage_outputs[output_key]
+        # Get year-aware output dataset name
+        updated_outputs = CONFIG.update_outputs_for_year()
+        output_dataset = updated_outputs[output_key]
 
         # Use the standard BaseSource method to save data
         self.save_data_direct(table_name, output_dataset, CONFIG.bucket, "gold")
 
         # Log export statistics
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        self.log.info(f"✅ Exported {count:,} rows to {output_dataset}")
+        self.log.info(f"✅ Exported {count:,} rows to {output_dataset} (year: {CONFIG.agricultural_fields_year})")
 
     def _get_latest_gold_path(self, dataset: str) -> str:
         """Get path to latest gold data file for a given dataset."""

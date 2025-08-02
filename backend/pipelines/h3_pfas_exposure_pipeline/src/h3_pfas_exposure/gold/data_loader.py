@@ -639,10 +639,7 @@ class H3DataLoader:
                 END as glyphosate_containing_pesticide_belastning_applied
 
             FROM {pesticide_table} p
-            LEFT JOIN {bmd_table} b ON (
-                p.PesticideRegistrationNumber = b.registration_number
-                OR LOWER(p.PesticideName) = LOWER(b.pesticide_name)
-            )
+            LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registration_number
         """)
 
         # Get statistics for logging

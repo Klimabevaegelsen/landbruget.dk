@@ -13,7 +13,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
     def _load_fields_for_filtering(self):
         """Load agricultural fields as BUILD side for spatial indexing."""
         self.log.info("Loading agricultural fields for pre-filtering (BUILD side)...")
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
 
         # Optimize fields table for spatial indexing
         self.conn.execute("""
