@@ -616,8 +616,14 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
             files = gcs_access.list_files(full_pattern)
             
             if files:
-                # Get latest file by sorting
-                latest_file = sorted(files, reverse=True)[0]
+                # Filter out old "run_" directories and prioritize proper timestamps
+                timestamp_files = [f for f in files if '/run_' not in f]
+                if timestamp_files:
+                    # Use proper timestamp files first
+                    latest_file = sorted(timestamp_files, reverse=True)[0]
+                else:
+                    # Fallback to any file if no timestamp files found
+                    latest_file = sorted(files, reverse=True)[0]
                 logger.info(f"📥 Loading {table_name} from: {latest_file}")
                 
                 # Use unified pipeline pattern: query_parquet_direct with shared connection
