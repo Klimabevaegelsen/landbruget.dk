@@ -1,16 +1,21 @@
 # CHR Pipeline
 
-This directory contains the bronze and silver layer processing scripts for the CHR data pipeline.
+This directory contains the bronze, silver, and gold layer processing scripts for the CHR data pipeline.
 
 ## Features
 
-- Fetches comprehensive CHR data including:
+- **Bronze Layer**: Fetches comprehensive CHR data including:
   - Species and usage combinations (Stamdata)
   - Herd information and details
   - Animal movements (DIKO)
   - Property details (Ejendom)
   - Veterinary events
   - VetStat antibiotic usage data
+- **Silver Layer**: Processes and standardizes raw bronze data
+- **Gold Layer**: Creates high-value analytical products:
+  - **Veterinary Timeline**: Comprehensive timeline of all veterinary events per CHR
+  - Combines animal welfare, SPF-SU data, veterinary status changes, and stable fires
+  - Spatially matched stable fire events to CHR properties
 - Processes data in parallel using multiple workers
 - Handles pagination for large data sets
 - Runs daily via GitHub Actions
@@ -112,11 +117,49 @@ The pipeline outputs data to timestamped directories under `data/bronze/chr/` to
    - Check if the service endpoints are accessible
    - The pipeline includes retry logic for transient failures
 
+## Gold Layer Processing
+
+The gold layer creates high-value analytical products from processed silver data.
+
+### Veterinary Timeline
+
+The main gold product is a comprehensive veterinary timeline that combines:
+- Animal welfare interventions from the drive pipeline
+- SPF-SU health certificates and disease statuses
+- CHR veterinary status changes
+- Spatially matched stable fire events
+- Pig tail cutting control inspections
+
+### Running Gold Processing Independently
+
+You can run gold processing separately from the main pipeline:
+
+```bash
+# Process latest silver data
+python run_gold_processing.py
+
+# Process specific silver timestamp
+python run_gold_processing.py --silver-timestamp 20240101_120000
+
+# Debug mode
+python run_gold_processing.py --log-level DEBUG --dry-run
+```
+
+### Gold Products
+
+The gold layer produces:
+- `veterinary_timeline.parquet` - Complete timeline of veterinary events per CHR
+- `timeline_summary.parquet` - Summary statistics by data source
+
+Data is exported to both local storage and GCS at `gs://landbrugsdata-raw-data/gold/chr/{timestamp}/`
+
 ## GitHub Actions
 
 The pipeline runs automatically via GitHub Actions:
 - Scheduled to run daily
 - Can be triggered manually via workflow_dispatch
+- Now includes gold layer processing after silver completion
+- Individual steps can be run: `all`, `bronze_foundation`, `silver_processing`, `gold_processing`
 - Data is stored in Google Cloud Storage in production
 
 ## Error Handling
