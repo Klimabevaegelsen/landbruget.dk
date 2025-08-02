@@ -127,6 +127,16 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as field_bnbo_water_uncovered_pct,
                 CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct,
                 
+                -- BNBO status metrics - flattened by category (hectares)
+                CAST(NULL AS DOUBLE) as bnbo_action_required_hectares,
+                CAST(NULL AS DOUBLE) as bnbo_completed_hectares,
+                CAST(NULL AS DOUBLE) as bnbo_action_required_overlap_hectares,
+                CAST(NULL AS DOUBLE) as bnbo_completed_overlap_hectares,
+                CAST(NULL AS DOUBLE) as bnbo_action_required_not_covered_by_water_hectares,
+                CAST(NULL AS DOUBLE) as bnbo_completed_not_covered_by_water_hectares,
+                CAST(NULL AS VARCHAR) as bnbo_status_categories,  -- Comma-separated list of categories present
+                CAST(NULL AS INTEGER) as bnbo_status_count,
+                
                 -- Property ownership summary
                 CAST(NULL AS INTEGER) as property_count,
                 CAST(NULL AS DOUBLE) as total_property_intersection_area_m2,
@@ -323,8 +333,68 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     WHERE FALSE
                 """)
 
+            # Create BNBO status breakdown per field
+            self.log.info("  Creating BNBO status breakdown per field")
+            if property_count > 0:
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_bnbo_status_breakdown AS
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        field_uuid,
+                        -- Flattened BNBO metrics by status category (in hectares)
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_action_required_hectares,
+                        
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_completed_hectares,
+                        
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_action_required_overlap_hectares,
+                        
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_completed_overlap_hectares,
+                        
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_action_required_not_covered_by_water_hectares,
+                        
+                        ROUND(
+                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
+                        ) as bnbo_completed_not_covered_by_water_hectares,
+                        
+                        -- Summary fields
+                        STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category) as bnbo_status_categories,
+                        COUNT(DISTINCT status_category) as bnbo_status_count
+                    FROM batch_property_bnbo_water pb
+                    GROUP BY field_id, block_id, cvr_number, year, field_uuid
+                """)
+            else:
+                # No properties for this batch - create empty status breakdown table
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE batch_bnbo_status_breakdown AS
+                    SELECT 
+                        field_id, block_id, cvr_number, year, field_uuid,
+                        0.0 as bnbo_action_required_hectares,
+                        0.0 as bnbo_completed_hectares,
+                        0.0 as bnbo_action_required_overlap_hectares,
+                        0.0 as bnbo_completed_overlap_hectares,
+                        0.0 as bnbo_action_required_not_covered_by_water_hectares,
+                        0.0 as bnbo_completed_not_covered_by_water_hectares,
+                        NULL as bnbo_status_categories,
+                        0 as bnbo_status_count
+                    FROM fields_batch
+                    WHERE FALSE
+                """)
+
             # Combine field-level data with property breakdown
-            self.log.info("  Combining field-level BNBO data with property breakdown")
+            self.log.info("  Combining field-level BNBO data with property and status breakdown")
             self.conn.execute("""
                 INSERT INTO final_bnbo_analysis
                 SELECT 
@@ -342,6 +412,16 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     b.field_bnbo_water_covered_pct,
                     b.field_bnbo_water_uncovered_pct,
                     b.field_bnbo_coverage_pct,
+                    
+                    -- BNBO status metrics - flattened by category (from batch processing)
+                    COALESCE(sb.bnbo_action_required_hectares, 0.0) as bnbo_action_required_hectares,
+                    COALESCE(sb.bnbo_completed_hectares, 0.0) as bnbo_completed_hectares,
+                    COALESCE(sb.bnbo_action_required_overlap_hectares, 0.0) as bnbo_action_required_overlap_hectares,
+                    COALESCE(sb.bnbo_completed_overlap_hectares, 0.0) as bnbo_completed_overlap_hectares,
+                    COALESCE(sb.bnbo_action_required_not_covered_by_water_hectares, 0.0) as bnbo_action_required_not_covered_by_water_hectares,
+                    COALESCE(sb.bnbo_completed_not_covered_by_water_hectares, 0.0) as bnbo_completed_not_covered_by_water_hectares,
+                    COALESCE(sb.bnbo_status_categories, NULL) as bnbo_status_categories,
+                    COALESCE(sb.bnbo_status_count, 0) as bnbo_status_count,
                     
                     -- Property ownership summary
                     COALESCE(ps.property_count, 0) as property_count,
@@ -378,6 +458,8 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     AND b.year = ps.year
                 LEFT JOIN batch_property_breakdown pb ON b.field_uuid = pb.field_uuid 
                     AND b.year = pb.year
+                LEFT JOIN batch_bnbo_status_breakdown sb ON b.field_uuid = sb.field_uuid 
+                    AND b.year = sb.year
             """)
 
             # Clean up batch tables
@@ -387,6 +469,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_spatial")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_bnbo_water")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_breakdown")
+            self.conn.execute("DROP TABLE IF EXISTS batch_bnbo_status_breakdown")
 
             # Memory cleanup
             if (batch_num + 1) % CONFIG.stage2_memory_cleanup_frequency == 0:
