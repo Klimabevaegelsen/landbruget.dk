@@ -176,8 +176,9 @@ class CVRCollectionManager:
             if not timestamp_folders:
                 return None
 
-            # Get the latest timestamp folder
-            latest_timestamp = sorted(timestamp_folders)[-1].rstrip("/").split("/")[-1]
+            # Get the latest timestamp folder, handling different timestamp formats
+            timestamps = [folder.rstrip("/").split("/")[-1] for folder in timestamp_folders]
+            latest_timestamp = self._get_latest_timestamp(timestamps)
 
             # Load the CVR numbers file
             cvr_file_path = f"cvr_collections/{pipeline_name}/{latest_timestamp}/cvr_numbers.json"
@@ -231,6 +232,45 @@ class CVRCollectionManager:
         except Exception as e:
             self.log.warning(f"Could not list timestamp folders for {pipeline_name}: {e}")
             return []
+
+    def _get_latest_timestamp(self, timestamps: List[str]) -> str:
+        """
+        Get the latest timestamp from a list, handling different timestamp formats.
+        
+        Args:
+            timestamps: List of timestamp strings
+            
+        Returns:
+            Latest timestamp string
+        """
+        if not timestamps:
+            raise ValueError("No timestamps provided")
+        
+        # Separate different timestamp formats
+        standard_timestamps = []  # Format: YYYYMMDD_HHMMSS
+        run_timestamps = []       # Format: run_XX_XXXXXXXXXX
+        
+        for ts in timestamps:
+            if ts.startswith('run_'):
+                run_timestamps.append(ts)
+            else:
+                # Assume standard format
+                standard_timestamps.append(ts)
+        
+        # Prefer standard timestamps (they're more recent format)
+        if standard_timestamps:
+            return sorted(standard_timestamps)[-1]
+        elif run_timestamps:
+            # For run timestamps, sort by the numeric part after the last underscore
+            def extract_run_number(run_ts):
+                try:
+                    return int(run_ts.split('_')[-1])
+                except (ValueError, IndexError):
+                    return 0
+            return sorted(run_timestamps, key=extract_run_number)[-1]
+        else:
+            # Fallback to simple string sorting
+            return sorted(timestamps)[-1]
 
 
 def extract_cvr_numbers_from_table(

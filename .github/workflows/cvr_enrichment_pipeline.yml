@@ -14,7 +14,6 @@ on:
         description: 'Limit number of CVR numbers to process (for testing)'
         required: false
         type: number
-        default: null
       parse_financial_xml:
         description: 'Whether to download and parse XML financial documents'
         required: false
