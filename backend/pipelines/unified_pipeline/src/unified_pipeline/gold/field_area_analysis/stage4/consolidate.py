@@ -251,6 +251,16 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(b.field_bnbo_water_uncovered_pct, 0) as field_bnbo_water_uncovered_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
             
+            -- BNBO status metrics - flattened by category (from Stage 3A)
+            COALESCE(b.bnbo_action_required_hectares, 0.0) as bnbo_action_required_hectares,
+            COALESCE(b.bnbo_completed_hectares, 0.0) as bnbo_completed_hectares,
+            COALESCE(b.bnbo_action_required_overlap_hectares, 0.0) as bnbo_action_required_overlap_hectares,
+            COALESCE(b.bnbo_completed_overlap_hectares, 0.0) as bnbo_completed_overlap_hectares,
+            COALESCE(b.bnbo_action_required_not_covered_by_water_hectares, 0.0) as bnbo_action_required_not_covered_by_water_hectares,
+            COALESCE(b.bnbo_completed_not_covered_by_water_hectares, 0.0) as bnbo_completed_not_covered_by_water_hectares,
+            COALESCE(b.bnbo_status_categories, NULL) as bnbo_status_categories,
+            COALESCE(b.bnbo_status_count, 0) as bnbo_status_count,
+            
             -- Wetland analysis data (from Stage 3B - may be NULL if no wetlands)
             COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
             COALESCE(w.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
