@@ -29,9 +29,12 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
 
         # Load Stage 0 pre-filtered properties (MASSIVE OPTIMIZATION!)
         self.log.info("Loading Stage 0 pre-filtered properties (500K instead of 6.5M)...")
-        stage0_properties_dataset = CONFIG.stage_outputs["properties_prefiltered"]
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        stage0_properties_dataset = updated_outputs["properties_prefiltered"]
         stage0_properties_path = self._get_latest_gold_path(stage0_properties_dataset)
         self.gcs_access.query_parquet_direct(stage0_properties_path, "SELECT *", "properties_full")
+        self.log.info(f"✅ Loaded properties from {stage0_properties_dataset}")
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered properties!")
         self.log.info("🚀 PERFORMANCE: 13x faster than original (6.5M → 500K properties)")

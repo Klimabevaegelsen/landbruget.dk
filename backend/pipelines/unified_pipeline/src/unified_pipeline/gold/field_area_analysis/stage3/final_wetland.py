@@ -40,31 +40,38 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load foundation data from previous stages."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load field-level wetland coverage from Stage 2B
-        stage2b_dataset = CONFIG.stage_outputs["fields_wetland_water"]
+        stage2b_dataset = updated_outputs["fields_wetland_water"]
         stage2b_path = self._get_latest_gold_path(stage2b_dataset)
         self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
+        self.log.info(f"✅ Loaded fields_wetland_water from {stage2b_dataset}")
 
         # Load property/field intersections from Stage 1C (includes intersection_geometry)
-        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
+        self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
 
         # Load water project/wetland intersections from Stage 1B (foundation data with wetland_id)
-        stage1b_dataset = CONFIG.stage_outputs["water_projects_wetlands_intersections"]
+        stage1b_dataset = updated_outputs["water_projects_wetlands_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(
             stage1b_path, "SELECT *", "water_projects_wetlands_intersections"
         )
+        self.log.info(f"✅ Loaded water_projects_wetlands_intersections from {stage1b_dataset}")
 
         # Load field-wetland intersections from Stage 2B (SPEED OPTIMIZATION!)
-        stage2b_intersections_dataset = CONFIG.stage_outputs["field_wetland_intersections"]
+        stage2b_intersections_dataset = updated_outputs["field_wetland_intersections"]
         stage2b_intersections_path = self._get_latest_gold_path(stage2b_intersections_dataset)
         self.gcs_access.query_parquet_direct(
             stage2b_intersections_path, "SELECT *", "field_wetland_intersections"
         )
+        self.log.info(f"✅ Loaded field_wetland_intersections from {stage2b_intersections_dataset}")
 
         self.log.info(
             "✅ SPEED OPTIMIZATION: Using pre-computed field-wetland intersections from Stage 2B"

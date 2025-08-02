@@ -24,12 +24,15 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load field data and water project BNBO intersections from Stage 1."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load agricultural fields (still from silver - this is the BUILD side)
         self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
 
         # Load Stage 0 pre-filtered BNBO data for field intersections (PROBE side optimization)
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
-        stage0_bnbo_dataset = CONFIG.stage_outputs["bnbo_prefiltered"]
+        stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
         # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
@@ -43,7 +46,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Load water project × BNBO intersections from Stage 1A
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
-        stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
+        stage1a_dataset = updated_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
