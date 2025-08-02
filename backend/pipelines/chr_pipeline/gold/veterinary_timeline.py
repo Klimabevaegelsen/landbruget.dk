@@ -557,20 +557,17 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[st
         return []
 
 
-def load_data_sources(con: duckdb.DuckDBPyConnection, gcs_access: Optional[GCSDataAccess] = None) -> Dict[str, bool]:
+def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
     """
     Load all available data sources dynamically using GCS patterns.
+    Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
     
     Args:
-        con: DuckDB connection
-        gcs_access: GCS access instance (optional, will create if needed)
+        gcs_access: GCS access instance with shared DuckDB connection
         
     Returns:
         Dict mapping table names to whether they were loaded successfully
     """
-    if gcs_access is None and GCS_AVAILABLE:
-        gcs_access = GCSDataAccess()
-    
     bucket = "landbrugsdata-raw-data"
     loaded_tables = {}
     
@@ -586,29 +583,24 @@ def load_data_sources(con: duckdb.DuckDBPyConnection, gcs_access: Optional[GCSDa
     
     for table_name, pattern in data_source_patterns:
         try:
-            if gcs_access:
-                # Use GCS pattern matching to find files
-                full_pattern = f"gs://{bucket}/{pattern}"
-                files = gcs_access.list_files(full_pattern)
+            # Use GCS pattern matching to find files
+            full_pattern = f"gs://{bucket}/{pattern}"
+            files = gcs_access.list_files(full_pattern)
+            
+            if files:
+                # Get latest file by sorting
+                latest_file = sorted(files, reverse=True)[0]
+                logger.info(f"📥 Loading {table_name} from: {latest_file}")
                 
-                if files:
-                    # Get latest file by sorting
-                    latest_file = sorted(files, reverse=True)[0]
-                    logger.info(f"📥 Loading {table_name} from: {latest_file}")
-                    
-                    # Load into DuckDB using GCS access
-                    gcs_access.create_table_from_gcs(table_name, latest_file)
-                    loaded_tables[table_name] = True
-                    
-                    # Log column info dynamically
-                    columns = con.execute(f"DESCRIBE {table_name}").fetchall()
-                    logger.info(f"   Columns: {[col[0] for col in columns[:5]]}{'...' if len(columns) > 5 else ''}")
-                else:
-                    logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
-                    loaded_tables[table_name] = False
+                # Use unified pipeline pattern: query_parquet_direct with shared connection
+                gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                loaded_tables[table_name] = True
+                
+                # Log column info dynamically using shared connection
+                columns = gcs_access.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
+                logger.info(f"   Columns: {[col[0] for col in columns[:5]]}{'...' if len(columns) > 5 else ''}")
             else:
-                # Fallback to local file discovery (for testing)
-                logger.warning(f"⚠️ GCS not available, skipping {table_name}")
+                logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
                 loaded_tables[table_name] = False
                 
         except Exception as e:
@@ -618,7 +610,7 @@ def load_data_sources(con: duckdb.DuckDBPyConnection, gcs_access: Optional[GCSDa
     # Create empty tables for failed loads to prevent SQL errors
     for table_name, loaded in loaded_tables.items():
         if not loaded:
-            con.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE")
+            gcs_access.duckdb_conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE")
     
     return loaded_tables
 
@@ -639,8 +631,16 @@ def create_veterinary_timeline(con: duckdb.DuckDBPyConnection, pipeline_run_date
     try:
         logger.info("🏗️ Creating comprehensive veterinary timeline...")
         
-        # Load all data sources dynamically
-        loaded_tables = load_data_sources(con, gcs_access)
+        # Ensure we have GCS access
+        if gcs_access is None:
+            logger.error("❌ GCS access is required for data loading")
+            return False
+            
+        # Load all data sources dynamically (using shared connection)
+        loaded_tables = load_data_sources(gcs_access)
+        
+        # Note: now we need to use gcs_access.duckdb_conn instead of con
+        con = gcs_access.duckdb_conn
         
         # Check what we have to work with
         available_sources = [name for name, loaded in loaded_tables.items() if loaded]
@@ -764,27 +764,34 @@ def process_veterinary_timeline(export_timestamp: str,
             from datetime import datetime
             pipeline_run_date = datetime.now().strftime("%Y-%m-%d")
             
-        # Initialize GCS access if not provided
-        if gcs_access is None and GCS_AVAILABLE:
-            gcs_access = GCSDataAccess()
-            
-        # Initialize DuckDB connection with spatial extension
+        # Initialize DuckDB connection with spatial extension first (unified pipeline pattern)
         con = duckdb.connect()
         try:
             con.install_extension("spatial")
             con.load_extension("spatial")
         except Exception as e:
             logger.warning(f"⚠️ Could not load spatial extension: {e}")
+            
+        # Initialize GCS access with shared connection (unified pipeline pattern)
+        if gcs_access is None and GCS_AVAILABLE:
+            gcs_access = GCSDataAccess(connection=con)
         
         # Create veterinary timeline using dynamic data loading
         success = create_veterinary_timeline(con, pipeline_run_date, gcs_access)
         
         if success:
-            # Export tables using GCS pattern
+            # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
             if gcs_access and migrate_save_data_pattern:
                 bucket = "landbrugsdata-raw-data"
+                # Tables are already in gcs_access.duckdb_conn, so migrate_save_data_pattern will find them
                 migrate_save_data_pattern(gcs_access, "veterinary_timeline", "chr", bucket, "gold", export_timestamp)
-                migrate_save_data_pattern(gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp)
+                
+                # Check if timeline_summary was created
+                try:
+                    gcs_access.duckdb_conn.execute("SELECT COUNT(*) FROM timeline_summary")
+                    migrate_save_data_pattern(gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp)
+                except:
+                    logger.info("ℹ️ No timeline_summary table to export")
             else:
                 # Fallback to local export
                 logger.warning("⚠️ GCS not available, exporting locally only")
@@ -794,7 +801,7 @@ def process_veterinary_timeline(export_timestamp: str,
         else:
             logger.error("❌ Veterinary timeline processing failed")
             
-        con.close()
+        # Connection will be closed when gcs_access is destroyed
         return success
         
     except Exception as e:
