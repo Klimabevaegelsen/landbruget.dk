@@ -438,12 +438,35 @@ def execute(cli_config: cli.CliConfig) -> int:
     help="Year filter for FVM matrix jobs (e.g., 2024).",
     required=False,
 )
+@click.option(
+    "--test-limit",
+    "test_limit",
+    type=int,
+    help="Limit number of CVR numbers to process for testing (CVR enrichment only).",
+    required=False,
+)
+@click.option(
+    "--parse-financial-xml/--no-parse-financial-xml",
+    "parse_financial_xml",
+    default=True,
+    help="Whether to download and parse XML financial documents (CVR enrichment only).",
+)
+@click.option(
+    "--max-financial-documents",
+    "max_financial_documents",
+    type=int,
+    default=10,
+    help="Maximum number of financial documents to fetch per company (CVR enrichment only).",
+)
 def run_cli(
     env: str,
     source: str,
     stage: str,
     fvm_layer_type: str = None,
     fvm_year: int = None,
+    test_limit: int = None,
+    parse_financial_xml: bool = True,
+    max_financial_documents: int = 10,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -469,6 +492,9 @@ def run_cli(
         stage=cli.Stage(stage),
         fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
         fvm_year=fvm_year,
+        test_limit=test_limit,
+        parse_financial_xml=parse_financial_xml,
+        max_financial_documents=max_financial_documents,
     )
     print(app_config)
     exit_code = execute(app_config)
