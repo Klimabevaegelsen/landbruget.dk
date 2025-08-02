@@ -202,9 +202,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         fw.toerv_pct,
                         fw.field_wetland_intersection_geometry as wetland_geometry
                     FROM batch_property_intersections p
-                    JOIN field_wetland_intersections fw ON p.field_id = fw.field_id 
-                        AND p.block_id = fw.block_id 
-                        AND p.cvr_number = fw.cvr_number
+                    JOIN field_wetland_intersections fw ON p.field_uuid = fw.field_uuid 
                         AND p.year = fw.year
                 """)
 
@@ -249,9 +247,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.property_wetland_area_m2 * (fw.field_wetland_water_covered_pct / 100.0) as property_wetland_covered_m2,
                         pw.property_wetland_area_m2 * (1 - (fw.field_wetland_water_covered_pct / 100.0)) as property_wetland_uncovered_m2
                     FROM batch_property_wetland_spatial pw
-                    JOIN fields_wetland_water fw ON pw.field_id = fw.field_id 
-                        AND pw.block_id = fw.block_id 
-                        AND pw.cvr_number = fw.cvr_number 
+                    JOIN fields_wetland_water fw ON pw.field_uuid = fw.field_uuid 
                         AND pw.year = fw.year
                 """)
 
@@ -354,27 +350,24 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 FROM fields_batch b
                 LEFT JOIN (
                     SELECT 
-                        field_id, block_id, cvr_number, year,
+                        field_uuid, year,
+                        -- Keep composite keys for reference
+                        field_id, block_id, cvr_number,
                         COUNT(*) as property_count,
                         SUM(intersection_area_m2) as total_property_intersection_area_m2,
                         (
                             SELECT bfe_number 
                             FROM batch_property_intersections bp2 
-                            WHERE bp2.field_id = bp.field_id 
-                            AND bp2.block_id = bp.block_id 
-                            AND bp2.cvr_number = bp.cvr_number
+                            WHERE bp2.field_uuid = bp.field_uuid 
+                            AND bp2.year = bp.year
                             ORDER BY bp2.intersection_area_m2 DESC 
                             LIMIT 1
                         ) as primary_bfe_number
                     FROM batch_property_intersections bp
-                    GROUP BY field_id, block_id, cvr_number, year
-                ) ps ON b.field_id = ps.field_id 
-                    AND b.block_id = ps.block_id 
-                    AND b.cvr_number = ps.cvr_number 
+                    GROUP BY field_uuid, year, field_id, block_id, cvr_number
+                ) ps ON b.field_uuid = ps.field_uuid 
                     AND b.year = ps.year
-                LEFT JOIN batch_property_breakdown pb ON b.field_id = pb.field_id 
-                    AND b.block_id = pb.block_id 
-                    AND b.cvr_number = pb.cvr_number 
+                LEFT JOIN batch_property_breakdown pb ON b.field_uuid = pb.field_uuid 
                     AND b.year = pb.year
             """)
 

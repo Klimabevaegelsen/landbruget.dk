@@ -240,6 +240,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.geometry as field_geometry,
                     wpwi.toerv_pct,
                     wpwi.intersection_geometry as water_covered_wetland_geometry
@@ -256,6 +257,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     toerv_pct,
                     ST_Area_Spheroid(ST_Intersection(field_geometry, water_covered_wetland_geometry)) as field_covered_wetland_area_m2
                 FROM batch_field_wetland_covered_raw
@@ -299,9 +301,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                     COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as field_wetland_water_covered_m2
                     
                 FROM batch_field_wetland_total f
-                LEFT JOIN batch_field_wetland_covered c ON f.field_id = c.field_id 
-                    AND f.block_id = c.block_id 
-                    AND f.cvr_number = c.cvr_number 
+                LEFT JOIN batch_field_wetland_covered c ON f.field_uuid = c.field_uuid 
                     AND f.year = c.year
                     AND f.toerv_pct = c.toerv_pct
                 GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
