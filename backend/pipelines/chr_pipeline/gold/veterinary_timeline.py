@@ -601,12 +601,12 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
     
     # Define data source patterns - specific files for correct data
     data_source_patterns = [
-        ("chr_properties", "silver/chr/*/*properties*.parquet"),
-        ("animal_welfare", "silver/animal welfare/*/*indsatsomraader*.parquet"),  # Main intervention data (CHR-level)
-        ("pig_tail_cutting", "silver/pig tail cutting/*/**.parquet"),
-        ("property_vet_events", "silver/chr/*/*property_vet*.parquet"),
-        ("spf_su_herds", "silver/chr/*/*spf_su_herds*.parquet"),
-        ("stable_fires", "silver/stable fires/*/**.parquet"),
+        ("chr_properties", "silver/chr/*/properties*.parquet"),
+        ("animal_welfare", "silver/animal welfare/*/Dyrevelfaerd_indsatsomraader*.parquet"),  # Main intervention data (CHR-level)
+        ("pig_tail_cutting", "silver/pig tail cutting/*/*.parquet"),
+        ("property_vet_events", "silver/chr/*/property_vet*.parquet"),
+        ("spf_su_herds", "silver/chr/*/spf_su_herds*.parquet"),
+        ("stable_fires", "silver/stable fires/*/*.parquet"),
     ]
     
     for table_name, pattern in data_source_patterns:
