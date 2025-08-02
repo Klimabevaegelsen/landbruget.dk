@@ -84,15 +84,15 @@ jobs:
           echo "🔐 Granting permissions..."
           gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
             --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/storage.objectAdmin"
+            --role="roles/storage.objectAdmin" --quiet
 
           gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
             --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/logging.logWriter"
+            --role="roles/logging.logWriter" --quiet
 
           gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
             --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/monitoring.metricWriter"
+            --role="roles/monitoring.metricWriter" --quiet
 
           # Create startup script
           cat > /tmp/startup-script.sh << 'EOF'
@@ -139,7 +139,7 @@ jobs:
 
           # Upload the enhanced scraper script
           echo "📤 Uploading enhanced scraper script..."
-          gcloud compute scp scripts/deployment/enhanced_dma_detail_scraper.py $VM_NAME:/tmp/enhanced_dma_detail_scraper.py --zone=${{ env.ZONE }}
+          gcloud compute scp backend/pipelines/dma_scraper/enhanced_dma_detail_scraper.py $VM_NAME:/tmp/enhanced_dma_detail_scraper.py --zone=${{ env.ZONE }}
 
           # Build command with optional parameters
           CMD="sudo python3 /tmp/enhanced_dma_detail_scraper.py --full-pipeline"
