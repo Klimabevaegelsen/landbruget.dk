@@ -59,26 +59,81 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
     try:
         logger.info("📊 Starting CVR collection for drive data pipeline")
 
-        # Find all parquet files in silver directory
-        parquet_files = list(silver_path.rglob("*.parquet"))
+        # Strategy 1: First try to find local parquet files from current pipeline run
+        # Ensure silver directory exists before searching for files
+        if silver_path.exists():
+            local_parquet_files = list(silver_path.rglob("*.parquet"))
+        else:
+            logger.info(f"⚠️ Silver directory does not exist: {silver_path}")
+            local_parquet_files = []
+        
+        files_to_process = []
+        source_description = ""
+        
+        if local_parquet_files:
+            logger.info(f"✅ Found {len(local_parquet_files)} local parquet files from current run")
+            files_to_process = [(str(f), "local") for f in local_parquet_files]
+            source_description = "local files"
+        else:
+            # Strategy 2: Fallback to downloading recent files from GCS
+            logger.info("🔍 No local parquet files found, searching GCS for recent files")
+            
+            try:
+                gcs_access = GCSDataAccess()
+                bucket = "landbrugsdata-raw-data"
+                
+                # Find parquet files in GCS silver directory with pattern matching
+                silver_pattern = f"gs://{bucket}/silver/*/*/*.parquet"
+                parquet_files = gcs_access.list_files(silver_pattern)
+                
+                # Filter to only recent files (within reasonable timeframe of pipeline run)
+                pipeline_date = pipeline_start_time.strftime("%Y%m%d")
+                recent_files = [f for f in parquet_files if pipeline_date in f]
+                
+                if not recent_files:
+                    # Fallback to most recent files if no files from today
+                    logger.warning(f"⚠️ No files found for date {pipeline_date}, using most recent files")
+                    recent_files = sorted(parquet_files, reverse=True)[:20]  # Most recent 20 files
+                    
+                files_to_process = [(f, "gcs") for f in recent_files[:20]]  # Limit to avoid excessive processing
+                source_description = f"GCS files (filtered for {pipeline_date})"
+                
+            except Exception as e:
+                logger.error(f"❌ Could not access GCS files: {e}")
+                return
 
-        if not parquet_files:
-            logger.warning("⚠️ No parquet files found in silver directory")
+        if not files_to_process:
+            logger.warning("⚠️ No parquet files found in local directory or GCS")
             return
 
+        logger.info(f"📂 Processing {len(files_to_process)} files from {source_description}")
+
         import duckdb
-
         conn = duckdb.connect()
-
         all_cvr_numbers = []
 
+        # Initialize GCS access only if needed
+        gcs_access = None
+        if any(source == "gcs" for _, source in files_to_process):
+            gcs_access = GCSDataAccess()
+
         # Process each parquet file
-        for i, file_path in enumerate(parquet_files):
+        for i, (file_path, source) in enumerate(files_to_process):
             try:
                 table_name = f"drive_table_{i + 1}"
-                conn.execute(
-                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
-                )
+                file_display_name = Path(file_path).name if source == "local" else file_path.split("/")[-1]
+                
+                if source == "gcs":
+                    # Download from GCS and load into DuckDB
+                    with gcs_access._temp_download(file_path) as temp_file:
+                        conn.execute(
+                            f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                        )
+                else:
+                    # Local file - use directly
+                    conn.execute(
+                        f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                    )
 
                 # Extract CVR numbers from this table
                 cvr_numbers = extract_cvr_numbers_from_table(
@@ -89,19 +144,21 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
 
                 if cvr_numbers:
                     all_cvr_numbers.extend(cvr_numbers)
-                    logger.info(f"   • {file_path.name}: {len(cvr_numbers)} CVR numbers")
+                    logger.info(f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})")
                 else:
-                    logger.debug(f"   • {file_path.name}: No CVR numbers found")
+                    logger.debug(f"   • {file_display_name}: No CVR numbers found ({source})")
 
             except Exception as e:
-                logger.warning(f"   • {file_path.name}: Error extracting CVR numbers - {e}")
+                logger.warning(f"   • {file_display_name}: Error extracting CVR numbers - {e}")
 
         # Remove duplicates and sort
         unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
 
         if unique_cvr_numbers:
-            # Initialize GCS access and save CVR numbers
-            gcs_access = GCSDataAccess()
+            # Initialize GCS access for saving if not already done
+            if gcs_access is None:
+                gcs_access = GCSDataAccess()
+                
             timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
             gcs_path = save_pipeline_cvr_numbers(
@@ -629,8 +686,16 @@ def main() -> int:
 
         # Save CVR numbers after Silver processing is complete
         if not args.bronze_only and CVR_COLLECTION_AVAILABLE:
+            # Use the actual silver run path from the processor if available
+            actual_silver_path = Path(settings.silver_path)
+            if 'silver_processor' in locals() and hasattr(silver_processor, 'silver_run_path') and silver_processor.silver_run_path:
+                actual_silver_path = storage_manager.base_dir / silver_processor.silver_run_path
+                logger.info(f"Using actual silver run path for CVR extraction: {actual_silver_path}")
+            else:
+                logger.info(f"Using base silver path for CVR extraction: {actual_silver_path}")
+            
             _save_discovered_cvr_numbers(
-                silver_path=Path(settings.silver_path),
+                silver_path=actual_silver_path,
                 pipeline_start_time=pipeline_start_time,
                 logger=logger,
             )
