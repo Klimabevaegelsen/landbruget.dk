@@ -232,7 +232,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             SELECT 
                 soil_type_category,
                 COUNT(*) as intersection_count,
-                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as field_count,
+                COUNT(DISTINCT field_uuid) as field_count,
                 SUM(soil_intersection_area_m2) / 1000000 as total_area_km2,
                 AVG(soil_area_share_pct) as avg_coverage_pct
             FROM field_soil_foundation
@@ -244,7 +244,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         coverage_stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_intersections,
-                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as fields_with_soil,
+                COUNT(DISTINCT field_uuid) as fields_with_soil,
                 AVG(soil_area_share_pct) as avg_soil_coverage,
                 COUNT(DISTINCT soil_id) as unique_soil_polygons,
                 COUNT(DISTINCT soil_code) as unique_soil_codes
