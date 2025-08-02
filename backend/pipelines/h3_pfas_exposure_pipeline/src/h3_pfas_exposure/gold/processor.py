@@ -1305,9 +1305,7 @@ class H3PFASProcessorRefactored:
             CREATE OR REPLACE TABLE pesticide_field_lookup AS
             SELECT DISTINCT
                 field_uuid,
-                CompanyRegistrationNumber as cvr,
-                REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
-                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
+                CompanyRegistrationNumber as cvr
             FROM temp_pesticide_raw
             WHERE field_uuid IS NOT NULL
             AND CompanyRegistrationNumber IS NOT NULL
@@ -1424,6 +1422,7 @@ class H3PFASProcessorRefactored:
                 AllocatedArea,
                 AllocationMethod,
                 MatchConfidence,
+                -- Extract field_id and block_id for reference (not used for joining)
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
             FROM temp_pesticide_raw

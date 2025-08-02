@@ -270,16 +270,14 @@ class H3DataLoader:
                 )
                 pest_cvr_col = "NULL"
 
-            # Create lookup table
+            # Create lookup table using field_uuid
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pesticide_field_lookup AS
                 SELECT DISTINCT
-                    {pest_cvr_col} as cvr,
-                    REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as field_id,
-                    REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as block_id
+                    field_uuid,
+                    {pest_cvr_col} as cvr
                 FROM {temp_pesticide_table}
-                WHERE MatchedFieldID IS NOT NULL
-                AND MatchedBlockID IS NOT NULL
+                WHERE field_uuid IS NOT NULL
                 AND {pest_cvr_col} IS NOT NULL
             """)
             self.conn.execute(f"DROP TABLE IF EXISTS {temp_pesticide_table}")
@@ -287,7 +285,7 @@ class H3DataLoader:
             # Create empty lookup
             self.conn.execute("""
                 CREATE OR REPLACE TABLE pesticide_field_lookup AS
-                SELECT 'dummy' as cvr, 'dummy' as field_id, 'dummy' as block_id
+                SELECT 'dummy' as field_uuid, 'dummy' as cvr
                 WHERE FALSE
             """)
 
@@ -377,7 +375,7 @@ class H3DataLoader:
                 f.field_uuid,
                 f.field_uuid as primary_field_id
             FROM {temp_table} f
-            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid 
+            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid
                 AND {"f.cvr_number" if "cvr_number" in column_names else "f.company_registration_number"} = p.cvr
             WHERE {geometry_column} IS NOT NULL
             AND {geometry_validation}
@@ -499,7 +497,7 @@ class H3DataLoader:
                 AllocatedArea,
                 AllocationMethod,
                 MatchConfidence,
-                -- Extract field_id and block_id for matching
+                -- Extract field_id and block_id for reference (not used for joining)
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id,
                 -- Add field UUID support
