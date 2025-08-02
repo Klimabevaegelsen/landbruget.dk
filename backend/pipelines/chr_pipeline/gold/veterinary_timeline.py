@@ -487,12 +487,17 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
               AND {cert_date_col} > '1900-01-01'
             """)
         
-        # Disease status events (if we have health status)
+        # Disease status events (if we have health status) - all actual markers found in data
         if health_col:
             disease_types = [
                 ("Mycoplasma", "+Myc"),
-                ("Actinobacillus", "+Ap"),  
-                ("PRRS", "+PRRS"),
+                ("Actinobacillus_type_2", "+Ap2"),
+                ("Actinobacillus_type_6", "+Ap6"), 
+                ("Actinobacillus_type_7", "+Ap7"),
+                ("Actinobacillus_type_12", "+Ap12"),
+                ("Nysesyge", "+Nys"),  # Sneezing disease - was missing!
+                ("PRRS_type_1", "+PRRS1"),
+                ("PRRS_type_2", "+PRRS2"),
             ]
             
             for disease_name, disease_marker in disease_types:
@@ -510,6 +515,29 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                 FROM spf_su_herds
                 WHERE {chr_col} IS NOT NULL 
                   AND {health_col} LIKE '%{disease_marker}%'
+                """)
+            
+            # Add sanitation events (different event type)
+            sanitation_types = [
+                ("Actinobacillus_type_2_sanitation", "+sanAp2"),
+                ("PRRS_type_2_sanitation", "+sanPRRS2"),
+            ]
+            
+            for san_name, san_marker in sanitation_types:
+                parts.append(f"""
+                SELECT 
+                    {chr_col} as chr_number,
+                    'spf_su_sanitation' as event_source,
+                    'sanitation_process' as event_type,
+                    '{san_name}: sanering igang' as event_description,
+                    'Sanitation' as event_category,
+                    'Pig' as species,
+                    CAST('{pipeline_run_date}' AS TIMESTAMP) as event_date,
+                    NULL as end_date,
+                    'spf_su_herds' as source_file
+                FROM spf_su_herds
+                WHERE {chr_col} IS NOT NULL 
+                  AND {health_col} LIKE '%{san_marker}%'
                 """)
         
         logger.info(f"✅ Created {len(parts)} SPF-SU timeline parts")
