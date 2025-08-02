@@ -34,6 +34,9 @@ from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
+
+# Import gold processing orchestrator
+from gold.chr_gold_processing import process_gold_data as run_gold_processing
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -1050,6 +1053,25 @@ def main():
                     raise RuntimeError("No bronze data source available for silver processing")
 
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
+                
+                # --- Gold Layer Processing ---
+                try:
+                    logging.warning("🥇 Starting Gold Layer Processing...")
+                    gold_success = run_gold_processing(
+                        export_timestamp=EXPORT_TIMESTAMP,
+                        silver_dir=silver_dir
+                    )
+                    
+                    if gold_success:
+                        logging.warning("✅ Gold processing completed successfully")
+                    else:
+                        logging.error("❌ Gold processing failed")
+                        # Don't fail the entire pipeline for gold processing failure
+                        
+                except Exception as e:
+                    logging.error(f"❌ Gold processing failed: {e}", exc_info=True)
+                    # Don't fail the entire pipeline for gold processing failure
+                    
             except Exception as e:
                 logging.error(f"❌ Silver processing failed: {e}", exc_info=True)
                 raise  # Re-raise to indicate pipeline failure
