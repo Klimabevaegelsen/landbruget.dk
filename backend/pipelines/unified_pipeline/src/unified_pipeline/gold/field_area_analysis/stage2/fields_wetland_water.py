@@ -24,12 +24,15 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load field data and water project wetland intersections from Stage 1."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load agricultural fields (still from silver - this is the BUILD side)
         self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "fields_raw")
 
         # Load Stage 0 pre-filtered wetlands data for field intersections (PROBE side optimization)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
-        stage0_wetlands_dataset = CONFIG.stage_outputs["wetlands_prefiltered"]
+        stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
         # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
         self.gcs_access.query_parquet_direct(
@@ -45,7 +48,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         # Load water project × wetland intersections from Stage 1B
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
-        stage1b_dataset = CONFIG.stage_outputs["water_projects_wetlands_intersections"]
+        stage1b_dataset = updated_outputs["water_projects_wetlands_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         # Explicitly select columns to ensure toerv_pct is treated as VARCHAR
         self.gcs_access.query_parquet_direct(

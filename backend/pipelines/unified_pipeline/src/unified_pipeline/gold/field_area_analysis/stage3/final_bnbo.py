@@ -40,31 +40,38 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load foundation data from previous stages."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load field-level BNBO coverage from Stage 2A
-        stage2a_dataset = CONFIG.stage_outputs["fields_bnbo_water"]
+        stage2a_dataset = updated_outputs["fields_bnbo_water"]
         stage2a_path = self._get_latest_gold_path(stage2a_dataset)
         self.gcs_access.query_parquet_direct(stage2a_path, "SELECT *", "fields_bnbo_water")
+        self.log.info(f"✅ Loaded fields_bnbo_water from {stage2a_dataset}")
 
         # Load property/field intersections from Stage 1C (includes intersection_geometry)
-        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
+        stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, "SELECT *", "field_property_intersections"
         )
+        self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
 
         # Load water project/BNBO intersections from Stage 1A (foundation data)
-        stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
+        stage1a_dataset = updated_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         self.gcs_access.query_parquet_direct(
             stage1a_path, "SELECT *", "water_projects_bnbo_intersections"
         )
+        self.log.info(f"✅ Loaded water_projects_bnbo_intersections from {stage1a_dataset}")
 
         # Load field-BNBO intersections from Stage 2A (SPEED OPTIMIZATION!)
-        stage2a_intersections_dataset = CONFIG.stage_outputs["field_bnbo_intersections"]
+        stage2a_intersections_dataset = updated_outputs["field_bnbo_intersections"]
         stage2a_intersections_path = self._get_latest_gold_path(stage2a_intersections_dataset)
         self.gcs_access.query_parquet_direct(
             stage2a_intersections_path, "SELECT *", "field_bnbo_intersections"
         )
+        self.log.info(f"✅ Loaded field_bnbo_intersections from {stage2a_intersections_dataset}")
 
         self.log.info(
             "✅ SPEED OPTIMIZATION: Using pre-computed field-BNBO intersections from Stage 2A"
