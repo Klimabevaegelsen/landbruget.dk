@@ -29,6 +29,10 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.arbejdstilsynet_inspections import (
+    ArbjdstilsynetInspectionsGold,
+    ArbjdstilsynetInspectionsGoldConfig,
+)
 from unified_pipeline.gold.cvr_enrichment import (
     CVREnrichmentGold,
     CVREnrichmentGoldConfig,
@@ -44,6 +48,10 @@ from unified_pipeline.gold.field_production import (
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig,
+)
+from unified_pipeline.gold.worker_safety import (
+    WorkerSafetyGold,
+    WorkerSafetyGoldConfig,
 )
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
@@ -346,6 +354,20 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.all: [
                 (DMIBronze, DMIBronzeConfig),
                 (DMISilver, DMISilverConfig),
+            ],
+        },
+        cli.Source.arbejdstilsynet_inspections: {
+            cli.Stage.gold: [(ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires arbejdstilsynet_inspections silver data to be available
+                (ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig),
+            ],
+        },
+        cli.Source.worker_safety: {
+            cli.Stage.gold: [(WorkerSafetyGold, WorkerSafetyGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires worker safety silver data to be available
+                (WorkerSafetyGold, WorkerSafetyGoldConfig),
             ],
         },
     }
