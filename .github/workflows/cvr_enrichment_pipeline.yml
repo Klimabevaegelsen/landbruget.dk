@@ -51,10 +51,12 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: "backend/pipelines/unified_pipeline/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: |
+          cd backend/pipelines/unified_pipeline
+          uv sync --frozen
 
       - name: Authenticate to Google Cloud
         uses: 'google-github-actions/auth@v2'
@@ -85,6 +87,7 @@ jobs:
           MAX_DOCS_ARG="--max-financial-documents ${{ github.event.inputs.max_financial_documents || 10 }}"
           
           # Run the CVR enrichment pipeline
+          cd backend/pipelines/unified_pipeline
           uv run python -m unified_pipeline \
             --env prod \
             --source cvr_enrichment \
