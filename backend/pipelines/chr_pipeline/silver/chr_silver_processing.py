@@ -322,10 +322,10 @@ def process_chr_data_streaming(
                 "description": "DIKO animal movements",
             },
             "cattle_movements": {
-                "file": "chr_dyr_all_movements.jsonl",
+                "file": "*chr_dyr_movement_summaries.parquet",
                 "table_name": "cattle_movements",
                 "required": False,
-                "description": "CHR cattle movements (single JSONL file, all matrix jobs append)",
+                "description": "CHR cattle movements (consolidated parquet)",
             },
             "ejendom_oplys": {
                 "file": "ejendom_oplysninger.json",
@@ -1446,9 +1446,8 @@ def process_chr_data(
                     con, context.get("diko_flyt_table"), silver_dir
                 )
 
-                # Process CHR_dyr cattle movements (streamed JSON from bronze)
+                # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                 if context.get("cattle_movements_table") is not None:
-                    logging.info("🗄️ Processing CHR cattle movements from streamed JSON")
                     chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
                         con, context.get("cattle_movements_table"), silver_dir
                     )
