@@ -1454,9 +1454,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
                             self.gcs_access.query_parquet_direct(
                                 latest_marker_file,
-                                "SELECT * WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL",
+                                "SELECT *",
                                 f"temp_marker_{year}"
                             )
+                            # Filter the loaded data in DuckDB
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE temp_marker_{year} AS
+                                SELECT * FROM temp_marker_{year}
+                                WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
+                            """)
                             marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
                             self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year} from {latest_marker_file}")
                         except Exception as e:
