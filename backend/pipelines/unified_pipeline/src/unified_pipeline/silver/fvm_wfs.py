@@ -1292,6 +1292,149 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if enrichment fails
             pass
 
+    async def _enrich_subsidies_with_field_uuid(self) -> None:
+        """
+        Enrich subsidy tables with field UUIDs from matching FVM marker fields.
+        
+        This method performs spatial matching between subsidy fields and FVM marker fields
+        to add field_uuid for direct field linkage. It uses centroid-within-polygon matching 
+        combined with Marknr (field_id) validation to ensure accurate matches.
+        
+        The matching logic:
+        1. Find the centroid of each subsidy field geometry
+        2. Check which FVM marker field contains this centroid 
+        3. Validate that the Marknr matches between subsidy and marker
+        4. If match is found, add the field_uuid from marker to subsidy record
+        """
+        self.log.info("Starting field UUID enrichment of subsidy tables")
+        
+        try:
+            # Define subsidy layer types to process
+            subsidy_layers = [
+                ("OrganicSubsidies", self.config.organic_subsidies_years, self.config.dataset_organic_subsidies),
+                ("GrasslandSubsidies", self.config.grassland_subsidies_years, self.config.dataset_grassland_subsidies), 
+                ("EnvironmentalSubsidies", self.config.environmental_subsidies_years, self.config.dataset_environmental_subsidies)
+            ]
+            
+            total_enriched = 0
+            
+            for layer_type, layer_years, dataset_name in subsidy_layers:
+                # Find overlapping years with marker data
+                overlapping_years = sorted(set(layer_years) & set(self.config.marker_years))
+                if not overlapping_years:
+                    self.log.warning(f"No overlapping years between {layer_type} and marker data - skipping")
+                    continue
+                    
+                self.log.info(f"Enriching {layer_type} fields for years: {overlapping_years}")
+                
+                for year in overlapping_years:
+                    try:
+                        # Define table names
+                        subsidy_table = f"fvm_{dataset_name}_{year}"
+                        marker_table = f"fvm_marker_{year}"
+                        
+                        # Check if both datasets exist for this year
+                        subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"  
+                        marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
+                        
+                        # Load subsidy data
+                        try:
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE temp_subsidy_{year} AS 
+                                SELECT * FROM read_parquet('{subsidy_path}*.parquet')
+                            """)
+                            subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_{year}").fetchone()[0]
+                            self.log.info(f"Loaded {subsidy_count:,} {layer_type} records for {year}")
+                        except Exception as e:
+                            self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
+                            continue
+                        
+                        # Load marker data
+                        try:
+                            self.conn.execute(f"""
+                                CREATE OR REPLACE TABLE temp_marker_{year} AS 
+                                SELECT * FROM read_parquet('{marker_path}*.parquet')
+                                WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
+                            """)
+                            marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
+                            self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year}")
+                        except Exception as e:
+                            self.log.warning(f"Could not load marker data for {year}: {e}")
+                            continue
+                        
+                        if subsidy_count == 0 or marker_count == 0:
+                            self.log.warning(f"Insufficient data for {layer_type} {year} - skipping")
+                            continue
+                        
+                        # Pre-filter to remove NULL geometries for optimal performance
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS 
+                            SELECT * FROM temp_subsidy_{year} WHERE geometry IS NOT NULL AND field_id IS NOT NULL
+                        """)
+                        
+                        filtered_subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_filtered_{year}").fetchone()[0]
+                        self.log.info(f"Filtered to {filtered_subsidy_count:,} {layer_type} records with valid geometry and field_id")
+                        
+                        # Add field_uuid column to subsidy table if it doesn't exist
+                        self.conn.execute(f"""
+                            ALTER TABLE temp_subsidy_{year} 
+                            ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
+                        """)
+                        
+                        # Perform spatial matching with field_id validation
+                        # Find marker fields that contain the centroid of subsidy fields AND have matching field_id
+                        enrichment_query = f"""
+                            UPDATE temp_subsidy_{year} SET
+                                field_uuid = field_matches.field_uuid
+                            FROM (
+                                SELECT DISTINCT
+                                    s.rowid as subsidy_rowid,
+                                    m.field_uuid
+                                FROM temp_subsidy_filtered_{year} s
+                                INNER JOIN temp_marker_{year} m ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
+                                WHERE s.field_id = m.field_id
+                            ) AS field_matches
+                            WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
+                        """
+                        
+                        matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
+                        total_enriched += matches_updated
+                        
+                        self.log.info(f"Enriched {matches_updated:,} {layer_type} records with field_uuid for {year}")
+                        
+                        # Save the enriched subsidy data back to GCS
+                        enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE {enriched_subsidy_table} AS 
+                            SELECT * FROM temp_subsidy_{year}
+                        """)
+                        
+                        # Save using the standard pattern (overwrite the original)
+                        self._save_data(
+                            enriched_subsidy_table,
+                            subsidy_table,  # Keep the same dataset name to overwrite
+                            self.config.bucket,
+                            "silver",
+                            conn=self.conn,
+                        )
+                        
+                        # Clean up temporary tables
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_filtered_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS {enriched_subsidy_table}")
+                        
+                    except Exception as e:
+                        self.log.error(f"Error enriching {layer_type} data for year {year}: {e}")
+                        continue
+            
+            self.log.info(f"Subsidy field UUID enrichment completed - enriched {total_enriched:,} total subsidy records")
+            
+        except Exception as e:
+            self.log.error(f"Error during subsidy field UUID enrichment: {e}")
+            # Don't fail the entire pipeline if enrichment fails
+            pass
+
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """
         Execute the silver processing job for all FVM WFS data.
@@ -1382,6 +1525,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Enrich marker fields with organic information
             await self._enrich_marker_with_organic_data()
+            
+            # Enrich subsidy fields with field UUIDs from matching FVM marker fields
+            await self._enrich_subsidies_with_field_uuid()
 
             self.log.info("FVM WFS silver job completed for all available data")
 
