@@ -82,6 +82,7 @@ class SilverProcessor:
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
         from .transformers.excel_transformer import ExcelTransformer
+        from .transformers.work_permits_transformer import WorkPermitsTransformer
 
         # Initialize transformers map
         self.transformers = {
@@ -90,6 +91,7 @@ class SilverProcessor:
                 use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
                 ocr_language="dan+eng",
             ),
+            "WorkPermits": WorkPermitsTransformer(),
         }
 
         logger.info("Initialized Silver processor")
@@ -570,12 +572,30 @@ class SilverProcessor:
                 logger.error(f"Checksum validation failed for {file_path}")
                 return False
 
-            # Select transformer based on content type
-            if not metadata.content_type or metadata.content_type not in self.transformers:
-                logger.warning(f"Unsupported content type: {metadata.content_type}")
+            # Select transformer based on content type and file specifics
+            transformer = None
+            
+            # First, check if specialized transformers can handle this file
+            for transformer_name, potential_transformer in self.transformers.items():
+                if hasattr(potential_transformer, 'can_handle'):
+                    # Convert metadata to dict for transformer
+                    metadata_dict = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    if potential_transformer.can_handle(file_path, metadata_dict):
+                        transformer = potential_transformer
+                        logger.info(f"Using specialized transformer: {transformer_name}")
+                        break
+            
+            # If no specialized transformer found, use content type mapping
+            if not transformer:
+                if not metadata.content_type or metadata.content_type not in self.transformers:
+                    logger.warning(f"Unsupported content type: {metadata.content_type}")
+                    return False
+                transformer = self.transformers[metadata.content_type]
+                logger.info(f"Using content type transformer: {metadata.content_type}")
+            
+            if not transformer:
+                logger.error("No suitable transformer found")
                 return False
-
-            transformer = self.transformers[metadata.content_type]
 
             # Transform the file
             result = transformer.transform(
