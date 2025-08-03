@@ -112,7 +112,7 @@ class H3PMTilesGenerator:
             self.log.info(f"📊 Processing {count:,} kommuner for PMTiles generation")
 
             # Create GeoJSON for kommune data
-            geojson_path = self._create_kommune_geojson(results_table, year)
+            geojson_path = self._create_kommune_geojson(results_table, year, kommune_boundaries_table)
             if not geojson_path:
                 return None
 
@@ -504,7 +504,7 @@ class H3PMTilesGenerator:
             self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
             self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
 
-    def _create_kommune_geojson(self, results_table: str, year: int | str) -> str | None:
+    def _create_kommune_geojson(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
         """Create GeoJSON from kommune results table."""
         try:
             # Create temporary file for GeoJSON
