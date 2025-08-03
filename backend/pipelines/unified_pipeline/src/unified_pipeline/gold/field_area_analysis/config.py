@@ -80,6 +80,8 @@ class FieldAreaAnalysisConfig(BaseModel):
         # Stage 3 outputs (property-level analysis)
         "final_bnbo": "field_analysis_bnbo",
         "final_wetland": "field_analysis_wetland",
+        "property_bnbo_breakdown": "field_analysis_property_bnbo_breakdown",
+        "property_wetland_breakdown": "field_analysis_property_wetland_breakdown",
         # Stage 4 outputs (consolidation)
         "consolidated": "field_analysis",
     }

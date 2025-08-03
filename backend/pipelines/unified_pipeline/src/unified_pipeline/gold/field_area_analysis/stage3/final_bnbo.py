@@ -371,6 +371,20 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         final_result_count = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
         self.log.info(f"✅ DUAL-TRACK COMPLETE: Created final analysis for {final_result_count:,} fields")
 
+        # Save property breakdown table before cleanup (if it has data)
+        try:
+            breakdown_count = self.conn.execute(f"SELECT COUNT(*) FROM {property_breakdown_table}").fetchone()[0]
+            if breakdown_count > 0:
+                # Get year-aware output dataset name for property breakdown
+                updated_outputs = CONFIG.update_outputs_for_year()
+                output_dataset = updated_outputs["property_bnbo_breakdown"]
+                self.save_data_direct(property_breakdown_table, output_dataset, CONFIG.bucket, "gold")
+                self.log.info(f"✅ Saved {breakdown_count:,} property BNBO breakdown records to {output_dataset}")
+            else:
+                self.log.info("⚠️ No property BNBO breakdown data to save")
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not save property breakdown table: {e}")
+
         # Clean up intermediate tables (year-specific for matrix parallel safety)
         self.conn.execute(f"DROP TABLE IF EXISTS {field_totals_table}")
         self.conn.execute(f"DROP TABLE IF EXISTS {property_intersections_table}")
@@ -385,4 +399,5 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save final BNBO analysis to GCS."""
-        self._save_stage_output("final_bnbo_analysis", "bnbo_analysis")
+        # Save field-level BNBO analysis (property breakdown already saved in _execute_stage_processing)
+        self._save_stage_output("final_bnbo_analysis", "final_bnbo")

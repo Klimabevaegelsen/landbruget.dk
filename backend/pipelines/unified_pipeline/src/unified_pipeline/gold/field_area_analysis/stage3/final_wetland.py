@@ -142,6 +142,21 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             WHERE FALSE
         """)
 
+        # Initialize consolidated property breakdown table for separate saving
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE consolidated_property_wetland_breakdown AS
+            SELECT 
+                CAST(NULL AS VARCHAR) as field_id,
+                CAST(NULL AS VARCHAR) as block_id,
+                CAST(NULL AS VARCHAR) as cvr_number,
+                CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
+                CAST(NULL AS VARCHAR) as bfe_number,
+                CAST(NULL AS DOUBLE) as property_wetland_total_m2,
+                CAST(NULL AS VARCHAR) as property_wetland_detail  -- JSON status breakdown
+            WHERE FALSE
+        """)
+
         # Process each batch
         for batch_num in range(num_batches):
             offset = batch_num * batch_size
@@ -311,6 +326,23 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     "SELECT COUNT(*) FROM batch_property_breakdown"
                 ).fetchone()[0]
                 self.log.info(f"  Created {breakdown_count:,} field-level property breakdowns")
+
+                # Accumulate individual property-level breakdown data from batch
+                if breakdown_count > 0:
+                    self.conn.execute("""
+                        INSERT INTO consolidated_property_wetland_breakdown
+                        SELECT 
+                            field_id, block_id, cvr_number, year, field_uuid,
+                            bfe_number,
+                            SUM(property_wetland_area_m2) as property_wetland_total_m2,
+                            JSON_OBJECT(
+                                'wetland_area_m2', SUM(property_wetland_area_m2),
+                                'covered_m2', SUM(property_wetland_covered_m2),
+                                'uncovered_m2', SUM(property_wetland_uncovered_m2)
+                            ) as property_wetland_detail
+                        FROM batch_property_wetland_water
+                        GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
+                    """)
             else:
                 # No properties for this batch - create empty breakdown table
                 self.conn.execute("""
@@ -419,6 +451,25 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         self.log.info(
             "🎯 ACHIEVED: field → property → wetland (area/covered/uncovered) nested breakdown"
         )
+
+        # Save consolidated property breakdown table before cleanup
+        try:
+            property_breakdown_count = self.conn.execute(
+                "SELECT COUNT(*) FROM consolidated_property_wetland_breakdown"
+            ).fetchone()[0]
+            if property_breakdown_count > 0:
+                # Get year-aware output dataset name for property breakdown
+                updated_outputs = CONFIG.update_outputs_for_year()
+                output_dataset = updated_outputs["property_wetland_breakdown"]
+                self.save_data_direct("consolidated_property_wetland_breakdown", output_dataset, CONFIG.bucket, "gold")
+                self.log.info(f"✅ Saved {property_breakdown_count:,} property wetland breakdown records to {output_dataset}")
+            else:
+                self.log.info("⚠️ No property wetland breakdown data to save")
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not save property wetland breakdown table: {e}")
+
+        # Clean up consolidated table
+        self.conn.execute("DROP TABLE IF EXISTS consolidated_property_wetland_breakdown")
 
         return {
             "final_records": final_count,

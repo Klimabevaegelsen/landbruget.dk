@@ -460,7 +460,7 @@ async def run_cumulative_analysis(
 
             # Save cumulative kommune results
             result_count = result_saver.save_cumulative_kommune_results(
-                final_cumulative_kommune_table, years
+                final_cumulative_kommune_table, years, kommune_table
             )
 
             if result_count > 0:
