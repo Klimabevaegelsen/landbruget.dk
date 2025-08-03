@@ -73,38 +73,20 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
                 # Filter out old "run_" directories and prioritize proper timestamps
                 timestamp_files = [f for f in files if '/run_' not in f]
                 if timestamp_files:
-                    files_to_load = sorted(timestamp_files, reverse=True)
+                    # Use proper timestamp files first
+                    latest_file = sorted(timestamp_files, reverse=True)[0]
                 else:
                     # Fallback to any file if no timestamp files found
-                    files_to_load = sorted(files, reverse=True)
+                    latest_file = sorted(files, reverse=True)[0]
+                logger.info(f"📥 Loading {table_name} from: {latest_file}")
                 
-                # Standard loading for CHR movement data (now from silver parquet)
-                if table_name == "chr_dyr_movements":
-                    # Use latest silver parquet file (contains all historical data from JSON)
-                    latest_file = files_to_load[0]
-                    logger.info(f"📥 Loading {table_name} from: {latest_file}")
-                    
-                    # Use unified pipeline pattern: query_parquet_direct with shared connection
-                    gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
-                    loaded_tables[table_name] = True
-                    
-                    # Log row count using shared connection
-                    count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                    intl_count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name} WHERE is_international = true").fetchone()[0]
-                    logger.info(f"   ✅ {table_name}: {count:,} total records ({intl_count:,} international)")
-                        
-                else:
-                    # For non-movement tables, use latest file as before
-                    latest_file = files_to_load[0]
-                    logger.info(f"📥 Loading {table_name} from: {latest_file}")
-                    
-                    # Use unified pipeline pattern: query_parquet_direct with shared connection
-                    gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
-                    loaded_tables[table_name] = True
-                    
-                    # Log row count using shared connection
-                    count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                    logger.info(f"   ✅ {table_name}: {count:,} records")
+                # Use unified pipeline pattern: query_parquet_direct with shared connection
+                gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                loaded_tables[table_name] = True
+                
+                # Log row count using shared connection
+                count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                logger.info(f"   ✅ {table_name}: {count:,} records")
             else:
                 logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
                 loaded_tables[table_name] = False
@@ -117,8 +99,6 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
     for table_name, loaded in loaded_tables.items():
         if not loaded:
             gcs_access.duckdb_conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE")
-    
-    # CHR movements are now processed from silver parquet (which contains all historical data from JSON)
     
     return loaded_tables
 
