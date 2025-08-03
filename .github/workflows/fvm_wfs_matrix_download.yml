@@ -146,6 +146,7 @@ jobs:
   process:
     needs: generate-matrix
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.stage == 'bronze' || github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
     strategy:
       fail-fast: false
       max-parallel: 10  # Limit concurrent jobs to avoid overwhelming the FVM server
@@ -257,7 +258,7 @@ jobs:
           exit 1
 
   summary:
-    needs: [generate-matrix, process, enrichment-matrix]
+    needs: [generate-matrix, enrichment-matrix]
     runs-on: ubuntu-latest
     if: always()
     steps:
