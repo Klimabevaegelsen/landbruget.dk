@@ -160,16 +160,18 @@ def finalize_consolidated_processing():
 
         logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
-        # Save consolidated data directly to GCS using the unified pipeline pattern
-        from .export import EXPORT_TIMESTAMP
-
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        gcs_path = f"gs://{bucket_name}/bronze/chr/{EXPORT_TIMESTAMP}/chr_dyr_movement_summaries.parquet"
-
-        # Use the unified GCS access pattern - export directly to parquet
-        _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
-
-        logger.info(f"✅ Saved consolidated movement data to {gcs_path}")
+        # FIXED: Append ALL movement data to single JSONL file (no overwrites!)
+        from .export import _save_to_gcs_streaming
+        
+        # Convert consolidated movements to list of dicts for JSON streaming
+        movements_list = _duckdb_conn.execute("SELECT * FROM consolidated_movements").fetchall()
+        columns = [desc[0] for desc in _duckdb_conn.description]
+        movements_data = [dict(zip(columns, row)) for row in movements_list]
+        
+        # All matrix jobs append to the same JSONL file
+        filename = "chr_dyr_all_movements.jsonl"
+        _save_to_gcs_streaming(filename, movements_data, append_mode=True)
+        logger.info(f"✅ Appended {len(movements_data):,} movements to {filename} (JSONL format, no overwrites)")
 
         # Clean up table
         _duckdb_conn.execute("DROP TABLE IF EXISTS consolidated_movements")
