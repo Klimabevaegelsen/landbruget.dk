@@ -31,7 +31,7 @@ class ParquetManager(DuckDBProcessor):
 
     def __init__(
         self,
-        storage_manager: DriveStorageManager,
+        storage_manager: "DriveStorageManager",
         compression: str = "snappy",
         partition_by: list[str] | None = None,
     ):
@@ -103,7 +103,7 @@ class ParquetManager(DuckDBProcessor):
                     with open(temp_path, "rb") as f:
                         self.storage_manager.save_file(f.read(), output_path)
 
-                    logger.info(f"Saved Parquet file to GCS: {output_path}")
+                    logger.info(f"✅ Saved Parquet file to GCS: {output_path}")
                     return output_path
 
                 finally:
