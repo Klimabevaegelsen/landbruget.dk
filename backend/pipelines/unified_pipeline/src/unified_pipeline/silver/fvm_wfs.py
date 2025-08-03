@@ -111,11 +111,11 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "Hovedafg": "main_crop_code",  # Only 2016
         # Area fields
         "Ansoegt": "applied_area_ha",  # 2010-2014
-        "GBanmeldt": "reported_area_ha",  # 2017-2025
+        "GBanmeldt": "grundbetaling_area_ha",  # 2017-2025, actual grundbetaling area reported
+        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling" (basic payment) eligibility
         # Administrative fields
         "Journalnr": "journal_number",  # 2014+
         "Markblok": "block_id",  # 2016+
-        # Note: GB field removed - it is NOT organic farming data
     }
 
     # Smaabiotoper fields (similar to Marker but with biotope-specific fields)
@@ -126,13 +126,13 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "CVR": "cvr_number",
         "Afgkode": "biotope_code",
         "Afgroede": "biotope_type",
-        "GBanmeldt": "reported_area_ha",
+        "GBanmeldt": "grundbetaling_area_ha",  # Actual grundbetaling area reported
+        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling" (basic payment) eligibility
         "Markblok": "block_id",
         "MarkblokNr": "block_number",
         "BRUGER_ID": "user_id",
         "OPRINDATO": "creation_date",
         "NOTAT": "notes",
-        # Note: GB field removed - it is NOT organic farming data
     }
 
     # Organic Areas fields (from Miljoe_og_oekologitilsagn:Oekologiske_arealer)
