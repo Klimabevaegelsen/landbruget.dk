@@ -52,12 +52,22 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         dataset_markblokke (str): Name of the markblokke dataset in storage
         dataset_marker (str): Name of the marker dataset in storage
         dataset_organic_areas (str): Name of the organic areas dataset in storage
+        dataset_organic_subsidies (str): Name of the organic subsidies dataset in storage
+        dataset_grassland_subsidies (str): Name of the grassland subsidies dataset in storage
+        dataset_environmental_subsidies (str): Name of the environmental subsidies dataset 
+            in storage
         frequency (str): How often the data is updated
         bucket (str): GCS bucket name for raw data storage
         markblokke_years (List[int]): Years available for Markblokke data (2005-2026)
         marker_years (List[int]): Years available for Marker data (2008-2025)
         smaabiotoper_years (List[int]): Years available for Smaabiotoper data (2023-2025)
         organic_areas_years (List[int]): Years available for Organic Areas data (2012-2024)
+        organic_subsidies_years (List[int]): Years available for Organic Subsidies data 
+            (2019-2024)
+        grassland_subsidies_years (List[int]): Years available for Grassland Subsidies data 
+            (2019-2024)
+        environmental_subsidies_years (List[int]): Years available for Environmental Subsidies data 
+            (2019-2023)
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
         max_concurrent (int): Maximum concurrent requests
         timeout_config (aiohttp.ClientTimeout): Request timeout configuration
@@ -71,6 +81,9 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     dataset_markblokke: str = "fvm_markblokke"
     dataset_marker: str = "fvm_marker"
     dataset_organic_areas: str = "fvm_organic_areas"
+    dataset_organic_subsidies: str = "fvm_organic_subsidies"
+    dataset_grassland_subsidies: str = "fvm_grassland_subsidies"
+    dataset_environmental_subsidies: str = "fvm_environmental_subsidies"
     frequency: str = "yearly"
     bucket: str = "landbrugsdata-raw-data"
 
@@ -79,6 +92,9 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
     smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
     organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
+    organic_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years)
+    grassland_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years)
+    environmental_subsidies_years: List[int] = list(range(2019, 2024))  # 2019-2023 (5 years)
 
     # Request configuration - optimized for full dataset downloads
     # Testing showed full downloads are optimal (no chunking needed)
@@ -119,6 +135,9 @@ class FVMWFSBronzeConfig(BaseJobConfig):
             object.__setattr__(self, "marker_years", [])
             object.__setattr__(self, "smaabiotoper_years", [])
             object.__setattr__(self, "organic_areas_years", [])
+            object.__setattr__(self, "organic_subsidies_years", [])
+            object.__setattr__(self, "grassland_subsidies_years", [])
+            object.__setattr__(self, "environmental_subsidies_years", [])
 
             # Apply layer type filter
             if cli_config.fvm_layer_type:
@@ -132,6 +151,12 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                     years = [2023, 2024, 2025]
                 elif layer_type == FVMLayerType.organic_areas:
                     years = list(range(2012, 2025))  # 2012-2024
+                elif layer_type == FVMLayerType.organic_subsidies:
+                    years = list(range(2019, 2025))  # 2019-2024
+                elif layer_type == FVMLayerType.grassland_subsidies:
+                    years = list(range(2019, 2025))  # 2019-2024
+                elif layer_type == FVMLayerType.environmental_subsidies:
+                    years = list(range(2019, 2024))  # 2019-2023
                 else:
                     years = []
 
@@ -151,6 +176,12 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                     object.__setattr__(self, "smaabiotoper_years", years)
                 elif layer_type == FVMLayerType.organic_areas:
                     object.__setattr__(self, "organic_areas_years", years)
+                elif layer_type == FVMLayerType.organic_subsidies:
+                    object.__setattr__(self, "organic_subsidies_years", years)
+                elif layer_type == FVMLayerType.grassland_subsidies:
+                    object.__setattr__(self, "grassland_subsidies_years", years)
+                elif layer_type == FVMLayerType.environmental_subsidies:
+                    object.__setattr__(self, "environmental_subsidies_years", years)
 
 
 class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
@@ -158,14 +189,16 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
     Bronze layer processing for FVM WFS agricultural data.
 
     This class is responsible for fetching raw agricultural field data from the
-    FVM WFS service for all available years. It handles both Markblokke (field blocks)
-    and Marker (field markers) data, plus special Smaabiotoper layers.
+    FVM WFS service for all available years. It handles Markblokke (field blocks),
+    Marker (field markers), Smaabiotoper (small biotopes), OrganicAreas, 
+    OrganicSubsidies, GrasslandSubsidies, and EnvironmentalSubsidies layers.
 
     The class implements retry logic for resilience against transient failures
     and uses semaphores to control the number of concurrent requests.
 
     Processing flow:
-    1. For each layer type (Markblokke, Marker, Smaabiotoper), iterate through years
+    1. For each layer type (Markblokke, Marker, Smaabiotoper, OrganicAreas, 
+       OrganicSubsidies, GrasslandSubsidies, EnvironmentalSubsidies), iterate through years
     2. Get total feature count from WFS service
     3. Fetch complete dataset in single request (optimal based on testing)
     4. Save raw WFS responses to Google Cloud Storage
@@ -184,7 +217,9 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         Get the WFS layer name for a specific type and year.
 
         Args:
-            layer_type (str): Type of layer ('Markblokke', 'Marker', 'Smaabiotoper', or 'OrganicAreas')
+            layer_type (str): Type of layer ('Markblokke', 'Marker', 'Smaabiotoper', 
+                             'OrganicAreas', 'OrganicSubsidies', 'GrasslandSubsidies', 
+                             or 'EnvironmentalSubsidies')
             year (int): Year for the layer
 
         Returns:
@@ -194,6 +229,14 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             return f"Marker:Smaabiotoper_{year}"
         elif layer_type == "OrganicAreas":
             return f"Miljoe_og_oekologitilsagn:Oekologiske_arealer_{year}"
+        elif layer_type == "OrganicSubsidies":
+            return (f"Miljoe_og_oekologitilsagn:"
+                   f"Tilsagn_til_oekologiske_arealtilskud_2015-2020_{year}")
+        elif layer_type == "GrasslandSubsidies":
+            return (f"Miljoe_og_oekologitilsagn:"
+                   f"Tilsagn_til_pleje_af_graes_2015-2020_{year}")
+        elif layer_type == "EnvironmentalSubsidies":
+            return f"Miljoe_og_oekologitilsagn:Miljoetilsagn_oevrige_typer_{year}"
         else:
             return f"{layer_type}:{layer_type}_{year}"
 
@@ -274,7 +317,8 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                 else:
                     response_text = await response.text()
                     raise Exception(
-                        f"Error getting count for {layer_name}: {response.status} - {response_text[:500]}"
+                        f"Error getting count for {layer_name}: {response.status} - "
+                        f"{response_text[:500]}"
                     )
         except Exception as e:
             self.log.error(f"Error getting total count for {layer_name}: {str(e)}")
@@ -430,11 +474,16 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         1. Processes Markblokke data for years 2005-2026
         2. Processes Marker data for years 2008-2025
         3. Processes Smaabiotoper data for years 2023-2025
-        4. Tracks overall execution time for performance monitoring
-        5. Returns all processed data for potential in-memory passing
+        4. Processes OrganicAreas data for years 2012-2024
+        5. Processes OrganicSubsidies data for years 2019-2024
+        6. Processes GrasslandSubsidies data for years 2019-2024
+        7. Processes EnvironmentalSubsidies data for years 2019-2023
+        8. Tracks overall execution time for performance monitoring
+        9. Returns all processed data for potential in-memory passing
 
         Returns:
-            Optional[Dict]: Dictionary containing all processed data organized by layer type and year,
+            Optional[Dict]: Dictionary containing all processed data organized by layer type 
+                           and year,
                            or None if processing fails
         """
         self.log.info("Starting FVM WFS bronze job for all available layers")
@@ -452,7 +501,15 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             ) as session,
             AsyncTimer("Total FVM WFS run time"),
         ):
-            all_data = {"markblokke": {}, "marker": {}, "smaabiotoper": {}, "organic_areas": {}}
+            all_data = {
+                "markblokke": {}, 
+                "marker": {}, 
+                "smaabiotoper": {}, 
+                "organic_areas": {},
+                "organic_subsidies": {},
+                "grassland_subsidies": {},
+                "environmental_subsidies": {}
+            }
 
             # Process Markblokke data (field blocks) 2005-2026
             self.log.info("Processing Markblokke (field blocks) data")
@@ -488,11 +545,44 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["organic_areas"] = organic_areas_data
 
+            # Process Organic Subsidies data (organic subsidies) 2019-2024
+            self.log.info("Processing Organic Subsidies (organic subsidies) data")
+            organic_subsidies_data = await self._process_layer_type(
+                session,
+                "OrganicSubsidies",
+                self.config.organic_subsidies_years,
+                self.config.dataset_organic_subsidies,
+            )
+            all_data["organic_subsidies"] = organic_subsidies_data
+
+            # Process Grassland Subsidies data (grassland subsidies) 2019-2024
+            self.log.info("Processing Grassland Subsidies (grassland subsidies) data")
+            grassland_subsidies_data = await self._process_layer_type(
+                session,
+                "GrasslandSubsidies",
+                self.config.grassland_subsidies_years,
+                self.config.dataset_grassland_subsidies,
+            )
+            all_data["grassland_subsidies"] = grassland_subsidies_data
+
+            # Process Environmental Subsidies data (environmental subsidies) 2019-2023
+            self.log.info("Processing Environmental Subsidies (environmental subsidies) data")
+            environmental_subsidies_data = await self._process_layer_type(
+                session,
+                "EnvironmentalSubsidies",
+                self.config.environmental_subsidies_years,
+                self.config.dataset_environmental_subsidies,
+            )
+            all_data["environmental_subsidies"] = environmental_subsidies_data
+
             # Log summary statistics
             total_markblokke = len(markblokke_data)
             total_marker = len(marker_data)
             total_smaabiotoper = len(smaabiotoper_data)
             total_organic_areas = len(organic_areas_data)
+            total_organic_subsidies = len(organic_subsidies_data)
+            total_grassland_subsidies = len(grassland_subsidies_data)
+            total_environmental_subsidies = len(environmental_subsidies_data)
 
             self.log.info("FVM WFS data processing summary:")
             self.log.info(
@@ -503,7 +593,20 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                 f"  Smaabiotoper layers: {total_smaabiotoper}/{len(self.config.smaabiotoper_years)}"
             )
             self.log.info(
-                f"  Organic Areas layers: {total_organic_areas}/{len(self.config.organic_areas_years)}"
+                f"  Organic Areas layers: {total_organic_areas}/"
+                f"{len(self.config.organic_areas_years)}"
+            )
+            self.log.info(
+                f"  Organic Subsidies layers: {total_organic_subsidies}/"
+                f"{len(self.config.organic_subsidies_years)}"
+            )
+            self.log.info(
+                f"  Grassland Subsidies layers: {total_grassland_subsidies}/"
+                f"{len(self.config.grassland_subsidies_years)}"
+            )
+            self.log.info(
+                f"  Environmental Subsidies layers: {total_environmental_subsidies}/"
+                f"{len(self.config.environmental_subsidies_years)}"
             )
 
             self.log.info("FVM WFS bronze job completed successfully")

@@ -6,10 +6,14 @@ more structured Geos for analytical purposes. It handles the extraction
 of GeoJSON features from WFS responses, converts them to Geos,
 and applies transformations such as column renaming and geometry validation.
 
-The module processes three types of FVM data:
+The module processes seven types of FVM data:
 - Markblokke (field blocks): Primary field boundary data 2005-2026
 - Marker (field markers): Field usage/application data 2008-2025
 - Smaabiotoper (small biotopes): Special biotope layers 2023-2025
+- OrganicAreas (organic areas): Organic area boundaries 2012-2024
+- OrganicSubsidies (organic subsidies): Organic subsidy field data 2019-2024
+- GrasslandSubsidies (grassland subsidies): Grassland subsidy field data 2019-2024
+- EnvironmentalSubsidies (environmental subsidies): Environmental subsidy field data 2019-2023
 
 The module consists of two main components:
 - FVMWFSSilverConfig: Configuration for Silver processing
@@ -60,12 +64,18 @@ class FVMWFSSilverConfig(BaseJobConfig):
     bronze_dataset_markblokke: str = "fvm_markblokke"
     bronze_dataset_marker: str = "fvm_marker"
     bronze_dataset_organic_areas: str = "fvm_organic_areas"
+    bronze_dataset_organic_subsidies: str = "fvm_organic_subsidies"
+    bronze_dataset_grassland_subsidies: str = "fvm_grassland_subsidies"
+    bronze_dataset_environmental_subsidies: str = "fvm_environmental_subsidies"
 
     # Silver dataset names (for saving to silver storage and test expectations)
     dataset_markblokke: str = "fvm_markblokke"
     dataset_marker: str = "fvm_marker"
     dataset_smaabiotoper: str = "fvm_smaabiotoper"
     dataset_organic_areas: str = "fvm_organic_areas"
+    dataset_organic_subsidies: str = "fvm_organic_subsidies"
+    dataset_grassland_subsidies: str = "fvm_grassland_subsidies"
+    dataset_environmental_subsidies: str = "fvm_environmental_subsidies"
 
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
@@ -79,6 +89,9 @@ class FVMWFSSilverConfig(BaseJobConfig):
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
     smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
     organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
+    organic_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years of organic subsidies)
+    grassland_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years of grassland subsidies)
+    environmental_subsidies_years: List[int] = list(range(2019, 2024))  # 2019-2023 (5 years of environmental subsidies)
 
     # Column mapping for standardization
     # Markblokke fields
@@ -146,6 +159,46 @@ class FVMWFSSilverConfig(BaseJobConfig):
         # Note: the_geom is handled as geometry automatically
     }
 
+    # Organic Subsidies fields (from Miljoe_og_oekologitilsagn:Tilsagn_til_oekologiske_arealtilskud_2015-2020)
+    organic_subsidies_column_mapping: Dict[str, str] = {
+        "CVR": "cvr_number",
+        "Marknr": "field_id",
+        "Geometrisk": "area_ha",  # Geometric area in hectares
+        "Foranstalt": "subsidy_measure",  # Subsidy measure description
+        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code (e.g., "36 Basistilskud")
+        "Startdato": "start_date",  # Start date of subsidy
+        "Slutdato": "end_date",  # End date of subsidy
+        "Tilsagnsar": "subsidy_year",  # Year of subsidy
+        # Note: the_geom is handled as geometry automatically
+    }
+
+    # Grassland Subsidies fields (from Miljoe_og_oekologitilsagn:Tilsagn_til_pleje_af_graes_2015-2020)
+    grassland_subsidies_column_mapping: Dict[str, str] = {
+        "CVR": "cvr_number",
+        "Marknr": "field_id",
+        "Geometrisk": "area_ha",  # Geometric area in hectares  
+        "Foranstalt": "subsidy_measure",  # Subsidy measure description
+        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code (e.g., "67 Afgræsning med grundbetaling")
+        "Graesnings": "grazing_info",  # Grazing-specific information
+        "Startdato": "start_date",  # Start date of subsidy
+        "Slutdato": "end_date",  # End date of subsidy
+        "Tilsagnsar": "subsidy_year",  # Year of subsidy
+        # Note: the_geom is handled as geometry automatically
+    }
+
+    # Environmental Subsidies fields (from Miljoe_og_oekologitilsagn:Miljoetilsagn_oevrige_typer)
+    environmental_subsidies_column_mapping: Dict[str, str] = {
+        "CVR": "cvr_number",
+        "Marknr": "field_id",
+        "AREAL_HA": "area_ha",  # Area in hectares (different column name than other layers)
+        "Foranstalt": "subsidy_measure",  # Subsidy measure description
+        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code (e.g., "8", "7")
+        "Startdato": "start_date",  # Start date of subsidy
+        "Slutdato": "end_date",  # End date of subsidy
+        "Tilsagnsar": "subsidy_year",  # Year of subsidy
+        # Note: the_geom is handled as geometry automatically
+    }
+
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     def apply_cli_filters(self, cli_config) -> None:
@@ -170,6 +223,9 @@ class FVMWFSSilverConfig(BaseJobConfig):
             object.__setattr__(self, "marker_years", [])
             object.__setattr__(self, "smaabiotoper_years", [])
             object.__setattr__(self, "organic_areas_years", [])
+            object.__setattr__(self, "organic_subsidies_years", [])
+            object.__setattr__(self, "grassland_subsidies_years", [])
+            object.__setattr__(self, "environmental_subsidies_years", [])
 
             # Apply layer type filter
             if cli_config.fvm_layer_type:
@@ -183,6 +239,12 @@ class FVMWFSSilverConfig(BaseJobConfig):
                     years = [2023, 2024, 2025]
                 elif layer_type == FVMLayerType.organic_areas:
                     years = list(range(2012, 2025))  # 2012-2024
+                elif layer_type == FVMLayerType.organic_subsidies:
+                    years = list(range(2019, 2025))  # 2019-2024
+                elif layer_type == FVMLayerType.grassland_subsidies:
+                    years = list(range(2019, 2025))  # 2019-2024
+                elif layer_type == FVMLayerType.environmental_subsidies:
+                    years = list(range(2019, 2024))  # 2019-2023
                 else:
                     years = []
 
@@ -202,6 +264,12 @@ class FVMWFSSilverConfig(BaseJobConfig):
                     object.__setattr__(self, "smaabiotoper_years", years)
                 elif layer_type == FVMLayerType.organic_areas:
                     object.__setattr__(self, "organic_areas_years", years)
+                elif layer_type == FVMLayerType.organic_subsidies:
+                    object.__setattr__(self, "organic_subsidies_years", years)
+                elif layer_type == FVMLayerType.grassland_subsidies:
+                    object.__setattr__(self, "grassland_subsidies_years", years)
+                elif layer_type == FVMLayerType.environmental_subsidies:
+                    object.__setattr__(self, "environmental_subsidies_years", years)
 
 
 class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
@@ -750,6 +818,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 column_mapping = self.config.smaabiotoper_column_mapping
             elif layer_type == "OrganicAreas":
                 column_mapping = self.config.organic_areas_column_mapping
+            elif layer_type == "OrganicSubsidies":
+                column_mapping = self.config.organic_subsidies_column_mapping
+            elif layer_type == "GrasslandSubsidies":
+                column_mapping = self.config.grassland_subsidies_column_mapping
+            elif layer_type == "EnvironmentalSubsidies":
+                column_mapping = self.config.environmental_subsidies_column_mapping
             else:  # Marker
                 column_mapping = self.config.marker_column_mapping
 
@@ -958,6 +1032,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         "marker": "marker",
                         "smaabiotoper": "smaabiotoper",
                         "organicareas": "organic_areas",  # Fix: OrganicAreas -> organic_areas
+                        "organicsubsidies": "organic_subsidies",
+                        "grasslandsubsidies": "grassland_subsidies",
+                        "environmentalsubsidies": "environmental_subsidies",
                     }
                     bronze_key = bronze_key_mapping.get(layer_type.lower(), layer_type.lower())
                     layer_data = bronze_data.get(bronze_key, {})
@@ -1273,6 +1350,33 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.config.organic_areas_years,
                 self.config.bronze_dataset_organic_areas,
                 self.config.dataset_organic_areas,
+                bronze_data,
+            )
+
+            # Process Organic Subsidies data (organic subsidies) 2019-2024
+            await self._process_layer_type(
+                "OrganicSubsidies",
+                self.config.organic_subsidies_years,
+                self.config.bronze_dataset_organic_subsidies,
+                self.config.dataset_organic_subsidies,
+                bronze_data,
+            )
+
+            # Process Grassland Subsidies data (grassland subsidies) 2019-2024
+            await self._process_layer_type(
+                "GrasslandSubsidies",
+                self.config.grassland_subsidies_years,
+                self.config.bronze_dataset_grassland_subsidies,
+                self.config.dataset_grassland_subsidies,
+                bronze_data,
+            )
+
+            # Process Environmental Subsidies data (environmental subsidies) 2019-2023
+            await self._process_layer_type(
+                "EnvironmentalSubsidies",
+                self.config.environmental_subsidies_years,
+                self.config.bronze_dataset_environmental_subsidies,
+                self.config.dataset_environmental_subsidies,
                 bronze_data,
             )
 
