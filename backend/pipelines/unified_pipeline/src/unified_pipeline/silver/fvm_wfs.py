@@ -1189,24 +1189,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
                     organic_path = f"gs://{self.config.bucket}/silver/{organic_table}/"
                     
-                    # Load marker data
+                    # Load marker data using GCSDataAccess
                     try:
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE temp_marker_{year} AS 
-                            SELECT * FROM read_parquet('{marker_path}*.parquet')
-                        """)
+                        self.gcs_access.query_multiple_direct(
+                            f"{marker_path}*.parquet", 
+                            f"temp_marker_{year}",
+                            "SELECT *"
+                        )
                         marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
                         self.log.info(f"Loaded {marker_count:,} marker fields for {year}")
                     except Exception as e:
                         self.log.warning(f"Could not load marker data for {year}: {e}")
                         continue
                     
-                    # Load organic data
+                    # Load organic data using GCSDataAccess
                     try:
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE temp_organic_{year} AS 
-                            SELECT * FROM read_parquet('{organic_path}*.parquet')
-                        """)
+                        self.gcs_access.query_multiple_direct(
+                            f"{organic_path}*.parquet", 
+                            f"temp_organic_{year}",
+                            "SELECT *"
+                        )
                         organic_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_organic_{year}").fetchone()[0]
                         self.log.info(f"Loaded {organic_count:,} organic fields for {year}")
                     except Exception as e:
@@ -1407,12 +1409,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"  
                         marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
                         
-                        # Load subsidy data
+                        # Load subsidy data using GCSDataAccess
                         try:
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE temp_subsidy_{year} AS 
-                                SELECT * FROM read_parquet('{subsidy_path}*.parquet')
-                            """)
+                            self.gcs_access.query_multiple_direct(
+                                f"{subsidy_path}*.parquet", 
+                                f"temp_subsidy_{year}",
+                                "SELECT *"
+                            )
                             subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_{year}").fetchone()[0]
                             self.log.info(f"Loaded {subsidy_count:,} {layer_type} records for {year}")
                         except Exception as e:
@@ -1421,11 +1424,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         
                         # Load marker data
                         try:
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE temp_marker_{year} AS 
-                                SELECT * FROM read_parquet('{marker_path}*.parquet')
-                                WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
-                            """)
+                            self.gcs_access.query_multiple_direct(
+                                f"{marker_path}*.parquet", 
+                                f"temp_marker_{year}",
+                                "SELECT * WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL"
+                            )
                             marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
                             self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year}")
                         except Exception as e:
