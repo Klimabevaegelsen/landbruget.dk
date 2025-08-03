@@ -991,7 +991,7 @@ class H3PFASProcessorRefactored:
         )
 
         # Step 5: Validate and save results
-        result_count = result_saver.save_kommune_results(kommune_results_table, year)
+        result_count = result_saver.save_kommune_results(kommune_results_table, year, kommune_table)
 
         # Step 6: Clean up intermediate tables
         self._cleanup_year_tables(year)
