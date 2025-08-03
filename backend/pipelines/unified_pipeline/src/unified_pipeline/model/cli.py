@@ -84,12 +84,14 @@ class Stage(Enum):
         bronze: Initial data ingestion stage with minimal transformations
         silver: Cleaned and transformed data stage
         gold: Business-ready combined datasets stage
+        enrichment: Enrichment-only stage for post-processing existing silver data
         all: Process bronze, silver, and gold stages sequentially
     """
 
     bronze = "bronze"
     silver = "silver"
     gold = "gold"
+    enrichment = "enrichment"
     all = "all"
 
 
