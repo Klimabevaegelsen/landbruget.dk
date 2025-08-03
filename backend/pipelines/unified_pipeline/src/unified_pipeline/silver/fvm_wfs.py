@@ -1416,7 +1416,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 for year in overlapping_years:
                     try:
                         # Define table names
-                        subsidy_table = f"fvm_{dataset_name}_{year}"
+                        subsidy_table = f"{dataset_name}_{year}"
                         marker_table = f"fvm_marker_{year}"
                         
                         # Check if both datasets exist for this year
