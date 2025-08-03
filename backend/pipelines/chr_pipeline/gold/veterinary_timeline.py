@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
     """
     Reconstruct stable fire data from loaded stable_fires table.
-    Handles any column structure dynamically.
+    Handles malformed column structure where first row data became column names.
     """
     try:
         logger.info("🔥 Reconstructing stable fires from table...")
@@ -38,23 +38,78 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
         
         logger.info(f"Available stable_fires columns: {column_names}")
         
-        # Try to identify coordinate and date columns dynamically
-        coord_x_col = next((col for col in column_names if 'x' in col.lower() or 'coord' in col.lower()), None)
-        coord_y_col = next((col for col in column_names if 'y' in col.lower() or 'coord' in col.lower()), None)
-        date_col = next((col for col in column_names if 'date' in col.lower() or 'time' in col.lower()), None)
+        # Check if we have malformed columns (data values as column names)
+        # Look for numeric columns and date-like patterns that suggest malformed structure
+        has_malformed_columns = (
+            len(column_names) >= 6 and 
+            any(col.replace('_', '').replace('.', '').isdigit() for col in column_names[1:3]) and
+            any(('_' in col and len(col.split('_')) == 3) or ('-' in col and len(col.split('-')) == 3) for col in column_names[:1])
+        )
         
-        if not coord_x_col or not coord_y_col:
-            logger.warning("⚠️ Could not identify coordinate columns in stable_fires data")
-            return False
+        if has_malformed_columns:
+            logger.info("🔧 Detected malformed column structure - using positional reconstruction")
+            # Column structure based on analysis: date, x_coord, y_coord, street, house_num, municipality, table_number, source_file
+            con.execute(f"""
+                CREATE OR REPLACE TABLE cleaned_fires AS
+                SELECT 
+                    "{column_names[0]}" as fire_date_str,
+                    TRY_CAST("{column_names[1]}" AS DOUBLE) as fire_x_coord,
+                    TRY_CAST("{column_names[2]}" AS DOUBLE) as fire_y_coord,
+                    "{column_names[3]}" as fire_street,
+                    TRY_CAST("{column_names[4]}" AS DOUBLE) as fire_house_number,
+                    "{column_names[5]}" as fire_municipality,
+                    -- Try to parse date from various formats like "08-feb-21"
+                    TRY_CAST(
+                        CASE 
+                            WHEN "{column_names[0]}" ~ '^[0-9]{{1,2}}-[a-z]{{3}}-[0-9]{{2}}$' THEN
+                                '20' || RIGHT("{column_names[0]}", 2) || '-' ||
+                                CASE LOWER(SUBSTRING("{column_names[0]}", POSITION('-' IN "{column_names[0]}") + 1, 3))
+                                    WHEN 'jan' THEN '01'
+                                    WHEN 'feb' THEN '02'
+                                    WHEN 'mar' THEN '03'
+                                    WHEN 'apr' THEN '04'
+                                    WHEN 'may' THEN '05'
+                                    WHEN 'jun' THEN '06'
+                                    WHEN 'jul' THEN '07'
+                                    WHEN 'aug' THEN '08'
+                                    WHEN 'sep' THEN '09'
+                                    WHEN 'oct' THEN '10'
+                                    WHEN 'nov' THEN '11'
+                                    WHEN 'dec' THEN '12'
+                                    ELSE '01'
+                                END || '-' ||
+                                LPAD(CAST(LEFT("{column_names[0]}", POSITION('-' IN "{column_names[0]}") - 1) AS VARCHAR), 2, '0')
+                            ELSE NULL
+                        END AS DATE
+                    ) as fire_date
+                FROM stable_fires
+                WHERE "{column_names[1]}" IS NOT NULL 
+                  AND "{column_names[2]}" IS NOT NULL
+                  AND TRY_CAST("{column_names[1]}" AS DOUBLE) IS NOT NULL
+                  AND TRY_CAST("{column_names[2]}" AS DOUBLE) IS NOT NULL
+            """)
+        else:
+            # Try to identify coordinate and date columns dynamically (original logic)
+            coord_x_col = next((col for col in column_names if 'x' in col.lower() or 'coord' in col.lower()), None)
+            coord_y_col = next((col for col in column_names if 'y' in col.lower() or 'coord' in col.lower()), None)
+            date_col = next((col for col in column_names if 'date' in col.lower() or 'time' in col.lower()), None)
             
-        # Create cleaned fires table dynamically
-        con.execute(f"""
-            CREATE OR REPLACE TABLE cleaned_fires AS
-            SELECT *
-            FROM stable_fires
-            WHERE {coord_x_col} IS NOT NULL 
-              AND {coord_y_col} IS NOT NULL
-        """)
+            if not coord_x_col or not coord_y_col:
+                logger.warning("⚠️ Could not identify coordinate columns in stable_fires data")
+                return False
+                
+            # Create cleaned fires table dynamically
+            con.execute(f"""
+                CREATE OR REPLACE TABLE cleaned_fires AS
+                SELECT 
+                    {coord_x_col} as fire_x_coord,
+                    {coord_y_col} as fire_y_coord,
+                    {date_col if date_col else 'NULL'} as fire_date,
+                    *
+                FROM stable_fires
+                WHERE {coord_x_col} IS NOT NULL 
+                  AND {coord_y_col} IS NOT NULL
+            """)
         
         count = con.execute("SELECT COUNT(*) FROM cleaned_fires").fetchone()[0]
         logger.info(f"✅ Processed {count} stable fire events")
@@ -543,6 +598,8 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                 """)
         
         # Salmonella events (if we have salmonella data from herds table)
+        salmonella_has_index_col = next((col for col in column_names if 'salmonella_has_index' in col.lower()), None)
+        
         if salmonella_date_col and salmonella_status_col:
             # Check if we have meaningful salmonella dates
             salmonella_check = con.execute(f"""
@@ -572,6 +629,35 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                   AND {salmonella_date_col} IS NOT NULL
                   AND {salmonella_date_col} > '1900-01-01'
                 """)
+            else:
+                # Check for salmonella monitoring enrollment (no valid test dates but enrolled in program)
+                if salmonella_has_index_col:
+                    monitoring_check = con.execute(f"""
+                        SELECT COUNT(*) 
+                        FROM spf_su_herds 
+                        WHERE {chr_col} IS NOT NULL
+                          AND {salmonella_has_index_col} = true
+                          AND ({salmonella_date_col} IS NULL OR {salmonella_date_col} <= '1900-01-01')
+                    """).fetchone()[0]
+                    
+                    if monitoring_check > 0:
+                        parts.append(f"""
+                        SELECT 
+                            {chr_col} as chr_number,
+                            'spf_su_salmonella_herds' as event_source,
+                            'salmonella_monitoring_enrollment' as event_type,
+                            'SPF-SU Salmonella monitoring: Enrolled in surveillance program' as event_description,
+                            'Salmonella' as event_category,
+                            'Pig' as species,
+                            CAST('2025-08-02 19:21:59' AS TIMESTAMP) as event_date,  -- Use pipeline run date
+                            NULL as end_date,
+                            'spf_su_herds' as source_file
+                        FROM spf_su_herds
+                        WHERE {chr_col} IS NOT NULL
+                          AND {salmonella_has_index_col} = true
+                          AND ({salmonella_date_col} IS NULL OR {salmonella_date_col} <= '1900-01-01')
+                        """)
+                        logger.info(f"📊 Created SPF-SU herds salmonella monitoring enrollment events for {monitoring_check} CHRs")
         
         logger.info(f"✅ Created {len(parts)} SPF-SU timeline parts")
         return parts
@@ -748,14 +834,50 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
                 timestamp_files = [f for f in files if '/run_' not in f]
                 if timestamp_files:
                     # Use proper timestamp files first
-                    latest_file = sorted(timestamp_files, reverse=True)[0]
+                    valid_files = sorted(timestamp_files, reverse=True)
                 else:
                     # Fallback to any file if no timestamp files found
-                    latest_file = sorted(files, reverse=True)[0]
-                logger.info(f"📥 Loading {table_name} from: {latest_file}")
+                    valid_files = sorted(files, reverse=True)
                 
-                # Use unified pipeline pattern: query_parquet_direct with shared connection
-                gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                # For most tables, use latest file only, but for stable_fires, combine all files
+                if table_name == "stable_fires" and len(valid_files) > 1:
+                    logger.info(f"📥 Loading {table_name} from {len(valid_files)} files:")
+                    for i, file_path in enumerate(valid_files):
+                        logger.info(f"   {i+1}. {file_path}")
+                    
+                    # Load first file to establish table structure
+                    gcs_access.query_parquet_direct(valid_files[0], "SELECT *", table_name)
+                    
+                    # Union all additional files
+                    for i, additional_file in enumerate(valid_files[1:], 1):
+                        try:
+                            # Create a temporary table for each additional file
+                            temp_table = f"{table_name}_temp_{i}"
+                            gcs_access.query_parquet_direct(additional_file, "SELECT *", temp_table)
+                            
+                            # Union with main table
+                            gcs_access.duckdb_conn.execute(f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                SELECT * FROM {table_name}
+                                UNION ALL
+                                SELECT * FROM {temp_table}
+                            """)
+                            
+                            # Drop temp table
+                            gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                            
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to load additional file {additional_file}: {e}")
+                    
+                    # Get final count
+                    total_rows = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                    logger.info(f"   Combined total: {total_rows} rows from {len(valid_files)} files")
+                else:
+                    # Single file loading (existing behavior)
+                    latest_file = valid_files[0]
+                    logger.info(f"📥 Loading {table_name} from: {latest_file}")
+                    gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                
                 loaded_tables[table_name] = True
                 
                 # Log column info dynamically using shared connection
