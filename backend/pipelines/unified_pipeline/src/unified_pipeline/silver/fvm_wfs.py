@@ -1191,26 +1191,40 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     
                     # Load marker data using GCSDataAccess
                     try:
-                        self.gcs_access.query_multiple_direct(
-                            f"{marker_path}*.parquet", 
-                            f"temp_marker_{year}",
-                            "SELECT *"
+                        # Find the latest timestamped file
+                        marker_pattern = f"{marker_path}*/data.parquet"
+                        marker_files = self.gcs_access.list_files(marker_pattern)
+                        if not marker_files:
+                            raise FileNotFoundError(f"No files found matching pattern: {marker_pattern}")
+                        
+                        latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
+                        self.gcs_access.query_parquet_direct(
+                            latest_marker_file,
+                            "SELECT *",
+                            f"temp_marker_{year}"
                         )
                         marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
-                        self.log.info(f"Loaded {marker_count:,} marker fields for {year}")
+                        self.log.info(f"Loaded {marker_count:,} marker fields for {year} from {latest_marker_file}")
                     except Exception as e:
                         self.log.warning(f"Could not load marker data for {year}: {e}")
                         continue
                     
                     # Load organic data using GCSDataAccess
                     try:
-                        self.gcs_access.query_multiple_direct(
-                            f"{organic_path}*.parquet", 
-                            f"temp_organic_{year}",
-                            "SELECT *"
+                        # Find the latest timestamped file
+                        organic_pattern = f"{organic_path}*/data.parquet"
+                        organic_files = self.gcs_access.list_files(organic_pattern)
+                        if not organic_files:
+                            raise FileNotFoundError(f"No files found matching pattern: {organic_pattern}")
+                        
+                        latest_organic_file = sorted(organic_files)[-1]  # Latest by timestamp
+                        self.gcs_access.query_parquet_direct(
+                            latest_organic_file,
+                            "SELECT *",
+                            f"temp_organic_{year}"
                         )
                         organic_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_organic_{year}").fetchone()[0]
-                        self.log.info(f"Loaded {organic_count:,} organic fields for {year}")
+                        self.log.info(f"Loaded {organic_count:,} organic fields for {year} from {latest_organic_file}")
                     except Exception as e:
                         self.log.warning(f"Could not load organic data for {year}: {e}")
                         continue
@@ -1411,26 +1425,40 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         
                         # Load subsidy data using GCSDataAccess
                         try:
-                            self.gcs_access.query_multiple_direct(
-                                f"{subsidy_path}*.parquet", 
-                                f"temp_subsidy_{year}",
-                                "SELECT *"
+                            # Find the latest timestamped file
+                            subsidy_pattern = f"{subsidy_path}*/data.parquet"
+                            subsidy_files = self.gcs_access.list_files(subsidy_pattern)
+                            if not subsidy_files:
+                                raise FileNotFoundError(f"No files found matching pattern: {subsidy_pattern}")
+                            
+                            latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
+                            self.gcs_access.query_parquet_direct(
+                                latest_subsidy_file,
+                                "SELECT *",
+                                f"temp_subsidy_{year}"
                             )
                             subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_{year}").fetchone()[0]
-                            self.log.info(f"Loaded {subsidy_count:,} {layer_type} records for {year}")
+                            self.log.info(f"Loaded {subsidy_count:,} {layer_type} records for {year} from {latest_subsidy_file}")
                         except Exception as e:
                             self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
                             continue
                         
                         # Load marker data
                         try:
-                            self.gcs_access.query_multiple_direct(
-                                f"{marker_path}*.parquet", 
-                                f"temp_marker_{year}",
-                                "SELECT * WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL"
+                            # Find the latest timestamped file
+                            marker_pattern = f"{marker_path}*/data.parquet"
+                            marker_files = self.gcs_access.list_files(marker_pattern)
+                            if not marker_files:
+                                raise FileNotFoundError(f"No files found matching pattern: {marker_pattern}")
+                            
+                            latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
+                            self.gcs_access.query_parquet_direct(
+                                latest_marker_file,
+                                "SELECT * WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL",
+                                f"temp_marker_{year}"
                             )
                             marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
-                            self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year}")
+                            self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year} from {latest_marker_file}")
                         except Exception as e:
                             self.log.warning(f"Could not load marker data for {year}: {e}")
                             continue
