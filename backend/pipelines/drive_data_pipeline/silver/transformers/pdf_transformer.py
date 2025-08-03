@@ -327,7 +327,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return table_name
 
     def _standardize_column_name(self, col_name: str) -> str:
-        """Convert column name to snake_case.
+        """Convert column name to snake_case with domain-specific mappings.
 
         Args:
             col_name: Original column name
@@ -336,6 +336,11 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             Standardized column name
         """
         import re
+
+        # First try domain-specific mappings
+        mapped_name = self._apply_domain_specific_mappings(col_name)
+        if mapped_name:
+            return mapped_name
 
         # Convert to lowercase and replace spaces/special chars with underscores
         clean_name = re.sub(r"[^a-zA-Z0-9]", "_", str(col_name).lower())
@@ -351,6 +356,92 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             clean_name = f"col_{clean_name}"
 
         return clean_name or "unnamed_column"
+
+    def _apply_domain_specific_mappings(self, col_name: str) -> str:
+        """Apply domain-specific column name mappings for known data types.
+
+        Args:
+            col_name: Original column name
+
+        Returns:
+            Mapped column name or None if no mapping applies
+        """
+        # Normalize column name for comparison (lowercase, no spaces)
+        normalized_name = col_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+        # VISA-specific column mappings (Danish and English)
+        visa_mappings = {
+            # Year variations
+            "aar": "year",
+            "år": "year", 
+            "year": "year",
+            "aarig": "year",
+            "årig": "year",
+            
+            # Nationality variations
+            "nationalitet": "nationality",
+            "nationality": "nationality",
+            "land": "nationality",
+            "country": "nationality", 
+            "oprindelsesland": "nationality",
+            "statsborger": "nationality",
+            "citizenship": "nationality",
+            
+            # First permits count variations
+            "foerstetilladelser": "first_permits_count",
+            "førstegangsarbejdstilladelser": "first_permits_count",
+            "firstpermits": "first_permits_count",
+            "foerstetilladelse": "first_permits_count",
+            "førstegangs": "first_permits_count",
+            "initialpermits": "first_permits_count",
+            "nyetilladelser": "first_permits_count",
+            "newtilladelser": "first_permits_count",
+            "antal": "count",
+            "count": "count",
+            "tael": "count",
+            "tal": "count",
+            
+            # CVR mappings (for company identification)
+            "cvr": "cvr_number",
+            "cvrno": "cvr_number",
+            "cvrnr": "cvr_number",
+            "cvrnummer": "cvr_number",
+            "virksomhedsnummer": "cvr_number",
+            "companyid": "cvr_number",
+            "company_id": "cvr_number",
+            "firmaid": "cvr_number",
+            "firma_id": "cvr_number",
+            
+            # Company name variations
+            "virksomhedsnavn": "company_name",
+            "firmanavn": "company_name",  
+            "companyname": "company_name",
+            "arbejdsgiver": "company_name",
+            "employer": "company_name",
+        }
+
+        # Check if this matches any VISA column
+        if normalized_name in visa_mappings:
+            return visa_mappings[normalized_name]
+
+        # Check for partial matches on common VISA terms
+        visa_partial_patterns = {
+            "tilladelse": "permits",
+            "permit": "permits", 
+            "arbejds": "work",
+            "work": "work",
+            "visa": "visa",
+            "visum": "visa",
+        }
+        
+        for pattern, mapped in visa_partial_patterns.items():
+            if pattern in normalized_name:
+                # If it contains count/number indicators, add _count suffix
+                if any(count_term in normalized_name for count_term in ["antal", "count", "tal", "tael", "number"]):
+                    return f"{mapped}_count"
+                return mapped
+
+        return None
 
     def _create_schema_dict_from_table(self, table_name: str) -> dict:
         """Create schema dictionary from DuckDB table.
