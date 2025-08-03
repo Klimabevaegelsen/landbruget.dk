@@ -7,7 +7,7 @@ OPTIMIZED APPROACH:
 - Use Stage 1C property/field intersections (with intersection_geometry)
 - Use Stage 2B field-wetland intersections (pre-computed intersection geometries)
 - Use Stage 2B field-level wetland coverage (aggregated results)
-- SPATIAL_JOIN OPTIMIZED: Property × Wetland spatial joins (DuckDB 1.3.0 single predicate)
+- Geometric intersection: Property intersections × Field-wetland intersections (NO SPATIAL JOIN!)
 - Field-level join: Apply water coverage ratios from Stage 2B
 
 ACHIEVES THE NESTED STRUCTURE:
@@ -21,7 +21,7 @@ ACHIEVES THE NESTED STRUCTURE:
      --- wetland area covered by water projects
      --- wetland area not covered by water projects
 
-Optimized for DuckDB 1.3.0 SPATIAL_JOIN operator (~100× performance improvement).
+Optimized for DuckDB Spatial v1.2.2 with pre-computed intersection geometries.
 """
 
 from typing import Any, Dict
@@ -90,14 +90,14 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         5. Use existing water project coverage using wetland_id from Stage 1B
         6. Aggregate to achieve nested field→property→environmental structure
 
-        DuckDB 1.3.0 SPATIAL_JOIN OPTIMIZATION:
-        - Single spatial predicate only (ST_Intersects) to activate SPATIAL_JOIN operator
-        - No complex multi-condition spatial joins
-        - ~100× performance improvement on spatial joins
+        DuckDB Spatial v1.2.2 COMPLIANCE:
+        - Only single spatial predicate (ST_Intersects)
+        - No complex 3-way spatial joins
+        - Use foundation data and ID-based joins where possible
         """
 
         self.log.info("🎯 FOUNDATION DATA APPROACH: Property-level wetland analysis")
-        self.log.info("🚀 DuckDB 1.3.0 SPATIAL_JOIN: Optimized for ~100× performance improvement")
+        self.log.info("✅ DuckDB Spatial v1.2.2: Single spatial predicates only")
 
         # Get total field count for batching
         total_fields = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
@@ -139,21 +139,6 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as property_wetland_water_uncovered_m2,
                 CAST(NULL AS INTEGER) as property_wetland_count,
                 CAST(NULL AS VARCHAR) as property_wetland_owners
-            WHERE FALSE
-        """)
-
-        # Initialize consolidated property breakdown table for separate saving
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE consolidated_property_wetland_breakdown AS
-            SELECT 
-                CAST(NULL AS VARCHAR) as field_id,
-                CAST(NULL AS VARCHAR) as block_id,
-                CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS VARCHAR) as field_uuid,
-                CAST(NULL AS VARCHAR) as bfe_number,
-                CAST(NULL AS DOUBLE) as property_wetland_total_m2,
-                CAST(NULL AS VARCHAR) as property_wetland_detail  -- JSON status breakdown
             WHERE FALSE
         """)
 
@@ -207,9 +192,9 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.log.info(f"  Found {property_count:,} property intersections for batch")
 
             if property_count > 0:
-                # OPTIMIZED FOR DUCKDB 1.3.0 SPATIAL_JOIN: Single spatial predicate only!
+                # DuckDB Spatial PR #545 COMPLIANCE: Separate JOIN and spatial filtering
                 self.log.info(
-                    "  🚀 SPATIAL_JOIN OPTIMIZED: Property × Wetland (DuckDB 1.3.0 ~100× faster)"
+                    "  STEP 1: Property intersections × Field-wetland intersections (ID-based JOIN)"
                 )
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE batch_property_wetland_raw AS
@@ -225,9 +210,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         fw.toerv_pct,
                         fw.field_wetland_intersection_geometry as wetland_geometry
                     FROM batch_property_intersections p
-                    JOIN field_wetland_intersections fw 
-                        ON ST_Intersects(p.intersection_geometry, fw.field_wetland_intersection_geometry)
-                    WHERE p.field_uuid = fw.field_uuid 
+                    JOIN field_wetland_intersections fw ON p.field_uuid = fw.field_uuid 
                         AND p.year = fw.year
                 """)
 
@@ -246,6 +229,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         toerv_pct,
                         ST_Area_Spheroid(ST_Intersection(property_geometry, wetland_geometry)) as property_wetland_area_m2
                     FROM batch_property_wetland_raw
+                    WHERE property_geometry IS NOT NULL AND wetland_geometry IS NOT NULL
                 """)
 
                 spatial_count = self.conn.execute(
@@ -326,23 +310,6 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     "SELECT COUNT(*) FROM batch_property_breakdown"
                 ).fetchone()[0]
                 self.log.info(f"  Created {breakdown_count:,} field-level property breakdowns")
-
-                # Accumulate individual property-level breakdown data from batch
-                if breakdown_count > 0:
-                    self.conn.execute("""
-                        INSERT INTO consolidated_property_wetland_breakdown
-                        SELECT 
-                            field_id, block_id, cvr_number, year, field_uuid,
-                            bfe_number,
-                            SUM(property_wetland_area_m2) as property_wetland_total_m2,
-                            JSON_OBJECT(
-                                'wetland_area_m2', SUM(property_wetland_area_m2),
-                                'covered_m2', SUM(property_wetland_covered_m2),
-                                'uncovered_m2', SUM(property_wetland_uncovered_m2)
-                            ) as property_wetland_detail
-                        FROM batch_property_wetland_water
-                        GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
-                    """)
             else:
                 # No properties for this batch - create empty breakdown table
                 self.conn.execute("""
@@ -398,13 +365,14 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         field_uuid, year,
                         -- Keep composite keys for reference
                         field_id, block_id, cvr_number,
-                        COUNT(*) as property_count,
-                        SUM(intersection_area_m2) as total_property_intersection_area_m2,
+                        SUM(CASE WHEN bfe_number IS NOT NULL THEN 1 ELSE 0 END) as property_count,
+                        COALESCE(SUM(intersection_area_m2), 0) as total_property_intersection_area_m2,
                         (
                             SELECT bfe_number 
                             FROM batch_property_intersections bp2 
                             WHERE bp2.field_uuid = bp.field_uuid 
                             AND bp2.year = bp.year
+                            AND bp2.bfe_number IS NOT NULL
                             ORDER BY bp2.intersection_area_m2 DESC 
                             LIMIT 1
                         ) as primary_bfe_number
@@ -451,25 +419,6 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         self.log.info(
             "🎯 ACHIEVED: field → property → wetland (area/covered/uncovered) nested breakdown"
         )
-
-        # Save consolidated property breakdown table before cleanup
-        try:
-            property_breakdown_count = self.conn.execute(
-                "SELECT COUNT(*) FROM consolidated_property_wetland_breakdown"
-            ).fetchone()[0]
-            if property_breakdown_count > 0:
-                # Get year-aware output dataset name for property breakdown
-                updated_outputs = CONFIG.update_outputs_for_year()
-                output_dataset = updated_outputs["property_wetland_breakdown"]
-                self.save_data_direct("consolidated_property_wetland_breakdown", output_dataset, CONFIG.bucket, "gold")
-                self.log.info(f"✅ Saved {property_breakdown_count:,} property wetland breakdown records to {output_dataset}")
-            else:
-                self.log.info("⚠️ No property wetland breakdown data to save")
-        except Exception as e:
-            self.log.warning(f"⚠️ Could not save property wetland breakdown table: {e}")
-
-        # Clean up consolidated table
-        self.conn.execute("DROP TABLE IF EXISTS consolidated_property_wetland_breakdown")
 
         return {
             "final_records": final_count,
