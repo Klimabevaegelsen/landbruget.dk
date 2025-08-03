@@ -374,11 +374,41 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     # Clear the full features list from memory
                     del all_features
 
-                processing_conn.execute(
-                    "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
-                )
+                # First, create a mapping of problematic column names to cleaned names
+                temp_columns_info = processing_conn.execute("DESCRIBE temp_features").fetchall()
+                temp_column_names = [row[0] for row in temp_columns_info]
+                
+                # Build column mapping for renaming problematic columns
+                column_renames = {}
+                clean_select_parts = []
+                
+                for col in temp_column_names:
+                    # Clean column name
+                    clean_col = (
+                        col.replace(".", "_")
+                        .replace("()", "_")
+                        .replace("(", "_")
+                        .replace(")", "_")
+                    )
+                    
+                    if col != clean_col:  # Only rename if different
+                        column_renames[col] = clean_col
+                        clean_select_parts.append(f'"{col}" as {clean_col}')
+                    else:
+                        clean_select_parts.append(f'"{col}"')
+                
+                # Create features_raw with cleaned column names
+                if clean_select_parts:
+                    clean_select_clause = ", ".join(clean_select_parts)
+                    processing_conn.execute(
+                        f"CREATE OR REPLACE TABLE features_raw AS SELECT {clean_select_clause} FROM temp_features"
+                    )
+                else:
+                    processing_conn.execute(
+                        "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
+                    )
 
-                # ✅ MIGRATION: Get column info without  conversion
+                # ✅ MIGRATION: Get column info from the cleaned table
                 columns_info = processing_conn.execute("DESCRIBE features_raw").fetchall()
                 available_columns = [row[0] for row in columns_info]
 
@@ -390,32 +420,52 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 select_columns = []
 
                 for old_col, new_col in self.config.column_mapping.items():
-                    if old_col in available_columns:
-                        # Apply proper type casting for area columns
-                        if new_col in [
-                            "area_ha",
-                            "block_area_ha",
-                            "applied_area_ha",
-                            "reported_area_ha",
-                        ]:
-                            select_columns.append(f'CAST("{old_col}" AS DOUBLE) as {new_col}')
-                        else:
-                            select_columns.append(f'"{old_col}" as {new_col}')
-
-                # Add unmapped columns (except geometry_json and payload_id)
-                for col in available_columns:
-                    if col not in self.config.column_mapping and col not in [
-                        "geometry_json",
-                        "payload_id",
-                    ]:
-                        # Clean column name
-                        clean_col = (
-                            col.replace(".", "_")
+                    # Check if the original column exists, or if its cleaned version exists
+                    actual_col = old_col
+                    if old_col not in available_columns:
+                        # Try the cleaned version of the column name
+                        cleaned_old_col = (
+                            old_col.replace(".", "_")
                             .replace("()", "_")
                             .replace("(", "_")
                             .replace(")", "_")
                         )
-                        select_columns.append(f'"{col}" as {clean_col}')
+                        if cleaned_old_col in available_columns:
+                            actual_col = cleaned_old_col
+                        else:
+                            continue  # Skip if neither version exists
+                    
+                    # Apply proper type casting for area columns
+                    if new_col in [
+                        "area_ha",
+                        "block_area_ha",
+                        "applied_area_ha",
+                        "reported_area_ha",
+                    ]:
+                        select_columns.append(f'CAST("{actual_col}" AS DOUBLE) as {new_col}')
+                    else:
+                        select_columns.append(f'"{actual_col}" as {new_col}')
+
+                # Add unmapped columns (except geometry_json and payload_id)
+                mapped_columns = set()
+                for old_col, new_col in self.config.column_mapping.items():
+                    # Add both original and cleaned versions to mapped set
+                    mapped_columns.add(old_col)
+                    cleaned_old_col = (
+                        old_col.replace(".", "_")
+                        .replace("()", "_")
+                        .replace("(", "_")
+                        .replace(")", "_")
+                    )
+                    mapped_columns.add(cleaned_old_col)
+                
+                for col in available_columns:
+                    if col not in mapped_columns and col not in [
+                        "geometry_json",
+                        "payload_id",
+                    ]:
+                        # Column names are already cleaned, so use them as-is
+                        select_columns.append(f'"{col}"')
 
                 # DEBUG: Log what columns will be selected
                 self.log.info(f"Select columns built: {select_columns}")
@@ -427,13 +477,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     )
                     for col in available_columns:
                         if col not in ["geometry_json", "payload_id"]:
-                            clean_col = (
-                                col.replace(".", "_")
-                                .replace("()", "_")
-                                .replace("(", "_")
-                                .replace(")", "_")
-                            )
-                            select_columns.append(f'"{col}" as {clean_col}')
+                            # Column names are already cleaned, so use them as-is
+                            select_columns.append(f'"{col}"')
 
                 select_clause = ", ".join(select_columns) if select_columns else "payload_id"
 
