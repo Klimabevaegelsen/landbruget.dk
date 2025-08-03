@@ -332,14 +332,8 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning(f"Error during post-export cleanup: {e}")
 
 
-def _save_to_gcs_streaming(filename: str, data_list: List[Any], append_mode: bool = False):
-    """Save large datasets to GCS using streaming to avoid memory issues.
-    
-    Args:
-        filename: Target filename in GCS
-        data_list: List of data items to save
-        append_mode: If True, append to existing file using JSONL format
-    """
+def _save_to_gcs_streaming(filename: str, data_list: List[Any]):
+    """Save large datasets to GCS using streaming to avoid memory issues."""
     bucket = gcs_client.bucket(GCS_BUCKET)
     blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}")
 
@@ -347,40 +341,27 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], append_mode: boo
     import sys
 
     estimated_size_mb = sys.getsizeof(data_list) / (1024 * 1024)
-    mode_str = "append" if append_mode else "overwrite"
     logger.info(
-        f"Starting streaming {mode_str} to GCS for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
+        f"Starting streaming upload to GCS for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
     )
 
     try:
-        if append_mode:
-            # FIXED: Use JSONL format for easy appending (one JSON object per line)
-            with blob.open("a", content_type="application/x-jsonlines") as f:
-                for i, item in enumerate(data_list):
-                    # Write each item as a separate line (JSONL format)
-                    json.dump(item, f, default=str)
-                    f.write("\n")
+        # Use blob.open() for streaming writes
+        with blob.open("w", content_type="application/json") as f:
+            f.write("[\n")
 
-                    # Log progress more frequently for very large datasets
-                    if i > 0 and i % 1000 == 0:
-                        logger.info(f"Appended {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
-        else:
-            # Original JSON array format for non-append mode
-            with blob.open("w", content_type="application/json") as f:
-                f.write("[\n")
+            for i, item in enumerate(data_list):
+                if i > 0:
+                    f.write(",\n")
 
-                for i, item in enumerate(data_list):
-                    if i > 0:
-                        f.write(",\n")
+                # Serialize one item at a time to avoid memory buildup
+                json.dump(item, f, indent=2, default=str)
 
-                    # Serialize one item at a time to avoid memory buildup
-                    json.dump(item, f, indent=2, default=str)
+                # Log progress more frequently for very large datasets
+                if i > 0 and i % 1000 == 0:
+                    logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
 
-                    # Log progress more frequently for very large datasets
-                    if i > 0 and i % 1000 == 0:
-                        logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
-
-                f.write("\n]")
+            f.write("\n]")
 
         logger.info(f"Completed streaming upload to GCS for {filename}")
 
