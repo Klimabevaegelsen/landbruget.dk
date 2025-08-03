@@ -466,7 +466,7 @@ class H3ResultSaver:
         # Generate PMTiles for frontend visualization with "total" as year identifier
         self.log.info("🗺️ Generating cumulative kommune PMTiles...")
         pmtiles_path = self.pmtiles_generator.generate_kommune_pmtiles_for_year(
-            "final_cumulative_kommune_results", "total", kommune_boundaries_table
+            "final_cumulative_kommune_results", "total"
         )
         if pmtiles_path:
             self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
