@@ -267,6 +267,8 @@ jobs:
     - name: Run pipeline for folder - ${{ matrix.folder }}
       working-directory: backend/pipelines/drive_data_pipeline
       env:
+        ENVIRONMENT: production
+        STORAGE_TYPE: gcs
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
@@ -363,6 +365,8 @@ jobs:
     - name: Run Google Drive Pipeline (Single Mode)
       working-directory: backend/pipelines/drive_data_pipeline
       env:
+        ENVIRONMENT: production
+        STORAGE_TYPE: gcs
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
