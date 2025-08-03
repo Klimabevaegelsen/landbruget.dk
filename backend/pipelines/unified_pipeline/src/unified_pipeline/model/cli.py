@@ -102,12 +102,18 @@ class FVMLayerType(Enum):
         marker: Field markers data (2008-2025)
         smaabiotoper: Small biotopes data (2023-2025)
         organic_areas: Organic areas data (2012-2024)
+        organic_subsidies: Organic subsidies data (2019-2024)
+        grassland_subsidies: Grassland subsidies data (2019-2024)
+        environmental_subsidies: Environmental subsidies data (2019-2023)
     """
 
     markblokke = "markblokke"
     marker = "marker"
     smaabiotoper = "smaabiotoper"
     organic_areas = "organic_areas"
+    organic_subsidies = "organic_subsidies"
+    grassland_subsidies = "grassland_subsidies"
+    environmental_subsidies = "environmental_subsidies"
 
 
 class CliConfig(BaseModel):
