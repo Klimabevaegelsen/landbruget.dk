@@ -212,10 +212,53 @@ class FVMWFSSilverConfig(BaseJobConfig):
             cli_config: CLI configuration containing fvm_layer_type and fvm_year filters
         """
         # Import here to avoid circular imports
-        from unified_pipeline.model.cli import FVMLayerType
+        from unified_pipeline.model.cli import FVMLayerType, Stage
 
         if cli_config.source.value != "fvm_wfs":
             return  # Only apply filters for FVM WFS source
+
+        # For enrichment stage, handle differently to preserve necessary data relationships
+        if cli_config.stage == Stage.enrichment:
+            if cli_config.fvm_year:
+                # For enrichment, preserve all layer types but filter to specific year
+                year = cli_config.fvm_year
+                
+                # Filter all year lists to only the specified year (if it exists in the original range)
+                if year in self.markblokke_years:
+                    object.__setattr__(self, "markblokke_years", [year])
+                else:
+                    object.__setattr__(self, "markblokke_years", [])
+                    
+                if year in self.marker_years:
+                    object.__setattr__(self, "marker_years", [year])
+                else:
+                    object.__setattr__(self, "marker_years", [])
+                    
+                if year in self.smaabiotoper_years:
+                    object.__setattr__(self, "smaabiotoper_years", [year])
+                else:
+                    object.__setattr__(self, "smaabiotoper_years", [])
+                    
+                if year in self.organic_areas_years:
+                    object.__setattr__(self, "organic_areas_years", [year])
+                else:
+                    object.__setattr__(self, "organic_areas_years", [])
+                    
+                if year in self.organic_subsidies_years:
+                    object.__setattr__(self, "organic_subsidies_years", [year])
+                else:
+                    object.__setattr__(self, "organic_subsidies_years", [])
+                    
+                if year in self.grassland_subsidies_years:
+                    object.__setattr__(self, "grassland_subsidies_years", [year])
+                else:
+                    object.__setattr__(self, "grassland_subsidies_years", [])
+                    
+                if year in self.environmental_subsidies_years:
+                    object.__setattr__(self, "environmental_subsidies_years", [year])
+                else:
+                    object.__setattr__(self, "environmental_subsidies_years", [])
+            return  # Skip regular filtering for enrichment stage
 
         if cli_config.fvm_layer_type or cli_config.fvm_year:
             # Clear all years initially for filtered processing
@@ -1291,6 +1334,33 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.error(f"Error during organic enrichment: {e}")
             # Don't fail the entire pipeline if enrichment fails
             pass
+
+    async def run_enrichment_only(self) -> Optional[Dict[str, Any]]:
+        """
+        Run only the enrichment functions without processing bronze/silver data.
+        
+        This method is designed for matrix jobs that need to run enrichment
+        on already-processed silver data without re-running the entire pipeline.
+        
+        Returns:
+            Optional[Dict[str, Any]]: Summary information about enrichment operations
+        """
+        self.log.info("Running FVM WFS enrichment-only job")
+        
+        # Enrich marker fields with organic information
+        await self._enrich_marker_with_organic_data()
+        
+        # Enrich subsidy fields with field UUIDs from matching FVM marker fields
+        await self._enrich_subsidies_with_field_uuid()
+        
+        self.log.info("FVM WFS enrichment-only job completed")
+        
+        return {
+            "dataset": self.config.dataset,
+            "mode": "enrichment-only",
+            "processed_at": self.conn.execute("SELECT current_timestamp").fetchone()[0].isoformat(),
+            "status": "completed",
+        }
 
     async def _enrich_subsidies_with_field_uuid(self) -> None:
         """

@@ -145,15 +145,23 @@ async def execute_pipeline_jobs(
                         )
 
             elif issubclass(job_cls, SilverJobInterface):
-                # Silver stage - pass in-memory data if available and collect results
-                result = await instance.run(bronze_data=bronze_data)
+                # Check if this is an enrichment-only job
+                if stage == cli.Stage.enrichment and hasattr(instance, 'run_enrichment_only'):
+                    # Enrichment stage - run only enrichment functions
+                    result = await instance.run_enrichment_only()
+                    stage_description = "enrichment-only"
+                else:
+                    # Silver stage - pass in-memory data if available and collect results
+                    result = await instance.run(bronze_data=bronze_data)
+                    stage_description = f"{'in-memory' if bronze_data is not None else 'storage'} data"
+                
                 if result is not None:
                     job_successful = True
                     # Collect silver data for gold stage
                     dataset_name = instance.config.dataset
                     silver_data[dataset_name] = result
                     log.info(
-                        f"Silver job {job_cls.__name__} completed successfully using {'in-memory' if bronze_data is not None else 'storage'} data"
+                        f"Silver job {job_cls.__name__} completed successfully using {stage_description}"
                     )
                 else:
                     log.error(f"Silver job {job_cls.__name__} failed - no data returned")
@@ -282,6 +290,7 @@ def execute(cli_config: cli.CliConfig) -> int:
         cli.Source.fvm_wfs: {
             cli.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
             cli.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli.Stage.enrichment: [(FVMWFSSilver, FVMWFSSilverConfig)],
             cli.Stage.all: [
                 (FVMWFSBronze, FVMWFSBronzeConfig),
                 (FVMWFSSilver, FVMWFSSilverConfig),

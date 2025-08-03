@@ -202,11 +202,17 @@ jobs:
           echo "❌ Failed to process ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
           exit 1
 
-  organic-enrichment:
+  enrichment-matrix:
     needs: process
     runs-on: ubuntu-latest
     if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && always() && !failure() }}
-    name: Enrich Fields with Organic Data and Subsidy UUIDs
+    strategy:
+      fail-fast: false
+      max-parallel: 5  # Limit concurrent enrichment jobs
+      matrix:
+        year: [2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+    
+    name: Enrich Fields ${{ matrix.year }}
     
     steps:
       - name: Checkout code
@@ -230,30 +236,28 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Run Field Enrichment
+      - name: Run Field Enrichment for ${{ matrix.year }}
         run: |
           cd backend/pipelines/unified_pipeline
-          echo "🌱 Running organic enrichment of marker fields and field UUID enrichment of subsidy fields..."
+          echo "🌱 Running enrichment for year ${{ matrix.year }}..."
           python -m unified_pipeline \
             -s fvm_wfs \
-            -j silver
-        # This will trigger both organic enrichment (2012-2024) and subsidy field UUID enrichment (2019-2024)
+            -j enrichment \
+            --fvm-year ${{ matrix.year }}
 
       - name: Report enrichment completion
         if: success()
         run: |
-          echo "✅ Successfully enriched marker fields with organic data and subsidy fields with field UUIDs"
-          echo "🌱 Organic information added to marker fields for all overlapping years"
-          echo "🔗 Field UUIDs added to subsidy fields for direct field linkage"
+          echo "✅ Successfully enriched fields for year ${{ matrix.year }}"
 
       - name: Report enrichment failure
         if: failure()
         run: |
-          echo "❌ Failed to enrich fields with organic data and subsidy UUIDs"
+          echo "❌ Failed to enrich fields for year ${{ matrix.year }}"
           exit 1
 
   summary:
-    needs: [generate-matrix, process, organic-enrichment]
+    needs: [generate-matrix, process, enrichment-matrix]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -270,9 +274,11 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Performance Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- Processing: 73 layer/year matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
-          echo "- Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
-          echo "- Total time for all 73 layers: ~25-30 minutes (vs 70+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
-          echo "- Organic enrichment runs after silver processing (adds ~92% organic field coverage)" >> $GITHUB_STEP_SUMMARY
-          echo "- Subsidy field UUID enrichment runs after silver processing (enables direct field linkage)" >> $GITHUB_STEP_SUMMARY
+          echo "- Total processing time for all 73 layers: ~25-30 minutes (vs 70+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
+          echo "- Enrichment: 13 year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
+          echo "- Each enrichment job processes only its specific year (2012-2024)" >> $GITHUB_STEP_SUMMARY
+          echo "- Organic enrichment adds ~92% organic field coverage to marker data" >> $GITHUB_STEP_SUMMARY
+          echo "- Subsidy UUID enrichment enables direct field linkage for analysis" >> $GITHUB_STEP_SUMMARY
           echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 
