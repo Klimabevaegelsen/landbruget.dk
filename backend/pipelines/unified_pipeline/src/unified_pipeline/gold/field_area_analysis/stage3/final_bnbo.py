@@ -277,7 +277,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             SELECT 
                 field_uuid, year,
                 COUNT(*) as property_count,
-                SUM(property_intersection_area_m2) as total_property_intersection_area_m2,
+                SUM(intersection_area_m2) as total_property_intersection_area_m2,
                 (
                     SELECT bfe_number 
                     FROM field_property_intersections fp2 
