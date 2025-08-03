@@ -215,9 +215,75 @@ class ConsolidateResults(FieldAnalysisStageBase):
         ]
         self.log.info(f"Created soil summaries for {soil_fields_count:,} fields")
 
-        # Create final consolidated analysis starting with ALL fields that have properties
+        # STEP 3A: Pre-aggregate Stage 3A BNBO data to field level (fix cartesian product!)
+        self.log.info("Step 3A: Pre-aggregating BNBO data to field level to prevent cartesian products...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE bnbo_field_summary AS
+            SELECT 
+                field_uuid, year,
+                -- Field-level totals (should be same across property rows - use MAX)
+                MAX(field_bnbo_total_m2) as field_bnbo_total_m2,
+                MAX(field_bnbo_water_covered_m2) as field_bnbo_water_covered_m2,
+                MAX(field_bnbo_water_covered_pct) as field_bnbo_water_covered_pct,
+                MAX(field_bnbo_water_uncovered_pct) as field_bnbo_water_uncovered_pct,
+                MAX(field_bnbo_coverage_pct) as field_bnbo_coverage_pct,
+                
+                -- BNBO status metrics (field-level - should be same across property rows)
+                MAX(bnbo_action_required_hectares) as bnbo_action_required_hectares,
+                MAX(bnbo_completed_hectares) as bnbo_completed_hectares,
+                MAX(bnbo_action_required_overlap_hectares) as bnbo_action_required_overlap_hectares,
+                MAX(bnbo_completed_overlap_hectares) as bnbo_completed_overlap_hectares,
+                MAX(bnbo_action_required_not_covered_by_water_hectares) as bnbo_action_required_not_covered_by_water_hectares,
+                MAX(bnbo_completed_not_covered_by_water_hectares) as bnbo_completed_not_covered_by_water_hectares,
+                MAX(bnbo_status_categories) as bnbo_status_categories,
+                MAX(bnbo_status_count) as bnbo_status_count,
+                
+                -- Property-level BNBO totals (MAX - these are duplicated across rows, not per-property)
+                MAX(property_bnbo_total_m2) as property_bnbo_total_m2,
+                MAX(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
+                MAX(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
+                MAX(property_bnbo_count) as property_bnbo_count,  -- Count should be same across rows
+                MAX(property_bnbo_owners) as property_bnbo_owners,
+                MAX(property_bnbo_breakdown) as property_bnbo_breakdown
+                
+            FROM final_bnbo_analysis 
+            GROUP BY field_uuid, year
+        """)
+        
+        bnbo_summary_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_field_summary").fetchone()[0]
+        self.log.info(f"✅ Created BNBO field summaries for {bnbo_summary_count:,} fields")
+
+        # STEP 3B: Pre-aggregate Stage 3B wetland data to field level (fix cartesian product!)
+        self.log.info("Step 3B: Pre-aggregating wetland data to field level to prevent cartesian products...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE wetland_field_summary AS
+            SELECT 
+                field_uuid, year,
+                -- Field-level totals (should be same across property rows - use MAX)
+                MAX(field_wetland_total_m2) as field_wetland_total_m2,
+                MAX(field_wetland_water_covered_m2) as field_wetland_water_covered_m2,
+                MAX(field_wetland_water_covered_pct) as field_wetland_water_covered_pct,
+                MAX(field_wetland_water_uncovered_pct) as field_wetland_water_uncovered_pct,
+                MAX(field_wetland_coverage_pct) as field_wetland_coverage_pct,
+                
+                -- Property-level wetland totals (MAX - these are duplicated across rows, not per-property)
+                MAX(property_wetland_total_m2) as property_wetland_total_m2,
+                MAX(property_wetland_water_covered_m2) as property_wetland_water_covered_m2,
+                MAX(property_wetland_water_uncovered_m2) as property_wetland_water_uncovered_m2,
+                MAX(property_wetland_count) as property_wetland_count,  -- Count should be same across rows
+                MAX(property_wetland_owners) as property_wetland_owners,
+                MAX(property_wetland_breakdown) as property_wetland_breakdown
+                
+            FROM final_wetland_analysis 
+            GROUP BY field_uuid, year
+        """)
+        
+        wetland_summary_count = self.conn.execute("SELECT COUNT(*) FROM wetland_field_summary").fetchone()[0]
+        self.log.info(f"✅ Created wetland field summaries for {wetland_summary_count:,} fields")
+
+        # STEP 3C: Create final consolidated analysis with pre-aggregated environmental data
         self.log.info(
-            "Step 3: Creating final analysis with environmental and soil data as LEFT JOINs..."
+            "Step 3C: Creating final analysis with pre-aggregated environmental data (NO MORE CARTESIAN PRODUCTS!)..."
         )
         consolidation_query = """
         CREATE OR REPLACE TABLE field_area_analysis_final AS
@@ -236,7 +302,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             f.total_property_intersection_area_m2,
             f.primary_bfe_number,
             
-            -- Soil type data (from Stage 1B - may be NULL if no soil data)
+            -- Soil type data (from Stage 1B - already field-level aggregated)
             COALESCE(s.soil_type_count, 0) as soil_type_count,
             COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
             COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
@@ -244,14 +310,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
             COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
             
-            -- BNBO analysis data (from Stage 3A - may be NULL if no BNBO)
+            -- BNBO analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
             COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
             COALESCE(b.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
             COALESCE(b.field_bnbo_water_covered_pct, 0) as field_bnbo_water_covered_pct,
             COALESCE(b.field_bnbo_water_uncovered_pct, 0) as field_bnbo_water_uncovered_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
             
-            -- BNBO status metrics - flattened by category (from Stage 3A)
+            -- BNBO status metrics - flattened by category (from pre-aggregated summary)
             COALESCE(b.bnbo_action_required_hectares, 0.0) as bnbo_action_required_hectares,
             COALESCE(b.bnbo_completed_hectares, 0.0) as bnbo_completed_hectares,
             COALESCE(b.bnbo_action_required_overlap_hectares, 0.0) as bnbo_action_required_overlap_hectares,
@@ -261,14 +327,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(b.bnbo_status_categories, NULL) as bnbo_status_categories,
             COALESCE(b.bnbo_status_count, 0) as bnbo_status_count,
             
-            -- Wetland analysis data (from Stage 3B - may be NULL if no wetlands)
+            -- Wetland analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
             COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
             COALESCE(w.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
             COALESCE(w.field_wetland_water_covered_pct, 0) as field_wetland_water_covered_pct,
             COALESCE(w.field_wetland_water_uncovered_pct, 0) as field_wetland_water_uncovered_pct,
             COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
             
-            -- Property-environmental spatial relationships (using actual columns from stage 3)
+            -- Property-environmental spatial relationships (from pre-aggregated field summaries)
             COALESCE(b.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
             COALESCE(b.property_bnbo_count, 0) as property_bnbo_count,
             COALESCE(b.property_bnbo_owners, NULL) as property_bnbo_owners,
@@ -306,8 +372,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
         FROM all_fields_with_properties f
         LEFT JOIN field_soil_summary s ON f.field_uuid = s.field_uuid 
             AND f.year = s.year
-        LEFT JOIN final_bnbo_analysis b ON f.field_uuid = b.field_uuid
-        LEFT JOIN final_wetland_analysis w ON f.field_uuid = w.field_uuid
+        LEFT JOIN bnbo_field_summary b ON f.field_uuid = b.field_uuid
+            AND f.year = b.year
+        LEFT JOIN wetland_field_summary w ON f.field_uuid = w.field_uuid
+            AND f.year = w.year
         """
 
         self.conn.execute(consolidation_query)
@@ -430,18 +498,17 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "✅ Created final consolidated field area analysis with property-environmental relationships:"
         )
         self.log.info(f"   Total fields: {total_fields:,}")
-        self.log.info(
-            f"   Fields with BNBO: {fields_with_bnbo:,} ({(fields_with_bnbo / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with wetlands: {fields_with_wetlands:,} ({(fields_with_wetlands / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with properties: {fields_with_props:,} ({(fields_with_props / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with soil data: {fields_with_soil_data:,} ({(fields_with_soil_data / total_fields) * 100:.1f}%)"
-        )
+        
+        # Calculate percentages safely to avoid division by zero
+        bnbo_pct = (fields_with_bnbo / total_fields) * 100 if total_fields > 0 else 0.0
+        wetlands_pct = (fields_with_wetlands / total_fields) * 100 if total_fields > 0 else 0.0
+        props_pct = (fields_with_props / total_fields) * 100 if total_fields > 0 else 0.0
+        soil_pct = (fields_with_soil_data / total_fields) * 100 if total_fields > 0 else 0.0
+        
+        self.log.info(f"   Fields with BNBO: {fields_with_bnbo:,} ({bnbo_pct:.1f}%)")
+        self.log.info(f"   Fields with wetlands: {fields_with_wetlands:,} ({wetlands_pct:.1f}%)")
+        self.log.info(f"   Fields with properties: {fields_with_props:,} ({props_pct:.1f}%)")
+        self.log.info(f"   Fields with soil data: {fields_with_soil_data:,} ({soil_pct:.1f}%)")
         self.log.info(f"   Fields with environmental features: {fields_with_env_features:,}")
         self.log.info(
             f"   Fields with property-environmental relationships: {fields_with_prop_env_relationships:,}"

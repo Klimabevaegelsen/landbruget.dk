@@ -219,7 +219,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 ST_Area_Spheroid(wp.geometry) as project_area_m2
             FROM wetlands_batch wb
             JOIN water_projects wp ON ST_Intersects(wb.geometry, wp.geometry)
-            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 1.0  -- Filter tiny intersections
+            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 0  -- Keep all intersections
             """
 
             self.conn.execute(batch_query)

@@ -113,7 +113,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             
         FROM water_projects wp
         JOIN bnbo_status b ON ST_Intersects(wp.geometry, b.geometry)
-        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 10  -- Filter tiny intersections
+        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0  -- Keep all intersections
         """
 
         self.log.info("Executing Water Projects × BNBO spatial intersection...")

@@ -387,6 +387,8 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    outputs:
+      matrix-year: ${{ strategy.job-index }}
     strategy:
       matrix:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}

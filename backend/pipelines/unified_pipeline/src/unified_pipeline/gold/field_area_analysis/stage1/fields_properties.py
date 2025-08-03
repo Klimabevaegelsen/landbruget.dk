@@ -215,9 +215,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         
                     FROM chunk_raw_intersections
                     WHERE 
-                        -- Filter out tiny intersections (< 1% of field area or < 100 m²)
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 100
-                        AND (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / field_area_m2) > 0.01
+                        -- Keep all intersections (removed tiny intersection filters)
+                        ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 0
                 """)
 
                 chunk_final_count = self.conn.execute(
