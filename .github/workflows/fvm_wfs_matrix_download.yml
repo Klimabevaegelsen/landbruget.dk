@@ -166,8 +166,57 @@ jobs:
           echo "❌ Failed to process ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
           exit 1
 
+  organic-enrichment:
+    needs: process
+    runs-on: ubuntu-latest
+    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && always() && !failure() }}
+    name: Enrich Marker Fields with Organic Data
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run Organic Enrichment
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌱 Running organic enrichment of marker fields for all overlapping years..."
+          python -m unified_pipeline \
+            -s fvm_wfs \
+            -j silver
+        # This will trigger the enrichment process for all overlapping years (2012-2024)
+
+      - name: Report enrichment completion
+        if: success()
+        run: |
+          echo "✅ Successfully enriched marker fields with organic data"
+          echo "🌱 Organic information added to marker fields for all overlapping years"
+
+      - name: Report enrichment failure
+        if: failure()
+        run: |
+          echo "❌ Failed to enrich marker fields with organic data"
+          exit 1
+
   summary:
-    needs: [generate-matrix, process]
+    needs: [generate-matrix, process, organic-enrichment]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -187,4 +236,5 @@ jobs:
           echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
           echo "- Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Total time for all 43 layers: ~15-20 minutes (vs 45+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
+          echo "- Organic enrichment runs after silver processing (adds ~92% organic field coverage)" >> $GITHUB_STEP_SUMMARY
           echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 
