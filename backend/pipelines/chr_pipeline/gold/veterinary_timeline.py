@@ -597,67 +597,9 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                   AND {health_col} LIKE '%{san_marker}%'
                 """)
         
-        # Salmonella events (if we have salmonella data from herds table)
-        salmonella_has_index_col = next((col for col in column_names if 'salmonella_has_index' in col.lower()), None)
-        
-        if salmonella_date_col and salmonella_status_col:
-            # Check if we have meaningful salmonella dates
-            salmonella_check = con.execute(f"""
-                SELECT COUNT(*) as total, 
-                       COUNT(CASE WHEN {salmonella_date_col} > '1900-01-01' THEN 1 END) as valid_dates
-                FROM spf_su_herds 
-                WHERE {chr_col} IS NOT NULL
-            """).fetchone()
-            
-            total_records, valid_dates = salmonella_check
-            logger.info(f"📊 Salmonella data in herds: {total_records} total, {valid_dates} with valid dates")
-            
-            if valid_dates > 0:
-                parts.append(f"""
-                SELECT 
-                    {chr_col} as chr_number,
-                    'spf_su_salmonella' as event_source,
-                    'salmonella_test' as event_type,
-                    'SPF-SU Salmonella: ' || COALESCE({salmonella_status_col}, 'Test performed') as event_description,
-                    'Salmonella' as event_category,
-                    'Pig' as species,
-                    TRY_CAST({salmonella_date_col} AS TIMESTAMP) as event_date,
-                    NULL as end_date,
-                    'spf_su_herds' as source_file
-                FROM spf_su_herds
-                WHERE {chr_col} IS NOT NULL
-                  AND {salmonella_date_col} IS NOT NULL
-                  AND {salmonella_date_col} > '1900-01-01'
-                """)
-            else:
-                # Check for salmonella monitoring enrollment (no valid test dates but enrolled in program)
-                if salmonella_has_index_col:
-                    monitoring_check = con.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM spf_su_herds 
-                        WHERE {chr_col} IS NOT NULL
-                          AND {salmonella_has_index_col} = true
-                          AND ({salmonella_date_col} IS NULL OR {salmonella_date_col} <= '1900-01-01')
-                    """).fetchone()[0]
-                    
-                    if monitoring_check > 0:
-                        parts.append(f"""
-                        SELECT 
-                            {chr_col} as chr_number,
-                            'spf_su_salmonella_herds' as event_source,
-                            'salmonella_monitoring_enrollment' as event_type,
-                            'SPF-SU Salmonella monitoring: Enrolled in surveillance program' as event_description,
-                            'Salmonella' as event_category,
-                            'Pig' as species,
-                            CAST('2025-08-02 19:21:59' AS TIMESTAMP) as event_date,  -- Use pipeline run date
-                            NULL as end_date,
-                            'spf_su_herds' as source_file
-                        FROM spf_su_herds
-                        WHERE {chr_col} IS NOT NULL
-                          AND {salmonella_has_index_col} = true
-                          AND ({salmonella_date_col} IS NULL OR {salmonella_date_col} <= '1900-01-01')
-                        """)
-                        logger.info(f"📊 Created SPF-SU herds salmonella monitoring enrollment events for {monitoring_check} CHRs")
+        # Skip salmonella processing - currently only enrollment records with no meaningful test data
+        # Salmonella data exists but contains only placeholder dates (0001-01-01) and empty arrays
+        # Will be re-enabled when actual test results become available
         
         logger.info(f"✅ Created {len(parts)} SPF-SU timeline parts")
         return parts
@@ -669,96 +611,12 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
 
 def create_spf_su_salmonella_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
     """Create SPF-SU salmonella timeline parts from detailed salmonella data."""
-    parts = []
-    try:
-        chr_col = get_chr_column(con, 'spf_su_salmonella')
-        
-        if not chr_col:
-            return []
-        
-        # Get available columns
-        columns = con.execute("DESCRIBE spf_su_salmonella").fetchall()
-        column_names = [col[0] for col in columns]
-        logger.info(f"🔍 Salmonella table columns: {column_names}")
-        
-        # Find relevant columns
-        date_col = next((col for col in column_names if 'date' in col.lower() and 'salmonella' in col.lower()), None)
-        status_col = next((col for col in column_names if 'status' in col.lower() and 'salmonella' in col.lower()), None)
-        
-        # Check if we have actual salmonella events (not just placeholder dates)
-        if date_col:
-            # First check if we have meaningful dates (not just 1/1/1 placeholders)
-            date_check = con.execute(f"""
-                SELECT COUNT(*) as total, 
-                       COUNT(CASE WHEN {date_col} > '1900-01-01' THEN 1 END) as valid_dates
-                FROM spf_su_salmonella 
-                WHERE {chr_col} IS NOT NULL
-            """).fetchone()
-            
-            total_records, valid_dates = date_check
-            logger.info(f"📊 Salmonella data: {total_records} total records, {valid_dates} with valid dates")
-            
-            if valid_dates > 0:
-                # Create timeline events for records with actual dates
-                parts.append(f"""
-                SELECT 
-                    {chr_col} as chr_number,
-                    'spf_su_salmonella' as event_source,
-                    'salmonella_test' as event_type,
-                    'SPF-SU Salmonella test: ' || COALESCE({status_col}, 'Test performed') as event_description,
-                    'Salmonella' as event_category,
-                    'Pig' as species,
-                    TRY_CAST({date_col} AS TIMESTAMP) as event_date,
-                    NULL as end_date,
-                    'spf_su_salmonella_data' as source_file
-                FROM spf_su_salmonella
-                WHERE {chr_col} IS NOT NULL
-                  AND {date_col} IS NOT NULL
-                  AND {date_col} > '1900-01-01'
-                """)
-            else:
-                # If no valid dates, create snapshot-based events using export timestamp
-                logger.info("⚠️ No valid salmonella dates found, creating snapshot-based events")
-                
-                # Check if we have any non-empty JSON data that indicates actual salmonella activity
-                json_check = con.execute(f"""
-                    SELECT COUNT(*) 
-                    FROM spf_su_salmonella 
-                    WHERE {chr_col} IS NOT NULL
-                      AND (salmonella_level_json != '[]' OR 
-                           salmonella_indexes_json != '[]' OR 
-                           salmonella_test_results_json != '[]')
-                """).fetchone()[0]
-                
-                if json_check > 0:
-                    parts.append(f"""
-                    SELECT 
-                        {chr_col} as chr_number,
-                        'spf_su_salmonella_snapshot' as event_source,
-                        'salmonella_status' as event_type,
-                        'SPF-SU Salmonella status: ' || COALESCE({status_col}, 'Active monitoring') as event_description,
-                        'Salmonella' as event_category,
-                        'Pig' as species,
-                        CAST(SUBSTRING(export_timestamp, 1, 8) || ' ' || 
-                             SUBSTRING(export_timestamp, 10, 2) || ':' || 
-                             SUBSTRING(export_timestamp, 12, 2) || ':' || 
-                             SUBSTRING(export_timestamp, 14, 2) AS TIMESTAMP) as event_date,
-                        NULL as end_date,
-                        'spf_su_salmonella_data' as source_file
-                    FROM spf_su_salmonella
-                    WHERE {chr_col} IS NOT NULL
-                      AND (salmonella_level_json != '[]' OR 
-                           salmonella_indexes_json != '[]' OR 
-                           salmonella_test_results_json != '[]')
-                    """)
-                    logger.info(f"📊 Created snapshot-based salmonella events for {json_check} records with data")
-        
-        logger.info(f"✅ Created {len(parts)} salmonella timeline parts")
-        return parts
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to create salmonella timeline parts: {e}")
-        return []
+    
+    # Skip salmonella processing - data contains only enrollment records with no meaningful test data
+    # All records have placeholder dates (0001-01-01) and empty arrays for test results
+    # Will be re-enabled when actual salmonella test results become available
+    logger.info("⚠️ Skipping salmonella timeline processing - only enrollment data available (no test results)")
+    return []
 
 
 def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
