@@ -9,7 +9,7 @@ This eliminates the record explosion issue by properly separating field-level an
 """
 
 from typing import Dict, Any
-from backend.pipelines.unified_pipeline.src.unified_pipeline.gold.field_area_analysis.base import FieldAnalysisStageBase
+from ..base import FieldAnalysisStageBase
 
 
 class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
