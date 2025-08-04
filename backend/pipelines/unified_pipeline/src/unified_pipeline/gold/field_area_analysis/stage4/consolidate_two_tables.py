@@ -67,14 +67,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         stage1b_path = self._get_latest_gold_path(updated_outputs["field_soil_intersections"])
         self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
         
-        # Load Stage 2 outputs (field-level environmental data - direct field-environment intersections)
-        stage2a_path = self._get_latest_gold_path(updated_outputs["fields_bnbo_water"])
-        self.gcs_access.query_parquet_direct(stage2a_path, "SELECT *", "fields_bnbo_water")
+        # Load Stage 3 outputs (both field-level and property-level consolidated data)
+        stage3a_fields_path = self._get_latest_gold_path(updated_outputs["final_bnbo_analysis"])
+        self.gcs_access.query_parquet_direct(stage3a_fields_path, "SELECT *", "final_bnbo_analysis")
         
-        stage2b_path = self._get_latest_gold_path(updated_outputs["fields_wetland_water"])
-        self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
+        stage3b_fields_path = self._get_latest_gold_path(updated_outputs["final_wetland_analysis"])
+        self.gcs_access.query_parquet_direct(stage3b_fields_path, "SELECT *", "final_wetland_analysis")
         
-        # Load Stage 3 property-level intersection outputs (NEW!)
         stage3a_properties_path = self._get_latest_gold_path(updated_outputs["property_bnbo_intersections"])
         self.gcs_access.query_parquet_direct(stage3a_properties_path, "SELECT *", "property_bnbo_intersections")
         
@@ -88,81 +87,68 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         
         self.log.info("Validating input data...")
         
-        # Check Stage 2 outputs (field-level environmental data)
-        bnbo_fields = self.conn.execute("SELECT COUNT(*) FROM fields_bnbo_water").fetchone()[0]
-        wetland_fields = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
+        # Check Stage 3 field-level outputs  
+        bnbo_fields = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
+        wetland_fields = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
+        
+        # Check Stage 3 property-level outputs
+        bnbo_properties = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_intersections").fetchone()[0]
+        wetland_properties = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
         
         # Check Stage 1 outputs (property intersections)
         property_intersections = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
         
-        self.log.info(f"✅ Stage 2: {bnbo_fields:,} fields with BNBO, {wetland_fields:,} fields with wetlands") 
+        self.log.info(f"✅ Stage 3 field-level: {bnbo_fields:,} BNBO fields, {wetland_fields:,} wetland fields") 
+        self.log.info(f"✅ Stage 3 property-level: {bnbo_properties:,} BNBO property intersections, {wetland_properties:,} wetland property intersections")
         self.log.info(f"✅ Stage 1: {property_intersections:,} field-property intersections")
 
     def _create_field_level_table(self):
         """Create field-level environmental analysis table (one record per field)."""
         
-        self.log.info("Creating field-level environmental analysis from Stage 2 field-environment intersections...")
+        self.log.info("Creating field-level environmental analysis from Stage 3 consolidated field data...")
         
-        # Start from ALL fields and LEFT JOIN environmental data
-        # This ensures we get all fields with environmental data as 0 for fields without features
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE all_fields_base AS
-            SELECT DISTINCT 
-                field_id, block_id, cvr_number, year, field_uuid, 
-                field_geometry as geometry, field_area_m2
-            FROM field_property_intersections
-        """)
+        # Use Stage 3 consolidated field-level analysis tables directly
+        # These already have all the field-level environmental data properly consolidated
         
+        # Combine Stage 3 field-level analysis tables to create comprehensive field environmental analysis
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_environmental_analysis AS
+            -- BNBO fields with environmental data
             SELECT 
-                -- Field identification (from complete field set)
-                f.field_id,
-                f.block_id,
-                f.cvr_number,
-                f.year,
-                f.field_uuid,
-                f.geometry,
-                f.field_area_m2,
+                field_id, block_id, cvr_number, year, field_uuid, geometry, field_area_m2,
                 
-                -- Soil data (from Stage 1 - field-soil intersections)
-                COALESCE(s.soil_type_count, 0) as soil_type_count,
-                COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
-                COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
-                COALESCE(s.dominant_soil_coverage_pct, 0) as dominant_soil_coverage_pct,
-                COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
-                COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
+                -- BNBO environmental data  
+                field_bnbo_total_m2,
+                field_bnbo_water_covered_m2 as field_area_bnbo_covered_by_water,
+                field_bnbo_total_m2 - field_bnbo_water_covered_m2 as field_area_bnbo_not_covered_by_water,
                 
-                -- Field-wide environmental data (from Stage 2 - direct field-environment intersections)
-                COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
-                COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_covered_by_water,
-                COALESCE(b.field_bnbo_total_m2, 0) - COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_not_covered_by_water,
+                -- No wetland data for BNBO-only fields
+                0 as field_wetland_total_m2,
+                0 as field_area_wetlands_covered_by_water, 
+                0 as field_area_wetlands_not_covered_by_water,
                 
-                COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
-                COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_covered_by_water,
-                COALESCE(w.field_wetland_total_m2, 0) - COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_not_covered_by_water,
+                TRUE as has_environmental_features
+            FROM final_bnbo_analysis
+            
+            UNION ALL
+            
+            -- Wetland fields with environmental data  
+            SELECT 
+                field_id, block_id, cvr_number, year, field_uuid, geometry, field_area_m2,
                 
-                -- Environmental summary flag
-                CASE 
-                    WHEN COALESCE(b.field_bnbo_total_m2, 0) > 0 OR COALESCE(w.field_wetland_total_m2, 0) > 0 
-                    THEN TRUE ELSE FALSE 
-                END as has_environmental_features
+                -- No BNBO data for wetland-only fields
+                0 as field_bnbo_total_m2,
+                0 as field_area_bnbo_covered_by_water,
+                0 as field_area_bnbo_not_covered_by_water,
                 
-            FROM all_fields_base f
-            LEFT JOIN fields_bnbo_water b ON f.field_uuid = b.field_uuid AND f.year = b.year
-            LEFT JOIN fields_wetland_water w ON f.field_uuid = w.field_uuid AND f.year = w.year
-            LEFT JOIN (
-                SELECT 
-                    field_uuid, year,
-                    COUNT(DISTINCT soil_type_category) as soil_type_count,
-                    COUNT(DISTINCT soil_code) as unique_soil_codes,
-                    (SELECT soil_type_category FROM field_soil_areas fsa2 WHERE fsa2.field_uuid = fsa.field_uuid AND fsa2.year = fsa.year ORDER BY fsa2.soil_area_m2 DESC LIMIT 1) as dominant_soil_type,
-                    (SELECT soil_area_share_pct FROM field_soil_areas fsa2 WHERE fsa2.field_uuid = fsa.field_uuid AND fsa2.year = fsa.year ORDER BY fsa2.soil_area_m2 DESC LIMIT 1) as dominant_soil_coverage_pct,
-                    SUM(soil_area_share_pct) as total_soil_coverage_pct,
-                    '{' || STRING_AGG('"' || soil_type_category || '": {' || '"area_m2": ' || ROUND(soil_area_m2, 2) || ', "coverage_pct": ' || ROUND(soil_area_share_pct, 2) || '}', ', ' ORDER BY soil_area_m2 DESC) || '}' as soil_type_breakdown
-                FROM field_soil_areas fsa
-                GROUP BY field_uuid, year
-            ) s ON f.field_uuid = s.field_uuid AND f.year = s.year
+                -- Wetland environmental data
+                field_wetland_total_m2,
+                field_wetland_water_covered_m2 as field_area_wetlands_covered_by_water,
+                field_wetland_total_m2 - field_wetland_water_covered_m2 as field_area_wetlands_not_covered_by_water,
+                
+                TRUE as has_environmental_features
+            FROM final_wetland_analysis
+            WHERE field_uuid NOT IN (SELECT field_uuid FROM final_bnbo_analysis)  -- Avoid duplicates
         """)
         
         field_count = self.conn.execute("SELECT COUNT(*) FROM field_environmental_analysis").fetchone()[0]
@@ -211,11 +197,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 END as has_environmental_features
                 
             FROM field_property_intersections fp
-            WHERE fp.bfe_number IS NOT NULL  -- Only properties, not NULL property fields
             LEFT JOIN property_bnbo_intersections b ON fp.field_uuid = b.field_uuid 
                 AND fp.year = b.year AND fp.bfe_number = b.bfe_number
             LEFT JOIN property_wetland_intersections w ON fp.field_uuid = w.field_uuid 
                 AND fp.year = w.year AND fp.bfe_number = w.bfe_number
+            WHERE fp.bfe_number IS NOT NULL  -- Only properties, not NULL property fields
         """)
         
         property_count = self.conn.execute("SELECT COUNT(*) FROM property_environmental_analysis").fetchone()[0]
@@ -236,7 +222,6 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         field_stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_fields,
-                COUNT(CASE WHEN primary_bfe_number IS NULL THEN 1 END) as fields_without_properties,
                 COUNT(CASE WHEN has_environmental_features THEN 1 END) as fields_with_environmental_features,
                 COUNT(CASE WHEN field_area_bnbo_covered_by_water > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN field_area_wetlands_covered_by_water > 0 THEN 1 END) as fields_with_wetlands,
