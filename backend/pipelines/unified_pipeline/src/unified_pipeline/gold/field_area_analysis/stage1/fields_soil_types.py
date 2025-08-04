@@ -78,6 +78,21 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         self.log.info(f"✅ Loaded {fields_count:,} agricultural fields (original multipolygons)")
         self.log.info(f"✅ Loaded {soil_count:,} soil type polygons (after ST_Dump)")
+        
+        # Store input area reference for validation
+        if self._should_validate_areas():
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as field_count,
+                    SUM(field_area_m2) as total_area
+                FROM agricultural_fields
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            self._input_area_reference = {
+                "total_area": fields_area_stats[1] or 0,
+                "field_count": fields_area_stats[0] or 0
+            }
         self.log.info(
             f"🚀 Processing {fields_count * soil_count:,} potential combinations (optimized)"
         )
@@ -310,3 +325,11 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Save simplified areas - this is what Stage 4 expects
         self.log.info("Saving field soil areas for Stage 4 compatibility...")
         self._save_stage_output("field_soil_areas", "field_soil_intersections")
+    
+    def _get_input_area_reference(self) -> Dict[str, Any]:
+        """Get reference area statistics from input data for validation."""
+        return getattr(self, '_input_area_reference', None)
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "field_soil_areas"
