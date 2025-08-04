@@ -1240,7 +1240,7 @@ class H3PFASProcessorRefactored:
         self._process_bmd_data()
 
         # Load pesticide data FIRST (needed for field filtering)
-        pesticide_path = self.local_data_dir / "pesticide_disaggregation_2022.parquet"
+        pesticide_path = self.local_data_dir / "pesticide_disaggregation_2022_2023.parquet"
         if not pesticide_path.exists():
             raise FileNotFoundError(f"Pesticide data not found: {pesticide_path}")
 
