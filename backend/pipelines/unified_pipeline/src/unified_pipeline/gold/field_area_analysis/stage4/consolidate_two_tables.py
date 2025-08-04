@@ -8,7 +8,7 @@ Creates two separate output tables:
 This eliminates the record explosion issue by properly separating field-level and property-level data.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
 
@@ -110,45 +110,42 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Use Stage 3 consolidated field-level analysis tables directly
         # These already have all the field-level environmental data properly consolidated
         
-        # Combine Stage 3 field-level analysis tables to create comprehensive field environmental analysis
+        # Create comprehensive field environmental analysis from ALL agricultural fields
+        # Environmental data is enrichment (0 values where no environmental features)
+        
+        # First get all unique agricultural fields from property intersections
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE all_agricultural_fields AS
+            SELECT DISTINCT 
+                field_id, block_id, cvr_number, year, field_uuid,
+                FIRST(field_geometry) as geometry,
+                FIRST(field_area_m2) as field_area_m2
+            FROM field_property_intersections
+            GROUP BY field_id, block_id, cvr_number, year, field_uuid
+        """)
+        
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_environmental_analysis AS
-            -- BNBO fields with environmental data
             SELECT 
-                field_id, block_id, cvr_number, year, field_uuid, geometry, field_area_m2,
+                f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, 
+                f.geometry, f.field_area_m2,
                 
-                -- BNBO environmental data  
-                field_bnbo_total_m2,
-                field_bnbo_water_covered_m2 as field_area_bnbo_covered_by_water,
-                field_bnbo_total_m2 - field_bnbo_water_covered_m2 as field_area_bnbo_not_covered_by_water,
+                -- BNBO environmental data (0 if no BNBO features)
+                COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
+                COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_covered_by_water,
+                COALESCE(b.field_bnbo_total_m2, 0) - COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_not_covered_by_water,
                 
-                -- No wetland data for BNBO-only fields
-                0 as field_wetland_total_m2,
-                0 as field_area_wetlands_covered_by_water, 
-                0 as field_area_wetlands_not_covered_by_water,
+                -- Wetland environmental data (0 if no wetland features)
+                COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
+                COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_covered_by_water,
+                COALESCE(w.field_wetland_total_m2, 0) - COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_not_covered_by_water,
                 
-                TRUE as has_environmental_features
-            FROM final_bnbo_analysis
-            
-            UNION ALL
-            
-            -- Wetland fields with environmental data  
-            SELECT 
-                field_id, block_id, cvr_number, year, field_uuid, geometry, field_area_m2,
+                -- Environmental presence flags
+                CASE WHEN b.field_uuid IS NOT NULL OR w.field_uuid IS NOT NULL THEN TRUE ELSE FALSE END as has_environmental_features
                 
-                -- No BNBO data for wetland-only fields
-                0 as field_bnbo_total_m2,
-                0 as field_area_bnbo_covered_by_water,
-                0 as field_area_bnbo_not_covered_by_water,
-                
-                -- Wetland environmental data
-                field_wetland_total_m2,
-                field_wetland_water_covered_m2 as field_area_wetlands_covered_by_water,
-                field_wetland_total_m2 - field_wetland_water_covered_m2 as field_area_wetlands_not_covered_by_water,
-                
-                TRUE as has_environmental_features
-            FROM final_wetland_analysis
-            WHERE field_uuid NOT IN (SELECT field_uuid FROM final_bnbo_analysis)  -- Avoid duplicates
+            FROM all_agricultural_fields f
+            LEFT JOIN final_bnbo_analysis b ON f.field_uuid = b.field_uuid AND f.year = b.year
+            LEFT JOIN final_wetland_analysis w ON f.field_uuid = w.field_uuid AND f.year = w.year
         """)
         
         field_count = self.conn.execute("SELECT COUNT(*) FROM field_environmental_analysis").fetchone()[0]
@@ -162,9 +159,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
     def _create_property_level_table(self):
         """Create property-level environmental analysis table (one record per field-property combination)."""
         
-        self.log.info("Creating property-level environmental analysis table...")
+        self.log.info("Creating property-level environmental analysis from ALL field×property combinations...")
         
-        # Create property-level environmental analysis using ACTUAL property-environment intersections from Stage 3
+        # Create property-level analysis using ALL field×property intersections
+        # Environmental data is enrichment (0 values where no environmental features)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_environmental_analysis AS
             SELECT 
@@ -179,15 +177,15 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.intersection_area_m2 as property_area_within_field_m2,
                 fp.field_area_share_pct as property_share_of_field_pct,
                 
-                -- ACTUAL property-environmental intersection data from Stage 3
+                -- Property-environmental intersection data from Stage 3 (0 if no environmental features)
                 COALESCE(b.property_bnbo_area_m2, 0) as property_bnbo_total_m2,
-                COALESCE(b.property_bnbo_water_covered_m2, 0) as property_area_bnbo_covered_by_water,
-                COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
+                COALESCE(b.property_bnbo_covered_m2, 0) as property_area_bnbo_covered_by_water,
+                COALESCE(b.property_bnbo_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
                 COALESCE(b.status_category, NULL) as bnbo_status_category,
                 
                 COALESCE(w.property_wetland_area_m2, 0) as property_wetland_total_m2,
-                COALESCE(w.property_wetland_water_covered_m2, 0) as property_area_wetlands_covered_by_water,
-                COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
+                COALESCE(w.property_wetland_covered_m2, 0) as property_area_wetlands_covered_by_water,
+                COALESCE(w.property_wetland_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
                 COALESCE(w.toerv_pct, NULL) as wetland_type,
                 
                 -- Property environmental summary flag
@@ -272,3 +270,22 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info(f"   Fields with environmental features: {stats['field_level']['fields_with_environmental_features']:,}")
         
         return stats
+
+    def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
+        """
+        Stage 4 validation approach: Do NOT validate area preservation.
+        
+        Stage 4 intentionally creates comprehensive datasets with ALL fields/properties,
+        while Stage 3 only contains fields with environmental features.
+        
+        This is by design - Stage 4 adds zero-value environmental data for fields
+        without environmental features, so area/count comparison is meaningless.
+        """
+        # Disable area validation for Stage 4 - it's expected to have different totals
+        self.log.info("ℹ️ Stage 4 validation: Skipping area validation (comprehensive dataset includes ALL fields)")
+        return None
+
+    def _get_main_output_table(self) -> Optional[str]:
+        """Return the main output table for validation."""
+        # Since we skip validation, this won't be called
+        return None
