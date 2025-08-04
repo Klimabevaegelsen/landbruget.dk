@@ -146,6 +146,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     WHEN geometry_wkt IS NOT NULL THEN ST_GeomFromText(geometry_wkt)
                     ELSE NULL
                 END as geom
+            WHERE crop_code IS NOT NULL
             """,
             "fields_raw",
         )
