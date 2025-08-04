@@ -560,6 +560,10 @@ jobs:
             ARGS="$ARGS --progress"
           fi
           
+          # MINIMAL FIX: Add month-year suffix to bronze directory to prevent matrix job overwrites
+          export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
+          echo "🗓️ Using unique bronze directory suffix: $BRONZE_MONTH_SUFFIX"
+          
           # Build command
           CMD="python -m main --steps animal_movements --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
           
