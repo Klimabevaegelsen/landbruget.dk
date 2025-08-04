@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       layer_types:
-        description: 'Layer types to process (comma-separated: markblokke,marker,smaabiotoper,organic_areas or "all")'
+        description: 'Layer types to process (comma-separated: markblokke,marker,smaabiotoper,organic_areas,organic_subsidies,grassland_subsidies,environmental_subsidies or "all")'
         required: false
         default: 'all'
       years:
@@ -34,7 +34,7 @@ jobs:
         run: |
           # Define all layer configurations
           if [ "${{ github.event.inputs.layer_types }}" = "all" ]; then
-            layer_types="markblokke,marker,smaabiotoper,organic_areas"
+            layer_types="markblokke,marker,smaabiotoper,organic_areas,organic_subsidies,grassland_subsidies,environmental_subsidies"
           else
             layer_types="${{ github.event.inputs.layer_types }}"
           fi
@@ -72,6 +72,27 @@ jobs:
                   years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
                 fi
                 ;;
+              "organic_subsidies")
+                if [ "${{ github.event.inputs.years }}" = "all" ]; then
+                  years=$(seq 2019 2024)
+                else
+                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
+                fi
+                ;;
+              "grassland_subsidies")
+                if [ "${{ github.event.inputs.years }}" = "all" ]; then
+                  years=$(seq 2019 2024)
+                else
+                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
+                fi
+                ;;
+              "environmental_subsidies")
+                if [ "${{ github.event.inputs.years }}" = "all" ]; then
+                  years=$(seq 2019 2023)
+                else
+                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
+                fi
+                ;;
             esac
             
             for year in $years; do
@@ -97,6 +118,21 @@ jobs:
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
                   fi
                   ;;
+                "organic_subsidies")
+                  if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
+                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                  fi
+                  ;;
+                "grassland_subsidies")
+                  if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
+                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                  fi
+                  ;;
+                "environmental_subsidies")
+                  if [ $year -ge 2019 ] && [ $year -le 2023 ]; then
+                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                  fi
+                  ;;
               esac
             done
           done
@@ -110,6 +146,7 @@ jobs:
   process:
     needs: generate-matrix
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.stage == 'bronze' || github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
     strategy:
       fail-fast: false
       max-parallel: 10  # Limit concurrent jobs to avoid overwhelming the FVM server
@@ -166,8 +203,62 @@ jobs:
           echo "❌ Failed to process ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
           exit 1
 
+  enrichment-matrix:
+    needs: process
+    runs-on: ubuntu-latest
+    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && always() && !failure() }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5  # Limit concurrent enrichment jobs
+      matrix:
+        year: [2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+    
+    name: Enrich Fields ${{ matrix.year }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run Field Enrichment for ${{ matrix.year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌱 Running enrichment for year ${{ matrix.year }}..."
+          python -m unified_pipeline \
+            -s fvm_wfs \
+            -j enrichment \
+            --fvm-year ${{ matrix.year }}
+
+      - name: Report enrichment completion
+        if: success()
+        run: |
+          echo "✅ Successfully enriched fields for year ${{ matrix.year }}"
+
+      - name: Report enrichment failure
+        if: failure()
+        run: |
+          echo "❌ Failed to enrich fields for year ${{ matrix.year }}"
+          exit 1
+
   summary:
-    needs: [generate-matrix, process]
+    needs: [generate-matrix, enrichment-matrix]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -184,7 +275,11 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Performance Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- Processing: 73 layer/year matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
-          echo "- Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
-          echo "- Total time for all 43 layers: ~15-20 minutes (vs 45+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
+          echo "- Total processing time for all 73 layers: ~25-30 minutes (vs 70+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
+          echo "- Enrichment: 13 year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
+          echo "- Each enrichment job processes only its specific year (2012-2024)" >> $GITHUB_STEP_SUMMARY
+          echo "- Organic enrichment adds ~92% organic field coverage to marker data" >> $GITHUB_STEP_SUMMARY
+          echo "- Subsidy UUID enrichment enables direct field linkage for analysis" >> $GITHUB_STEP_SUMMARY
           echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 

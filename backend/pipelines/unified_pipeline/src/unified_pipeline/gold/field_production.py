@@ -1057,9 +1057,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
-                COALESCE(field_uuid, 'legacy_' || CAST({cvr_number_select} AS VARCHAR) || '_' || CAST({block_id_select} AS VARCHAR) || '_' || CAST({field_id_select} AS VARCHAR)) as primary_field_id
+                field_uuid as primary_field_id
             FROM {source_table}
             WHERE {geometry_where}
+            AND field_uuid IS NOT NULL
         """
 
         self.conn.execute(create_query)
@@ -1105,9 +1106,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
-                COALESCE(field_uuid, 'legacy_' || CAST({cvr_number_select} AS VARCHAR) || '_' || CAST({block_id_select} AS VARCHAR) || '_' || CAST({field_id_select} AS VARCHAR)) as primary_field_id
+                field_uuid as primary_field_id
             FROM read_parquet('{temp_file}')
             WHERE {geometry_where}
+            AND field_uuid IS NOT NULL
         """
 
         self.conn.execute(create_query)

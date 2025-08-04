@@ -25,6 +25,26 @@ def _get_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        
+        # Try alternative import paths that might work in different environments
+        try:
+            import sys
+            import os
+            
+            # Add unified pipeline to path if it exists
+            current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            unified_pipeline_path = os.path.join(current_dir, "unified_pipeline", "src")
+            if os.path.exists(unified_pipeline_path) and unified_pipeline_path not in sys.path:
+                sys.path.insert(0, unified_pipeline_path)
+                logger.info(f"Added unified pipeline path: {unified_pipeline_path}")
+            
+            from unified_pipeline.util.gcs_access import GCSDataAccess
+            logger.info("✅ Successfully imported GCSDataAccess via alternative path")
+            return GCSDataAccess
+            
+        except ImportError as e2:
+            logger.warning(f"⚠️ Alternative import also failed: {e2}")
+        
         logger.warning(
             "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
         )
@@ -122,15 +142,15 @@ class DriveStorageManager:
                     with self.gcs_access.fs.open(gcs_path, "wb") as gcs_file:
                         gcs_file.write(file_bytes)
 
-                    logger.debug(
-                        f"Saved file to GCS (optimized): {gcs_path} ({len(file_bytes)} bytes)"
+                    logger.info(
+                        f"✅ Saved file to GCS (optimized): {gcs_path} ({len(file_bytes)} bytes)"
                     )
                 else:
                     # Use fallback GCS storage
                     blob = self.gcs_bucket.blob(str(path))
                     blob.upload_from_string(file_bytes)
-                    logger.debug(
-                        f"Saved file to GCS (fallback): gs://{self.bucket_name}/{path} ({len(file_bytes)} bytes)"
+                    logger.info(
+                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{path} ({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage

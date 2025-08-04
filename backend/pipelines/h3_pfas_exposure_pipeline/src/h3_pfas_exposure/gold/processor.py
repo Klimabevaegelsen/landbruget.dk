@@ -991,7 +991,7 @@ class H3PFASProcessorRefactored:
         )
 
         # Step 5: Validate and save results
-        result_count = result_saver.save_kommune_results(kommune_results_table, year)
+        result_count = result_saver.save_kommune_results(kommune_results_table, year, kommune_table)
 
         # Step 6: Clean up intermediate tables
         self._cleanup_year_tables(year)
@@ -1020,6 +1020,7 @@ class H3PFASProcessorRefactored:
                     f.cvr_number,
                     f.block_id,
                     f.field_id,
+                    f.field_uuid,
                     f.crop_code,
                     f.crop_name,
                     ST_Area_Spheroid(
@@ -1056,11 +1057,8 @@ class H3PFASProcessorRefactored:
                     (fki.intersection_area_ha / fki.field_area_ha) * 
                         COALESCE(p.glyphosate_containing_pesticide_belastning_applied, 0) as weighted_glyphosate_belastning
                 FROM field_kommune_intersections fki
-                LEFT JOIN {pesticide_table} p ON (
-                    fki.cvr_number = p.cvr AND 
-                    fki.block_id = p.extracted_block_id AND 
-                    fki.field_id = p.extracted_field_id
-                )
+                LEFT JOIN {pesticide_table} p ON fki.field_uuid = p.field_uuid 
+                    AND fki.cvr_number = p.cvr
             )
             SELECT
                 kommune_code,
@@ -1294,16 +1292,22 @@ class H3PFASProcessorRefactored:
 
     def _process_field_data(self):
         """Process field data with geometry preparation."""
-        # Get pesticide field lookup
+        # Check if pesticide data has field_uuid
+        pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticide_raw)").fetchall()
+        pest_column_names = [col[1] for col in pest_columns]
+        has_field_uuid = "field_uuid" in pest_column_names
+        
+        if not has_field_uuid:
+            raise ValueError("field_uuid column is required in pesticide data for H3 PFAS analysis")
+        
+        # Get pesticide field lookup - UUID based
         self.conn.execute("""
             CREATE OR REPLACE TABLE pesticide_field_lookup AS
             SELECT DISTINCT
-                CompanyRegistrationNumber as cvr,
-                REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as field_id,
-                REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as block_id
+                field_uuid,
+                CompanyRegistrationNumber as cvr
             FROM temp_pesticide_raw
-            WHERE MatchedFieldID IS NOT NULL
-            AND MatchedBlockID IS NOT NULL
+            WHERE field_uuid IS NOT NULL
             AND CompanyRegistrationNumber IS NOT NULL
         """)
 
@@ -1348,24 +1352,26 @@ class H3PFASProcessorRefactored:
             cvr_join_condition = "FALSE"
             cvr_condition = "TRUE"
 
-        # Handle block ID column name dynamically
+        # Handle block ID column name dynamically (for output only)
         if "block_id" in fvm_column_names:
             block_field_select = "f.block_id"
-            block_join_condition = "f.block_id = p.block_id"
-            block_condition = "f.block_id IS NOT NULL"
         elif "block_number" in fvm_column_names:
             block_field_select = "f.block_number as block_id"
-            block_join_condition = "f.block_number = p.block_id"
-            block_condition = "f.block_number IS NOT NULL"
         else:
             block_field_select = "NULL as block_id"
-            block_join_condition = "FALSE"
-            block_condition = "TRUE"
 
         self.log.info(f"🔍 Using geometry column: {geometry_column}")
         self.log.info(f"🔍 Using area column: {area_field_select}")
         self.log.info(f"🔍 Using CVR column: {cvr_field_select}")
         self.log.info(f"🔍 Using block ID column: {block_field_select}")
+
+        # Require field UUID column for proper field identification
+        if "field_uuid" not in fvm_column_names:
+            raise ValueError("field_uuid column is required in FVM data for H3 PFAS analysis")
+        
+        field_uuid_select = "f.field_uuid"
+        primary_field_id_select = "f.field_uuid as primary_field_id"
+        self.log.info("✅ Using field_uuid for unique field identification")
 
         # Process fields with geometry preparation
         self.conn.execute(f"""
@@ -1377,18 +1383,18 @@ class H3PFASProcessorRefactored:
                 {block_field_select},
                 f.crop_code,
                 f.crop_name,
-                {geometry_field_select}
+                {geometry_field_select},
+                -- Add field UUID support
+                {field_uuid_select},
+                {primary_field_id_select}
             FROM temp_fvm_raw f
-            INNER JOIN pesticide_field_lookup p ON (
-                {cvr_join_condition}
-                AND f.field_id = p.field_id
-                AND {block_join_condition}
-            )
+            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid 
+                AND {cvr_join_condition}
             WHERE {geometry_column} IS NOT NULL
             AND {geometry_validation}
             AND {area_condition}
             AND {cvr_condition}
-            AND {block_condition}
+            AND f.field_uuid IS NOT NULL
         """)
 
         # Use coordinate transformer to prepare geometries
@@ -1416,6 +1422,7 @@ class H3PFASProcessorRefactored:
                 AllocatedArea,
                 AllocationMethod,
                 MatchConfidence,
+                -- Extract field_id and block_id for reference (not used for joining)
                 REGEXP_EXTRACT(MatchedFieldID, 'marker_(.+)', 1) as extracted_field_id,
                 REGEXP_EXTRACT(MatchedBlockID, 'block_(.+)', 1) as extracted_block_id
             FROM temp_pesticide_raw

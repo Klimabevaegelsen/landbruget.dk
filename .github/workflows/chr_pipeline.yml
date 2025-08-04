@@ -19,6 +19,9 @@ on:
           - bronze_foundation
           - bronze_data_collection
           - silver_processing
+          - gold_processing
+          - veterinary_timeline
+          - transportation_analysis
           - stamdata
           - herds
           - herd_details
@@ -556,6 +559,10 @@ jobs:
           if [[ "${{ inputs.show_progress }}" == "true" ]]; then
             ARGS="$ARGS --progress"
           fi
+          
+          # MINIMAL FIX: Add month-year suffix to bronze directory to prevent matrix job overwrites
+          export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
+          echo "🗓️ Using unique bronze directory suffix: $BRONZE_MONTH_SUFFIX"
           
           # Build command
           CMD="python -m main --steps animal_movements --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
@@ -1110,10 +1117,206 @@ jobs:
           echo "📊 Processing data directly from GCS without local downloads"
           $CMD
 
-  # Job 6: Single Step Execution (for individual steps not covered above)
+  # Job 6: Gold Processing (Veterinary Timeline + Transportation Analysis)
+  gold-processing:
+    runs-on: ubuntu-latest
+    needs: [silver-processing]
+    if: ${{ always() && !cancelled() && (needs.silver-processing.result == 'success' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') && ((inputs.step || 'all') == 'all' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+          
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
+
+      - id: 'auth-gold'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          
+          # Set up environment for gold processing
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          
+          mkdir -p /tmp/data/silver/chr
+          mkdir -p /tmp/data/gold/chr
+
+      - name: Find latest silver data
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          echo "🔍 Finding latest silver data in GCS..."
+          
+          # If we have a bronze timestamp (from silver processing), use that
+          if [ -f /tmp/bronze_timestamp.txt ]; then
+            BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+            echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
+            
+            # Check if corresponding silver data exists
+            SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$BRONZE_TIMESTAMP/"
+            if gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
+              echo "SILVER_TIMESTAMP=$BRONZE_TIMESTAMP" >> $GITHUB_ENV
+              echo "Found silver data at: $SILVER_PATH"
+            else
+              echo "⚠️ No silver data found for bronze timestamp $BRONZE_TIMESTAMP"
+              echo "Looking for latest silver data..."
+              LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+              echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
+              echo "Using latest silver data: $LATEST_SILVER"
+            fi
+          else
+            # Find latest silver data
+            echo "No bronze timestamp found, finding latest silver data..."
+            LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+            echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
+            echo "Using latest silver data: $LATEST_SILVER"
+          fi
+
+      - name: Download bronze timestamp artifact (if available)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: bronze-timestamp
+          path: /tmp/
+
+      - name: Verify silver data exists
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          echo "🔍 Verifying silver data exists for timestamp: $SILVER_TIMESTAMP"
+          
+          SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$SILVER_TIMESTAMP/"
+          echo "Checking GCS path: $SILVER_PATH"
+          
+          if ! gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
+            echo "❌ No silver data found for timestamp: $SILVER_TIMESTAMP"
+            echo "Available silver timestamps:"
+            gsutil ls gs://$GCS_BUCKET/silver/chr/ | head -10
+            exit 1
+          fi
+          
+          echo "✅ Silver data verified at: $SILVER_PATH"
+          
+          # List key files to verify completeness
+          echo "📋 Available silver files:"
+          gsutil ls "$SILVER_PATH" | head -20
+
+      - name: Run gold processing (Veterinary Timeline)
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GITHUB_ACTIONS: "true"
+        run: |
+          echo "🥇 Starting Gold Processing (Veterinary Timeline + Transportation Analysis)..."
+          echo "Using silver timestamp: $SILVER_TIMESTAMP"
+          
+          # Generate gold timestamp
+          GOLD_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "Gold timestamp: $GOLD_TIMESTAMP"
+          
+          # Run gold processing standalone
+          python -c "
+          import sys
+          import logging
+          from pathlib import Path
+          from gold.chr_gold_processing import process_gold_data
+          
+          logging.basicConfig(level=logging.INFO)
+          
+          # Process gold data using the silver timestamp
+          success = process_gold_data(
+              export_timestamp='$GOLD_TIMESTAMP',
+              silver_dir=None  # Will auto-find from GCS
+          )
+          
+          if success:
+              print('✅ Gold processing completed successfully')
+              sys.exit(0)
+          else:
+              print('❌ Gold processing failed')
+              sys.exit(1)
+          "
+
+      - name: Verify gold output
+        working-directory: backend/pipelines/chr_pipeline  
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          echo "🔍 Verifying gold output..."
+          
+          GOLD_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          GOLD_PATH="gs://$GCS_BUCKET/gold/chr/"
+          
+          echo "Checking for gold output in: $GOLD_PATH"
+          if gsutil ls "$GOLD_PATH" > /dev/null 2>&1; then
+            echo "📋 Gold layer contents:"
+            gsutil ls -la "$GOLD_PATH" | tail -10
+            
+            # Check for veterinary timeline specifically
+            if gsutil ls "${GOLD_PATH}*/veterinary_timeline.parquet" > /dev/null 2>&1; then
+              echo "✅ Veterinary timeline successfully created"
+              
+              # Get file size
+              TIMELINE_SIZE=$(gsutil ls -la "${GOLD_PATH}*/veterinary_timeline.parquet" | awk '{print $1}' | tail -1)
+              echo "📊 Timeline file size: $TIMELINE_SIZE bytes"
+            else
+              echo "⚠️ Veterinary timeline not found in gold output"
+            fi
+            
+            # Check for transportation analysis specifically
+            if gsutil ls "${GOLD_PATH}*/transportation_analysis.parquet" > /dev/null 2>&1; then
+              echo "✅ Transportation analysis successfully created"
+              
+              # Get file size
+              TRANSPORT_SIZE=$(gsutil ls -la "${GOLD_PATH}*/transportation_analysis.parquet" | awk '{print $1}' | tail -1)
+              echo "📊 Transportation analysis file size: $TRANSPORT_SIZE bytes"
+            else
+              echo "⚠️ Transportation analysis not found in gold output"
+            fi
+          else
+            echo "⚠️ No gold output found in GCS"
+          fi
+
+  # Job 7: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -1238,10 +1441,10 @@ jobs:
           echo "💡 For animal_movements, consider using year_range parameter (e.g., '2023' or '2022-2023') to process smaller chunks"
           exit 1
 
-  # Job 7: Pipeline Summary and Optimization Report
+  # Job 8: Pipeline Summary and Optimization Report
   pipeline-summary:
     runs-on: ubuntu-latest
-    needs: [generate-monthly-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing]
+    needs: [generate-monthly-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing, gold-processing]
     if: always() && !cancelled()
     
     steps:
@@ -1301,6 +1504,7 @@ jobs:
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
           echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
           echo "| Silver Processing | ${{ needs.silver-processing.result || 'skipped' }} |"
+          echo "| Gold Processing (Vet Timeline + Transport Analysis) | ${{ needs.gold-processing.result || 'skipped' }} |"
           echo ""
           
           # Determine overall success
@@ -1325,6 +1529,9 @@ jobs:
           fi
           if [[ "${{ needs.silver-processing.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS silver"
+          fi
+          if [[ "${{ needs.gold-processing.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS gold"
           fi
           
           if [[ -n "$FAILED_JOBS" ]]; then

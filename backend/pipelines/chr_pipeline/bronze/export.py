@@ -48,9 +48,8 @@ _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 
 # Get timestamp for this export run - use shared timestamp from workflow if available
 EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-logger.info(
-    f"Using export timestamp: {EXPORT_TIMESTAMP} (from {'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'})"
-)
+timestamp_source = 'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'
+logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
 
 
 def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
@@ -332,10 +331,16 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning(f"Error during post-export cleanup: {e}")
 
 
-def _save_to_gcs_streaming(filename: str, data_list: List[Any]):
-    """Save large datasets to GCS using streaming to avoid memory issues."""
+def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str = ""):
+    """Save large datasets to GCS using streaming to avoid memory issues.
+    
+    Args:
+        filename: Target filename in GCS
+        data_list: List of data items to save
+        path_suffix: Optional suffix to add to the bronze directory path (for matrix job separation)
+    """
     bucket = gcs_client.bucket(GCS_BUCKET)
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}")
+    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{filename}")
 
     # Estimate data size for logging
     import sys

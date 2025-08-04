@@ -29,6 +29,10 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.arbejdstilsynet_inspections import (
+    ArbjdstilsynetInspectionsGold,
+    ArbjdstilsynetInspectionsGoldConfig,
+)
 from unified_pipeline.gold.cvr_enrichment import (
     CVREnrichmentGold,
     CVREnrichmentGoldConfig,
@@ -44,6 +48,14 @@ from unified_pipeline.gold.field_production import (
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig,
+)
+from unified_pipeline.gold.worker_safety import (
+    WorkerSafetyGold,
+    WorkerSafetyGoldConfig,
+)
+from unified_pipeline.gold.work_permits import (
+    WorkPermitsGold,
+    WorkPermitsGoldConfig,
 )
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
@@ -138,15 +150,23 @@ async def execute_pipeline_jobs(
                         )
 
             elif issubclass(job_cls, SilverJobInterface):
-                # Silver stage - pass in-memory data if available and collect results
-                result = await instance.run(bronze_data=bronze_data)
+                # Check if this is an enrichment-only job
+                if stage == cli.Stage.enrichment and hasattr(instance, 'run_enrichment_only'):
+                    # Enrichment stage - run only enrichment functions
+                    result = await instance.run_enrichment_only()
+                    stage_description = "enrichment-only"
+                else:
+                    # Silver stage - pass in-memory data if available and collect results
+                    result = await instance.run(bronze_data=bronze_data)
+                    stage_description = f"{'in-memory' if bronze_data is not None else 'storage'} data"
+                
                 if result is not None:
                     job_successful = True
                     # Collect silver data for gold stage
                     dataset_name = instance.config.dataset
                     silver_data[dataset_name] = result
                     log.info(
-                        f"Silver job {job_cls.__name__} completed successfully using {'in-memory' if bronze_data is not None else 'storage'} data"
+                        f"Silver job {job_cls.__name__} completed successfully using {stage_description}"
                     )
                 else:
                     log.error(f"Silver job {job_cls.__name__} failed - no data returned")
@@ -275,6 +295,7 @@ def execute(cli_config: cli.CliConfig) -> int:
         cli.Source.fvm_wfs: {
             cli.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
             cli.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli.Stage.enrichment: [(FVMWFSSilver, FVMWFSSilverConfig)],
             cli.Stage.all: [
                 (FVMWFSBronze, FVMWFSBronzeConfig),
                 (FVMWFSSilver, FVMWFSSilverConfig),
@@ -361,6 +382,27 @@ def execute(cli_config: cli.CliConfig) -> int:
                 (DMISilver, DMISilverConfig),
             ],
         },
+        cli.Source.arbejdstilsynet_inspections: {
+            cli.Stage.gold: [(ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires arbejdstilsynet_inspections silver data to be available
+                (ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig),
+            ],
+        },
+        cli.Source.worker_safety: {
+            cli.Stage.gold: [(WorkerSafetyGold, WorkerSafetyGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires worker safety silver data to be available
+                (WorkerSafetyGold, WorkerSafetyGoldConfig),
+            ],
+        },
+        cli.Source.work_permits: {
+            cli.Stage.gold: [(WorkPermitsGold, WorkPermitsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires work permits silver data from drive pipeline to be available
+                (WorkPermitsGold, WorkPermitsGoldConfig),
+            ],
+        },
     }
 
     # Retrieve jobs for given source and stage
@@ -429,13 +471,35 @@ def execute(cli_config: cli.CliConfig) -> int:
     help="Year filter for FVM matrix jobs (e.g., 2024).",
     required=False,
 )
-
+@click.option(
+    "--test-limit",
+    "test_limit",
+    type=int,
+    help="Limit number of CVR numbers to process for testing (CVR enrichment only).",
+    required=False,
+)
+@click.option(
+    "--parse-financial-xml/--no-parse-financial-xml",
+    "parse_financial_xml",
+    default=True,
+    help="Whether to download and parse XML financial documents (CVR enrichment only).",
+)
+@click.option(
+    "--max-financial-documents",
+    "max_financial_documents",
+    type=int,
+    default=10,
+    help="Maximum number of financial documents to fetch per company (CVR enrichment only).",
+)
 def run_cli(
     env: str,
     source: str,
     stage: str,
     fvm_layer_type: str = None,
     fvm_year: int = None,
+    test_limit: int = None,
+    parse_financial_xml: bool = True,
+    max_financial_documents: int = 10,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -461,6 +525,9 @@ def run_cli(
         stage=cli.Stage(stage),
         fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
         fvm_year=fvm_year,
+        test_limit=test_limit,
+        parse_financial_xml=parse_financial_xml,
+        max_financial_documents=max_financial_documents,
     )
     print(app_config)
     exit_code = execute(app_config)

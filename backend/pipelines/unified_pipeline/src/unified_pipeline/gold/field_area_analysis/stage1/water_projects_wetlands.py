@@ -24,19 +24,24 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load Stage 0 pre-filtered wetlands and water projects datasets."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load Stage 0 pre-filtered wetlands (1.6M → ~200K, 85% reduction)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
-        stage0_wetlands_dataset = CONFIG.stage_outputs["wetlands_prefiltered"]
+        stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
         self.gcs_access.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
+        self.log.info(f"✅ Loaded wetlands from {stage0_wetlands_dataset}")
 
         # Load Stage 0 pre-filtered water projects (2.4K → ~500, 80% reduction)
         self.log.info("Loading Stage 0 pre-filtered water projects dataset...")
-        stage0_water_projects_dataset = CONFIG.stage_outputs["water_projects_prefiltered"]
+        stage0_water_projects_dataset = updated_outputs["water_projects_prefiltered"]
         stage0_water_projects_path = self._get_latest_gold_path(stage0_water_projects_dataset)
         self.gcs_access.query_parquet_direct(
             stage0_water_projects_path, "SELECT *", "water_projects_raw"
         )
+        self.log.info(f"✅ Loaded water projects from {stage0_water_projects_dataset}")
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered wetlands and water projects!")
         self.log.info(
@@ -214,7 +219,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 ST_Area_Spheroid(wp.geometry) as project_area_m2
             FROM wetlands_batch wb
             JOIN water_projects wp ON ST_Intersects(wb.geometry, wp.geometry)
-            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 1.0  -- Filter tiny intersections
+            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 0  -- Keep all intersections
             """
 
             self.conn.execute(batch_query)

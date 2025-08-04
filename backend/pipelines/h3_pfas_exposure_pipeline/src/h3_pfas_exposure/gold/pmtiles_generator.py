@@ -88,7 +88,7 @@ class H3PMTilesGenerator:
             self._cleanup_temp_files_for_year(year)
             return None
 
-    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int | str) -> str | None:
+    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
         """Generate PMTiles for kommune (municipality) data."""
         self.log.info(f"🏛️ Generating kommune PMTiles for year {year}")
 
@@ -112,7 +112,7 @@ class H3PMTilesGenerator:
             self.log.info(f"📊 Processing {count:,} kommuner for PMTiles generation")
 
             # Create GeoJSON for kommune data
-            geojson_path = self._create_kommune_geojson(results_table, year)
+            geojson_path = self._create_kommune_geojson(results_table, year, kommune_boundaries_table)
             if not geojson_path:
                 return None
 
@@ -504,7 +504,7 @@ class H3PMTilesGenerator:
             self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
             self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
 
-    def _create_kommune_geojson(self, results_table: str, year: int | str) -> str | None:
+    def _create_kommune_geojson(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
         """Create GeoJSON from kommune results table."""
         try:
             # Create temporary file for GeoJSON
@@ -517,19 +517,23 @@ class H3PMTilesGenerator:
 
             self.log.info(f"📄 Creating kommune GeoJSON: {geojson_path}")
 
-            # Always try to use actual kommune polygon geometries from kommune_boundaries table
-            # The results table only contains aggregated data and centroids, not polygon geometries
-            self.log.info(
-                "✅ Using actual kommune polygon geometries from kommune_boundaries table"
-            )
-
-            # Check if kommune_boundaries table exists
+            # Check if kommune_boundaries table exists first
+            has_kommune_boundaries = False
             try:
-                self.conn.execute("SELECT COUNT(*) FROM kommune_boundaries").fetchone()
+                # Debug: List all available tables
+                tables = self.conn.execute("SHOW TABLES").fetchall()
+                table_names = [table[0] for table in tables]
+                self.log.info(f"🔍 Available tables: {table_names}")
+                
+                count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_boundaries_table}").fetchone()[0]
                 has_kommune_boundaries = True
-            except Exception:
+                self.log.info(
+                    f"✅ Using actual kommune polygon geometries from {kommune_boundaries_table} table ({count} kommuner)"
+                )
+            except Exception as e:
                 has_kommune_boundaries = False
-                self.log.warning("⚠️ kommune_boundaries table not found, falling back to centroids")
+                self.log.warning(f"⚠️ {kommune_boundaries_table} table not accessible: {e}")
+                self.log.info("📍 Falling back to centroids as point geometries")
 
             if has_kommune_boundaries:
                 # Use actual kommune geometries from the boundaries table
@@ -537,7 +541,7 @@ class H3PMTilesGenerator:
                     ST_AsGeoJSON(kb.geometry)::JSON
                 """
                 geometry_condition = "kb.geometry IS NOT NULL"
-                join_clause = "LEFT JOIN kommune_boundaries kb ON r.kommune_code = kb.kommune_code"
+                join_clause = f"LEFT JOIN {kommune_boundaries_table} kb ON r.kommune_code = kb.kommune_code"
             else:
                 # Fallback to centroids as points if boundaries table is not available
                 geometry_select = """

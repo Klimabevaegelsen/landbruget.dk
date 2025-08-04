@@ -80,6 +80,9 @@ def initialize_consolidated_processing():
                 animal_count INTEGER,
                 movement_reasons TEXT,  -- JSON array of reasons
                 cattle_type_breakdown TEXT,  -- JSON object containing cattle type breakdown (koen field)
+                nation_codes_from TEXT,  -- JSON array of source country codes
+                nation_codes_to TEXT,    -- JSON array of destination country codes
+                is_international BOOLEAN,  -- Flag for easy filtering of international movements
                 data_source VARCHAR DEFAULT 'chr_dyr'
             )
         """)
@@ -113,8 +116,9 @@ def add_to_consolidated_table(movement_data):
                 """
                 INSERT INTO consolidated_movements 
                 (reporting_herd_number, movement_date, counterparty_herd, movement_type, 
-                 animal_count, movement_reasons, cattle_type_breakdown)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                 animal_count, movement_reasons, cattle_type_breakdown, 
+                 nation_codes_from, nation_codes_to, is_international)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 [
                     reporting_herd,
@@ -126,6 +130,9 @@ def add_to_consolidated_table(movement_data):
                         [str(r) for r in movement.get("movement_reasons", []) if r is not None], ensure_ascii=False
                     ),
                     json.dumps(movement.get("cattle_type_breakdown", {}), ensure_ascii=False),
+                    json.dumps(movement.get("nation_codes_from", []), ensure_ascii=False),
+                    json.dumps(movement.get("nation_codes_to", []), ensure_ascii=False),
+                    movement.get("is_international", False),
                 ],
             )
 
@@ -153,11 +160,16 @@ def finalize_consolidated_processing():
 
         logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
-        # Save consolidated data directly to GCS using the unified pipeline pattern
+        # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
         from .export import EXPORT_TIMESTAMP
+        import os
 
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        gcs_path = f"gs://{bucket_name}/bronze/chr/{EXPORT_TIMESTAMP}/chr_dyr_movement_summaries.parquet"
+        
+        # Add month suffix if matrix job (environment variable set by GitHub Actions)
+        month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
+        bronze_dir = f"{EXPORT_TIMESTAMP}{month_suffix}"
+        gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir}/chr_dyr_movement_summaries.parquet"
 
         # Use the unified GCS access pattern - export directly to parquet
         _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)

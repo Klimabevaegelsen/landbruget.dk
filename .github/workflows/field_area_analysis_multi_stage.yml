@@ -19,6 +19,15 @@ on:
         description: 'Specific job within stage (optional)'
         required: false
         type: string
+      agricultural_fields_year:
+        description: 'Agricultural fields year to process'
+        required: false
+        type: choice
+        options:
+          - '2024'
+          - '2025'
+          - 'both'
+        default: 'both'
   schedule:
     - cron: '0 2 * * 1'  # Weekly Monday 2AM
 
@@ -34,6 +43,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,8 +68,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Properties Pre-filtering (Critical - 90% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=properties_prefilter
 
@@ -67,6 +82,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -89,8 +107,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Wetlands Pre-filtering (85% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=wetlands_prefilter
 
@@ -100,6 +121,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -122,8 +146,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run BNBO Pre-filtering (70% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=bnbo_prefilter
 
@@ -133,6 +160,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,8 +185,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Water Projects Pre-filtering (80% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=water_projects_prefilter
 
@@ -166,6 +199,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -188,8 +224,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Soil Types Pre-filtering (40% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=soil_types_prefilter
 
@@ -201,6 +240,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -223,8 +265,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Water Projects × BNBO Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=1 --job=water_projects_bnbo
 
@@ -235,6 +280,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -257,8 +305,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Water Projects × Wetlands Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=1 --job=water_projects_wetlands
 
@@ -269,6 +320,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -312,8 +366,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Fields × Properties Intersection
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=1 --job=fields_properties
 
@@ -330,6 +387,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -352,8 +412,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Fields × Soil Types Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=1 --job=fields_soil_types
 
@@ -365,6 +428,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -387,8 +453,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Fields × BNBO Water Coverage
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=2 --job=fields_bnbo_water
 
@@ -399,6 +468,9 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -421,19 +493,24 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Fields × Wetland Water Coverage
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=2 --job=fields_wetland_water
 
-  # Stage 3: Final Analysis (Parallel)
+  # Stage 3: Final Analysis (Parallel) - Can run independently using latest Stage 1&2 outputs
   stage3-final-bnbo:
-    needs: [stage2-fields-bnbo-water, stage1-fields-properties]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -456,18 +533,23 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Final BNBO Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_bnbo
 
   stage3-final-wetland:
-    needs: [stage2-fields-wetland-water, stage1-fields-properties]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -490,19 +572,24 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Final Wetland Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_wetland
 
-  # Stage 4: Consolidation
+  # Stage 4: Consolidation - Can run independently using latest Stage 1&3 outputs
   stage4-consolidate:
-    needs: [stage1-fields-soil-types, stage3-final-bnbo, stage3-final-wetland]
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -525,8 +612,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Consolidate Results
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
           cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=4 --job=consolidate
 

@@ -422,7 +422,7 @@ class FieldAreaAnalysisRedesigned:
                     p.area_share as property_area_share
                 FROM fields_with_wetlands f
                 LEFT JOIN field_property_results p 
-                    ON f.field_id = p.field_id AND f.block_id = p.block_id
+                    ON f.field_uuid = p.field_uuid
             """)
         else:
             self.conn.execute("""
