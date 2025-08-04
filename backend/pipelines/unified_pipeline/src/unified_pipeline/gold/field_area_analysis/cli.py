@@ -176,15 +176,28 @@ Examples:
   # Run complete pipeline
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=all
   
+  # Run with area validation disabled (if needed)
+  python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --disable-area-validation
+  
   # Use custom bucket
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --job=fields_properties --bucket=my-bucket
 
 Stage/Job combinations:
-  Stage 0: properties_prefilter, bnbo_prefilter, wetlands_prefilter, water_projects_prefilter
-  Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, fields_soil_types
-  Stage 2: fields_bnbo_water, fields_wetland_water (uses Stage 1 foundation data)
-  Stage 3: final_bnbo, final_wetland
-  Stage 4: consolidate
+  Stage 0: properties_prefilter, bnbo_prefilter, wetlands_prefilter, water_projects_prefilter (no validation)
+  Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, fields_soil_types (validation by default)
+  Stage 2: fields_bnbo_water, fields_wetland_water (validation by default)
+  Stage 3: final_bnbo, final_wetland (validation by default)
+  Stage 4: consolidate (validation by default)
+
+Area validation (stages 1-4 only, ENABLED BY DEFAULT):
+  --disable-area-validation: Disable area validation (enabled by default for data integrity)
+  --area-validation-tolerance-pct: Maximum acceptable area difference (default: 1.0%)
+  --no-fail-on-validation-error: Don't fail pipeline on validation errors (default: fails pipeline)
+  
+  Environment variables (override defaults):
+    ENABLE_AREA_VALIDATION=false     # Disable validation globally
+    AREA_VALIDATION_TOLERANCE_PCT=2.0 # Set custom tolerance
+    FAIL_ON_VALIDATION_ERROR=false   # Disable pipeline failure on validation errors
         """,
     )
 
@@ -216,6 +229,26 @@ Stage/Job combinations:
     )
 
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    
+    # Area validation arguments (enabled by default for data integrity)
+    parser.add_argument(
+        "--disable-area-validation", 
+        action="store_true", 
+        help="Disable area validation (validation is enabled by default)"
+    )
+    
+    parser.add_argument(
+        "--area-validation-tolerance-pct", 
+        type=float, 
+        default=1.0, 
+        help="Area validation tolerance percentage (default: 1.0%%)"
+    )
+    
+    parser.add_argument(
+        "--no-fail-on-validation-error", 
+        action="store_true", 
+        help="Don't fail pipeline on validation errors, just warn (default: fails pipeline)"
+    )
 
     return parser
 
@@ -235,6 +268,9 @@ async def main():
         "max_memory_gb": args.max_memory_gb,
         "max_threads": args.max_threads,
         "batch_size": args.batch_size,
+        "enable_area_validation": not args.disable_area_validation,  # Enabled by default, disabled with flag
+        "area_validation_tolerance_pct": args.area_validation_tolerance_pct,
+        "fail_on_validation_error": not args.no_fail_on_validation_error,  # Fails by default, disabled with flag
     }
 
     if args.bucket:
@@ -247,6 +283,10 @@ async def main():
     logger.info(f"   Max Memory: {config.max_memory_gb}GB")
     logger.info(f"   Max Threads: {config.max_threads}")
     logger.info(f"   Batch Size: {config.batch_size:,}")
+    logger.info(f"   Area Validation: {'ENABLED (default)' if config.enable_area_validation else 'DISABLED'}")
+    if config.enable_area_validation:
+        logger.info(f"   Validation Tolerance: {config.area_validation_tolerance_pct}%")
+        logger.info(f"   Fail on Validation Error: {'YES (default)' if config.fail_on_validation_error else 'NO (warn only)'}")
 
     try:
         if args.stage == "all":
