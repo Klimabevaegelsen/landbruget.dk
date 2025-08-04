@@ -119,9 +119,20 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
     
     def _should_validate_areas(self) -> bool:
         """Check if this stage should perform area validation."""
-        # Only validate if enabled and this is not stage 0 (pre-filtering doesn't preserve areas exactly)
-        return (self.area_validator is not None and 
-                not self.stage_name.startswith("Stage 0"))
+        # Skip validation for stages that intentionally filter/reduce the dataset
+        if self.area_validator is None:
+            return False
+            
+        # Stage 0: Pre-filtering doesn't preserve areas exactly
+        if self.stage_name.startswith("Stage 0"):
+            return False
+            
+        # Stage 2: Filtering stages intentionally reduce dataset size (only fields with intersections)
+        if self.stage_name.startswith("Stage 2"):
+            return False
+            
+        # All other stages should preserve area (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
+        return True
     
     def _validate_stage_areas(self) -> None:
         """Validate areas after stage processing if validation is enabled."""
