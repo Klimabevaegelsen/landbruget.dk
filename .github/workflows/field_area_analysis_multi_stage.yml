@@ -503,7 +503,7 @@ jobs:
 
   # Stage 3: Final Analysis (Parallel) - Can run independently using latest Stage 1&2 outputs
   stage3-final-bnbo:
-    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage2-fields-bnbo-water", "stage1-fields-properties"]') || fromJSON('[]') }}
+    needs: ${{ github.event.inputs.stage == 'all' && 'stage2-fields-bnbo-water' || '' }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -543,7 +543,7 @@ jobs:
             --stage=3 --job=final_bnbo
 
   stage3-final-wetland:
-    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage2-fields-wetland-water", "stage1-fields-properties"]') || fromJSON('[]') }}
+    needs: ${{ github.event.inputs.stage == 'all' && 'stage2-fields-wetland-water' || '' }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -584,7 +584,7 @@ jobs:
 
   # Stage 4: Consolidation - Can run independently using latest Stage 1&3 outputs
   stage4-consolidate:
-    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage1-fields-soil-types", "stage3-final-bnbo", "stage3-final-wetland"]') || fromJSON('[]') }}
+    needs: ${{ github.event.inputs.stage == 'all' && 'stage3-final-wetland' || '' }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
