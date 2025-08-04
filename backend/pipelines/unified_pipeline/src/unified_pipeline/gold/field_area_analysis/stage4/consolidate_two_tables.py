@@ -179,13 +179,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 
                 -- Property-environmental intersection data from Stage 3 (0 if no environmental features)
                 COALESCE(b.property_bnbo_area_m2, 0) as property_bnbo_total_m2,
-                COALESCE(b.property_bnbo_covered_m2, 0) as property_area_bnbo_covered_by_water,
-                COALESCE(b.property_bnbo_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
+                COALESCE(b.property_bnbo_water_covered_m2, 0) as property_area_bnbo_covered_by_water,
+                COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
                 COALESCE(b.status_category, NULL) as bnbo_status_category,
                 
                 COALESCE(w.property_wetland_area_m2, 0) as property_wetland_total_m2,
-                COALESCE(w.property_wetland_covered_m2, 0) as property_area_wetlands_covered_by_water,
-                COALESCE(w.property_wetland_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
+                COALESCE(w.property_wetland_water_covered_m2, 0) as property_area_wetlands_covered_by_water,
+                COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
                 COALESCE(w.toerv_pct, NULL) as wetland_type,
                 
                 -- Property environmental summary flag
