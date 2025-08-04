@@ -273,19 +273,137 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
 
     def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
         """
-        Stage 4 validation approach: Do NOT validate area preservation.
+        Stage 4 validation: Validate against ORIGINAL agricultural fields.
         
-        Stage 4 intentionally creates comprehensive datasets with ALL fields/properties,
-        while Stage 3 only contains fields with environmental features.
-        
-        This is by design - Stage 4 adds zero-value environmental data for fields
-        without environmental features, so area/count comparison is meaningless.
+        Stage 4 creates comprehensive datasets with ALL fields, so we should validate
+        against the original field dataset (Stage 1 input), not filtered Stage 3 outputs.
         """
-        # Disable area validation for Stage 4 - it's expected to have different totals
-        self.log.info("ℹ️ Stage 4 validation: Skipping area validation (comprehensive dataset includes ALL fields)")
-        return None
+        if not self._should_validate_areas():
+            return None
+            
+        try:
+            # Get reference from original field-property intersections (which has all fields)
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(DISTINCT field_uuid) as field_count,
+                    SUM(DISTINCT field_area_m2) as total_area
+                FROM field_property_intersections
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            if fields_area_stats and fields_area_stats[0] and fields_area_stats[1]:
+                return {
+                    "total_area": fields_area_stats[1],
+                    "field_count": fields_area_stats[0]
+                }
+            else:
+                self.log.warning("⚠️ Could not get field reference stats for Stage 4 validation")
+                return None
+                
+        except Exception as e:
+            self.log.warning(f"⚠️ Failed to get Stage 4 input reference: {e}")
+            return None
 
     def _get_main_output_table(self) -> Optional[str]:
         """Return the main output table for validation."""
-        # Since we skip validation, this won't be called
-        return None
+        return "field_environmental_analysis"
+    
+    def _validate_stage_areas(self) -> None:
+        """
+        Custom validation for Stage 4: Comprehensive Field Environmental Analysis.
+        
+        Validates that ALL original agricultural fields are preserved with correct areas.
+        """
+        if not self._should_validate_areas() or not self.area_validator:
+            return
+            
+        input_reference = self._get_input_area_reference()
+        if not input_reference:
+            self.log.info("⚠️ Stage 4 validation skipped: missing input reference")
+            return
+            
+        try:
+            # Validate field-level table: should have ALL fields with correct total area
+            field_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(DISTINCT field_uuid) as distinct_field_count,
+                    SUM(DISTINCT field_area_m2) as total_distinct_field_area,
+                    COUNT(*) as total_records
+                FROM field_environmental_analysis
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            distinct_field_count = field_stats[0] or 0
+            total_distinct_field_area = field_stats[1] or 0
+            total_records = field_stats[2] or 0
+            
+            # Validate property-level table stats (different expectations!)
+            property_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(DISTINCT field_uuid) as distinct_field_count,
+                    COUNT(*) as total_property_records,
+                    SUM(COALESCE(property_area_within_field_m2, 0)) as total_intersection_area
+                FROM property_environmental_analysis
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            property_field_count = property_stats[0] or 0
+            property_total_records = property_stats[1] or 0
+            property_total_intersection_area = property_stats[2] or 0
+            
+            # Validation 1: Field-level table should have ALL fields
+            field_count_diff = distinct_field_count - input_reference["field_count"]
+            field_count_valid = field_count_diff == 0
+            
+            # Validation 2: Property-level table should have FEWER fields (only those with properties)
+            # This is expected and correct - not all fields have property intersections
+            property_field_count_valid = property_field_count <= input_reference["field_count"]
+            
+            # Validation 3: Field-level area preservation (should match original exactly)
+            field_area_difference = total_distinct_field_area - input_reference["total_area"]
+            field_area_difference_pct = (field_area_difference / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
+            field_area_valid = abs(field_area_difference_pct) <= self.area_validator.tolerance_pct
+            
+            # Validation 4: Property-level area should be LESS than original (incomplete coverage)
+            property_area_difference = property_total_intersection_area - input_reference["total_area"]  
+            property_area_difference_pct = (property_area_difference / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
+            property_coverage_pct = (property_total_intersection_area / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
+            
+            # Property area should be ≤ original area (expect reduction due to incomplete coverage)
+            property_area_valid = property_area_difference_pct <= 0 and abs(property_area_difference_pct) <= 50.0  # 50% tolerance for property coverage
+            
+            # Overall validation result
+            validation_passed = field_count_valid and property_field_count_valid and field_area_valid and property_area_valid
+            
+            # Log results
+            if validation_passed:
+                self.log.info(f"✅ Stage 4 validation PASSED:")  
+            else:
+                self.log.error(f"❌ Stage 4 validation FAILED:")
+                
+            self.log.info(f"📊 Field-Level Table (ALL agricultural fields):")
+            self.log.info(f"    Field Count - Input: {input_reference['field_count']:,}, Output: {distinct_field_count:,} ({field_count_diff:+,})")
+            self.log.info(f"    Total Area - Input: {input_reference['total_area']:,.0f} m², Output: {total_distinct_field_area:,.0f} m² ({field_area_difference_pct:+.3f}%)")
+            self.log.info(f"    Records: {total_records:,} (should be 1 per field)")
+            
+            self.log.info(f"📊 Property-Level Table (fields with properties only):")
+            self.log.info(f"    Field Count - Fields with properties: {property_field_count:,} of {input_reference['field_count']:,} total fields")
+            self.log.info(f"    Property Coverage - {property_total_intersection_area:,.0f} m² ({property_coverage_pct:.1f}% of total field area)")
+            self.log.info(f"    Property Area vs Total - {property_area_difference_pct:+.3f}% (expected reduction due to incomplete coverage)")
+            self.log.info(f"    Records: {property_total_records:,} field×property combinations")
+            
+            # Handle validation failure
+            if not validation_passed:
+                error_msg = f"Stage 4 validation failed - Field count: {field_count_valid}, Property field count: {property_field_count_valid}, Field area: {field_area_valid}, Property area: {property_area_valid}"
+                if self.validation_config.fail_on_validation_error:
+                    from ..area_validation import ValidationException
+                    raise ValidationException(error_msg)
+                else:
+                    self.log.warning(f"⚠️ {error_msg} but continuing")
+                    
+        except Exception as e:
+            error_msg = f"❌ Stage 4 validation error: {str(e)}"
+            if self.validation_config.fail_on_validation_error:
+                raise Exception(error_msg)
+            else:
+                self.log.warning(f"⚠️ {error_msg} but continuing")
