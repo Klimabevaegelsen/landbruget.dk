@@ -387,8 +387,6 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-    outputs:
-      matrix-year: ${{ strategy.job-index }}
     strategy:
       matrix:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
@@ -503,9 +501,9 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=2 --job=fields_wetland_water
 
-  # Stage 3: Final Analysis (Parallel)
+  # Stage 3: Final Analysis (Parallel) - Can run independently using latest Stage 1&2 outputs
   stage3-final-bnbo:
-    needs: [stage2-fields-bnbo-water, stage1-fields-properties]
+    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage2-fields-bnbo-water", "stage1-fields-properties"]') || fromJSON('[]') }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -545,7 +543,7 @@ jobs:
             --stage=3 --job=final_bnbo
 
   stage3-final-wetland:
-    needs: [stage2-fields-wetland-water, stage1-fields-properties]
+    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage2-fields-wetland-water", "stage1-fields-properties"]') || fromJSON('[]') }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage3' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -584,9 +582,9 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_wetland
 
-  # Stage 4: Consolidation
+  # Stage 4: Consolidation - Can run independently using latest Stage 1&3 outputs
   stage4-consolidate:
-    needs: [stage1-fields-soil-types, stage3-final-bnbo, stage3-final-wetland]
+    needs: ${{ github.event.inputs.stage == 'all' && fromJSON('["stage1-fields-soil-types", "stage3-final-bnbo", "stage3-final-wetland"]') || fromJSON('[]') }}
     if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage4' || github.event.inputs.stage == '' }}
     runs-on: ubuntu-latest
     permissions:
