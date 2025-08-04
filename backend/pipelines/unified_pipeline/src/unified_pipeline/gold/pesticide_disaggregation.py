@@ -1667,8 +1667,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Remove processed applications from pending queue
             self.duckdb_conn.execute(f"""
                 DELETE FROM pending_pesticide_rows 
-                WHERE OriginalPesticideRowID IN (
-                    SELECT DISTINCT da.OriginalPesticideRowID
+                WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
+                    SELECT DISTINCT CAST(da.OriginalPesticideRowID AS VARCHAR)
                     FROM disaggregated_pesticide_applications da
                     WHERE da.AllocationMethod LIKE 'Ethical Best-Match:%'
                 )
