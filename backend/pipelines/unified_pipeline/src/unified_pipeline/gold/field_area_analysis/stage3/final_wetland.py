@@ -459,8 +459,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         bfe_number,
                         FIRST(toerv_pct) as toerv_pct,  -- Take first value if multiple wetland types
                         SUM(property_wetland_area_m2) as property_wetland_area_m2,
-                        SUM(property_wetland_covered_m2) as property_wetland_covered_m2,
-                        SUM(property_wetland_uncovered_m2) as property_wetland_uncovered_m2
+                        SUM(property_wetland_covered_m2) as property_wetland_water_covered_m2,
+                        SUM(property_wetland_uncovered_m2) as property_wetland_water_uncovered_m2
                     FROM batch_property_wetland_water
                     GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
                 """)

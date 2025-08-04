@@ -553,8 +553,8 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         bfe_number,
                         FIRST(status_category) as status_category,  -- Take first value if multiple BNBO statuses
                         SUM(property_bnbo_area_m2) as property_bnbo_area_m2,
-                        SUM(property_bnbo_covered_m2) as property_bnbo_covered_m2,
-                        SUM(property_bnbo_uncovered_m2) as property_bnbo_uncovered_m2
+                        SUM(property_bnbo_covered_m2) as property_bnbo_water_covered_m2,
+                        SUM(property_bnbo_uncovered_m2) as property_bnbo_water_uncovered_m2
                     FROM batch_property_bnbo_water
                     GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
                 """)
