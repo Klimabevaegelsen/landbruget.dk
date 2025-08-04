@@ -82,10 +82,13 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
                 SELECT 
-                    COUNT(*) as field_count,
+                    COUNT(DISTINCT field_uuid) as field_count,
                     SUM(field_area_m2) as total_area
-                FROM fields_wetland_water
-                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+                FROM (
+                    SELECT DISTINCT field_uuid, field_area_m2
+                    FROM fields_wetland_water
+                    WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+                ) unique_fields
             """).fetchone()
             
             self._input_area_reference = {
@@ -344,24 +347,24 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 """)
 
             # Combine field-level data with property breakdown
-            self.log.info("  Combining field-level wetland data with property breakdown")
+            self.log.info("  Aggregating wetland fragments to field-level and combining with property breakdown")
             self.conn.execute("""
                 INSERT INTO final_wetland_analysis
                 SELECT 
-                    b.field_id,
-                    b.block_id,
-                    b.cvr_number,
-                    b.year,
-                    b.field_uuid,
-                    b.geometry,
-                    b.field_area_m2,
+                    fab.field_id,
+                    fab.block_id,
+                    fab.cvr_number,
+                    fab.year,
+                    fab.field_uuid,
+                    fab.geometry,
+                    fab.field_area_m2,
                     
-                    -- Field-level wetland data (from Stage 2B)
-                    b.field_wetland_total_m2,
-                    b.field_wetland_water_covered_m2,
-                    b.field_wetland_water_covered_pct,
-                    b.field_wetland_water_uncovered_pct,
-                    b.field_wetland_coverage_pct,
+                    -- Field-level wetland data (aggregated from Stage 2B fragments)
+                    fab.field_wetland_total_m2,
+                    fab.field_wetland_water_covered_m2,
+                    fab.field_wetland_water_covered_pct,
+                    fab.field_wetland_water_uncovered_pct,
+                    fab.field_wetland_coverage_pct,
                     
                     -- Property ownership summary
                     COALESCE(ps.property_count, 0) as property_count,
@@ -376,7 +379,43 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     COALESCE(pb.property_wetland_count, 0) as property_wetland_count,
                     COALESCE(pb.property_wetland_owners, NULL) as property_wetland_owners
                     
-                FROM fields_batch b
+                FROM (
+                    -- CRITICAL FIX: Aggregate multiple wetland fragments per field to single field-level record
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        field_uuid,
+                        FIRST(geometry) as geometry,  -- Take first geometry per field
+                        FIRST(field_area_m2) as field_area_m2,  -- Field area should be same across fragments
+                        
+                        -- Aggregate wetland areas from multiple fragments
+                        SUM(field_wetland_total_m2) as field_wetland_total_m2,
+                        SUM(field_wetland_water_covered_m2) as field_wetland_water_covered_m2,
+                        
+                        -- Recalculate percentages from aggregated totals
+                        CASE 
+                            WHEN SUM(field_wetland_total_m2) > 0 
+                            THEN (SUM(field_wetland_water_covered_m2) / SUM(field_wetland_total_m2)) * 100.0
+                            ELSE 0 
+                        END as field_wetland_water_covered_pct,
+                        
+                        CASE 
+                            WHEN SUM(field_wetland_total_m2) > 0 
+                            THEN ((SUM(field_wetland_total_m2) - SUM(field_wetland_water_covered_m2)) / SUM(field_wetland_total_m2)) * 100.0
+                            ELSE 0 
+                        END as field_wetland_water_uncovered_pct,
+                        
+                        CASE 
+                            WHEN FIRST(field_area_m2) > 0 
+                            THEN (SUM(field_wetland_total_m2) / FIRST(field_area_m2)) * 100.0
+                            ELSE 0 
+                        END as field_wetland_coverage_pct
+                        
+                    FROM fields_batch 
+                    GROUP BY field_id, block_id, cvr_number, year, field_uuid
+                ) fab
                 LEFT JOIN (
                     SELECT 
                         field_uuid, year,
@@ -395,10 +434,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         ) as primary_bfe_number
                     FROM batch_property_intersections bp
                     GROUP BY field_uuid, year, field_id, block_id, cvr_number
-                ) ps ON b.field_uuid = ps.field_uuid 
-                    AND b.year = ps.year
-                LEFT JOIN batch_property_breakdown pb ON b.field_uuid = pb.field_uuid 
-                    AND b.year = pb.year
+                ) ps ON fab.field_uuid = ps.field_uuid 
+                    AND fab.year = ps.year
+                LEFT JOIN batch_property_breakdown pb ON fab.field_uuid = pb.field_uuid 
+                    AND fab.year = pb.year
             """)
 
             # Save property-level intersection data before cleanup (NEW OUTPUT TABLE)

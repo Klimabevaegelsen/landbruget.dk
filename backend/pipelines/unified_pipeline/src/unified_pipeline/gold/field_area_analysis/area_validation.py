@@ -157,27 +157,70 @@ class FieldAreaValidator:
         if column_exists == 0:
             raise ValueError(f"Column {field_area_column} does not exist in table {table_name}")
         
-        # Get statistics
-        stats = self.conn.execute(f"""
+        # First check if we have fragments (multiple records per field)
+        fragment_check = self.conn.execute(f"""
             SELECT 
-                COUNT(*) as field_count,
-                COALESCE(SUM({field_area_column}), 0) as total_area,
-                COALESCE(AVG({field_area_column}), 0) as avg_area,
-                COALESCE(MIN({field_area_column}), 0) as min_area,
-                COALESCE(MAX({field_area_column}), 0) as max_area,
+                COUNT(*) as total_records,
                 COUNT(DISTINCT field_uuid) as unique_fields
             FROM {table_name}
             WHERE {field_area_column} IS NOT NULL 
             AND {field_area_column} > 0
         """).fetchone()
         
+        has_fragments = fragment_check[0] > fragment_check[1]
+        
+        if has_fragments:
+            self.log.info(f"🔍 Fragment mode detected for {table_name}: {fragment_check[0]} records, {fragment_check[1]} unique fields")
+        
+        # Get statistics - handle fragments correctly to avoid double-counting
+        if has_fragments:
+            # FRAGMENT MODE: Use DISTINCT to avoid double-counting field areas across fragments
+            stats = self.conn.execute(f"""
+                SELECT 
+                    COUNT(*) as field_count,
+                    COALESCE(SUM({field_area_column}), 0) as total_area_with_fragments,
+                    COALESCE(AVG({field_area_column}), 0) as avg_area,
+                    COALESCE(MIN({field_area_column}), 0) as min_area,
+                    COALESCE(MAX({field_area_column}), 0) as max_area,
+                    COUNT(DISTINCT field_uuid) as unique_fields,
+                    -- Correct total area using distinct fields to avoid double-counting
+                    (SELECT COALESCE(SUM({field_area_column}), 0) 
+                     FROM (SELECT DISTINCT field_uuid, {field_area_column} 
+                           FROM {table_name} 
+                           WHERE {field_area_column} IS NOT NULL AND {field_area_column} > 0)
+                    ) as total_area_distinct
+                FROM {table_name}
+                WHERE {field_area_column} IS NOT NULL 
+                AND {field_area_column} > 0
+            """).fetchone()
+            
+            # Use the distinct area calculation for validation
+            total_area = stats[6]  # total_area_distinct
+            
+        else:
+            # AGGREGATED MODE: Direct sum is correct (no fragments)
+            stats = self.conn.execute(f"""
+                SELECT 
+                    COUNT(*) as field_count,
+                    COALESCE(SUM({field_area_column}), 0) as total_area,
+                    COALESCE(AVG({field_area_column}), 0) as avg_area,
+                    COALESCE(MIN({field_area_column}), 0) as min_area,
+                    COALESCE(MAX({field_area_column}), 0) as max_area,
+                    COUNT(DISTINCT field_uuid) as unique_fields
+                FROM {table_name}
+                WHERE {field_area_column} IS NOT NULL 
+                AND {field_area_column} > 0
+            """).fetchone()
+            
+            total_area = stats[1]  # total_area
+        
         return {
             "field_count": stats[0],
-            "total_area": stats[1],
+            "total_area": total_area,  # Use the correct total_area (fragments-aware)
             "avg_area": stats[2],
             "min_area": stats[3],
             "max_area": stats[4],
-            "unique_fields": stats[5]
+            "unique_fields": stats[5] if not has_fragments else stats[5]
         }
     
     def validate_stage_with_input_reference(self,

@@ -283,12 +283,16 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             
         try:
             # Get reference from original field-property intersections (which has all fields)
+            # Handle potential fragments correctly - field_property_intersections may have multiple records per field
             fields_area_stats = self.conn.execute("""
                 SELECT 
                     COUNT(DISTINCT field_uuid) as field_count,
-                    SUM(DISTINCT field_area_m2) as total_area
-                FROM field_property_intersections
-                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+                    SUM(field_area_m2) as total_area
+                FROM (
+                    SELECT DISTINCT field_uuid, field_area_m2
+                    FROM field_property_intersections
+                    WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+                ) unique_fields
             """).fetchone()
             
             if fields_area_stats and fields_area_stats[0] and fields_area_stats[1]:
@@ -327,7 +331,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             field_stats = self.conn.execute("""
                 SELECT 
                     COUNT(DISTINCT field_uuid) as distinct_field_count,
-                    SUM(DISTINCT field_area_m2) as total_distinct_field_area,
+                    (SELECT SUM(field_area_m2) 
+                     FROM (SELECT DISTINCT field_uuid, field_area_m2 
+                           FROM field_environmental_analysis 
+                           WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0)
+                    ) as total_distinct_field_area,
                     COUNT(*) as total_records
                 FROM field_environmental_analysis
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
