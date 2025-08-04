@@ -108,7 +108,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             f"Processing {total_fields:,} fields in {num_batches} batches of {batch_size:,}"
         )
 
-        # Initialize result table with nested structure
+        # Initialize field-level aggregated result table
         self.conn.execute("""
             CREATE OR REPLACE TABLE final_wetland_analysis AS
             SELECT 
@@ -139,6 +139,23 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 CAST(NULL AS DOUBLE) as property_wetland_water_uncovered_m2,
                 CAST(NULL AS INTEGER) as property_wetland_count,
                 CAST(NULL AS VARCHAR) as property_wetland_owners
+            WHERE FALSE
+        """)
+        
+        # Initialize property-level detailed intersection table (NEW OUTPUT)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_wetland_intersections AS
+            SELECT 
+                CAST(NULL AS VARCHAR) as field_id,
+                CAST(NULL AS VARCHAR) as block_id,
+                CAST(NULL AS VARCHAR) as cvr_number,
+                CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
+                CAST(NULL AS VARCHAR) as bfe_number,
+                CAST(NULL AS VARCHAR) as toerv_pct,
+                CAST(NULL AS DOUBLE) as property_wetland_area_m2,
+                CAST(NULL AS DOUBLE) as property_wetland_water_covered_m2,
+                CAST(NULL AS DOUBLE) as property_wetland_water_uncovered_m2
             WHERE FALSE
         """)
 
@@ -384,6 +401,30 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     AND b.year = pb.year
             """)
 
+            # Save property-level intersection data before cleanup (NEW OUTPUT TABLE)
+            if property_count > 0:
+                self.log.info("  Saving property-level wetland intersection data...")
+                self.conn.execute("""
+                    INSERT INTO property_wetland_intersections
+                    SELECT 
+                        field_id,
+                        block_id,
+                        cvr_number,
+                        year,
+                        field_uuid,
+                        bfe_number,
+                        toerv_pct,
+                        property_wetland_area_m2,
+                        property_wetland_water_covered_m2,
+                        property_wetland_water_uncovered_m2
+                    FROM batch_property_wetland_water
+                """)
+                
+                property_intersections_saved = self.conn.execute(
+                    "SELECT COUNT(*) FROM property_wetland_intersections"
+                ).fetchone()[0]
+                self.log.info(f"  ✅ Saved {property_intersections_saved:,} property-level wetland intersections so far")
+
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
             self.conn.execute("DROP TABLE IF EXISTS batch_property_intersections")
@@ -420,13 +461,24 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             "🎯 ACHIEVED: field → property → wetland (area/covered/uncovered) nested breakdown"
         )
 
+        # Get property-level intersection statistics
+        property_intersections_count = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
+        
         return {
             "final_records": final_count,
+            "property_intersections": property_intersections_count,
             "batches_processed": num_batches,
             "foundation_data_approach": True,
             "single_spatial_predicates": True,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save final wetland analysis with nested property structure."""
+        """Save both field-level and property-level wetland analysis."""
+        # Save field-level aggregated analysis (existing output)
         self._save_stage_output("final_wetland_analysis", "final_wetland")
+        
+        # Save property-level intersection analysis (new output)
+        self._save_stage_output("property_wetland_intersections", "property_wetland_intersections")
+        
+        self.log.info(f"✅ Saved field-level analysis: {result['final_records']:,} records")
+        self.log.info(f"✅ Saved property-level intersections: {result['property_intersections']:,} records")
