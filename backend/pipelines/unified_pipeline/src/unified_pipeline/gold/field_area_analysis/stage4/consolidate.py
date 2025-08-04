@@ -156,6 +156,21 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "SELECT COUNT(*) FROM all_fields_with_properties"
         ).fetchone()[0]
         self.log.info(f"Found {all_fields_count:,} fields with property intersections")
+        
+        # Store input area reference for validation
+        if self._should_validate_areas():
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as field_count,
+                    SUM(field_area_m2) as total_area
+                FROM all_fields_with_properties
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            self._input_area_reference = {
+                "total_area": fields_area_stats[1] or 0,
+                "field_count": fields_area_stats[0] or 0
+            }
 
         # Create soil type summary per field from Stage 1B data
         self.log.info("Step 2: Creating field-level soil type summary...")
@@ -238,11 +253,11 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(bnbo_status_categories) as bnbo_status_categories,
                 MAX(bnbo_status_count) as bnbo_status_count,
                 
-                -- Property-level BNBO totals (MAX - these are duplicated across rows, not per-property)
-                MAX(property_bnbo_total_m2) as property_bnbo_total_m2,
-                MAX(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
-                MAX(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
-                MAX(property_bnbo_count) as property_bnbo_count,  -- Count should be same across rows
+                -- Property-level BNBO totals (SUM - aggregate across all properties for this field)
+                SUM(property_bnbo_total_m2) as property_bnbo_total_m2,
+                SUM(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
+                SUM(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
+                SUM(property_bnbo_count) as property_bnbo_count,  -- Total count across all properties
                 MAX(property_bnbo_owners) as property_bnbo_owners,
                 MAX(property_bnbo_breakdown) as property_bnbo_breakdown
                 
@@ -266,11 +281,11 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(field_wetland_water_uncovered_pct) as field_wetland_water_uncovered_pct,
                 MAX(field_wetland_coverage_pct) as field_wetland_coverage_pct,
                 
-                -- Property-level wetland totals (MAX - these are duplicated across rows, not per-property)
-                MAX(property_wetland_total_m2) as property_wetland_total_m2,
-                MAX(property_wetland_water_covered_m2) as property_wetland_water_covered_m2,
-                MAX(property_wetland_water_uncovered_m2) as property_wetland_water_uncovered_m2,
-                MAX(property_wetland_count) as property_wetland_count,  -- Count should be same across rows
+                -- Property-level wetland totals (SUM - aggregate across all properties for this field)
+                SUM(property_wetland_total_m2) as property_wetland_total_m2,
+                SUM(property_wetland_water_covered_m2) as property_wetland_water_covered_m2,
+                SUM(property_wetland_water_uncovered_m2) as property_wetland_water_uncovered_m2,
+                SUM(property_wetland_count) as property_wetland_count,  -- Total count across all properties
                 MAX(property_wetland_owners) as property_wetland_owners,
                 MAX(property_wetland_breakdown) as property_wetland_breakdown
                 
@@ -281,12 +296,12 @@ class ConsolidateResults(FieldAnalysisStageBase):
         wetland_summary_count = self.conn.execute("SELECT COUNT(*) FROM wetland_field_summary").fetchone()[0]
         self.log.info(f"✅ Created wetland field summaries for {wetland_summary_count:,} fields")
 
-        # STEP 3C: Create final consolidated analysis with pre-aggregated environmental data
-        self.log.info(
-            "Step 3C: Creating final analysis with pre-aggregated environmental data (NO MORE CARTESIAN PRODUCTS!)..."
-        )
-        consolidation_query = """
-        CREATE OR REPLACE TABLE field_area_analysis_final AS
+        # STEP 3C: Create TWO separate outputs - field-level and property-level environmental analysis
+        self.log.info("Step 3C: Creating field-level environmental analysis (one record per field)...")
+        
+        # TABLE 1: Field-Level Environmental Analysis (one record per field)
+        field_level_query = """
+        CREATE OR REPLACE TABLE field_environmental_analysis AS
         SELECT 
             -- Field identification (from property intersections - guaranteed to exist)
             f.field_id,
@@ -604,6 +619,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "total_properties_with_uncovered_wetlands": total_properties_with_uncovered_wetlands,
             "env_breakdown": env_breakdown,
         }
+    
+    def _get_input_area_reference(self) -> Dict[str, Any]:
+        """Get reference area statistics from input data for validation."""
+        return getattr(self, '_input_area_reference', None)
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "field_environmental_analysis"
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save final consolidated analysis to GCS."""

@@ -1,0 +1,282 @@
+"""Area validation utilities for Field Area Analysis pipeline."""
+
+import time
+from typing import Dict, Any, Optional, List, Tuple
+from dataclasses import dataclass
+
+from unified_pipeline.util.log_util import Logger
+
+
+@dataclass
+class AreaValidationResult:
+    """Result of area validation check."""
+    is_valid: bool
+    total_area_before: float
+    total_area_after: float
+    area_difference: float
+    area_difference_pct: float
+    tolerance_pct: float
+    field_count_before: int
+    field_count_after: int
+    validation_message: str
+    details: Dict[str, Any]
+
+
+class FieldAreaValidator:
+    """Validates that field areas are preserved across pipeline stages."""
+    
+    def __init__(self, 
+                 conn,
+                 log: Optional[Logger] = None,
+                 tolerance_pct: float = 1.0):
+        """
+        Initialize the area validator.
+        
+        Args:
+            conn: DuckDB connection
+            log: Logger instance
+            tolerance_pct: Maximum acceptable area difference percentage (default: 1.0%)
+        """
+        self.conn = conn
+        self.log = log or Logger.get_logger()
+        self.tolerance_pct = tolerance_pct
+    
+    def validate_field_areas(self, 
+                           before_table: str,
+                           after_table: str,
+                           stage_name: str,
+                           field_area_column: str = "field_area_m2") -> AreaValidationResult:
+        """
+        Validate that field areas are preserved between before and after tables.
+        
+        Args:
+            before_table: Name of table before processing
+            after_table: Name of table after processing  
+            stage_name: Name of the stage being validated
+            field_area_column: Column name containing field area
+            
+        Returns:
+            AreaValidationResult with validation outcome
+        """
+        validation_start = time.time()
+        self.log.info(f"🔍 Starting area validation for {stage_name}...")
+        
+        try:
+            # Get total areas and field counts from before table
+            before_stats = self._get_table_area_stats(before_table, field_area_column)
+            
+            # Get total areas and field counts from after table
+            after_stats = self._get_table_area_stats(after_table, field_area_column)
+            
+            # Calculate differences
+            area_difference = after_stats["total_area"] - before_stats["total_area"]
+            area_difference_pct = (area_difference / before_stats["total_area"]) * 100 if before_stats["total_area"] > 0 else 0
+            
+            # Determine if validation passes
+            is_valid = abs(area_difference_pct) <= self.tolerance_pct
+            
+            # Create validation message
+            if is_valid:
+                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+            else:
+                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+            
+            # Detailed validation info
+            validation_time = time.time() - validation_start
+            details = {
+                "stage_name": stage_name,
+                "validation_time_seconds": validation_time,
+                "before_stats": before_stats,
+                "after_stats": after_stats,
+                "tolerance_check": {
+                    "absolute_difference_pct": abs(area_difference_pct),
+                    "tolerance_pct": self.tolerance_pct,
+                    "passes_tolerance": is_valid
+                }
+            }
+            
+            result = AreaValidationResult(
+                is_valid=is_valid,
+                total_area_before=before_stats["total_area"],
+                total_area_after=after_stats["total_area"],
+                area_difference=area_difference,
+                area_difference_pct=area_difference_pct,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=before_stats["field_count"],
+                field_count_after=after_stats["field_count"],
+                validation_message=message,
+                details=details
+            )
+            
+            self.log.info(message)
+            self.log.info(f"📊 Before: {before_stats['field_count']:,} fields, {before_stats['total_area']:,.0f} m²")
+            self.log.info(f"📊 After:  {after_stats['field_count']:,} fields, {after_stats['total_area']:,.0f} m²")
+            self.log.info(f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)")
+            self.log.info(f"⏱️ Area validation completed in {validation_time:.2f} seconds")
+            
+            return result
+            
+        except Exception as e:
+            error_message = f"❌ Area validation ERROR for {stage_name}: {str(e)}"
+            self.log.error(error_message)
+            
+            return AreaValidationResult(
+                is_valid=False,
+                total_area_before=0,
+                total_area_after=0,
+                area_difference=0,
+                area_difference_pct=0,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=0,
+                field_count_after=0,
+                validation_message=error_message,
+                details={"error": str(e), "stage_name": stage_name}
+            )
+    
+    def _get_table_area_stats(self, table_name: str, field_area_column: str) -> Dict[str, Any]:
+        """Get area statistics from a table."""
+        
+        # Check if table exists
+        table_exists = self.conn.execute(f"""
+            SELECT COUNT(*) 
+            FROM information_schema.tables 
+            WHERE table_name = '{table_name}'
+        """).fetchone()[0]
+        
+        if table_exists == 0:
+            raise ValueError(f"Table {table_name} does not exist")
+        
+        # Check if field area column exists
+        column_exists = self.conn.execute(f"""
+            SELECT COUNT(*) 
+            FROM information_schema.columns 
+            WHERE table_name = '{table_name}' 
+            AND column_name = '{field_area_column}'
+        """).fetchone()[0]
+        
+        if column_exists == 0:
+            raise ValueError(f"Column {field_area_column} does not exist in table {table_name}")
+        
+        # Get statistics
+        stats = self.conn.execute(f"""
+            SELECT 
+                COUNT(*) as field_count,
+                COALESCE(SUM({field_area_column}), 0) as total_area,
+                COALESCE(AVG({field_area_column}), 0) as avg_area,
+                COALESCE(MIN({field_area_column}), 0) as min_area,
+                COALESCE(MAX({field_area_column}), 0) as max_area,
+                COUNT(DISTINCT field_uuid) as unique_fields
+            FROM {table_name}
+            WHERE {field_area_column} IS NOT NULL 
+            AND {field_area_column} > 0
+        """).fetchone()
+        
+        return {
+            "field_count": stats[0],
+            "total_area": stats[1],
+            "avg_area": stats[2],
+            "min_area": stats[3],
+            "max_area": stats[4],
+            "unique_fields": stats[5]
+        }
+    
+    def validate_stage_with_input_reference(self,
+                                          output_table: str,
+                                          stage_name: str,
+                                          reference_total_area: float,
+                                          reference_field_count: int,
+                                          field_area_column: str = "field_area_m2") -> AreaValidationResult:
+        """
+        Validate stage output against a reference area (useful when input table is temporary).
+        
+        Args:
+            output_table: Name of output table to validate
+            stage_name: Name of the stage being validated
+            reference_total_area: Expected total area from input
+            reference_field_count: Expected field count from input
+            field_area_column: Column name containing field area
+            
+        Returns:
+            AreaValidationResult with validation outcome
+        """
+        validation_start = time.time()
+        self.log.info(f"🔍 Starting area validation for {stage_name} against reference...")
+        
+        try:
+            # Get stats from output table
+            output_stats = self._get_table_area_stats(output_table, field_area_column)
+            
+            # Calculate differences against reference
+            area_difference = output_stats["total_area"] - reference_total_area
+            area_difference_pct = (area_difference / reference_total_area) * 100 if reference_total_area > 0 else 0
+            
+            # Determine if validation passes
+            is_valid = abs(area_difference_pct) <= self.tolerance_pct
+            
+            # Create validation message
+            if is_valid:
+                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+            else:
+                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+            
+            validation_time = time.time() - validation_start
+            details = {
+                "stage_name": stage_name,
+                "validation_time_seconds": validation_time,
+                "reference_stats": {
+                    "total_area": reference_total_area,
+                    "field_count": reference_field_count
+                },
+                "output_stats": output_stats,
+                "tolerance_check": {
+                    "absolute_difference_pct": abs(area_difference_pct),
+                    "tolerance_pct": self.tolerance_pct,
+                    "passes_tolerance": is_valid
+                }
+            }
+            
+            result = AreaValidationResult(
+                is_valid=is_valid,
+                total_area_before=reference_total_area,
+                total_area_after=output_stats["total_area"],
+                area_difference=area_difference,
+                area_difference_pct=area_difference_pct,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=reference_field_count,
+                field_count_after=output_stats["field_count"],
+                validation_message=message,
+                details=details
+            )
+            
+            self.log.info(message)
+            self.log.info(f"📊 Reference: {reference_field_count:,} fields, {reference_total_area:,.0f} m²")
+            self.log.info(f"📊 Output:    {output_stats['field_count']:,} fields, {output_stats['total_area']:,.0f} m²")
+            self.log.info(f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)")
+            self.log.info(f"⏱️ Area validation completed in {validation_time:.2f} seconds")
+            
+            return result
+            
+        except Exception as e:
+            error_message = f"❌ Area validation ERROR for {stage_name}: {str(e)}"
+            self.log.error(error_message)
+            
+            return AreaValidationResult(
+                is_valid=False,
+                total_area_before=reference_total_area,
+                total_area_after=0,
+                area_difference=0,
+                area_difference_pct=0,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=reference_field_count,
+                field_count_after=0,
+                validation_message=error_message,
+                details={"error": str(e), "stage_name": stage_name}
+            )
+
+
+class ValidationException(Exception):
+    """Exception raised when area validation fails."""
+    
+    def __init__(self, validation_result: AreaValidationResult):
+        self.validation_result = validation_result
+        super().__init__(validation_result.validation_message)

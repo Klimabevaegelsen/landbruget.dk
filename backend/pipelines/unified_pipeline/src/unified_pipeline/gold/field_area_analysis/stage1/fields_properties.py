@@ -80,6 +80,21 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             f"🎯 OPTIMIZATION IMPACT: {properties_count:,} vs original 6.5M properties (13x reduction)"
         )
         self.log.info("🚀 Ready for optimized SPATIAL_JOIN with dramatically reduced complexity")
+        
+        # Store input area reference for validation
+        if self._should_validate_areas():
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as field_count,
+                    SUM(field_area_m2) as total_area
+                FROM agricultural_fields
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            self._input_area_reference = {
+                "total_area": fields_area_stats[1] or 0,
+                "field_count": fields_area_stats[0] or 0
+            }
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -278,6 +293,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 SELECT * FROM fields_without_properties
             """)
             self.log.info(f"✅ Added {fields_without_properties:,} fields with NULL property data")
+            self.log.info("🌊 These fields will continue through environmental analysis (BNBO, wetlands, water)")
 
         # Final statistics with optimization impact
         final_count = self.conn.execute(
@@ -307,6 +323,14 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             "optimization_impact": "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)",
             "uuid_preservation": "All source fields preserved with NULL property data for non-intersecting fields"
         }
+    
+    def _get_input_area_reference(self) -> Dict[str, Any]:
+        """Get reference area statistics from input data for validation."""
+        return getattr(self, '_input_area_reference', None)
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "field_property_intersections"
 
     def _save_output_data(self, result: Dict[str, Any]):
         """Save field-property intersection data - already handled in _execute_stage_processing."""
