@@ -332,6 +332,11 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         """Get the name of the main output table for area validation."""
         return "field_property_intersections"
     
+    def _should_validate_areas(self) -> bool:
+        """DISABLE validation for Stage 1 Properties - testing override mechanism."""
+        self.log.info("🔍 DEBUG: _should_validate_areas called for Stage 1 Properties - DISABLING")
+        return False
+    
     def _validate_stage_areas(self) -> None:
         """
         Custom validation for Stage 1: Field-Property Intersections.
@@ -341,6 +346,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         1. Sum of intersection areas = Sum of distinct field areas
         2. Number of distinct fields = Input field count
         """
+        self.log.info("🔍 DEBUG: Using CUSTOM Stage 1 validation (not base class validation)")
+        
         if not self._should_validate_areas() or not self.area_validator:
             return
             

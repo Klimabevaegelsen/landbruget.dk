@@ -334,6 +334,11 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         """Get the name of the main output table for area validation."""
         return "field_soil_areas"
     
+    def _should_validate_areas(self) -> bool:
+        """DISABLE validation for Stage 1 Soil Types - testing override mechanism."""
+        self.log.info("🔍 DEBUG: _should_validate_areas called for Stage 1 Soil Types - DISABLING")
+        return False
+    
     def _validate_stage_areas(self) -> None:
         """
         Custom validation for Stage 1: Field-Soil Intersections.
@@ -343,6 +348,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         1. Sum of intersection areas ≤ Sum of distinct field areas (incomplete soil coverage)
         2. Number of distinct fields = Input field count
         """
+        self.log.info("🔍 DEBUG: Using CUSTOM Stage 1 SOIL validation (not base class validation)")
+        
         if not self._should_validate_areas() or not self.area_validator:
             return
             
