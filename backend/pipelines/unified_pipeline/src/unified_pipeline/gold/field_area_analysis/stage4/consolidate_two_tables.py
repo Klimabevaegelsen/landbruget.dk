@@ -68,10 +68,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
         
         # Load Stage 3 outputs (both field-level and property-level consolidated data)
-        stage3a_fields_path = self._get_latest_gold_path(updated_outputs["final_bnbo_analysis"])
+        stage3a_fields_path = self._get_latest_gold_path(updated_outputs["final_bnbo"])
         self.gcs_access.query_parquet_direct(stage3a_fields_path, "SELECT *", "final_bnbo_analysis")
         
-        stage3b_fields_path = self._get_latest_gold_path(updated_outputs["final_wetland_analysis"])
+        stage3b_fields_path = self._get_latest_gold_path(updated_outputs["final_wetland"])
         self.gcs_access.query_parquet_direct(stage3b_fields_path, "SELECT *", "final_wetland_analysis")
         
         stage3a_properties_path = self._get_latest_gold_path(updated_outputs["property_bnbo_intersections"])
