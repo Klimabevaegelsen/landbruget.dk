@@ -160,11 +160,16 @@ def finalize_consolidated_processing():
 
         logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
-        # Save consolidated data directly to GCS using the unified pipeline pattern
+        # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
         from .export import EXPORT_TIMESTAMP
+        import os
 
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        gcs_path = f"gs://{bucket_name}/bronze/chr/{EXPORT_TIMESTAMP}/chr_dyr_movement_summaries.parquet"
+        
+        # Add month suffix if matrix job (environment variable set by GitHub Actions)
+        month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
+        bronze_dir = f"{EXPORT_TIMESTAMP}{month_suffix}"
+        gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir}/chr_dyr_movement_summaries.parquet"
 
         # Use the unified GCS access pattern - export directly to parquet
         _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
