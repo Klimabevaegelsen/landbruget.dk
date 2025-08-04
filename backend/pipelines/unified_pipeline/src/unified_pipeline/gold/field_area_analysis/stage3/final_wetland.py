@@ -77,6 +77,21 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             "✅ SPEED OPTIMIZATION: Using pre-computed field-wetland intersections from Stage 2B"
         )
         self.log.info("✅ No more expensive Property × Environmental spatial joins!")
+        
+        # Store input area reference for validation
+        if self._should_validate_areas():
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as field_count,
+                    SUM(field_area_m2) as total_area
+                FROM fields_wetland_water
+                WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
+            """).fetchone()
+            
+            self._input_area_reference = {
+                "total_area": fields_area_stats[1] or 0,
+                "field_count": fields_area_stats[0] or 0
+            }
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -472,3 +487,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         
         self.log.info(f"✅ Saved field-level analysis: {result['final_records']:,} records")
         self.log.info(f"✅ Saved property-level intersections: {result['property_intersections']:,} records")
+    
+    def _get_input_area_reference(self) -> Dict[str, Any]:
+        """Get reference area statistics from input data for validation."""
+        return getattr(self, '_input_area_reference', None)
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "final_wetland_analysis"

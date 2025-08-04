@@ -83,6 +83,21 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info(f"   BNBO polygons: {bnbo_count:,}")
         self.log.info(f"   BNBO areas covered by water projects: {covered_count:,}")
         self.log.info(f"   Intersection records (for validation): {intersections_count:,}")
+        
+        # Store input area reference for validation
+        if self._should_validate_areas():
+            fields_area_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as field_count,
+                    SUM(ST_Area_Spheroid(geometry)) as total_area
+                FROM agricultural_fields
+                WHERE geometry IS NOT NULL
+            """).fetchone()
+            
+            self._input_area_reference = {
+                "total_area": fields_area_stats[1] or 0,
+                "field_count": fields_area_stats[0] or 0
+            }
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -370,3 +385,11 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Save detailed field-BNBO intersections for Stage 3 optimization
         self._save_stage_output("field_bnbo_intersections", "field_bnbo_intersections")
+    
+    def _get_input_area_reference(self) -> Dict[str, Any]:
+        """Get reference area statistics from input data for validation."""
+        return getattr(self, '_input_area_reference', None)
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "fields_bnbo_water"
