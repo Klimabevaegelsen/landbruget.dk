@@ -482,7 +482,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             """)
 
             # Save property-level intersection data before cleanup (NEW OUTPUT TABLE)
-            if property_count > 0:
+            # Check if batch_property_bnbo_water has any data to save
+            batch_property_data_count = self.conn.execute(
+                "SELECT COUNT(*) FROM batch_property_bnbo_water"
+            ).fetchone()[0]
+            
+            if batch_property_data_count > 0:
                 self.log.info("  Saving property-level BNBO intersection data...")
                 self.conn.execute("""
                     INSERT INTO property_bnbo_intersections

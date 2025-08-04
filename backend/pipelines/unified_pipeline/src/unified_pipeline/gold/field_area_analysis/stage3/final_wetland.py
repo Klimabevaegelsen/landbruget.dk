@@ -402,7 +402,12 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             """)
 
             # Save property-level intersection data before cleanup (NEW OUTPUT TABLE)
-            if property_count > 0:
+            # Check if batch_property_wetland_water has any data to save
+            batch_property_data_count = self.conn.execute(
+                "SELECT COUNT(*) FROM batch_property_wetland_water"
+            ).fetchone()[0]
+            
+            if batch_property_data_count > 0:
                 self.log.info("  Saving property-level wetland intersection data...")
                 self.conn.execute("""
                     INSERT INTO property_wetland_intersections
