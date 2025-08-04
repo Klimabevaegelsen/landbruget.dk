@@ -181,9 +181,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.log.info(f"📦 Batch {batch_num + 1}/{num_batches} - {progress_pct:.1f}% complete")
 
             # Create field batch (Stage 2 already filtered to fields with wetlands > 0)
+            # Use deterministic ordering to ensure consistent batching
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_wetland_water
+                ORDER BY field_uuid  -- Deterministic ordering
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
