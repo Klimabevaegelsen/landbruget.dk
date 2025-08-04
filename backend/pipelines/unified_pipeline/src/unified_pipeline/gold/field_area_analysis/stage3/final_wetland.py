@@ -485,6 +485,95 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 gc.collect()
                 self.log.info(f"  🧹 Memory cleanup after batch {batch_num + 1}")
 
+        # CRITICAL FIX: Final aggregation to handle fields split across batches
+        self.log.info("🔧 Final aggregation: Consolidating any field fragments split across batches...")
+        
+        # Check for duplicates before final aggregation
+        pre_agg_stats = self.conn.execute("""
+            SELECT COUNT(*) as total_records, COUNT(DISTINCT field_uuid) as unique_fields
+            FROM final_wetland_analysis
+        """).fetchone()
+        
+        duplicates_found = pre_agg_stats[0] - pre_agg_stats[1]
+        if duplicates_found > 0:
+            self.log.info(f"  🔍 Found {duplicates_found} duplicate field records to consolidate")
+            
+            # Create final aggregated table
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE final_wetland_analysis_consolidated AS
+                SELECT 
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    field_uuid,
+                    FIRST(geometry) as geometry,
+                    FIRST(field_area_m2) as field_area_m2,
+                    
+                    -- Aggregate wetland areas from fragments split across batches
+                    SUM(field_wetland_total_m2) as field_wetland_total_m2,
+                    SUM(field_wetland_water_covered_m2) as field_wetland_water_covered_m2,
+                    
+                    -- Recalculate percentages from final aggregated totals
+                    CASE 
+                        WHEN SUM(field_wetland_total_m2) > 0 
+                        THEN (SUM(field_wetland_water_covered_m2) / SUM(field_wetland_total_m2)) * 100.0
+                        ELSE 0 
+                    END as field_wetland_water_covered_pct,
+                    
+                    CASE 
+                        WHEN SUM(field_wetland_total_m2) > 0 
+                        THEN ((SUM(field_wetland_total_m2) - SUM(field_wetland_water_covered_m2)) / SUM(field_wetland_total_m2)) * 100.0
+                        ELSE 0 
+                    END as field_wetland_water_uncovered_pct,
+                    
+                    CASE 
+                        WHEN FIRST(field_area_m2) > 0 
+                        THEN (SUM(field_wetland_total_m2) / FIRST(field_area_m2)) * 100.0
+                        ELSE 0 
+                    END as field_wetland_coverage_pct,
+                    
+                    -- Aggregate property summary fields
+                    MAX(property_count) as property_count,
+                    SUM(total_property_intersection_area_m2) as total_property_intersection_area_m2,
+                    FIRST(primary_bfe_number) as primary_bfe_number,
+                    
+                    -- For property breakdown, take the most complete one (longest JSON string)
+                    (SELECT property_wetland_breakdown 
+                     FROM final_wetland_analysis fwa2 
+                     WHERE fwa2.field_uuid = fwa.field_uuid 
+                     ORDER BY LENGTH(property_wetland_breakdown) DESC 
+                     LIMIT 1) as property_wetland_breakdown,
+                    
+                    SUM(property_wetland_total_m2) as property_wetland_total_m2,
+                    SUM(property_wetland_water_covered_m2) as property_wetland_water_covered_m2,
+                    SUM(property_wetland_water_uncovered_m2) as property_wetland_water_uncovered_m2,
+                    MAX(property_wetland_count) as property_wetland_count,
+                    FIRST(property_wetland_owners) as property_wetland_owners
+                    
+                FROM final_wetland_analysis fwa
+                GROUP BY field_id, block_id, cvr_number, year, field_uuid
+            """)
+            
+            # Replace the original table with the consolidated one
+            self.conn.execute("DROP TABLE final_wetland_analysis")
+            self.conn.execute("ALTER TABLE final_wetland_analysis_consolidated RENAME TO final_wetland_analysis")
+            
+            # Verify the fix
+            post_agg_stats = self.conn.execute("""
+                SELECT COUNT(*) as total_records, COUNT(DISTINCT field_uuid) as unique_fields
+                FROM final_wetland_analysis
+            """).fetchone()
+            
+            self.log.info(f"  ✅ Final aggregation complete: {post_agg_stats[0]:,} records ({post_agg_stats[1]:,} unique fields)")
+            
+            if post_agg_stats[0] == post_agg_stats[1]:
+                self.log.info(f"  🎉 All field duplicates resolved!")
+            else:
+                self.log.warning(f"  ⚠️ Still have {post_agg_stats[0] - post_agg_stats[1]} duplicates - needs investigation")
+        else:
+            self.log.info(f"  ✅ No duplicate fields found - batching worked perfectly")
+
         # Get final statistics
         final_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
 
