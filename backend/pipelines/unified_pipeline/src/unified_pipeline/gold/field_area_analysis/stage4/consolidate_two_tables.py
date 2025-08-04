@@ -21,11 +21,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
     - property_environmental_analysis: One record per field-property combination with property-specific data
     """
 
-    def run(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> Dict[str, Any]:
         """Execute Stage 4 consolidation with two-table architecture."""
-        
-        # Load all required input data
-        self._load_input_data()
         
         # Create base tables for consolidation
         self._create_base_tables()
@@ -34,11 +31,21 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self._create_field_level_table()
         self._create_property_level_table()
         
-        # Save both tables to GCS
-        self._save_output_tables()
-        
         # Return statistics
         return self._get_final_statistics()
+        
+    def _save_output_data(self, result: Dict[str, Any]):
+        """Save both output tables to GCS."""
+        
+        self.log.info("Saving output tables to GCS...")
+        
+        # Save field-level table
+        self._save_stage_output("field_environmental_analysis", "field_environmental_analysis")
+        
+        # Save property-level table  
+        self._save_stage_output("property_environmental_analysis", "property_environmental_analysis")
+        
+        self.log.info("✅ Both output tables saved successfully")
 
     def _load_input_data(self):
         """Load all required input data from previous stages."""
@@ -215,18 +222,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         else:
             self.log.error(f"❌ Property-level table has {property_count - property_combinations:,} duplicate combinations!")
 
-    def _save_output_tables(self):
-        """Save both output tables to GCS."""
-        
-        self.log.info("Saving output tables to GCS...")
-        
-        # Save field-level table
-        self._save_stage_output("field_environmental_analysis", "field_environmental")
-        
-        # Save property-level table
-        self._save_stage_output("property_environmental_analysis", "property_environmental")
-        
-        self.log.info("✅ Both output tables saved successfully")
+
 
     def _get_final_statistics(self) -> Dict[str, Any]:
         """Get final statistics for both tables."""
