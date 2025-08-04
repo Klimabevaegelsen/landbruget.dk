@@ -1,0 +1,11 @@
+{
+  "pipeline_name": "dma_scraper",
+  "timestamp": "20250705_054247",
+  "cvr_count": 1,
+  "cvr_numbers": [
+    "78078154"
+  ],
+  "generated_at": "2025-08-02T20:23:01.728537",
+  "test_mode": true,
+  "companies_processed": 1
+}

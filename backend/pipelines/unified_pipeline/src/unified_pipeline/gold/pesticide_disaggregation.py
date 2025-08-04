@@ -1339,31 +1339,32 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _get_organic_marker_field_ids(self) -> Set[str]:
         """
-        Identifies marker field IDs that are considered organic.
+        Identifies marker field UUIDs that are considered organic.
 
         Now that FVM marker data contains organic farming information via the is_organic column,
-        this method queries the marker table to find all organic fields.
+        this method queries the marker table to find all organic fields using field_uuid as the unique identifier.
 
         Results are cached.
-        Returns a set of marker.field_id strings.
+        Returns a set of marker.field_uuid strings.
         """
         if self._organic_marker_field_ids is not None:
-            self.log.debug("Returning cached organic marker field IDs.")
+            self.log.debug("Returning cached organic marker field UUIDs.")
             return self._organic_marker_field_ids
 
         try:
-            # Query organic fields from the marker table
+            # Query organic fields from the marker table using field_uuid as unique identifier
             result = self.duckdb_conn.execute("""
-                SELECT DISTINCT field_id 
+                SELECT DISTINCT field_uuid 
                 FROM marker 
                 WHERE organic_farming = TRUE
+                  AND field_uuid IS NOT NULL
             """).fetchall()
             
-            organic_field_ids = {str(row[0]) for row in result}
-            self.log.info(f"Found {len(organic_field_ids)} organic fields out of total marker fields")
+            organic_field_uuids = {str(row[0]) for row in result}
+            self.log.info(f"Found {len(organic_field_uuids)} unique organic field UUIDs out of total marker fields")
             
             # Cache the result
-            self._organic_marker_field_ids = organic_field_ids
+            self._organic_marker_field_ids = organic_field_uuids
             
             return self._organic_marker_field_ids
             
@@ -1509,16 +1510,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("Running marker non-organic match strategy")
 
         try:
-            # Get organic field IDs
-            organic_field_ids = self._get_organic_marker_field_ids()
+            # Get organic field UUIDs  
+            organic_field_uuids = self._get_organic_marker_field_ids()
 
-            if not organic_field_ids:
+            if not organic_field_uuids:
                 # If no organic fields found, create empty tuple for SQL
-                organic_ids_sql_tuple = "('')"
+                organic_uuids_sql_tuple = "('')"
             else:
                 # Convert to SQL tuple format
-                organic_ids_list = [f"'{field_id}'" for field_id in organic_field_ids]
-                organic_ids_sql_tuple = f"({', '.join(organic_ids_list)})"
+                organic_uuids_list = [f"'{field_uuid}'" for field_uuid in organic_field_uuids]
+                organic_uuids_sql_tuple = f"({', '.join(organic_uuids_list)})"
 
             # EXACT original SQL query with organic field exclusion
             insert_query = f"""
@@ -1532,7 +1533,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                           AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
-                          AND m.field_id NOT IN {organic_ids_sql_tuple} 
+                          AND m.field_uuid NOT IN {organic_uuids_sql_tuple} 
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications
@@ -1568,7 +1569,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                     AND m_fields.area_ha > 0.0
-                    AND m_fields.field_id NOT IN {organic_ids_sql_tuple}
+                    AND m_fields.field_uuid NOT IN {organic_uuids_sql_tuple}
             """
 
             self.duckdb_conn.execute(insert_query)
