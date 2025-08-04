@@ -1,5 +1,6 @@
 """Base classes and utilities for Field Area Analysis pipeline."""
 
+import os
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -7,6 +8,7 @@ from typing import Any, Dict, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.log_util import Logger
 
+from .area_validation import FieldAreaValidator, ValidationException
 from .config import CONFIG
 
 
@@ -17,6 +19,11 @@ class FieldAnalysisStageConfig(BaseJobConfig):
     batch_size: int = CONFIG.batch_size
     max_memory_gb: int = CONFIG.max_memory_gb
     max_threads: int = CONFIG.max_threads
+    
+    # Area validation settings (enabled by default for data integrity)
+    enable_area_validation: bool = os.getenv("ENABLE_AREA_VALIDATION", "true").lower() == "true"
+    area_validation_tolerance_pct: float = float(os.getenv("AREA_VALIDATION_TOLERANCE_PCT", "1.0"))
+    fail_on_validation_error: bool = os.getenv("FAIL_ON_VALIDATION_ERROR", "true").lower() == "true"
 
 
 class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
@@ -27,6 +34,18 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         self.log = Logger.get_logger()
         self.stage_name = stage_name
         self.start_time = None
+        
+        # Initialize area validator if validation is enabled
+        self.area_validator = None
+        if config.enable_area_validation:
+            self.area_validator = FieldAreaValidator(
+                conn=self.conn,
+                log=self.log,
+                tolerance_pct=config.area_validation_tolerance_pct
+            )
+            self.log.info(f"🔍 Area validation ENABLED by default for {stage_name} (tolerance: {config.area_validation_tolerance_pct}%)")
+        
+        self.validation_config = config
 
     def _load_silver_dataset(self, dataset_name: str, table_name: str, where_clause: str = "1=1"):
         """
@@ -77,6 +96,70 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
             raise FileNotFoundError(f"No gold data found for {dataset}")
 
         return sorted(files)[-1]  # Latest by timestamp
+    
+    def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
+        """
+        Get reference area statistics from input data for validation.
+        Should be overridden by stages that need validation.
+        
+        Returns:
+            Dict with 'total_area' and 'field_count' keys, or None if not applicable
+        """
+        return None
+    
+    def _get_main_output_table(self) -> Optional[str]:
+        """
+        Get the name of the main output table for area validation.
+        Should be overridden by stages that need validation.
+        
+        Returns:
+            Name of the main output table to validate, or None if not applicable
+        """
+        return None
+    
+    def _should_validate_areas(self) -> bool:
+        """Check if this stage should perform area validation."""
+        # Only validate if enabled and this is not stage 0 (pre-filtering doesn't preserve areas exactly)
+        return (self.area_validator is not None and 
+                not self.stage_name.startswith("Stage 0"))
+    
+    def _validate_stage_areas(self) -> None:
+        """Validate areas after stage processing if validation is enabled."""
+        if not self._should_validate_areas():
+            return
+        
+        # Get input reference and output table
+        input_reference = self._get_input_area_reference()
+        output_table = self._get_main_output_table()
+        
+        if not input_reference or not output_table:
+            self.log.info(f"⚠️ Area validation skipped for {self.stage_name}: missing reference data or output table")
+            return
+        
+        # Perform validation
+        try:
+            validation_result = self.area_validator.validate_stage_with_input_reference(
+                output_table=output_table,
+                stage_name=self.stage_name,
+                reference_total_area=input_reference["total_area"],
+                reference_field_count=input_reference["field_count"]
+            )
+            
+            # Handle validation failure
+            if not validation_result.is_valid:
+                if self.validation_config.fail_on_validation_error:
+                    raise ValidationException(validation_result)
+                else:
+                    self.log.warning(f"⚠️ Area validation failed but continuing: {validation_result.validation_message}")
+            
+        except ValidationException:
+            raise  # Re-raise validation exceptions
+        except Exception as e:
+            error_msg = f"❌ Area validation error for {self.stage_name}: {str(e)}"
+            if self.validation_config.fail_on_validation_error:
+                raise RuntimeError(error_msg) from e
+            else:
+                self.log.warning(f"⚠️ {error_msg} - continuing anyway")
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute the stage processing."""
@@ -92,6 +175,9 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
             # Save output data
             self._save_output_data(result)
+            
+            # Validate areas after processing (stages 1-4 only)
+            self._validate_stage_areas()
 
             # Log performance
             total_time = time.time() - self.start_time
