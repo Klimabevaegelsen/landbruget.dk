@@ -65,7 +65,19 @@ class ResourceMonitor:
         self.max_disk_usage = 0
 
     def check_resources(self, operation_name: str) -> dict:
-        """Check current resource usage."""
+        """Check current resource usage with GitHub Actions compatibility."""
+        import os
+        
+        # GITHUB ACTIONS FIX: Skip resource monitoring entirely in CI environment
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            return {
+                "memory_gb": 0.0,
+                "disk_gb": 0.0,
+                "memory_percent": 0.0,
+                "disk_percent": 0.0,
+            }
+        
+        # Normal resource monitoring for local/non-CI environments
         import psutil
 
         # Memory check
