@@ -126,7 +126,7 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}/"
+        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)
