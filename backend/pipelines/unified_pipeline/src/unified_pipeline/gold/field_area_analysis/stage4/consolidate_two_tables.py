@@ -9,7 +9,7 @@ This eliminates the record explosion issue by properly separating field-level an
 """
 
 from typing import Dict, Any
-from ..base import FieldAnalysisStageBase
+from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 
 
 class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
@@ -20,6 +20,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
     - field_environmental_analysis: One record per field with field-wide environmental totals
     - property_environmental_analysis: One record per field-property combination with property-specific data
     """
+
+    def __init__(self, config: FieldAnalysisStageConfig = None):
+        if config is None:
+            config = FieldAnalysisStageConfig()
+        super().__init__(config, "Stage 4: Consolidate Results - Two-Table Architecture")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """Execute Stage 4 consolidation with two-table architecture."""

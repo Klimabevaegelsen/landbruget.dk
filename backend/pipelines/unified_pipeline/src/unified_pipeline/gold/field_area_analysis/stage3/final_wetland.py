@@ -392,7 +392,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             ).fetchone()[0]
             
             if batch_property_data_count > 0:
-                self.log.info("  Saving property-level wetland intersection data...")
+                self.log.info("  Aggregating and saving property-level wetland totals...")
                 self.conn.execute("""
                     INSERT INTO property_wetland_intersections
                     SELECT 
@@ -402,11 +402,12 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         year,
                         field_uuid,
                         bfe_number,
-                        toerv_pct,
-                        property_wetland_area_m2,
-                        property_wetland_covered_m2,
-                        property_wetland_uncovered_m2
+                        FIRST(toerv_pct) as toerv_pct,  -- Take first value if multiple wetland types
+                        SUM(property_wetland_area_m2) as property_wetland_area_m2,
+                        SUM(property_wetland_covered_m2) as property_wetland_covered_m2,
+                        SUM(property_wetland_uncovered_m2) as property_wetland_uncovered_m2
                     FROM batch_property_wetland_water
+                    GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
                 """)
                 
                 property_intersections_saved = self.conn.execute(
