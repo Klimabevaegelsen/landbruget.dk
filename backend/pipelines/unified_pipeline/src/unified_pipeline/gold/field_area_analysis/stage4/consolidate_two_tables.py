@@ -10,6 +10,7 @@ This eliminates the record explosion issue by properly separating field-level an
 
 from typing import Dict, Any
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
+from ..config import CONFIG
 
 
 class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
@@ -55,7 +56,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load all required input data from previous stages."""
         
-        updated_outputs = self.CONFIG.update_outputs_for_year()
+        updated_outputs = CONFIG.update_outputs_for_year()
         
         self.log.info("Loading input data from previous stages...")
         
