@@ -24,12 +24,15 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load field data and water project BNBO intersections from Stage 1."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load agricultural fields (still from silver - this is the BUILD side)
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
 
         # Load Stage 0 pre-filtered BNBO data for field intersections (PROBE side optimization)
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
-        stage0_bnbo_dataset = CONFIG.stage_outputs["bnbo_prefiltered"]
+        stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
         # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
@@ -43,7 +46,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Load water project × BNBO intersections from Stage 1A
         # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
-        stage1a_dataset = CONFIG.stage_outputs["water_projects_bnbo_intersections"]
+        stage1a_dataset = updated_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
@@ -120,6 +123,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS GEOMETRY) as geometry,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS DOUBLE) as field_bnbo_total_m2,
@@ -138,6 +142,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS VARCHAR) as status_category,
                 CAST(NULL AS GEOMETRY) as field_bnbo_intersection_geometry,
                 CAST(NULL AS DOUBLE) as field_bnbo_intersection_area_m2,
@@ -177,6 +182,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.geometry as field_geometry,
                     ST_Area_Spheroid(f.geometry) as field_area_m2,
                     b.bnbo_id,
@@ -195,6 +201,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     field_geometry,
                     field_area_m2,
                     bnbo_id,
@@ -213,6 +220,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     status_category,
                     field_bnbo_intersection_geometry,
                     field_bnbo_area_m2 as field_bnbo_intersection_area_m2,
@@ -233,6 +241,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.geometry as field_geometry,
                     wpbi.status_category,
                     wpbi.intersection_geometry as water_covered_bnbo_geometry
@@ -249,6 +258,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     block_id,
                     cvr_number,
                     year,
+                    field_uuid,
                     status_category,
                     ST_Area_Spheroid(ST_Intersection(field_geometry, water_covered_bnbo_geometry)) as field_covered_bnbo_area_m2
                 FROM batch_field_bnbo_covered_raw
@@ -279,6 +289,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.field_geometry as geometry,
                     f.field_area_m2,
                     
@@ -289,12 +300,10 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as field_bnbo_water_covered_m2
                     
                 FROM batch_field_bnbo_total f
-                LEFT JOIN batch_field_bnbo_covered c ON f.field_id = c.field_id 
-                    AND f.block_id = c.block_id 
-                    AND f.cvr_number = c.cvr_number 
+                LEFT JOIN batch_field_bnbo_covered c ON f.field_uuid = c.field_uuid 
                     AND f.year = c.year
                     AND f.status_category = c.status_category
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_geometry, f.field_area_m2
+                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
             """)
 
             # Calculate percentages and final metrics

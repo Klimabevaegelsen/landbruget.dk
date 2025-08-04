@@ -143,6 +143,8 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_type": None,
                 "movement_reasons": [],
                 "cattle_type_breakdown": defaultdict(int),
+                "nation_codes_from": set(),  # Track source countries
+                "nation_codes_to": set(),    # Track destination countries
             }
         )
 
@@ -176,6 +178,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     dest_herd = getattr(animal, "BesaetningsNummerTil", None)
                     exit_reason = getattr(animal, "AarsagAfgaaet", None)
                     cattle_type = getattr(animal, "Koen", None)  # Extract cattle type
+                    
+                    # IMPORTANT: Add nation codes for international movement analysis
+                    nation_code_from = getattr(animal, "NationskodeFra", None)
+                    nation_code_to = getattr(animal, "NationskodeTil", None)
 
                     movement_summaries["summary_stats"]["total_animals_processed"] += 1
 
@@ -193,6 +199,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             if cattle_type:
                                 movement_groups[key]["cattle_type_breakdown"][cattle_type] += 1
 
+                            # Track nation codes for international movement analysis
+                            if nation_code_from:
+                                movement_groups[key]["nation_codes_from"].add(nation_code_from)
+                            if nation_code_to:
+                                movement_groups[key]["nation_codes_to"].add(nation_code_to)
+
                             movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
                             movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
 
@@ -209,6 +221,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             # Track cattle type breakdown
                             if cattle_type:
                                 movement_groups[key]["cattle_type_breakdown"][cattle_type] += 1
+
+                            # Track nation codes for international movement analysis
+                            if nation_code_from:
+                                movement_groups[key]["nation_codes_from"].add(nation_code_from)
+                            if nation_code_to:
+                                movement_groups[key]["nation_codes_to"].add(nation_code_to)
 
                             # Clean and validate the exit reason before adding
                             clean_reason = str(exit_reason).strip() if exit_reason is not None else None
@@ -252,6 +270,9 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_reasons": unique_reasons,
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
                 "cattle_type_breakdown": dict(group_data["cattle_type_breakdown"]),
+                "nation_codes_from": list(group_data["nation_codes_from"]),  # Convert set to list for JSON
+                "nation_codes_to": list(group_data["nation_codes_to"]),      # Convert set to list for JSON
+                "is_international": bool(group_data["nation_codes_from"] or group_data["nation_codes_to"]),  # Flag for easy filtering
                 "source_data": "chr_dyr_aggregated",
             }
             movement_summaries["movements"].append(movement_summary)

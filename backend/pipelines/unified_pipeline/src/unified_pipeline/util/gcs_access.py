@@ -659,8 +659,19 @@ class GCSDataAccess:
             try:
                 # Get file info including timestamp
                 file_info = self.fs.info(file_path)
-                # Convert timestamp to datetime object
-                timestamp = datetime.datetime.fromtimestamp(file_info.get("mtime", 0))
+                mtime = file_info.get("mtime", 0)
+                
+                # Handle different mtime types from gcsfs
+                if isinstance(mtime, datetime.datetime):
+                    # mtime is already a datetime object
+                    timestamp = mtime
+                elif isinstance(mtime, (int, float)) and mtime > 0:
+                    # mtime is a numeric timestamp
+                    timestamp = datetime.datetime.fromtimestamp(mtime)
+                else:
+                    # No valid timestamp available
+                    timestamp = datetime.datetime.now()
+                    
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")

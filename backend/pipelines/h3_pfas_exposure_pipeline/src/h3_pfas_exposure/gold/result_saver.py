@@ -116,7 +116,7 @@ class H3ResultSaver:
 
         return count
 
-    def save_kommune_results(self, results_table: str, year: int) -> int:
+    def save_kommune_results(self, results_table: str, year: int, kommune_boundaries_table: str = "kommune_boundaries") -> int:
         """Save kommune-level results to GCS."""
         self.log.info(f"💾 Saving kommune-level pesticide exposure results for year {year} to GCS")
 
@@ -195,7 +195,7 @@ class H3ResultSaver:
         # Generate PMTiles for frontend visualization
         self.log.info(f"🗺️ Generating kommune PMTiles for year {year}...")
         pmtiles_path = self.pmtiles_generator.generate_kommune_pmtiles_for_year(
-            f"final_kommune_results_{year}", year
+            f"final_kommune_results_{year}", year, kommune_boundaries_table
         )
         if pmtiles_path:
             self.log.info(f"   🎯 PMTiles: {pmtiles_path}")
@@ -384,7 +384,7 @@ class H3ResultSaver:
 
         return count
 
-    def save_cumulative_kommune_results(self, results_table: str, years: list[int]) -> int:
+    def save_cumulative_kommune_results(self, results_table: str, years: list[int], kommune_boundaries_table: str = "kommune_boundaries") -> int:
         """Save cumulative kommune-level results to GCS with special 'total' year identifier."""
         self.log.info("💾 Saving cumulative kommune-level pesticide exposure results to GCS")
         self.log.info(f"   📅 Years included: {years}")

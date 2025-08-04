@@ -784,6 +784,11 @@ async def run_cumulative_analysis_optimized(
         if include_kommune:
             logger.info("🏛️ Creating optimized cumulative kommune analysis")
 
+            # Load kommune boundaries for PMTiles generation
+            logger.info("📊 Loading kommune boundaries for PMTiles generation")
+            kommune_table = processor._load_kommune_boundaries()
+            processor._protect_table(kommune_table)
+
             # Check which years have existing kommune results with improved path discovery
             available_kommune_results = []
             for year in years:
@@ -826,8 +831,77 @@ async def run_cumulative_analysis_optimized(
 
                 # Initialize cumulative kommune results table
                 cumulative_kommune_table = "cumulative_kommune_results"
+                final_cumulative_kommune_table = "final_cumulative_kommune"
+                
+                # Create empty cumulative table with correct schema
                 processor.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {cumulative_kommune_table} AS
+                    CREATE OR REPLACE TABLE {cumulative_kommune_table} (
+                        kommune_code INTEGER,
+                        kommune_name VARCHAR,
+                        region_code INTEGER,
+                        kommune_area_ha DOUBLE,
+                        kommune_centroid_x DOUBLE,
+                        kommune_centroid_y DOUBLE,
+                        total_agricultural_area_ha DOUBLE,
+                        unique_field_count INTEGER,
+                        unique_company_count INTEGER,
+                        avg_field_coverage_ratio DOUBLE,
+                        max_field_coverage_ratio DOUBLE,
+                        min_field_coverage_ratio DOUBLE,
+                        crop_diversity INTEGER,
+                        crop_types VARCHAR,
+                        total_pfas_containing_active_ingredient_grams DOUBLE,
+                        total_diquat_containing_active_ingredient_grams DOUBLE,
+                        total_glyphosate_containing_active_ingredient_grams DOUBLE,
+                        total_pesticide_belastning DOUBLE,
+                        total_pfas_pesticide_belastning DOUBLE,
+                        total_diquat_pesticide_belastning DOUBLE,
+                        total_glyphosate_pesticide_belastning DOUBLE,
+                        total_pesticide_applications INTEGER,
+                        pfas_containing_applications INTEGER,
+                        diquat_containing_applications INTEGER,
+                        glyphosate_containing_applications INTEGER,
+                        unique_pfas_products INTEGER,
+                        unique_diquat_products INTEGER,
+                        unique_glyphosate_products INTEGER,
+                        unique_pesticide_products INTEGER,
+                        pfas_containing_active_ingredient_intensity_grams_per_ha DOUBLE,
+                        diquat_containing_active_ingredient_intensity_grams_per_ha DOUBLE,
+                        glyphosate_containing_active_ingredient_intensity_grams_per_ha DOUBLE,
+                        pesticide_belastning_per_ha DOUBLE,
+                        pfas_pesticide_belastning_per_ha DOUBLE,
+                        diquat_pesticide_belastning_per_ha DOUBLE,
+                        glyphosate_pesticide_belastning_per_ha DOUBLE,
+                        agricultural_coverage_pct DOUBLE,
+                        created_at TIMESTAMP
+                    )
+                """)
+
+                # Load and aggregate each year's results
+                for year, file_path in available_kommune_results:
+                    logger.info(f"   📅 Loading kommune results for year {year} from GCS")
+                    
+                    # Load year results from GCS
+                    year_table = f"year_kommune_results_{year}"
+                    try:
+                        processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                        
+                        # Insert into cumulative table
+                        processor.conn.execute(f"""
+                            INSERT INTO {cumulative_kommune_table}
+                            SELECT * FROM {year_table}
+                        """)
+                        
+                        # Clean up year table
+                        processor.conn.execute(f"DROP TABLE IF EXISTS {year_table}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Failed to load year {year} kommune results: {e}")
+                        continue
+
+                # Create final aggregated results table
+                processor.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {final_cumulative_kommune_table} AS
                     SELECT
                         kommune_code,
                         ANY_VALUE(kommune_name) as kommune_name,
@@ -907,7 +981,7 @@ async def run_cumulative_analysis_optimized(
 
                 # Save cumulative kommune results
                 result_count = result_saver.save_cumulative_kommune_results(
-                    final_cumulative_kommune_table, years
+                    final_cumulative_kommune_table, years, kommune_table
                 )
 
                 if result_count > 0:

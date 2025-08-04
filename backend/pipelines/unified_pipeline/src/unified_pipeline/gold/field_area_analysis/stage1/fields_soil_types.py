@@ -32,7 +32,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered soil types."""
         # Load agricultural fields (600K fields)
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_raw")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw")
 
         # Keep agricultural fields as original multipolygons for consistency with other stages
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
@@ -43,6 +43,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 geometry,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_raw
@@ -50,9 +51,12 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # Load Stage 0 pre-filtered soil types (~8K polygons instead of 13K)
         self.log.info("Loading Stage 0 pre-filtered soil types (major performance boost)...")
-        stage0_soil_types_dataset = CONFIG.stage_outputs["soil_types_prefiltered"]
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        stage0_soil_types_dataset = updated_outputs["soil_types_prefiltered"]
         stage0_soil_types_path = self._get_latest_gold_path(stage0_soil_types_dataset)
         self.gcs_access.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types_raw")
+        self.log.info(f"✅ Loaded soil types from {stage0_soil_types_dataset}")
 
         # OPTIMIZATION: Decompose soil types with ST_Dump for optimal spatial indexing
         self.log.info("Decomposing soil types with ST_Dump for optimal spatial indexing...")
@@ -107,6 +111,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 f.block_id,
                 f.cvr_number,
                 f.year,
+                f.field_uuid,
                 f.field_area_m2,
                 s.soil_id,
                 s.soil_code,
@@ -140,6 +145,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 field_area_m2,
                 soil_id,
                 soil_code,
@@ -180,6 +186,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 soil_id,  -- Foundation data: enables ID-based joins in later stages
                 soil_code,
                 soil_description,
@@ -189,7 +196,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 field_area_m2,
                 intersection_geometry  -- Preserve for property-level analysis
             FROM field_soil_meaningful
-            ORDER BY field_id, block_id, cvr_number, soil_intersection_area_m2 DESC
+            ORDER BY field_uuid, year, soil_intersection_area_m2 DESC
         """)
 
         # STEP 4: Create simplified areas table (backward compatibility)
@@ -200,6 +207,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 soil_code,
                 soil_description,
                 soil_type_category,
@@ -227,7 +235,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             SELECT 
                 soil_type_category,
                 COUNT(*) as intersection_count,
-                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as field_count,
+                COUNT(DISTINCT field_uuid) as field_count,
                 SUM(soil_intersection_area_m2) / 1000000 as total_area_km2,
                 AVG(soil_area_share_pct) as avg_coverage_pct
             FROM field_soil_foundation
@@ -239,7 +247,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         coverage_stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_intersections,
-                COUNT(DISTINCT field_id || '-' || block_id || '-' || cvr_number) as fields_with_soil,
+                COUNT(DISTINCT field_uuid) as fields_with_soil,
                 AVG(soil_area_share_pct) as avg_soil_coverage,
                 COUNT(DISTINCT soil_id) as unique_soil_polygons,
                 COUNT(DISTINCT soil_code) as unique_soil_codes

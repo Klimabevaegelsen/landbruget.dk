@@ -367,17 +367,8 @@ class SpatialJoiner:
                 ELSE 0
             END as weighted_glyphosate_pesticide_belastning
         FROM {aggregated_table} i
-        LEFT JOIN {pesticide_table} p ON (
-            -- Primary: Use field UUID if available
-            (i.field_uuid IS NOT NULL AND p.field_uuid IS NOT NULL AND i.field_uuid = p.field_uuid)
-            OR
-            -- Fallback: Use triple key for legacy data
-            (i.field_uuid IS NULL AND (
-                i.cvr_number = p.cvr
-                AND i.field_id = p.extracted_field_id
-                AND i.block_id = p.extracted_block_id
-            ))
-        )
+        LEFT JOIN {pesticide_table} p ON i.field_uuid = p.field_uuid 
+            AND i.cvr_number = p.cvr
         """
 
         self.conn.execute(query)

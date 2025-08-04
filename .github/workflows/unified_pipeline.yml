@@ -29,8 +29,21 @@ on:
           - field_area_analysis
           - pesticide_disaggregation
           - nles5_nitrogen_estimation
+          - arbejdstilsynet_inspections
+          - worker_safety
+          - work_permits
           - dst
           - dmi
+          - cvr_enrichment
+      agricultural_fields_year:
+        description: 'Agricultural fields year (for field_area_analysis only)'
+        required: false
+        type: choice
+        options:
+          - '2024'
+          - '2025'
+          - 'both'
+        default: 'both'
 
 jobs:
   run-unified-pipeline:
@@ -55,6 +68,9 @@ jobs:
              fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"nles5_nitrogen_estimation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
              fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"nles5_nitrogen_estimation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+            (github.event.inputs.source == 'all' &&
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
@@ -163,6 +179,16 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
               -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
             echo "FVM WFS matrix workflow triggered successfully with stage=all"
+          elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
+            # Field Area Analysis - trigger the dedicated matrix workflow
+            SELECTED_YEAR="${{ github.event.inputs.agricultural_fields_year || 'both' }}"
+            echo "Field Area Analysis detected - triggering dedicated matrix workflow with year: $SELECTED_YEAR"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"$SELECTED_YEAR\"}}"
+            echo "Field Area Analysis matrix workflow triggered successfully with year: $SELECTED_YEAR"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }}"

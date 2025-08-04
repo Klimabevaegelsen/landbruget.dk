@@ -22,7 +22,7 @@ def create_chr_dyr_movement_summaries_table(
 
     try:
         # Expected columns in aggregated format:
-        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown
+        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown, nation_codes_from, nation_codes_to, is_international
         required_columns = [
             "reporting_herd_number",
             "movement_date",
@@ -69,6 +69,25 @@ def create_chr_dyr_movement_summaries_table(
             )
             if "cattle_type_breakdown" in chr_dyr_summaries.columns
             else ibis.literal("{}"),
+            # Add country/nation code fields for international movement analysis
+            nation_codes_from=ibis.coalesce(
+                chr_dyr_summaries.nation_codes_from.cast(dt.string).strip().nullif(""),
+                ibis.literal("[]"),
+            )
+            if "nation_codes_from" in chr_dyr_summaries.columns
+            else ibis.literal("[]"),
+            nation_codes_to=ibis.coalesce(
+                chr_dyr_summaries.nation_codes_to.cast(dt.string).strip().nullif(""),
+                ibis.literal("[]"),
+            )
+            if "nation_codes_to" in chr_dyr_summaries.columns
+            else ibis.literal("[]"),
+            is_international=ibis.coalesce(
+                chr_dyr_summaries.is_international.cast(dt.boolean),
+                ibis.literal(False).cast(dt.boolean),
+            )
+            if "is_international" in chr_dyr_summaries.columns
+            else ibis.literal(False).cast(dt.boolean),
         )
 
         # Filter out records with no animal count
@@ -84,6 +103,9 @@ def create_chr_dyr_movement_summaries_table(
             "animal_count",
             "movement_reasons",
             "cattle_type_breakdown",
+            "nation_codes_from",
+            "nation_codes_to",
+            "is_international",
         ]
         movements_final = movements.select(*final_cols)
 

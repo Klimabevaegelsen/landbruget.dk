@@ -22,27 +22,94 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load all field-property intersections, soil data, and environmental analyses from previous stages."""
-        # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
-        stage1c_dataset = CONFIG.stage_outputs["field_property_intersections"]
-        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
-            stage1c_path, "SELECT *", "field_property_intersections"
+        # Debug: Log the current configuration
+        self.log.info(
+            f"🔍 DEBUG: Using agricultural_fields_year = {CONFIG.agricultural_fields_year}"
         )
+        
+        # Get year-aware output dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        self.log.info(f"🔍 DEBUG: Updated dataset outputs: {updated_outputs}")
+        
+        # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
+        stage1c_dataset = updated_outputs["field_property_intersections"] 
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1c_dataset}")
+        try:
+            stage1c_path = self._get_latest_gold_path(stage1c_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage1c_path}")
+            self.gcs_access.query_parquet_direct(
+                stage1c_path, "SELECT *", "field_property_intersections"
+            )
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage1c_dataset}: {e}")
+            raise
 
         # Load field-soil intersections from Stage 1B
-        stage1b_dataset = CONFIG.stage_outputs["field_soil_intersections"]
-        stage1b_path = self._get_latest_gold_path(stage1b_dataset)
-        self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
+        stage1b_dataset = updated_outputs["field_soil_intersections"]
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1b_dataset}")
+        try:
+            stage1b_path = self._get_latest_gold_path(stage1b_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage1b_path}")
+            self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage1b_dataset}: {e}")
+            raise
 
         # Load final BNBO analysis from Stage 3A (only fields with BNBO)
-        stage3a_dataset = CONFIG.stage_outputs["final_bnbo"]
-        stage3a_path = self._get_latest_gold_path(stage3a_dataset)
-        self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+        stage3a_dataset = updated_outputs["final_bnbo"]
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage3a_dataset}")
+        try:
+            stage3a_path = self._get_latest_gold_path(stage3a_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage3a_path}")
+            self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage3a_dataset}: {e}")
+            raise
+        
+        # DEBUG: Check how many BNBO records were loaded
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM final_bnbo_analysis").fetchone()[0]
+        self.log.info(
+            f"🔍 DEBUG: Loaded {bnbo_count:,} final BNBO analysis records from {stage3a_path}"
+        )
 
         # Load final wetland analysis from Stage 3B (only fields with wetlands)
-        stage3b_dataset = CONFIG.stage_outputs["final_wetland"]
-        stage3b_path = self._get_latest_gold_path(stage3b_dataset)
-        self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+        stage3b_dataset = updated_outputs["final_wetland"]
+        self.log.info(f"🔍 DEBUG: Looking for dataset: {stage3b_dataset}")
+        try:
+            stage3b_path = self._get_latest_gold_path(stage3b_dataset)
+            self.log.info(f"🔍 DEBUG: Found path: {stage3b_path}")
+            self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+        except Exception as e:
+            self.log.error(f"❌ Failed to load {stage3b_dataset}: {e}")
+            raise
+        
+        # DEBUG: Check how many wetland records were loaded
+        wetland_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]
+        self.log.info(
+            f"🔍 DEBUG: Loaded {wetland_count:,} final wetland analysis records from {stage3b_path}"
+        )
+        
+        # DEBUG: Check if we have UUID fields and what the schemas look like
+        if bnbo_count > 0:
+            bnbo_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_bnbo_analysis)").fetchall()]
+            self.log.info(f"🔍 DEBUG: BNBO table columns: {bnbo_columns}")
+            if 'field_uuid' in bnbo_columns:
+                self.log.info("✅ BNBO table has field_uuid - should use UUID-based JOINs!")
+        
+        if wetland_count > 0:
+            wetland_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(final_wetland_analysis)").fetchall()]
+            self.log.info(f"🔍 DEBUG: Wetland table columns: {wetland_columns}")
+            if 'field_uuid' in wetland_columns:
+                self.log.info("✅ Wetland table has field_uuid - should use UUID-based JOINs!")
+        
+        # Check soil data structure 
+        soil_columns = [desc[0] for desc in self.conn.execute("PRAGMA table_info(field_soil_areas)").fetchall()]
+        self.log.info(f"🔍 DEBUG: Soil data columns: {soil_columns}")
+        if 'field_uuid' in soil_columns:
+            self.log.info("✅ Soil data has field_uuid - consider updating soil JOINs to use UUID too!")
+        
+        if bnbo_count > 0 or wetland_count > 0:
+            self.log.info("✅ FIXED: Updated environmental JOINs to use field_uuid instead of composite keys!")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -65,6 +132,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
+                field_uuid,
                 field_geometry as geometry,
                 field_area_m2,
                 
@@ -74,16 +142,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT bfe_number 
                     FROM field_property_intersections fp2 
-                    WHERE fp2.field_id = fp.field_id 
-                    AND fp2.block_id = fp.block_id 
-                    AND fp2.cvr_number = fp.cvr_number
+                    WHERE fp2.field_uuid = fp.field_uuid 
                     AND fp2.year = fp.year
                     ORDER BY fp2.intersection_area_m2 DESC 
                     LIMIT 1
                 ) as primary_bfe_number
                 
             FROM field_property_intersections fp
-            GROUP BY field_id, block_id, cvr_number, year, field_geometry, field_area_m2
+            GROUP BY field_id, block_id, cvr_number, year, field_uuid, field_geometry, field_area_m2
         """)
 
         all_fields_count = self.conn.execute(
@@ -96,10 +162,13 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_summary AS
             SELECT 
+                field_uuid,
+                year,
+                
+                -- Keep composite keys for debugging/reference
                 field_id,
                 block_id,
                 cvr_number,
-                year,
                 
                 -- Soil type diversity metrics
                 COUNT(DISTINCT soil_type_category) as soil_type_count,
@@ -109,9 +178,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT soil_type_category 
                     FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_id = fsa.field_id 
-                    AND fsa2.block_id = fsa.block_id 
-                    AND fsa2.cvr_number = fsa.cvr_number 
+                    WHERE fsa2.field_uuid = fsa.field_uuid 
                     AND fsa2.year = fsa.year
                     ORDER BY fsa2.soil_area_m2 DESC 
                     LIMIT 1
@@ -121,9 +188,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 (
                     SELECT soil_area_share_pct 
                     FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_id = fsa.field_id 
-                    AND fsa2.block_id = fsa.block_id 
-                    AND fsa2.cvr_number = fsa.cvr_number 
+                    WHERE fsa2.field_uuid = fsa.field_uuid 
                     AND fsa2.year = fsa.year
                     ORDER BY fsa2.soil_area_m2 DESC 
                     LIMIT 1
@@ -142,7 +207,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 ) || '}' as soil_type_breakdown
                 
             FROM field_soil_areas fsa
-            GROUP BY field_id, block_id, cvr_number, year
+            GROUP BY field_uuid, year, field_id, block_id, cvr_number
         """)
 
         soil_fields_count = self.conn.execute("SELECT COUNT(*) FROM field_soil_summary").fetchone()[
@@ -150,9 +215,75 @@ class ConsolidateResults(FieldAnalysisStageBase):
         ]
         self.log.info(f"Created soil summaries for {soil_fields_count:,} fields")
 
-        # Create final consolidated analysis starting with ALL fields that have properties
+        # STEP 3A: Pre-aggregate Stage 3A BNBO data to field level (fix cartesian product!)
+        self.log.info("Step 3A: Pre-aggregating BNBO data to field level to prevent cartesian products...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE bnbo_field_summary AS
+            SELECT 
+                field_uuid, year,
+                -- Field-level totals (should be same across property rows - use MAX)
+                MAX(field_bnbo_total_m2) as field_bnbo_total_m2,
+                MAX(field_bnbo_water_covered_m2) as field_bnbo_water_covered_m2,
+                MAX(field_bnbo_water_covered_pct) as field_bnbo_water_covered_pct,
+                MAX(field_bnbo_water_uncovered_pct) as field_bnbo_water_uncovered_pct,
+                MAX(field_bnbo_coverage_pct) as field_bnbo_coverage_pct,
+                
+                -- BNBO status metrics (field-level - should be same across property rows)
+                MAX(bnbo_action_required_hectares) as bnbo_action_required_hectares,
+                MAX(bnbo_completed_hectares) as bnbo_completed_hectares,
+                MAX(bnbo_action_required_overlap_hectares) as bnbo_action_required_overlap_hectares,
+                MAX(bnbo_completed_overlap_hectares) as bnbo_completed_overlap_hectares,
+                MAX(bnbo_action_required_not_covered_by_water_hectares) as bnbo_action_required_not_covered_by_water_hectares,
+                MAX(bnbo_completed_not_covered_by_water_hectares) as bnbo_completed_not_covered_by_water_hectares,
+                MAX(bnbo_status_categories) as bnbo_status_categories,
+                MAX(bnbo_status_count) as bnbo_status_count,
+                
+                -- Property-level BNBO totals (MAX - these are duplicated across rows, not per-property)
+                MAX(property_bnbo_total_m2) as property_bnbo_total_m2,
+                MAX(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
+                MAX(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
+                MAX(property_bnbo_count) as property_bnbo_count,  -- Count should be same across rows
+                MAX(property_bnbo_owners) as property_bnbo_owners,
+                MAX(property_bnbo_breakdown) as property_bnbo_breakdown
+                
+            FROM final_bnbo_analysis 
+            GROUP BY field_uuid, year
+        """)
+        
+        bnbo_summary_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_field_summary").fetchone()[0]
+        self.log.info(f"✅ Created BNBO field summaries for {bnbo_summary_count:,} fields")
+
+        # STEP 3B: Pre-aggregate Stage 3B wetland data to field level (fix cartesian product!)
+        self.log.info("Step 3B: Pre-aggregating wetland data to field level to prevent cartesian products...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE wetland_field_summary AS
+            SELECT 
+                field_uuid, year,
+                -- Field-level totals (should be same across property rows - use MAX)
+                MAX(field_wetland_total_m2) as field_wetland_total_m2,
+                MAX(field_wetland_water_covered_m2) as field_wetland_water_covered_m2,
+                MAX(field_wetland_water_covered_pct) as field_wetland_water_covered_pct,
+                MAX(field_wetland_water_uncovered_pct) as field_wetland_water_uncovered_pct,
+                MAX(field_wetland_coverage_pct) as field_wetland_coverage_pct,
+                
+                -- Property-level wetland totals (MAX - these are duplicated across rows, not per-property)
+                MAX(property_wetland_total_m2) as property_wetland_total_m2,
+                MAX(property_wetland_water_covered_m2) as property_wetland_water_covered_m2,
+                MAX(property_wetland_water_uncovered_m2) as property_wetland_water_uncovered_m2,
+                MAX(property_wetland_count) as property_wetland_count,  -- Count should be same across rows
+                MAX(property_wetland_owners) as property_wetland_owners,
+                MAX(property_wetland_breakdown) as property_wetland_breakdown
+                
+            FROM final_wetland_analysis 
+            GROUP BY field_uuid, year
+        """)
+        
+        wetland_summary_count = self.conn.execute("SELECT COUNT(*) FROM wetland_field_summary").fetchone()[0]
+        self.log.info(f"✅ Created wetland field summaries for {wetland_summary_count:,} fields")
+
+        # STEP 3C: Create final consolidated analysis with pre-aggregated environmental data
         self.log.info(
-            "Step 3: Creating final analysis with environmental and soil data as LEFT JOINs..."
+            "Step 3C: Creating final analysis with pre-aggregated environmental data (NO MORE CARTESIAN PRODUCTS!)..."
         )
         consolidation_query = """
         CREATE OR REPLACE TABLE field_area_analysis_final AS
@@ -162,6 +293,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             f.block_id,
             f.cvr_number,
             f.year,
+            f.field_uuid,
             f.geometry,
             f.field_area_m2,
             
@@ -170,7 +302,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             f.total_property_intersection_area_m2,
             f.primary_bfe_number,
             
-            -- Soil type data (from Stage 1B - may be NULL if no soil data)
+            -- Soil type data (from Stage 1B - already field-level aggregated)
             COALESCE(s.soil_type_count, 0) as soil_type_count,
             COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
             COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
@@ -178,21 +310,31 @@ class ConsolidateResults(FieldAnalysisStageBase):
             COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
             COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
             
-            -- BNBO analysis data (from Stage 3A - may be NULL if no BNBO)
+            -- BNBO analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
             COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
             COALESCE(b.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
             COALESCE(b.field_bnbo_water_covered_pct, 0) as field_bnbo_water_covered_pct,
             COALESCE(b.field_bnbo_water_uncovered_pct, 0) as field_bnbo_water_uncovered_pct,
             COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
             
-            -- Wetland analysis data (from Stage 3B - may be NULL if no wetlands)
+            -- BNBO status metrics - flattened by category (from pre-aggregated summary)
+            COALESCE(b.bnbo_action_required_hectares, 0.0) as bnbo_action_required_hectares,
+            COALESCE(b.bnbo_completed_hectares, 0.0) as bnbo_completed_hectares,
+            COALESCE(b.bnbo_action_required_overlap_hectares, 0.0) as bnbo_action_required_overlap_hectares,
+            COALESCE(b.bnbo_completed_overlap_hectares, 0.0) as bnbo_completed_overlap_hectares,
+            COALESCE(b.bnbo_action_required_not_covered_by_water_hectares, 0.0) as bnbo_action_required_not_covered_by_water_hectares,
+            COALESCE(b.bnbo_completed_not_covered_by_water_hectares, 0.0) as bnbo_completed_not_covered_by_water_hectares,
+            COALESCE(b.bnbo_status_categories, NULL) as bnbo_status_categories,
+            COALESCE(b.bnbo_status_count, 0) as bnbo_status_count,
+            
+            -- Wetland analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
             COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
             COALESCE(w.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
             COALESCE(w.field_wetland_water_covered_pct, 0) as field_wetland_water_covered_pct,
             COALESCE(w.field_wetland_water_uncovered_pct, 0) as field_wetland_water_uncovered_pct,
             COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
             
-            -- Property-environmental spatial relationships (using actual columns from stage 3)
+            -- Property-environmental spatial relationships (from pre-aggregated field summaries)
             COALESCE(b.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
             COALESCE(b.property_bnbo_count, 0) as property_bnbo_count,
             COALESCE(b.property_bnbo_owners, NULL) as property_bnbo_owners,
@@ -228,26 +370,21 @@ class ConsolidateResults(FieldAnalysisStageBase):
             END as has_property_environmental_relationships
             
         FROM all_fields_with_properties f
-        LEFT JOIN field_soil_summary s ON f.field_id = s.field_id 
-            AND f.block_id = s.block_id 
-            AND f.cvr_number = s.cvr_number 
+        LEFT JOIN field_soil_summary s ON f.field_uuid = s.field_uuid 
             AND f.year = s.year
-        LEFT JOIN final_bnbo_analysis b ON f.field_id = b.field_id 
-            AND f.block_id = b.block_id 
-            AND f.cvr_number = b.cvr_number 
+        LEFT JOIN bnbo_field_summary b ON f.field_uuid = b.field_uuid
             AND f.year = b.year
-        LEFT JOIN final_wetland_analysis w ON f.field_id = w.field_id 
-            AND f.block_id = w.block_id 
-            AND f.cvr_number = w.cvr_number 
+        LEFT JOIN wetland_field_summary w ON f.field_uuid = w.field_uuid
             AND f.year = w.year
         """
 
         self.conn.execute(consolidation_query)
 
         # Log results
-        result_count = self.conn.execute(
+        final_result_count = self.conn.execute(
             "SELECT COUNT(*) FROM field_area_analysis_final"
         ).fetchone()[0]
+        self.log.info(f"✅ Created final analysis table with {final_result_count:,} fields")
 
         # Get comprehensive statistics including property-environmental relationships
         stats = self.conn.execute("""
@@ -361,18 +498,17 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "✅ Created final consolidated field area analysis with property-environmental relationships:"
         )
         self.log.info(f"   Total fields: {total_fields:,}")
-        self.log.info(
-            f"   Fields with BNBO: {fields_with_bnbo:,} ({(fields_with_bnbo / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with wetlands: {fields_with_wetlands:,} ({(fields_with_wetlands / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with properties: {fields_with_props:,} ({(fields_with_props / total_fields) * 100:.1f}%)"
-        )
-        self.log.info(
-            f"   Fields with soil data: {fields_with_soil_data:,} ({(fields_with_soil_data / total_fields) * 100:.1f}%)"
-        )
+        
+        # Calculate percentages safely to avoid division by zero
+        bnbo_pct = (fields_with_bnbo / total_fields) * 100 if total_fields > 0 else 0.0
+        wetlands_pct = (fields_with_wetlands / total_fields) * 100 if total_fields > 0 else 0.0
+        props_pct = (fields_with_props / total_fields) * 100 if total_fields > 0 else 0.0
+        soil_pct = (fields_with_soil_data / total_fields) * 100 if total_fields > 0 else 0.0
+        
+        self.log.info(f"   Fields with BNBO: {fields_with_bnbo:,} ({bnbo_pct:.1f}%)")
+        self.log.info(f"   Fields with wetlands: {fields_with_wetlands:,} ({wetlands_pct:.1f}%)")
+        self.log.info(f"   Fields with properties: {fields_with_props:,} ({props_pct:.1f}%)")
+        self.log.info(f"   Fields with soil data: {fields_with_soil_data:,} ({soil_pct:.1f}%)")
         self.log.info(f"   Fields with environmental features: {fields_with_env_features:,}")
         self.log.info(
             f"   Fields with property-environmental relationships: {fields_with_prop_env_relationships:,}"
@@ -385,13 +521,13 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Average coverage percentages:")
-        self.log.info(f"     BNBO: {avg_bnbo_pct:.2f}%")
-        self.log.info(f"     Wetlands: {avg_wetland_pct:.2f}%")
-        self.log.info(f"     Property-environmental: {avg_prop_env_pct:.2f}%")
-        self.log.info(f"     Properties per field: {avg_props_per_field:.1f}")
-        self.log.info(f"     Dominant soil type coverage: {avg_dominant_soil_pct:.1f}%")
-        self.log.info(f"     Total soil coverage: {avg_total_soil_pct:.1f}%")
-        self.log.info(f"     Soil types per field: {avg_soil_types_per_field:.1f}")
+        self.log.info(f"     BNBO: {avg_bnbo_pct:.2f}%" if avg_bnbo_pct is not None else "     BNBO: 0.00%")
+        self.log.info(f"     Wetlands: {avg_wetland_pct:.2f}%" if avg_wetland_pct is not None else "     Wetlands: 0.00%")
+        self.log.info(f"     Property-environmental: {avg_prop_env_pct:.2f}%" if avg_prop_env_pct is not None else "     Property-environmental: 0.00%")
+        self.log.info(f"     Properties per field: {avg_props_per_field:.1f}" if avg_props_per_field is not None else "     Properties per field: 0.0")
+        self.log.info(f"     Dominant soil type coverage: {avg_dominant_soil_pct:.1f}%" if avg_dominant_soil_pct is not None else "     Dominant soil type coverage: 0.0%")
+        self.log.info(f"     Total soil coverage: {avg_total_soil_pct:.1f}%" if avg_total_soil_pct is not None else "     Total soil coverage: 0.0%")
+        self.log.info(f"     Soil types per field: {avg_soil_types_per_field:.1f}" if avg_soil_types_per_field is not None else "     Soil types per field: 0.0")
 
         self.log.info("   Property-environmental spatial relationships:")
         self.log.info(f"     Total BNBO-property relationships: {total_bnbo_prop_relationships:,}")
@@ -403,9 +539,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Water project coverage:")
-        self.log.info(f"     BNBO areas: {avg_bnbo_water:.1f}%")
-        self.log.info(f"     Wetland areas: {avg_wetland_water:.1f}%")
-        self.log.info(f"     Property wetland areas: {avg_property_wetland_water:.1f}%")
+        self.log.info(f"     BNBO areas: {avg_bnbo_water:.1f}%" if avg_bnbo_water is not None else "     BNBO areas: 0.0%")
+        self.log.info(f"     Wetland areas: {avg_wetland_water:.1f}%" if avg_wetland_water is not None else "     Wetland areas: 0.0%")
+        self.log.info(f"     Property wetland areas: {avg_property_wetland_water:.1f}%" if avg_property_wetland_water is not None else "     Property wetland areas: 0.0%")
 
         self.log.info("   Total areas:")
         self.log.info(f"     Fields: {total_area_km2:.1f} km²")
@@ -433,8 +569,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
         self.log.info("   Environmental category breakdown:")
         for category, count, avg_props, avg_env, avg_prop_env, total_relationships in env_breakdown:
+            avg_props_str = f"{avg_props:.1f}" if avg_props is not None else "0.0"
+            avg_env_str = f"{avg_env:.1f}" if avg_env is not None else "0.0"
             self.log.info(
-                f"     {category}: {count:,} fields ({(count / total_fields) * 100:.1f}%), {avg_props:.1f} avg properties, {avg_env:.1f}% env coverage, {total_relationships:,} property relationships"
+                f"     {category}: {count:,} fields ({(count / total_fields) * 100:.1f}%), {avg_props_str} avg properties, {avg_env_str}% env coverage, {total_relationships:,} property relationships"
             )
 
         return {

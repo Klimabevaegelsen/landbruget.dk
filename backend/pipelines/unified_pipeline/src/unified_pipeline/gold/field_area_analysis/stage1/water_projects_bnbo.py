@@ -22,19 +22,24 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load Stage 0 pre-filtered BNBO and water projects datasets."""
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        
         # Load Stage 0 pre-filtered BNBO (3.7K → ~1K, 70% reduction)
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
-        stage0_bnbo_dataset = CONFIG.stage_outputs["bnbo_prefiltered"]
+        stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
         self.gcs_access.query_parquet_direct(stage0_bnbo_path, "SELECT *", "bnbo_status_raw")
+        self.log.info(f"✅ Loaded BNBO from {stage0_bnbo_dataset}")
 
         # Load Stage 0 pre-filtered water projects (2.4K → ~500, 80% reduction)
         self.log.info("Loading Stage 0 pre-filtered water projects dataset...")
-        stage0_water_projects_dataset = CONFIG.stage_outputs["water_projects_prefiltered"]
+        stage0_water_projects_dataset = updated_outputs["water_projects_prefiltered"]
         stage0_water_projects_path = self._get_latest_gold_path(stage0_water_projects_dataset)
         self.gcs_access.query_parquet_direct(
             stage0_water_projects_path, "SELECT *", "water_projects_raw"
         )
+        self.log.info(f"✅ Loaded water projects from {stage0_water_projects_dataset}")
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered BNBO and water projects!")
         self.log.info(
@@ -108,7 +113,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             
         FROM water_projects wp
         JOIN bnbo_status b ON ST_Intersects(wp.geometry, b.geometry)
-        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 10  -- Filter tiny intersections
+        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0  -- Keep all intersections
         """
 
         self.log.info("Executing Water Projects × BNBO spatial intersection...")

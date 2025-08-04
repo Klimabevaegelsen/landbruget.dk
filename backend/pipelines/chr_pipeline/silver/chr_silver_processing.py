@@ -359,34 +359,61 @@ def process_chr_data_streaming(
             if "*" in dataset_info["file"]:
                 # This is a pattern for streaming files
                 pattern = dataset_info["file"]
-                gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
+                
+                # MINIMAL FIX: For CHR movement data, search across month-suffixed directories
+                if dataset_key == "cattle_movements":
+                    logging.info(f"🔍 Looking for CHR movement files across month-suffixed bronze directories...")
+                    
+                    try:
+                        # Find all month-suffixed directories for this bronze timestamp
+                        all_dirs = gcs_access.list_files(f"gs://{bucket_name}/bronze/chr/")
+                        bronze_dirs = [d for d in all_dirs if d.startswith(f"bronze/chr/{bronze_timestamp}")]
+                        
+                        logging.info(f"Found bronze directories: {bronze_dirs}")
+                        
+                        matching_files = []
+                        for bronze_path in bronze_dirs:
+                            dir_files = gcs_access.list_files(f"gs://{bucket_name}/{bronze_path}")
+                            pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
+                            dir_matches = [f"gs://{bucket_name}/{f}" for f in dir_files if pattern_prefix in f and f.endswith(".parquet")]
+                            matching_files.extend(dir_matches)
+                            logging.info(f"Found {len(dir_matches)} CHR movement files in {bronze_path}")
+                            
+                    except Exception as e:
+                        logging.error(f"Error discovering month-suffixed bronze directories: {e}")
+                        matching_files = []
+                else:
+                    # Original logic for other datasets
+                    gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
+                    logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
+                    
+                    try:
+                        gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
+                        all_files = gcs_access.list_files(gcs_list_pattern)
 
-                logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
+                        # Filter files matching the pattern (handle both .json and .parquet files)
+                        if pattern.endswith(".parquet"):
+                            pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
+                            matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".parquet")]
+                        else:
+                            pattern_prefix = pattern.replace("*", "").replace(".json", "")
+                            matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
+                            
+                    except Exception as e:
+                        logging.error(f"Error listing files for pattern {pattern}: {e}")
+                        matching_files = []
+
+                if not matching_files:
+                    if dataset_info["required"]:
+                        logging.error(f"❌ No files found matching required pattern: {pattern}")
+                        return False
+                    else:
+                        logging.info(f"⚠️ No files found matching optional pattern: {pattern} - skipping")
+                        continue
+
+                logging.info(f"📁 Found {len(matching_files)} files matching pattern: {pattern}")
 
                 try:
-                    # Use the same pattern as other successful pipelines
-                    # Use gcs_access.list_files() with full GCS pattern including wildcards
-                    gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
-                    all_files = gcs_access.list_files(gcs_list_pattern)
-
-                    # Filter files matching the pattern (handle both .json and .parquet files)
-                    if pattern.endswith(".parquet"):
-                        pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
-                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".parquet")]
-                    else:
-                        pattern_prefix = pattern.replace("*", "").replace(".json", "")
-                        matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
-
-                    if not matching_files:
-                        if dataset_info["required"]:
-                            logging.error(f"❌ No files found matching required pattern: {pattern}")
-                            return False
-                        else:
-                            logging.info(f"⚠️ No files found matching optional pattern: {pattern} - skipping")
-                            continue
-
-                    logging.info(f"📁 Found {len(matching_files)} files matching pattern: {pattern}")
-
                     # Process files in batches to avoid memory issues (600 files is too many at once)
                     batch_size = 50  # Process 50 files at a time
 

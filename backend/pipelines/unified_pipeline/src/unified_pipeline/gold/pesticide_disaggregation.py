@@ -1940,6 +1940,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
                     SELECT 
                         m.field_id,
+                        m.field_uuid,
                         m.geometry,
                         m.area_ha,
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
@@ -1959,14 +1960,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     -- Now do spatial join ONLY on the filtered subset (much smaller!)
                     SELECT DISTINCT
                         f1.field_id as field1_id,
+                        f1.field_uuid as field1_uuid,
                         f2.field_id as field2_id,
+                        f2.field_uuid as field2_uuid,
                         f1.CVR_Str,
                         f1.Crop_Str
                     FROM FilteredFields f1
                     JOIN FilteredFields f2 ON 
                         f1.CVR_Str = f2.CVR_Str 
                         AND f1.Crop_Str = f2.Crop_Str
-                        AND f1.field_id != f2.field_id
+                        AND f1.field_uuid != f2.field_uuid
                         AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
@@ -1992,6 +1995,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FieldClusters AS (
                     SELECT 
                         field_id,
+                        field_uuid,
                         CVR_Str,
                         Crop_Str,
                         -- Use minimum field_id in adjacency as cluster identifier
@@ -1999,6 +2003,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM (
                         SELECT 
                             sa.field1_id as field_id,
+                            sa.field1_uuid as field_uuid,
                             sa.CVR_Str,
                             sa.Crop_Str,
                             sa.field2_id as connected_field
@@ -2008,6 +2013,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         
                         SELECT 
                             sa.field2_id as field_id,
+                            sa.field2_uuid as field_uuid,
                             sa.CVR_Str,
                             sa.Crop_Str,
                             sa.field1_id as connected_field
@@ -2018,6 +2024,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         -- Include isolated fields (not in any adjacency) from our filtered set
                         SELECT 
                             f.field_id,
+                            f.field_uuid,
                             f.CVR_Str,
                             f.Crop_Str,
                             f.field_id as connected_field
@@ -2038,9 +2045,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         COUNT(*) as cluster_field_count,
                         SUM(m.area_ha) as cluster_total_area,
                         ARRAY_AGG(fc.field_id) as cluster_field_ids,
+                        ARRAY_AGG(fc.field_uuid) as cluster_field_uuids,
                         ARRAY_AGG(m.area_ha) as cluster_field_areas
                     FROM FieldClusters fc
-                    JOIN marker m ON fc.field_id = m.field_id
+                    JOIN marker m ON fc.field_uuid = m.field_uuid
                     GROUP BY fc.CVR_Str, fc.Crop_Str, fc.cluster_id
                     HAVING COUNT(*) >= 2  -- Only multi-field clusters
                 ),
@@ -2057,6 +2065,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         ca.cluster_id,
                         ca.cluster_total_area,
                         ca.cluster_field_ids,
+                        ca.cluster_field_uuids,
                         ca.cluster_field_areas,
                         ca.cluster_field_count,
                         -- Calculate area match quality
@@ -2082,6 +2091,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         mc.DosageUnit,
                         mc.AcreageSize,
                         UNNEST(mc.cluster_field_ids) as field_id,
+                        UNNEST(mc.cluster_field_uuids) as field_uuid,
                         UNNEST(mc.cluster_field_areas) as field_area,
                         mc.cluster_total_area,
                         mc.area_diff_pct,
@@ -2110,7 +2120,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     m.field_uuid,
                     m.primary_field_id
                 FROM FieldAllocations fa
-                JOIN marker m ON fa.field_id = m.field_id
+                JOIN marker m ON fa.field_uuid = m.field_uuid
             """
 
             # Execute the chunked spatial clustering

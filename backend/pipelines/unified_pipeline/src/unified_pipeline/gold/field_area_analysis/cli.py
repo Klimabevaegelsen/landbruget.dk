@@ -33,7 +33,7 @@ from .stage2.fields_bnbo_water import FieldsBNBOWaterCoverage
 from .stage2.fields_wetland_water import FieldsWetlandWaterCoverage
 from .stage3.final_bnbo import FinalBNBOAnalysis
 from .stage3.final_wetland import FinalWetlandAnalysis
-from .stage4.consolidate import ConsolidateResults
+from .stage4.consolidate_two_tables import ConsolidateResultsTwoTables
 
 # Configure logging
 logger = Logger.get_logger()
@@ -65,9 +65,9 @@ STAGE_JOBS = {
         "final_bnbo": FinalBNBOAnalysis,
         "final_wetland": FinalWetlandAnalysis,
     },
-    # Stage 4 (consolidation)
+    # Stage 4 (consolidation) - Two-Table Architecture
     4: {
-        "consolidate": ConsolidateResults,
+        "consolidate": ConsolidateResultsTwoTables,
     },
 }
 

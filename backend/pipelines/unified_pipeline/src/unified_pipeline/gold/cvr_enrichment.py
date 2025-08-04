@@ -13,10 +13,14 @@ them all for enrichment.
 """
 
 import os
+import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, Optional, Set
+from urllib.parse import urlparse
 
 from pydantic import Field
+from tqdm import tqdm
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.cvr_api_client import CVRAPIClient
@@ -49,7 +53,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
     )
 
     max_financial_documents: int = Field(
-        default=5, description="Maximum number of financial documents to fetch per company"
+        default=10, description="Maximum number of financial documents to fetch per company"
     )
 
     # Processing configuration
@@ -66,7 +70,34 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
         default=True, description="Whether to save raw API responses for debugging"
     )
 
+    # Testing configuration
+    test_limit: Optional[int] = Field(
+        default=None, description="Limit number of CVR numbers to process for testing (None = no limit)"
+    )
+    
+    parse_financial_xml: bool = Field(
+        default=True, description="Whether to download and parse XML financial documents"
+    )
+
     model_config = {"frozen": True}
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI configuration filters to the CVR enrichment config.
+        
+        Args:
+            cli_config: CLI configuration containing CVR-specific parameters
+        """
+        # Only apply CVR-specific parameters if this is a CVR enrichment job
+        if hasattr(cli_config, 'test_limit') and cli_config.test_limit is not None:
+            # Create a new config with updated values (since model is frozen)
+            object.__setattr__(self, 'test_limit', cli_config.test_limit)
+        
+        if hasattr(cli_config, 'parse_financial_xml'):
+            object.__setattr__(self, 'parse_financial_xml', cli_config.parse_financial_xml)
+            
+        if hasattr(cli_config, 'max_financial_documents'):
+            object.__setattr__(self, 'max_financial_documents', cli_config.max_financial_documents)
 
 
 class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
@@ -175,6 +206,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         # Convert to sorted list and validate uniqueness
         cvr_list = sorted(list(cvr_numbers))
 
+        # Apply test limit if configured
+        if self.config.test_limit is not None:
+            original_list_length = len(cvr_list)
+            cvr_list = cvr_list[:self.config.test_limit]
+            self.log.info(f"🧪 Test mode: Limited CVR list from {original_list_length} to {len(cvr_list)} entries")
+
         # Additional validation and logging for deduplication
         original_count = len(cvr_numbers) if isinstance(cvr_numbers, (set, list)) else 0
         unique_count = len(cvr_list)
@@ -215,18 +252,23 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         if self.config.fetch_financial_documents:
             self.log.info("Fetching financial documents for companies")
 
-            for cvr_number in valid_cvrs:
-                if company_results["results"].get(cvr_number):
-                    try:
-                        docs = self.cvr_api_client.get_financial_documents(
-                            cvr_number=cvr_number, max_results=self.config.max_financial_documents
-                        )
-                        financial_documents[cvr_number] = docs
-                    except Exception as e:
-                        self.log.warning(
-                            f"Failed to fetch financial documents for CVR {cvr_number}: {e}"
-                        )
-                        financial_documents[cvr_number] = []
+            companies_with_data = [cvr for cvr in valid_cvrs if company_results["results"].get(cvr)]
+            
+            for cvr_number in tqdm(companies_with_data, desc="Fetching financial documents", unit="company"):
+                try:
+                    docs = self.cvr_api_client.get_financial_documents(
+                        cvr_number=cvr_number, max_results=self.config.max_financial_documents
+                    )
+                    # Download XML content if configured
+                    if self.config.parse_financial_xml:
+                        docs = self._download_financial_xml_documents(docs)
+                    
+                    financial_documents[cvr_number] = docs
+                except Exception as e:
+                    self.log.warning(
+                        f"Failed to fetch financial documents for CVR {cvr_number}: {e}"
+                    )
+                    financial_documents[cvr_number] = []
 
         enrichment_data = {
             "company_data": company_results,
@@ -335,16 +377,295 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
         if companies_data:
-            # Insert data into DuckDB
-            self.conn.execute(
-                f"""
+            self.log.info(f"🔍 Creating normalized tables for {len(companies_data)} companies")
+            
+            import json
+            json_strings = [json.dumps(company) for company in companies_data]
+            
+            # 1. Main companies table
+            self.conn.execute(f"""
                 CREATE TABLE {table_name} AS 
-                SELECT * FROM read_json_auto($1)
-            """,
-                [companies_data],
-            )
+                SELECT 
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                    json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                    json_extract(json_data, '$.status')::VARCHAR as status,
+                    json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
+                    json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                    json_extract(json_data, '$.data_source')::VARCHAR as data_source,
+                    json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
+                    json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
+                    json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
+                    json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                    json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
+                FROM unnest($1) as t(json_data)
+            """, [json_strings])
+            
+            # 2. Leadership table - let DuckDB auto-detect and parse the structure
+            # First get the schema structure for leadership data
+            leadership_schema = self.conn.execute("""
+                WITH leadership_sample AS (
+                    SELECT json_extract(json_data, '$.leadership') as leadership_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(leadership_json) FROM leadership_sample
+            """, [json_strings]).fetchone()
+            
+            if leadership_schema and leadership_schema[0]:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_leadership AS
+                    SELECT 
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_parsed
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+                """, [json_strings, leadership_schema[0]])
+            else:
+                # Fallback: create empty table
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_leadership (
+                        cvr_number INTEGER,
+                        leadership_data VARCHAR
+                    )
+                """)
+            
+            # Extract leadership details
+            leadership_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_leadership").fetchone()[0]
+            
+            # 3. Financial documents table - flattened structure for easier analysis
+            financial_schema = self.conn.execute("""
+                WITH financial_sample AS (
+                    SELECT json_extract(json_data, '$.financial_documents') as financial_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(financial_json) FROM financial_sample
+            """, [json_strings]).fetchone()
+            
+            if financial_schema and financial_schema[0]:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_financial AS
+                    WITH financial_flattened AS (
+                        SELECT
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.financial_documents'), $2)) as financial_parsed
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                    )
+                    SELECT 
+                        cvr_number,
+                        -- Document metadata
+                        financial_parsed.publication_type,
+                        financial_parsed.publication_time,
+                        financial_parsed.case_number,
+                        financial_parsed.reporting_period.start_date as reporting_period_start,
+                        financial_parsed.reporting_period.end_date as reporting_period_end,
+                        financial_parsed.document_count,
+                        financial_parsed.xml_size_bytes,
+                        financial_parsed.download_success,
+                        -- XBRL Context Information
+                        financial_parsed.financial_metrics.duration_context,
+                        financial_parsed.financial_metrics.instant_context,
+                        financial_parsed.financial_metrics.income_statement_start_date,
+                        financial_parsed.financial_metrics.income_statement_end_date,
+                        financial_parsed.financial_metrics.balance_sheet_date,
+                        -- Key Financial Metrics (Income Statement)
+                        financial_parsed.financial_metrics.net_profit_loss,
+                        financial_parsed.financial_metrics.gross_profit_loss,
+                        financial_parsed.financial_metrics.operating_profit_loss,
+                        financial_parsed.financial_metrics.profit_loss_before_tax,
+                        financial_parsed.financial_metrics.employee_benefits_expense,
+                        financial_parsed.financial_metrics.average_number_of_employees,
+                        financial_parsed.financial_metrics.depreciation_expense,
+                        financial_parsed.financial_metrics.other_finance_income,
+                        financial_parsed.financial_metrics.other_finance_expenses,
+                        financial_parsed.financial_metrics.tax_expense,
+                        -- Key Financial Metrics (Balance Sheet)
+                        financial_parsed.financial_metrics.total_assets,
+                        financial_parsed.financial_metrics.total_equity,
+                        financial_parsed.financial_metrics.noncurrent_assets,
+                        financial_parsed.financial_metrics.current_assets,
+                        financial_parsed.financial_metrics.cash_and_cash_equivalents,
+                        financial_parsed.financial_metrics.liabilities_other_than_provisions,
+                        financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions,
+                        financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions,
+                        financial_parsed.financial_metrics.provisions,
+                        financial_parsed.financial_metrics.property_plant_equipment,
+                        financial_parsed.financial_metrics.contributed_capital,
+                        -- Additional calculated fields for analysis
+                        CASE 
+                            WHEN financial_parsed.financial_metrics.total_assets > 0 
+                            THEN financial_parsed.financial_metrics.total_equity / financial_parsed.financial_metrics.total_assets 
+                            ELSE NULL 
+                        END as equity_ratio,
+                        CASE 
+                            WHEN financial_parsed.financial_metrics.average_number_of_employees > 0 
+                            THEN financial_parsed.financial_metrics.net_profit_loss / financial_parsed.financial_metrics.average_number_of_employees 
+                            ELSE NULL 
+                        END as profit_per_employee,
+                        CASE 
+                            WHEN financial_parsed.financial_metrics.total_assets > 0 
+                            THEN financial_parsed.financial_metrics.net_profit_loss / financial_parsed.financial_metrics.total_assets 
+                            ELSE NULL 
+                        END as return_on_assets
+                    FROM financial_flattened
+                """, [json_strings, financial_schema[0]])
+            else:
+                # Fallback: create empty table with proper schema
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_financial (
+                        cvr_number INTEGER,
+                        publication_type VARCHAR,
+                        reporting_period_start VARCHAR,
+                        reporting_period_end VARCHAR,
+                        net_profit_loss DOUBLE,
+                        total_assets DOUBLE,
+                        total_equity DOUBLE,
+                        average_number_of_employees DOUBLE,
+                        equity_ratio DOUBLE,
+                        profit_per_employee DOUBLE,
+                        return_on_assets DOUBLE
+                    )
+                """)
+            
+            financial_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_financial").fetchone()[0]
+            
+            # 4. Address history table - let DuckDB auto-detect structure
+            address_schema = self.conn.execute("""
+                WITH address_sample AS (
+                    SELECT json_extract(json_data, '$.addresses') as address_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(address_json) FROM address_sample
+            """, [json_strings]).fetchone()
+            
+            if address_schema and address_schema[0]:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_addresses AS
+                    SELECT 
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                """, [json_strings, address_schema[0]])
+            else:
+                # Fallback: create empty table
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_addresses (
+                        cvr_number INTEGER,
+                        address_data VARCHAR
+                    )
+                """)
+            
+            address_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses").fetchone()[0]
+            
+            # 5. Industries table - let DuckDB auto-detect structure  
+            industry_schema = self.conn.execute("""
+                WITH industry_sample AS (
+                    SELECT json_extract(json_data, '$.industries') as industry_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.industries')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(industry_json) FROM industry_sample
+            """, [json_strings]).fetchone()
+            
+            if industry_schema and industry_schema[0]:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_industries AS
+                    SELECT 
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.industries'), $2)) as industry_parsed
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.industries')) > 0
+                """, [json_strings, industry_schema[0]])
+            else:
+                # Fallback: create empty table
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_industries (
+                        cvr_number INTEGER,
+                        industry_data VARCHAR
+                    )
+                """)
+            
+            industry_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_industries").fetchone()[0]
+            
+            # 6. Employment data tables - separate tables for each employment type
+            employment_types = [
+                ('annual_employment', 'annual'),
+                ('quarterly_employment', 'quarterly'), 
+                ('monthly_employment', 'monthly'),
+                ('replacement_monthly_employment', 'replacement_monthly')
+            ]
+            
+            employment_counts = {}
+            for employment_field, table_suffix in employment_types:
+                employment_schema = self.conn.execute("""
+                    WITH employment_sample AS (
+                        SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                        LIMIT 1
+                    )
+                    SELECT json_structure(employment_json) FROM employment_sample
+                """, [json_strings, employment_field]).fetchone()
 
-            self.log.info(f"Created DuckDB table {table_name} with {len(companies_data)} companies")
+                if employment_schema and employment_schema[0]:
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name}_employment_{table_suffix} AS
+                        SELECT
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_parsed
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                    """, [json_strings, employment_schema[0]])
+                else:
+                    # Fallback: create empty table
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name}_employment_{table_suffix} (
+                            cvr_number INTEGER,
+                            employment_data VARCHAR
+                        )
+                    """)
+                
+                employment_counts[table_suffix] = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_employment_{table_suffix}").fetchone()[0]
+            
+            # Show summary results
+            sample_results = self.conn.execute(f"""
+                SELECT cvr_number, company_name, company_type_description, founded_date, 
+                       source_pipelines, financial_document_count
+                FROM {table_name} 
+                LIMIT 5
+            """).fetchall()
+            
+            self.log.info(f"🎉 Successfully created normalized CVR tables!")
+            self.log.info(f"   📋 Companies: {len(companies_data)}")
+            self.log.info(f"   👥 Leadership entries: {leadership_count}")
+            self.log.info(f"   💰 Financial documents: {financial_count}")
+            self.log.info(f"   📍 Address entries: {address_count}")
+            self.log.info(f"   🏭 Industry entries: {industry_count}")
+            self.log.info(f"   👷 Employment data:")
+            for table_suffix, count in employment_counts.items():
+                self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
+            
+            for row in sample_results:
+                self.log.info(f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}")
         else:
             # Create empty table with schema
             self.conn.execute(f"""
@@ -360,10 +681,35 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """)
             self.log.warning(f"Created empty table {table_name} - no company data to process")
 
-        # Save table to GCS
-        self._save_data(
-            data=table_name, dataset=self.config.dataset, bucket=self.config.bucket, stage="gold"
-        )
+        # Save all tables to GCS
+        tables_to_save = [table_name]
+        if companies_data:
+            # Add the additional normalized tables
+            tables_to_save.extend([
+                f"{table_name}_leadership",
+                f"{table_name}_financial", 
+                f"{table_name}_addresses",
+                f"{table_name}_industries",
+                f"{table_name}_employment_annual",
+                f"{table_name}_employment_quarterly",
+                f"{table_name}_employment_monthly",
+                f"{table_name}_employment_replacement_monthly"
+            ])
+        
+        for table in tables_to_save:
+            # Check if table exists and has data
+            try:
+                count = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                if count > 0:
+                    self.log.info(f"💾 Saving table {table} ({count} rows)")
+                    self._save_data(
+                        data=table, dataset=f"{self.config.dataset}_{table.split('_')[-1]}" if '_' in table else self.config.dataset, 
+                        bucket=self.config.bucket, stage="gold"
+                    )
+                else:
+                    self.log.info(f"⚠️ Skipping empty table {table}")
+            except Exception as e:
+                self.log.warning(f"⚠️ Could not save table {table}: {e}")
 
         # Save summary data separately
         self._save_summary_data(processed_data)
@@ -438,3 +784,249 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             return False
 
         return True
+
+    def _download_financial_xml_documents(self, financial_docs: list) -> list:
+        """
+        Download XML financial documents for analysis.
+        
+        Args:
+            financial_docs: List of financial document metadata
+            
+        Returns:
+            List of financial docs with downloaded XML content added
+        """
+        enriched_docs = []
+        
+        for doc in financial_docs:
+            try:
+                # Get the first document URL if available
+                if doc.get("documents") and len(doc["documents"]) > 0:
+                    document_url = doc["documents"][0].get("document_url")
+                    
+                    if document_url and document_url.endswith('.xml'):
+                        self.log.debug(f"Downloading XML from: {document_url}")
+                        
+                        # Download XML content
+                        response = requests.get(document_url, timeout=30)
+                        response.raise_for_status()
+                        
+                        # Add XML content to document
+                        doc_copy = doc.copy()
+                        doc_copy["xml_content"] = response.text
+                        doc_copy["xml_size_bytes"] = len(response.text)
+                        doc_copy["download_success"] = True
+                        
+                        # Parse financial metrics from XML
+                        financial_metrics = self._parse_xbrl_financial_data(response.text)
+                        doc_copy["financial_metrics"] = financial_metrics
+                        
+                        enriched_docs.append(doc_copy)
+                    else:
+                        # Non-XML or no URL - keep original
+                        doc_copy = doc.copy()
+                        doc_copy["download_success"] = False
+                        doc_copy["download_reason"] = "No XML URL found"
+                        enriched_docs.append(doc_copy)
+                else:
+                    # No documents array
+                    doc_copy = doc.copy()
+                    doc_copy["download_success"] = False
+                    doc_copy["download_reason"] = "No documents array"
+                    enriched_docs.append(doc_copy)
+                    
+            except Exception as e:
+                self.log.warning(f"Failed to download XML document: {e}")
+                doc_copy = doc.copy()
+                doc_copy["download_success"] = False
+                doc_copy["download_error"] = str(e)
+                enriched_docs.append(doc_copy)
+        
+        return enriched_docs
+
+    def _parse_xbrl_financial_data(self, xml_content: str) -> dict:
+        """
+        Parse XBRL financial data from XML content.
+        
+        Args:
+            xml_content: Raw XML content from financial document
+            
+        Returns:
+            Dictionary with parsed financial metrics for current and previous year
+        """
+        try:
+            root = ET.fromstring(xml_content)
+            
+            # Parse context definitions to understand periods and types
+            contexts = {}
+            for elem in root.iter():
+                if 'context' in elem.tag.lower() and elem.get('id'):
+                    context_id = elem.get('id')
+                    contexts[context_id] = {
+                        'type': None,  # 'duration' or 'instant'
+                        'start_date': None,
+                        'end_date': None,
+                        'instant_date': None,
+                        'entity_id': None
+                    }
+                    
+                    # Parse context details
+                    for child in elem:
+                        if 'entity' in child.tag.lower():
+                            for gc in child:
+                                if 'identifier' in gc.tag.lower():
+                                    contexts[context_id]['entity_id'] = gc.text
+                        elif 'period' in child.tag.lower():
+                            for gc in child:
+                                gc_tag = gc.tag.split('}')[-1] if '}' in gc.tag else gc.tag
+                                if gc_tag == 'startDate':
+                                    contexts[context_id]['start_date'] = gc.text
+                                    contexts[context_id]['type'] = 'duration'
+                                elif gc_tag == 'endDate':
+                                    contexts[context_id]['end_date'] = gc.text
+                                elif gc_tag == 'instant':
+                                    contexts[context_id]['instant_date'] = gc.text
+                                    contexts[context_id]['type'] = 'instant'
+            
+            # Also extract reporting period info from elements
+            reporting_periods = {}
+            for elem in root.iter():
+                tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                context_ref = elem.get('contextRef')
+                
+                if tag_name == 'ReportingPeriodStartDate' and context_ref and elem.text:
+                    if context_ref not in reporting_periods:
+                        reporting_periods[context_ref] = {}
+                    reporting_periods[context_ref]['start_date'] = elem.text
+                elif tag_name == 'ReportingPeriodEndDate' and context_ref and elem.text:
+                    if context_ref not in reporting_periods:
+                        reporting_periods[context_ref] = {}
+                    reporting_periods[context_ref]['end_date'] = elem.text
+            
+            # Find current duration context (for income statement items)
+            current_duration_context = None
+            current_instant_context = None
+            
+            # Look for the most recent duration context
+            duration_contexts = {k: v for k, v in contexts.items() if v['type'] == 'duration'}
+            if duration_contexts:
+                sorted_duration = sorted(duration_contexts.items(), 
+                                       key=lambda x: x[1].get('end_date', ''), reverse=True)
+                current_duration_context = sorted_duration[0][0]
+            
+            # Look for the most recent instant context  
+            instant_contexts = {k: v for k, v in contexts.items() if v['type'] == 'instant'}
+            if instant_contexts:
+                sorted_instant = sorted(instant_contexts.items(),
+                                      key=lambda x: x[1].get('instant_date', ''), reverse=True)
+                current_instant_context = sorted_instant[0][0]
+            
+            # Fallbacks
+            if not current_duration_context:
+                current_duration_context = 'c1'
+            if not current_instant_context:
+                current_instant_context = 'c4' if 'c4' in contexts else current_duration_context
+            
+            # Key financial elements to extract (Danish XBRL taxonomy)
+            # Based on analysis of 10 XML documents across 5 companies
+            # Separated by context type: duration (income statement) vs instant (balance sheet)
+            
+            duration_elements = {
+                # Income Statement items (use duration context)
+                'net_profit_loss': 'ProfitLoss',
+                'gross_profit_loss': 'GrossProfitLoss', 
+                'operating_profit_loss': 'ProfitLossFromOrdinaryOperatingActivities',
+                'profit_loss_before_tax': 'ProfitLossFromOrdinaryActivitiesBeforeTax',
+                'revenue': 'Revenue',
+                'gross_result': 'GrossResult',
+                'employee_benefits_expense': 'EmployeeBenefitsExpense',
+                'average_number_of_employees': 'AverageNumberOfEmployees',  # IMPORTANT!
+                'depreciation_expense': 'DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss',
+                'other_finance_income': 'OtherFinanceIncome',
+                'other_finance_expenses': 'OtherFinanceExpenses', 
+                'tax_expense': 'TaxExpense',
+            }
+            
+            instant_elements = {
+                # Balance Sheet items (use instant context)
+                'total_assets': 'Assets',
+                'total_equity': 'Equity',
+                'noncurrent_assets': 'NoncurrentAssets',
+                'current_assets': 'CurrentAssets', 
+                'liabilities_and_equity': 'LiabilitiesAndEquity',
+                'contributed_capital': 'ContributedCapital',
+                'cash_and_cash_equivalents': 'CashAndCashEquivalents',
+                'deferred_income_assets': 'DeferredIncomeAssets',
+                'recognised_not_owned_assets': 'RecognisedButNotOwnedAssets',
+                'liabilities_other_than_provisions': 'LiabilitiesOtherThanProvisions',
+                'shortterm_liabilities_other_than_provisions': 'ShorttermLiabilitiesOtherThanProvisions',
+                'longterm_liabilities_other_than_provisions': 'LongtermLiabilitiesOtherThanProvisions',
+                'shortterm_debt_to_banks': 'ShorttermDebtToBanks',
+                'shortterm_part_of_longterm_liabilities': 'ShorttermPartOfLongtermLiabilitiesOtherThanProvisions',
+                'other_payables_including_tax': 'OtherPayablesIncludingTaxPayablesLiabilitiesOtherThanProvisionsShortterm',
+                'provisions': 'Provisions',
+                'provisions_for_deferred_tax': 'ProvisionsForDeferredTax',
+                'property_plant_equipment': 'PropertyPlantAndEquipment',
+                'longterm_debt_to_credit_institutions': 'LongtermDebtToOtherCreditInstitutions',
+            }
+            
+            # Extract period information for the data
+            duration_period = contexts.get(current_duration_context, {})
+            instant_period = contexts.get(current_instant_context, {})
+            
+            # Extract financial metrics for current period
+            financial_metrics = {
+                # Context information
+                'duration_context': current_duration_context,
+                'instant_context': current_instant_context,
+                
+                # Period dates (for income statement)
+                'income_statement_start_date': duration_period.get('start_date'),
+                'income_statement_end_date': duration_period.get('end_date'),
+                
+                # Balance sheet date
+                'balance_sheet_date': instant_period.get('instant_date'),
+                
+                # Entity verification
+                'entity_id_duration': duration_period.get('entity_id'),
+                'entity_id_instant': instant_period.get('entity_id'),
+            }
+            
+            # Extract duration elements (income statement) using duration context
+            for metric_name, element_name in duration_elements.items():
+                for elem in root.iter():
+                    tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                    
+                    if (tag_name == element_name and 
+                        elem.get('contextRef') == current_duration_context and 
+                        elem.text and elem.text.strip()):
+                        
+                        try:
+                            # Parse as number
+                            financial_metrics[metric_name] = float(elem.text.strip())
+                        except ValueError:
+                            # Keep as string if not numeric
+                            financial_metrics[metric_name] = elem.text.strip()
+                        break
+            
+            # Extract instant elements (balance sheet) using instant context
+            for metric_name, element_name in instant_elements.items():
+                for elem in root.iter():
+                    tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                    
+                    if (tag_name == element_name and 
+                        elem.get('contextRef') == current_instant_context and 
+                        elem.text and elem.text.strip()):
+                        
+                        try:
+                            # Parse as number  
+                            financial_metrics[metric_name] = float(elem.text.strip())
+                        except ValueError:
+                            # Keep as string if not numeric
+                            financial_metrics[metric_name] = elem.text.strip()
+                        break
+            
+            return financial_metrics
+            
+        except Exception as e:
+            self.log.warning(f"Failed to parse XBRL data: {e}")
+            return {'parse_error': str(e)}

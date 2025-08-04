@@ -7,6 +7,8 @@ from .field_production import FieldProductionGold, FieldProductionGoldConfig
 from .pesticide_disaggregation import PesticideDisaggregationGold, PesticideDisaggregationGoldConfig
 from .property_cadastral_merge import PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig
 from .nles5_nitrogen_estimation import NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig
+from .worker_safety import WorkerSafetyGold, WorkerSafetyGoldConfig
+from .work_permits import WorkPermitsGold, WorkPermitsGoldConfig
 
 # Export all gold processors and configs
 __all__ = [
@@ -20,4 +22,8 @@ __all__ = [
     "PesticideDisaggregationGoldConfig",
     "NLES5NitrogenEstimationGold",
     "NLES5NitrogenEstimationGoldConfig",
+    "WorkerSafetyGold",
+    "WorkerSafetyGoldConfig",
+    "WorkPermitsGold",
+    "WorkPermitsGoldConfig",
 ]

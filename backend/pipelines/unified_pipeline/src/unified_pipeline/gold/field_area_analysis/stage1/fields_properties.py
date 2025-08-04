@@ -25,13 +25,16 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         """Load agricultural fields and Stage 0 pre-filtered properties."""
         # Load agricultural fields (600K fields)
         self.log.info("Loading agricultural fields dataset...")
-        self._load_silver_dataset(CONFIG.agricultural_fields_dataset, "agricultural_fields_full")
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_full")
 
         # Load Stage 0 pre-filtered properties (MASSIVE OPTIMIZATION!)
         self.log.info("Loading Stage 0 pre-filtered properties (500K instead of 6.5M)...")
-        stage0_properties_dataset = CONFIG.stage_outputs["properties_prefiltered"]
+        # Get year-aware dataset names
+        updated_outputs = CONFIG.update_outputs_for_year()
+        stage0_properties_dataset = updated_outputs["properties_prefiltered"]
         stage0_properties_path = self._get_latest_gold_path(stage0_properties_dataset)
         self.gcs_access.query_parquet_direct(stage0_properties_path, "SELECT *", "properties_full")
+        self.log.info(f"✅ Loaded properties from {stage0_properties_dataset}")
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered properties!")
         self.log.info("🚀 PERFORMANCE: 13x faster than original (6.5M → 500K properties)")
@@ -51,6 +54,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 geometry,
+                field_uuid,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_full
         """)
@@ -111,6 +115,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS INTEGER) as year,
+                CAST(NULL AS VARCHAR) as field_uuid,
                 CAST(NULL AS DOUBLE) as field_area_m2,
                 CAST(NULL AS VARCHAR) as bfe_number,
                 CAST(NULL AS DOUBLE) as property_area_m2,
@@ -166,6 +171,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     f.block_id,
                     f.cvr_number,
                     f.year,
+                    f.field_uuid,
                     f.field_area_m2,
                     p.bestemtFastEjendomBFENr as bfe_number,
                     p.property_area_m2,
@@ -192,6 +198,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         block_id,
                         cvr_number,
                         year,
+                        field_uuid,
                         field_area_m2,
                         bfe_number,
                         property_area_m2,
@@ -235,31 +242,70 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 f"  ✅ Chunk {chunk_num + 1}: {chunk_final_count:,}/{chunk_raw_count:,} meaningful intersections - {chunk_time:.1f}s"
             )
 
+        # ADD FIELDS WITHOUT PROPERTY INTERSECTIONS (preserve all source fields)
+        self.log.info("🔧 Adding fields without property intersections (NULL property data)...")
+        
+        # Find fields that didn't intersect with any properties
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE fields_without_properties AS
+            SELECT 
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                f.field_uuid,
+                f.field_area_m2,
+                NULL as bfe_number,
+                NULL as property_area_m2,
+                NULL as intersection_area_m2,
+                NULL as field_area_share_pct,
+                NULL as property_area_share_pct,
+                f.geometry as field_geometry,
+                NULL as property_geometry,
+                NULL as intersection_geometry
+            FROM agricultural_fields f
+            LEFT JOIN field_property_intersections existing ON f.field_uuid = existing.field_uuid
+            WHERE existing.field_uuid IS NULL
+        """)
+        
+        fields_without_properties = self.conn.execute("SELECT COUNT(*) FROM fields_without_properties").fetchone()[0]
+        self.log.info(f"📊 Fields without property intersections: {fields_without_properties:,}")
+        
+        # Add them to the main results table
+        if fields_without_properties > 0:
+            self.conn.execute("""
+                INSERT INTO field_property_intersections
+                SELECT * FROM fields_without_properties
+            """)
+            self.log.info(f"✅ Added {fields_without_properties:,} fields with NULL property data")
+
         # Final statistics with optimization impact
         final_count = self.conn.execute(
             "SELECT COUNT(*) FROM field_property_intersections"
         ).fetchone()[0]
 
+        unique_fields = self.conn.execute("SELECT COUNT(DISTINCT field_uuid) FROM field_property_intersections").fetchone()[0]
+        
         self.log.info("🎯 STAGE 0 OPTIMIZATION RESULTS:")
         self.log.info(f"   Total raw intersections: {total_intersections:,}")
         self.log.info(f"   Meaningful intersections: {total_meaningful:,}")
+        self.log.info(f"   Fields without intersections: {fields_without_properties:,}")
         self.log.info(f"   Final field-property relationships: {final_count:,}")
+        self.log.info(f"   Total unique fields preserved: {unique_fields:,}")
         self.log.info("   ⚡ 13x faster than original due to Stage 0 pre-filtering!")
+        self.log.info("   ✅ ALL source fields preserved (no UUID loss)!")
 
-        # Export results using standard pipeline pattern
-        output_path = self.save_data_direct(
-            "field_property_intersections",
-            CONFIG.stage_outputs["field_property_intersections"],
-            CONFIG.bucket,
-            "gold",
-        )
+        # Export results using year-aware pipeline pattern
+        self._save_stage_output("field_property_intersections", "field_property_intersections")
 
         return {
             "total_raw_intersections": total_intersections,
             "meaningful_intersections": total_meaningful,
+            "fields_without_properties": fields_without_properties,
             "final_intersections": final_count,
-            "output_path": output_path,
+            "unique_fields": unique_fields,
             "optimization_impact": "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)",
+            "uuid_preservation": "All source fields preserved with NULL property data for non-intersecting fields"
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
