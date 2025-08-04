@@ -852,6 +852,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ====================================================================
             # Sometimes organic fields are mixed with conventional fields, causing area mismatches
             # This strategy excludes organic fields and retries the area matching
+            # Now uses the is_organic flag from FVM marker data to identify organic fields
             # Useful when companies have both organic and conventional fields of the same crop
             self.log.info(f"🎯 Strategy 2: Running non-organic match for year {pesticide_year}")
             processed_2 = self._disaggregate_by_marker_non_organic_match()
@@ -1075,10 +1076,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             crop_name_column = "NULL as crop_name"
             self.log.warning("No crop_name or crop_type column found, using NULL")
 
-        # Handle organic farming column - FVM data doesn't contain organic farming info
-        # Organic farming data is in a separate dataset (fvm_organic_areas)
-        organic_farming_column = "false as organic_farming"
-        self.log.info("Note: FVM marker data does not contain organic farming information")
+        # Handle organic farming column - check if is_organic exists in FVM data
+        if "is_organic" in temp_column_names:
+            organic_farming_column = "COALESCE(is_organic, false) as organic_farming"
+            self.log.info("✅ Found is_organic column in FVM data - organic fields will be used")
+        else:
+            organic_farming_column = "false as organic_farming"
+            self.log.warning("⚠️ No is_organic column found in FVM data - assuming all fields are non-organic")
 
         # Check if field_uuid exists in the source data
         has_field_uuid = "field_uuid" in temp_column_names
@@ -1337,9 +1341,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         Identifies marker field IDs that are considered organic.
 
-        Note: FVM marker data does NOT contain organic farming information.
-        Organic farming data is in a separate dataset (fvm_organic_areas).
-        Since we don't have access to that data in this pipeline, we return an empty set.
+        Now that FVM marker data contains organic farming information via the is_organic column,
+        this method queries the marker table to find all organic fields.
 
         Results are cached.
         Returns a set of marker.field_id strings.
@@ -1348,14 +1351,28 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.debug("Returning cached organic marker field IDs.")
             return self._organic_marker_field_ids
 
-        self.log.info("Note: FVM marker data does not contain organic farming information")
-        self.log.info("Organic farming data is in separate fvm_organic_areas dataset")
-        self.log.info("No organic field exclusion will be applied in non-organic strategies")
-
-        # Since FVM marker data doesn't contain organic farming info, return empty set
-        self._organic_marker_field_ids = set()
-
-        return self._organic_marker_field_ids
+        try:
+            # Query organic fields from the marker table
+            result = self.duckdb_conn.execute("""
+                SELECT DISTINCT field_id 
+                FROM marker 
+                WHERE organic_farming = TRUE
+            """).fetchall()
+            
+            organic_field_ids = {str(row[0]) for row in result}
+            self.log.info(f"Found {len(organic_field_ids)} organic fields out of total marker fields")
+            
+            # Cache the result
+            self._organic_marker_field_ids = organic_field_ids
+            
+            return self._organic_marker_field_ids
+            
+        except Exception as e:
+            self.log.error(f"Error querying organic fields: {e}")
+            self.log.warning("Falling back to no organic fields due to query error")
+            # Fall back to empty set if query fails
+            self._organic_marker_field_ids = set()
+            return self._organic_marker_field_ids
 
     def _disaggregate_by_marker_match(self) -> int:
         """
