@@ -420,8 +420,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         bfe_number,
                         toerv_pct,
                         property_wetland_area_m2,
-                        property_wetland_water_covered_m2,
-                        property_wetland_water_uncovered_m2
+                        property_wetland_covered_m2,
+                        property_wetland_uncovered_m2
                     FROM batch_property_wetland_water
                 """)
                 

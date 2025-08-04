@@ -500,8 +500,8 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         bfe_number,
                         status_category,
                         property_bnbo_area_m2,
-                        property_bnbo_water_covered_m2,
-                        property_bnbo_water_uncovered_m2
+                        property_bnbo_covered_m2,
+                        property_bnbo_uncovered_m2
                     FROM batch_property_bnbo_water
                 """)
                 
