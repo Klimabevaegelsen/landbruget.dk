@@ -215,6 +215,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 "SELECT COUNT(*) FROM batch_property_intersections"
             ).fetchone()[0]
             self.log.info(f"  Found {property_count:,} property intersections for batch")
+            
+            # DEBUG: Count unique fields in property intersections
+            property_fields = self.conn.execute(
+                "SELECT COUNT(DISTINCT field_uuid) FROM batch_property_intersections"
+            ).fetchone()[0]
+            self.log.info(f"  🔍 DEBUG: Property intersections cover {property_fields:,} unique fields")
 
             if property_count > 0:
                 # PROPER SPATIAL JOIN: Only create records where geometries actually intersect
@@ -245,6 +251,14 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     "SELECT COUNT(*) FROM batch_property_bnbo_spatial"
                 ).fetchone()[0]
                 self.log.info(f"  Found {spatial_count:,} property-BNBO spatial intersections")
+                
+                # DEBUG: Show how many property records were filtered out by spatial join
+                pre_spatial_count = self.conn.execute("""
+                    SELECT COUNT(*) FROM batch_property_intersections p
+                    JOIN field_bnbo_intersections fb ON p.field_uuid = fb.field_uuid AND p.year = fb.year
+                """).fetchone()[0]
+                filtered_out = pre_spatial_count - spatial_count
+                self.log.info(f"  🔍 DEBUG: {filtered_out:,} property records filtered out by spatial intersection")
 
                 # Calculate water project coverage using field-level coverage ratios from Stage 2A
                 self.log.info(
@@ -494,6 +508,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                     "SELECT COUNT(*) FROM property_bnbo_intersections"
                 ).fetchone()[0]
                 self.log.info(f"  ✅ Saved {property_intersections_saved:,} property-level BNBO intersections so far")
+                
+                # DEBUG: Show unique fields in final output
+                final_fields = self.conn.execute(
+                    "SELECT COUNT(DISTINCT field_uuid) FROM property_bnbo_intersections"
+                ).fetchone()[0]
+                self.log.info(f"  🔍 DEBUG: Final output covers {final_fields:,} unique fields with property×BNBO data")
 
             # Clean up batch tables
             self.conn.execute("DROP TABLE IF EXISTS fields_batch")
