@@ -472,7 +472,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             ).fetchone()[0]
             
             if batch_property_data_count > 0:
-                self.log.info("  Saving property-level BNBO intersection data...")
+                self.log.info("  Aggregating and saving property-level BNBO totals...")
                 self.conn.execute("""
                     INSERT INTO property_bnbo_intersections
                     SELECT 
@@ -482,11 +482,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         year,
                         field_uuid,
                         bfe_number,
-                        status_category,
-                        property_bnbo_area_m2,
-                        property_bnbo_covered_m2,
-                        property_bnbo_uncovered_m2
+                        FIRST(status_category) as status_category,  -- Take first value if multiple BNBO statuses
+                        SUM(property_bnbo_area_m2) as property_bnbo_area_m2,
+                        SUM(property_bnbo_covered_m2) as property_bnbo_covered_m2,
+                        SUM(property_bnbo_uncovered_m2) as property_bnbo_uncovered_m2
                     FROM batch_property_bnbo_water
+                    GROUP BY field_id, block_id, cvr_number, year, field_uuid, bfe_number
                 """)
                 
                 property_intersections_saved = self.conn.execute(
