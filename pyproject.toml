@@ -6,8 +6,8 @@ requires-python = ">=3.11"
 dynamic = ["readme"]
 dependencies = [
     # Core Data Processing
-    "numpy~=2.2.2",
-    "pyarrow~=20.0.0",
+    "numpy~=2.0.0",
+    "pyarrow~=18.0.0",
     # Geospatial Processing - User prefers duckdb-spatial over geopandas
     "ibis-framework[duckdb]~=10.6.0",
     "duckdb~=1.3.1",
@@ -16,7 +16,7 @@ dependencies = [
     "pyproj~=3.7.0",
     "fiona~=1.10.1",
     # Cloud Services
-    "google-cloud-storage~=3.1.1",
+    "google-cloud-storage~=2.18.2",
     "google-cloud-bigquery~=3.29.0",
     "google-cloud-secret-manager~=2.24.0",
     "fsspec~=2025.5.1",
@@ -27,12 +27,13 @@ dependencies = [
     "pydantic~=2.10.6",
     # HTTP and API Clients
     "aiohttp~=3.11.11",
-    "requests~=2.32.3",
+    "requests~=2.31.0",
     "zeep~=4.3.1",
     "paramiko~=3.5.0",
     "certifi~=2025.6.15",
     "pyOpenSSL~=25.0.0",
     # Data Pipeline and Validation
+    "apache-beam[gcp]==2.66.0",
     "backoff~=2.2.1",
     # PDF Processing
     "pdfplumber~=0.11.5",
@@ -49,6 +50,9 @@ dependencies = [
     "ruff~=0.8.0",
     "pytest~=8.3.0",
     "jupyter~=1.1.1",
+    "pip>=25.1.1",
+    "xmlschema>=4.1.0",
+    "openpyxl>=3.1.5",
 ]
 
 [build-system]

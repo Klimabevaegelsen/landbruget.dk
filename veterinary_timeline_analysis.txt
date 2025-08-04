@@ -1,0 +1,215 @@
+MULTI-SOURCE VETERINARY TIMELINE ANALYSIS
+============================================================
+CHRs WITH 3+ DATA SOURCES:
+----------------------------------------------------------------------------------------------------
+CHR        Sources  Events   First Event  Last Event   Data Sources
+----------------------------------------------------------------------------------------------------
+28171      5        31       2005-05-10   2025-07-29   spf_su_certificates, spf_su_health_controls, pig_tail_cutting, animal_welfare, chr_veterinary
+86991      5        30       2010-06-03   2025-07-29   animal_welfare, spf_su_certificates, spf_su_health_controls, chr_veterinary, pig_tail_cutting
+53436      5        29       2003-09-10   2025-07-29   pig_tail_cutting, spf_su_certificates, spf_su_health_controls, chr_veterinary, animal_welfare
+98602      5        27       2006-03-04   2025-07-29   chr_veterinary, animal_welfare, spf_su_certificates, spf_su_health_controls, pig_tail_cutting
+55040      5        27       2012-06-19   2025-07-29   pig_tail_cutting, chr_veterinary, spf_su_certificates, spf_su_health_controls, animal_welfare
+96265      5        27       2004-07-26   2025-07-29   chr_veterinary, pig_tail_cutting, spf_su_certificates, spf_su_health_controls, animal_welfare
+97942      5        27       2002-10-05   2025-07-29   chr_veterinary, animal_welfare, spf_su_certificates, spf_su_health_controls, pig_tail_cutting
+39887      5        26       2005-12-12   2025-07-29   pig_tail_cutting, animal_welfare, spf_su_certificates, spf_su_health_controls, chr_veterinary
+46425      5        26       2002-10-05   2025-07-29   chr_veterinary, animal_welfare, spf_su_certificates, spf_su_health_controls, pig_tail_cutting
+97128      5        26       2014-06-02   2025-07-29   animal_welfare, spf_su_certificates, spf_su_health_controls, chr_veterinary, pig_tail_cutting
+46562      5        25       2015-03-02   2025-07-29   pig_tail_cutting, spf_su_certificates, spf_su_health_controls, chr_veterinary, animal_welfare
+92467      5        25       2012-03-10   2025-07-29   animal_welfare, spf_su_certificates, spf_su_health_controls, pig_tail_cutting, chr_veterinary
+21133      5        25       2014-06-13   2025-07-29   pig_tail_cutting, chr_veterinary, animal_welfare, spf_su_certificates, spf_su_health_controls
+21876      5        25       2005-07-16   2025-07-29   spf_su_certificates, spf_su_health_controls, chr_veterinary, animal_welfare, pig_tail_cutting
+98389      5        24       2011-02-08   2025-07-29   animal_welfare, pig_tail_cutting, chr_veterinary, spf_su_certificates, spf_su_health_controls
+61135      5        23       2002-11-05   2025-07-29   chr_veterinary, pig_tail_cutting, spf_su_certificates, spf_su_health_controls, animal_welfare
+57911      5        23       2002-11-08   2025-07-29   spf_su_certificates, spf_su_health_controls, animal_welfare, chr_veterinary, pig_tail_cutting
+34287      5        22       2002-10-05   2025-07-29   animal_welfare, pig_tail_cutting, chr_veterinary, spf_su_certificates, spf_su_health_controls
+38022      5        22       2006-12-27   2025-07-29   chr_veterinary, pig_tail_cutting, spf_su_certificates, spf_su_health_controls, animal_welfare
+60534      5        21       2004-10-26   2025-07-29   chr_veterinary, pig_tail_cutting, spf_su_certificates, spf_su_health_controls, animal_welfare
+
+SOURCE COMBINATION ANALYSIS
+============================================================
+Source Combination                                           CHR Count
+--------------------------------------------------------------------------------
+chr_veterinary                                                  17146
+animal_welfare, spf_su_certificates, spf_su_health_controls      2641
+animal_welfare, chr_veterinary                                   2619
+animal_welfare                                                    980
+spf_su_health_controls                                            625
+animal_welfare, chr_veterinary, spf_su_certificates, spf_su_health_controls      563
+animal_welfare, pig_tail_cutting, spf_su_certificates, spf_su_health_controls      277
+chr_veterinary, spf_su_health_controls                            181
+spf_su_certificates, spf_su_health_controls                       151
+animal_welfare, spf_su_health_controls                             66
+chr_veterinary, spf_su_certificates, spf_su_health_controls        58
+animal_welfare, chr_veterinary, pig_tail_cutting, spf_su_certificates, spf_su_health_controls       55
+animal_welfare, pig_tail_cutting                                   28
+animal_welfare, chr_veterinary, pig_tail_cutting                   19
+animal_welfare, chr_veterinary, spf_su_health_controls             15
+
+DETAILED TIMELINES FOR TOP MULTI-SOURCE CHRs
+
+================================================================================
+DETAILED TIMELINE FOR CHR 28171
+================================================================================
+Found 31 events:
+Date         Source               Type                      Description
+------------------------------------------------------------------------------------------------------------------------
+2005-05-10   chr_veterinary       disease_status_change     Salmonella dublin - Fri
+------------------------------------------------------------------------------------------------------------------------
+2020-01-28   animal_welfare       intervention_start        Søer - Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2022-10-03
+2020-01-28   animal_welfare       intervention_start        Søer - Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2022-10-03
+2020-01-28   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2022-10-03
+------------------------------------------------------------------------------------------------------------------------
+2022-04-11   animal_welfare       intervention_start        Der er ikke defineret indsatsområde
+                                  -> End date:              2022-06-20
+2022-04-11   animal_welfare       intervention_start        Der er ikke defineret indsatsområde
+                                  -> End date:              2022-06-20
+2022-06-20   animal_welfare       intervention_end          Der er ikke defineret indsatsområde
+2022-06-20   animal_welfare       intervention_end          Der er ikke defineret indsatsområde
+2022-06-21   animal_welfare       intervention_start        Rode- og beskæftigelsesmateriale
+                                  -> End date:              2022-10-03
+2022-06-21   animal_welfare       intervention_start        Der er ikke defineret indsatsområde
+                                  -> End date:              2022-10-03
+2022-06-21   animal_welfare       intervention_start        Pattegrise - Dødelighed
+                                  -> End date:              2022-10-03
+2022-10-03   animal_welfare       intervention_end          Søer - Håndtering og behandling af syge og tilskadekomne dyr
+2022-10-03   animal_welfare       intervention_end          Der er ikke defineret indsatsområde
+2022-10-03   animal_welfare       intervention_end          Pattegrise - Dødelighed
+2022-10-03   animal_welfare       intervention_end          Søer - Håndtering og behandling af syge og tilskadekomne dyr
+2022-10-03   animal_welfare       intervention_end          Rode- og beskæftigelsesmateriale
+2022-10-03   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2022-12-13   animal_welfare       intervention_start        Pattegrise - Mave-/tarminfektioner
+                                  -> End date:              2023-05-02
+------------------------------------------------------------------------------------------------------------------------
+2023-05-02   animal_welfare       intervention_end          Pattegrise - Mave-/tarminfektioner
+2023-05-02   animal_welfare       intervention_start        Søer - Benproblemer/udskridninger/klove
+                                  -> End date:              2023-12-05
+2023-06-16   pig_tail_cutting     control_inspection        2023: Risikovurdering for forekomst af halebid
+2023-12-05   animal_welfare       intervention_end          Søer - Benproblemer/udskridninger/klove
+2023-12-05   animal_welfare       intervention_start        Søer - Benproblemer/udskridninger/klove
+                                  -> End date:              2024-05-14
+------------------------------------------------------------------------------------------------------------------------
+2024-05-14   animal_welfare       intervention_end          Søer - Benproblemer/udskridninger/klove
+2024-05-14   animal_welfare       intervention_start        Mave-/tarminfektioner
+------------------------------------------------------------------------------------------------------------------------
+2025-04-08   spf_su_certificates  certificate_issued        Certificate: Blå SPF +Myc +Ap2 +Ap6 +Ap12 +Nys +PRRS1 +PRRS2
+                                  -> End date:              2028-04-08
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap2)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap6)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap12)
+2025-07-29   spf_su_health_controls health_control_status     Mycoplasma lung disease (Code: Myc)
+2025-07-29   spf_su_health_controls health_control_status     PRRS (Code: PRRS)
+
+================================================================================
+
+================================================================================
+DETAILED TIMELINE FOR CHR 86991
+================================================================================
+Found 30 events:
+Date         Source               Type                      Description
+------------------------------------------------------------------------------------------------------------------------
+2010-06-03   chr_veterinary       disease_status_change     Salmonella dublin - Fri
+------------------------------------------------------------------------------------------------------------------------
+2019-07-19   animal_welfare       intervention_start        Benproblemer/udskridninger/klove
+                                  -> End date:              2021-10-12
+2019-07-19   animal_welfare       intervention_start        Benproblemer/udskridninger/klove
+                                  -> End date:              2021-10-12
+------------------------------------------------------------------------------------------------------------------------
+2020-01-02   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-10-12
+2020-01-02   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-10-12
+2020-06-09   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-10-12
+2020-06-09   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-10-12
+2020-11-23   animal_welfare       intervention_start        Rode- og beskæftigelsesmateriale
+                                  -> End date:              2021-10-12
+2020-11-23   animal_welfare       intervention_start        Rode- og beskæftigelsesmateriale
+                                  -> End date:              2021-10-12
+------------------------------------------------------------------------------------------------------------------------
+2021-05-11   animal_welfare       intervention_start        Hjernehindebetændelse
+                                  -> End date:              2021-10-12
+2021-05-11   animal_welfare       intervention_start        Søer - Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-10-12
+2021-05-11   animal_welfare       intervention_start        Hjernehindebetændelse
+                                  -> End date:              2021-10-12
+2021-10-12   animal_welfare       intervention_end          Hjernehindebetændelse
+2021-10-12   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2021-10-12   animal_welfare       intervention_end          Benproblemer/udskridninger/klove
+2021-10-12   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2021-10-12   animal_welfare       intervention_end          Søer - Håndtering og behandling af syge og tilskadekomne dyr
+2021-10-12   animal_welfare       intervention_end          Benproblemer/udskridninger/klove
+2021-10-12   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2021-10-12   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2021-10-12   animal_welfare       intervention_end          Rode- og beskæftigelsesmateriale
+2021-10-12   animal_welfare       intervention_end          Rode- og beskæftigelsesmateriale
+2021-10-12   animal_welfare       intervention_end          Hjernehindebetændelse
+------------------------------------------------------------------------------------------------------------------------
+2023-05-12   pig_tail_cutting     control_inspection        2023: Risikovurdering for forekomst af halebid
+------------------------------------------------------------------------------------------------------------------------
+2025-07-16   spf_su_certificates  certificate_issued        Certificate: Rød SPF +Myc
+                                  -> End date:              2028-01-18
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap2)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap6)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap12)
+2025-07-29   spf_su_health_controls health_control_status     Mycoplasma lung disease (Code: Myc)
+2025-07-29   spf_su_health_controls health_control_status     PRRS (Code: PRRS)
+
+================================================================================
+
+================================================================================
+DETAILED TIMELINE FOR CHR 53436
+================================================================================
+Found 29 events:
+Date         Source               Type                      Description
+------------------------------------------------------------------------------------------------------------------------
+2003-09-10   chr_veterinary       disease_status_change     Salmonellose - Fri
+------------------------------------------------------------------------------------------------------------------------
+2019-08-20   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-11-01
+2019-08-20   animal_welfare       intervention_start        Håndtering og behandling af syge og tilskadekomne dyr
+                                  -> End date:              2021-11-01
+------------------------------------------------------------------------------------------------------------------------
+2020-02-11   animal_welfare       intervention_start        Hjernehindebetændelse
+                                  -> End date:              2021-11-01
+2020-10-07   animal_welfare       intervention_start        Brok
+                                  -> End date:              2021-11-01
+2020-10-07   animal_welfare       intervention_start        Brok
+                                  -> End date:              2021-11-01
+------------------------------------------------------------------------------------------------------------------------
+2021-09-14   animal_welfare       intervention_start        Brok
+                                  -> End date:              2021-11-01
+2021-11-01   animal_welfare       intervention_end          Hjernehindebetændelse
+2021-11-01   animal_welfare       intervention_end          Brok
+2021-11-01   animal_welfare       intervention_end          Brok
+2021-11-01   animal_welfare       intervention_end          Brok
+2021-11-01   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+2021-11-01   animal_welfare       intervention_end          Håndtering og behandling af syge og tilskadekomne dyr
+------------------------------------------------------------------------------------------------------------------------
+2022-03-03   animal_welfare       intervention_start        Brok
+                                  -> End date:              2023-01-03
+2022-09-20   animal_welfare       intervention_start        Halebid
+                                  -> End date:              2023-01-03
+------------------------------------------------------------------------------------------------------------------------
+2023-01-03   animal_welfare       intervention_end          Brok
+2023-01-03   animal_welfare       intervention_end          Halebid
+2023-02-03   pig_tail_cutting     control_inspection        2023: Risikovurdering for forekomst af halebid
+2023-05-25   animal_welfare       intervention_start        Rode- og beskæftigelsesmateriale
+                                  -> End date:              2023-12-07
+2023-06-09   spf_su_certificates  certificate_issued        Certificate: Blå SPF +Myc +Ap12 +PRRS1
+                                  -> End date:              2026-06-08
+2023-12-07   animal_welfare       intervention_end          Rode- og beskæftigelsesmateriale
+2023-12-07   animal_welfare       intervention_start        Halebid
+                                  -> End date:              2024-05-31
+------------------------------------------------------------------------------------------------------------------------
+2024-05-31   animal_welfare       intervention_end          Halebid
+2024-05-31   animal_welfare       intervention_start        Rode- og beskæftigelsesmateriale
+------------------------------------------------------------------------------------------------------------------------
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap2)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap6)
+2025-07-29   spf_su_health_controls health_control_status     Malignant lung disease (Actinobacillus) (Code: Ap12)
+2025-07-29   spf_su_health_controls health_control_status     Mycoplasma lung disease (Code: Myc)
+2025-07-29   spf_su_health_controls health_control_status     PRRS (Code: PRRS)
