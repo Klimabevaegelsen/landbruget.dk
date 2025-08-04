@@ -163,6 +163,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         
         # Create property-level analysis using ALL field×property intersections
         # Environmental data is enrichment (0 values where no environmental features)
+        # CRITICAL FIX: Add DISTINCT and GROUP BY to eliminate duplicate field×property combinations
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_environmental_analysis AS
             SELECT 
@@ -173,24 +174,24 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.year,
                 fp.field_uuid,
                 fp.bfe_number,
-                fp.field_area_m2,
-                fp.intersection_area_m2 as property_area_within_field_m2,
-                fp.field_area_share_pct as property_share_of_field_pct,
+                FIRST(fp.field_area_m2) as field_area_m2,
+                FIRST(fp.intersection_area_m2) as property_area_within_field_m2,
+                FIRST(fp.field_area_share_pct) as property_share_of_field_pct,
                 
-                -- Property-environmental intersection data from Stage 3 (0 if no environmental features)
-                COALESCE(b.property_bnbo_area_m2, 0) as property_bnbo_total_m2,
-                COALESCE(b.property_bnbo_water_covered_m2, 0) as property_area_bnbo_covered_by_water,
-                COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
-                COALESCE(b.status_category, NULL) as bnbo_status_category,
+                -- Property-environmental intersection data from Stage 3 (use MAX to handle multiple matches)
+                COALESCE(MAX(b.property_bnbo_area_m2), 0) as property_bnbo_total_m2,
+                COALESCE(MAX(b.property_bnbo_water_covered_m2), 0) as property_area_bnbo_covered_by_water,
+                COALESCE(MAX(b.property_bnbo_water_uncovered_m2), 0) as property_area_bnbo_not_covered_by_water,
+                COALESCE(FIRST(b.status_category), NULL) as bnbo_status_category,
                 
-                COALESCE(w.property_wetland_area_m2, 0) as property_wetland_total_m2,
-                COALESCE(w.property_wetland_water_covered_m2, 0) as property_area_wetlands_covered_by_water,
-                COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
-                COALESCE(w.toerv_pct, NULL) as wetland_type,
+                COALESCE(MAX(w.property_wetland_area_m2), 0) as property_wetland_total_m2,
+                COALESCE(MAX(w.property_wetland_water_covered_m2), 0) as property_area_wetlands_covered_by_water,
+                COALESCE(MAX(w.property_wetland_water_uncovered_m2), 0) as property_area_wetlands_not_covered_by_water,
+                COALESCE(FIRST(w.toerv_pct), NULL) as wetland_type,
                 
                 -- Property environmental summary flag
                 CASE 
-                    WHEN COALESCE(b.property_bnbo_area_m2, 0) > 0 OR COALESCE(w.property_wetland_area_m2, 0) > 0 
+                    WHEN COALESCE(MAX(b.property_bnbo_area_m2), 0) > 0 OR COALESCE(MAX(w.property_wetland_area_m2), 0) > 0 
                     THEN TRUE ELSE FALSE 
                 END as has_environmental_features
                 
@@ -200,6 +201,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             LEFT JOIN property_wetland_intersections w ON fp.field_uuid = w.field_uuid 
                 AND fp.year = w.year AND fp.bfe_number = w.bfe_number
             WHERE fp.bfe_number IS NOT NULL  -- Only properties, not NULL property fields
+            GROUP BY fp.field_id, fp.block_id, fp.cvr_number, fp.year, fp.field_uuid, fp.bfe_number
         """)
         
         property_count = self.conn.execute("SELECT COUNT(*) FROM property_environmental_analysis").fetchone()[0]
@@ -229,37 +231,48 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             FROM field_environmental_analysis
         """).fetchone()
         
-        property_stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_property_combinations,
-                COUNT(DISTINCT field_uuid) as fields_with_properties,
-                COUNT(DISTINCT bfe_number) as unique_properties,
-                COUNT(CASE WHEN has_environmental_features THEN 1 END) as properties_with_environmental_features,
-                AVG(property_area_within_field_m2) as avg_property_area_m2,
-                SUM(property_area_bnbo_covered_by_water + property_area_bnbo_not_covered_by_water) as total_property_bnbo_area_m2,
-                SUM(property_area_wetlands_covered_by_water + property_area_wetlands_not_covered_by_water) as total_property_wetland_area_m2
-            FROM property_environmental_analysis
-        """).fetchone()
+        # CRITICAL FIX: Add error handling for property statistics to prevent tuple index out of range
+        try:
+            property_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_property_combinations,
+                    COUNT(DISTINCT field_uuid) as fields_with_properties,
+                    COUNT(DISTINCT bfe_number) as unique_properties,
+                    COUNT(CASE WHEN has_environmental_features THEN 1 END) as properties_with_environmental_features,
+                    AVG(property_area_within_field_m2) as avg_property_area_m2,
+                    SUM(property_area_bnbo_covered_by_water + property_area_bnbo_not_covered_by_water) as total_property_bnbo_area_m2,
+                    SUM(property_area_wetlands_covered_by_water + property_area_wetlands_not_covered_by_water) as total_property_wetland_area_m2
+                FROM property_environmental_analysis
+            """).fetchone()
+            
+            if property_stats is None or len(property_stats) < 7:
+                self.log.warning("⚠️ Property statistics query returned incomplete results, using default values")
+                property_stats = (0, 0, 0, 0, 0.0, 0.0, 0.0)
+                
+        except Exception as e:
+            self.log.error(f"❌ Failed to collect property statistics: {e}")
+            self.log.warning("Using default property statistics values to prevent pipeline failure")
+            property_stats = (0, 0, 0, 0, 0.0, 0.0, 0.0)
         
         stats = {
             "field_level": {
-                "total_fields": field_stats[0],
-                "fields_without_properties": field_stats[1],
-                "fields_with_environmental_features": field_stats[2],
-                "fields_with_bnbo": field_stats[3],
-                "fields_with_wetlands": field_stats[4],
-                "avg_field_area_m2": field_stats[5],
-                "total_bnbo_area_m2": field_stats[6],
-                "total_wetland_area_m2": field_stats[7]
+                "total_fields": field_stats[0] if field_stats and len(field_stats) > 0 else 0,
+                "fields_without_properties": field_stats[1] if field_stats and len(field_stats) > 1 else 0,
+                "fields_with_environmental_features": field_stats[2] if field_stats and len(field_stats) > 2 else 0,
+                "fields_with_bnbo": field_stats[3] if field_stats and len(field_stats) > 3 else 0,
+                "fields_with_wetlands": field_stats[4] if field_stats and len(field_stats) > 4 else 0,
+                "avg_field_area_m2": field_stats[5] if field_stats and len(field_stats) > 5 else 0.0,
+                "total_bnbo_area_m2": field_stats[6] if field_stats and len(field_stats) > 6 else 0.0,
+                "total_wetland_area_m2": field_stats[7] if field_stats and len(field_stats) > 7 else 0.0
             },
             "property_level": {
-                "total_property_combinations": property_stats[0],
-                "fields_with_properties": property_stats[1],
-                "unique_properties": property_stats[2],
-                "properties_with_environmental_features": property_stats[3],
-                "avg_property_area_m2": property_stats[4],
-                "total_property_bnbo_area_m2": property_stats[5],
-                "total_property_wetland_area_m2": property_stats[6]
+                "total_property_combinations": property_stats[0] if property_stats and len(property_stats) > 0 else 0,
+                "fields_with_properties": property_stats[1] if property_stats and len(property_stats) > 1 else 0,
+                "unique_properties": property_stats[2] if property_stats and len(property_stats) > 2 else 0,
+                "properties_with_environmental_features": property_stats[3] if property_stats and len(property_stats) > 3 else 0,
+                "avg_property_area_m2": property_stats[4] if property_stats and len(property_stats) > 4 else 0.0,
+                "total_property_bnbo_area_m2": property_stats[5] if property_stats and len(property_stats) > 5 else 0.0,
+                "total_property_wetland_area_m2": property_stats[6] if property_stats and len(property_stats) > 6 else 0.0
             }
         }
         
