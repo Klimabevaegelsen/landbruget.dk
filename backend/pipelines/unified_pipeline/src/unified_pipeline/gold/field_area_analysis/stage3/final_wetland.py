@@ -180,11 +180,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             progress_pct = ((batch_num + 1) / num_batches) * 100
             self.log.info(f"📦 Batch {batch_num + 1}/{num_batches} - {progress_pct:.1f}% complete")
 
-            # Create field batch (only fields with wetlands)
+            # Create field batch (Stage 2 already filtered to fields with wetlands > 0)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_wetland_water
-                WHERE field_wetland_total_m2 > 0
                 LIMIT {batch_size} OFFSET {offset}
             """)
 

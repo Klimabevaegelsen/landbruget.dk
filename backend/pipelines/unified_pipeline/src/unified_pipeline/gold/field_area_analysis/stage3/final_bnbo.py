@@ -190,11 +190,10 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             progress_pct = ((batch_num + 1) / num_batches) * 100
             self.log.info(f"📦 Batch {batch_num + 1}/{num_batches} - {progress_pct:.1f}% complete")
 
-            # Create field batch (only fields with BNBO)
+            # Create field batch (Stage 2 already filtered to fields with BNBO > 0)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_batch AS
                 SELECT * FROM fields_bnbo_water
-                WHERE field_bnbo_total_m2 > 0
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
