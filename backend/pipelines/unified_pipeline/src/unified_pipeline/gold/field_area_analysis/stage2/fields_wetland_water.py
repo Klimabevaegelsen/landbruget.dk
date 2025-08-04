@@ -349,10 +349,11 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 FROM batch_field_aggregates
             """)
 
-            # Insert into main results table
+            # Insert into main results table (only fields with wetland coverage > 0)
             self.conn.execute("""
                 INSERT INTO fields_wetland_water 
                 SELECT * FROM batch_final
+                WHERE field_wetland_total_m2 > 0
             """)
 
             total_fields_processed += batch_count
