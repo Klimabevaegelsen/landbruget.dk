@@ -209,12 +209,12 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.log.info(f"  Found {property_count:,} property intersections for batch")
 
             if property_count > 0:
-                # DuckDB Spatial PR #545 COMPLIANCE: Separate JOIN and spatial filtering
+                # PROPER SPATIAL JOIN: Only create records where geometries actually intersect
                 self.log.info(
-                    "  STEP 1: Property intersections × Field-wetland intersections (ID-based JOIN)"
+                    "  STEP 1: Property intersections × Wetland intersections (SPATIAL JOIN)"
                 )
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_raw AS
+                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -223,30 +223,14 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         p.field_uuid,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
-                        p.intersection_geometry as property_geometry,
                         fw.toerv_pct,
-                        fw.field_wetland_intersection_geometry as wetland_geometry
+                        ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fw.field_wetland_intersection_geometry)) as property_wetland_area_m2
                     FROM batch_property_intersections p
                     JOIN field_wetland_intersections fw ON p.field_uuid = fw.field_uuid 
                         AND p.year = fw.year
-                """)
-
-                # Post-JOIN spatial processing (NO SPATIAL WHERE CLAUSES)
-                self.log.info("  STEP 2: Area calculation (no spatial filtering)")
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_wetland_spatial AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        field_uuid,
-                        bfe_number,
-                        property_intersection_area_m2,
-                        toerv_pct,
-                        ST_Area_Spheroid(ST_Intersection(property_geometry, wetland_geometry)) as property_wetland_area_m2
-                    FROM batch_property_wetland_raw
-                    WHERE property_geometry IS NOT NULL AND wetland_geometry IS NOT NULL
+                        AND ST_Intersects(p.intersection_geometry, fw.field_wetland_intersection_geometry)
+                    WHERE p.intersection_geometry IS NOT NULL 
+                        AND fw.field_wetland_intersection_geometry IS NOT NULL
                 """)
 
                 spatial_count = self.conn.execute(

@@ -217,12 +217,12 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             self.log.info(f"  Found {property_count:,} property intersections for batch")
 
             if property_count > 0:
-                # DuckDB Spatial PR #545 COMPLIANCE: Separate JOIN and spatial filtering
+                # PROPER SPATIAL JOIN: Only create records where geometries actually intersect
                 self.log.info(
-                    "  STEP 1: Property intersections × Field-BNBO intersections (ID-based JOIN)"
+                    "  STEP 1: Property intersections × BNBO intersections (SPATIAL JOIN)"
                 )
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_bnbo_raw AS
+                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
                     SELECT 
                         p.field_id,
                         p.block_id,
@@ -231,30 +231,14 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         p.field_uuid,
                         p.bfe_number,
                         p.intersection_area_m2 as property_intersection_area_m2,
-                        p.intersection_geometry as property_geometry,
                         fb.status_category,
-                        fb.field_bnbo_intersection_geometry as bnbo_geometry
+                        ST_Area_Spheroid(ST_Intersection(p.intersection_geometry, fb.field_bnbo_intersection_geometry)) as property_bnbo_area_m2
                     FROM batch_property_intersections p
                     JOIN field_bnbo_intersections fb ON p.field_uuid = fb.field_uuid 
                         AND p.year = fb.year
-                """)
-
-                # Post-JOIN spatial processing (NO SPATIAL WHERE CLAUSES)
-                self.log.info("  STEP 2: Area calculation (no spatial filtering)")
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE batch_property_bnbo_spatial AS
-                    SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        field_uuid,
-                        bfe_number,
-                        property_intersection_area_m2,
-                        status_category,
-                        ST_Area_Spheroid(ST_Intersection(property_geometry, bnbo_geometry)) as property_bnbo_area_m2
-                    FROM batch_property_bnbo_raw
-                    WHERE property_geometry IS NOT NULL AND bnbo_geometry IS NOT NULL
+                        AND ST_Intersects(p.intersection_geometry, fb.field_bnbo_intersection_geometry)
+                    WHERE p.intersection_geometry IS NOT NULL 
+                        AND fb.field_bnbo_intersection_geometry IS NOT NULL
                 """)
 
                 spatial_count = self.conn.execute(
