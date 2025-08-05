@@ -746,7 +746,6 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Consolidate Results (Independent)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}

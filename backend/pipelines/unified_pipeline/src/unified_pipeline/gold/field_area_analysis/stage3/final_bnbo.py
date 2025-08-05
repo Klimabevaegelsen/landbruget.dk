@@ -381,27 +381,27 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                         field_uuid,
                         -- Flattened BNBO metrics by status category (in hectares)
                         ROUND(
-                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Action Required' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_action_required_hectares,
                         
                         ROUND(
-                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Completed' THEN property_bnbo_area_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_completed_hectares,
                         
                         ROUND(
-                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Action Required' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_action_required_overlap_hectares,
                         
                         ROUND(
-                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Completed' THEN property_bnbo_covered_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_completed_overlap_hectares,
                         
                         ROUND(
-                            SUM(CASE WHEN status_category = 'action_required' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Action Required' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_action_required_not_covered_by_water_hectares,
                         
                         ROUND(
-                            SUM(CASE WHEN status_category = 'completed' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
+                            SUM(CASE WHEN status_category = 'Completed' THEN property_bnbo_uncovered_m2 ELSE 0 END) / 10000, 4
                         ) as bnbo_completed_not_covered_by_water_hectares,
                         
                         -- Summary fields
