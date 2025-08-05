@@ -260,7 +260,8 @@ jobs:
   # Silver layer processing job - reads from GCS and processes everything
   process-silver:
     runs-on: ubuntu-latest
-    if: ${{ inputs.layer == 'silver' || inputs.layer == 'both' }}
+    needs: [generate-timestamp, fetch-geodanmark, fetch-inspire-bbr]
+    if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') && !cancelled() }}
     
     permissions:
       contents: 'read'
@@ -317,6 +318,8 @@ jobs:
 
     - name: Run Silver Layer Processing - Read from GCS and Process
       working-directory: backend/pipelines/bbr_buildings
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
         echo "🥈 Starting silver layer processing..."
         
@@ -324,9 +327,16 @@ jobs:
         CMD="python main.py --layer silver"
         
         # Determine bronze timestamp to use
+        # Priority: 1) Input parameter, 2) Generated timestamp from bronze jobs, 3) Auto-detect latest
         BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp }}"
+        GENERATED_TIMESTAMP="${{ needs.generate-timestamp.outputs.bronze-timestamp }}"
         
-        if [[ -z "$BRONZE_TIMESTAMP" ]]; then
+        if [[ -n "$BRONZE_TIMESTAMP" ]]; then
+          echo "🎯 Using provided bronze timestamp: $BRONZE_TIMESTAMP"
+        elif [[ -n "$GENERATED_TIMESTAMP" ]]; then
+          BRONZE_TIMESTAMP="$GENERATED_TIMESTAMP"
+          echo "🔗 Using generated bronze timestamp from current run: $BRONZE_TIMESTAMP"
+        else
           echo "🔍 No bronze timestamp provided, finding latest available..."
           
           # Find latest GeoDanmark bronze timestamp
@@ -354,8 +364,6 @@ jobs:
               echo "⚠️ Using latest INSPIRE data: $BRONZE_TIMESTAMP"
             fi
           fi
-        else
-          echo "🎯 Using provided bronze timestamp: $BRONZE_TIMESTAMP"
         fi
         
         # Add timestamp to command
