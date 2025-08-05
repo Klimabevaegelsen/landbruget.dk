@@ -299,61 +299,52 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 self.log.info(f"  No wetland intersections found in batch {batch_num + 1}")
                 continue
 
-            # Aggregate to field level
-            self.log.info("  Aggregating to field-level wetland coverage statistics")
+            # ARCHITECTURAL FIX: Skip field-level aggregation in Stage 2
+            # Stage 2 only creates detailed intersections for Stage 3
+            # All aggregation is handled in Stage 3 to avoid double-counting
+            self.log.info("  ✅ ARCHITECTURAL FIX: Skipping field-level aggregation in Stage 2")
+            self.log.info("  🎯 Stage 2 focuses on intersection geometries, Stage 3 handles all aggregation")
+            
+            # Create minimal field reference table for final output (fields with any wetlands)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE batch_field_aggregates AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.year,
-                    f.field_uuid,
-                    f.field_geometry as geometry,
-                    f.field_area_m2,
-                    
-                    -- Total wetland area in field
-                    COALESCE(SUM(f.field_wetland_area_m2), 0) as field_wetland_total_m2,
-                    
-                    -- Wetlands covered by water projects
-                    COALESCE(SUM(c.field_covered_wetland_area_m2), 0) as field_wetland_water_covered_m2
-                    
-                FROM batch_field_wetland_total f
-                LEFT JOIN batch_field_wetland_covered c ON f.field_uuid = c.field_uuid 
-                    AND f.year = c.year
-                    AND f.toerv_pct = c.toerv_pct
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
+                SELECT DISTINCT
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    field_uuid,
+                    field_geometry as geometry,
+                    field_area_m2
+                FROM batch_field_wetland_total
             """)
 
-            # Calculate percentages and final metrics
+            # ARCHITECTURAL FIX: No percentage calculations in Stage 2
+            # All aggregation and calculations moved to Stage 3
             self.conn.execute("""
                 CREATE OR REPLACE TABLE batch_final AS
                 SELECT 
-                    *,
-                    -- Coverage percentages
-                    CASE 
-                        WHEN field_wetland_total_m2 > 0 
-                        THEN (field_wetland_water_covered_m2 / field_wetland_total_m2) * 100 
-                        ELSE 0 
-                    END as field_wetland_water_covered_pct,
-                    
-                    CASE 
-                        WHEN field_wetland_total_m2 > 0 
-                        THEN ((field_wetland_total_m2 - field_wetland_water_covered_m2) / field_wetland_total_m2) * 100 
-                        ELSE 0 
-                    END as field_wetland_water_uncovered_pct,
-                    
-                    -- Field coverage percentage
-                    (field_wetland_total_m2 / field_area_m2) * 100 as field_wetland_coverage_pct
-                    
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    field_uuid,
+                    geometry,
+                    field_area_m2,
+                    -- Placeholder values - real calculations done in Stage 3
+                    0 as field_wetland_total_m2,
+                    0 as field_wetland_water_covered_m2,
+                    0 as field_wetland_water_covered_pct,
+                    0 as field_wetland_water_uncovered_pct,
+                    0 as field_wetland_coverage_pct
                 FROM batch_field_aggregates
             """)
 
-            # Insert into main results table (only fields with wetland coverage > 0)
+            # Insert into main results table (all fields with wetland intersections)
+            # Stage 3 will filter and calculate actual coverage
             self.conn.execute("""
                 INSERT INTO fields_wetland_water 
                 SELECT * FROM batch_final
-                WHERE field_wetland_total_m2 > 0
             """)
 
             total_fields_processed += batch_count
@@ -376,6 +367,41 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info(f"📊 Total wetland intersections: {total_wetland_intersections:,}")
         self.log.info(f"📊 Water-covered intersections: {total_covered_intersections:,}")
         self.log.info("✅ DuckDB Spatial PR #545 COMPLIANCE: Separated spatial joins completed")
+        
+        # COMPREHENSIVE VALIDATION SUITE
+        if self.area_validator:
+            self.log.info("🔍 RUNNING COMPREHENSIVE VALIDATION SUITE...")
+            
+            # Run comprehensive stage validation
+            validation_results = self.area_validator.run_comprehensive_stage_validation(
+                "fields_wetland_water", 
+                "Stage 2B Wetland", 
+                "wetland"
+            )
+            
+            # Fragment sum consistency validation
+            if final_fields > 0:
+                fragment_consistency = self.area_validator.validate_fragment_sum_consistency(
+                    "field_wetland_intersections",
+                    "fields_wetland_water", 
+                    "Stage 2B Fragment Consistency",
+                    ["field_uuid", "year"],
+                    "field_wetland_intersection_area_m2",
+                    "field_wetland_total_m2"
+                )
+                validation_results["fragment_consistency"] = fragment_consistency
+            
+            # Check if any validation failed
+            failed_validations = [name for name, result in validation_results.items() if not result.is_valid]
+            
+            if failed_validations and self.validation_config.fail_on_validation_error:
+                from ..area_validation import ValidationException
+                failed_result = validation_results[failed_validations[0]]
+                raise ValidationException(failed_result)
+            elif failed_validations:
+                self.log.warning(f"⚠️ Validation failures detected but continuing: {failed_validations}")
+            else:
+                self.log.info("✅ All Stage 2B validations PASSED!")
 
         return {
             "fields_processed": final_fields,

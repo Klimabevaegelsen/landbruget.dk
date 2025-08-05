@@ -590,6 +590,52 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 f"     {category}: {count:,} fields ({(count / total_fields) * 100:.1f}%), {avg_props_str} avg properties, {avg_env_str}% env coverage, {total_relationships:,} property relationships"
             )
 
+        # COMPREHENSIVE VALIDATION SUITE
+        if self.area_validator:
+            self.log.info("🔍 RUNNING COMPREHENSIVE VALIDATION SUITE...")
+            
+            # Run comprehensive validation for both BNBO and wetland data in consolidated table
+            validation_results = {}
+            
+            # Validate BNBO hierarchy
+            bnbo_validation = self.area_validator.run_comprehensive_stage_validation(
+                "field_environmental_analysis", 
+                "Stage 4 Consolidated BNBO", 
+                "bnbo"
+            )
+            validation_results.update({f"bnbo_{k}": v for k, v in bnbo_validation.items()})
+            
+            # Validate wetland hierarchy  
+            wetland_validation = self.area_validator.run_comprehensive_stage_validation(
+                "field_environmental_analysis", 
+                "Stage 4 Consolidated Wetland", 
+                "wetland"
+            )
+            validation_results.update({f"wetland_{k}": v for k, v in wetland_validation.items()})
+            
+            # Additional consolidated validation: check total environmental areas ≤ field areas
+            consolidated_hierarchy = self.area_validator.validate_area_hierarchy(
+                "field_environmental_analysis",
+                "Stage 4 Consolidated Environmental",
+                [
+                    ("property_bnbo_total_m2", "total_property_intersection_area_m2", "Property BNBO area ≤ Property area"),
+                    ("property_wetland_total_m2", "total_property_intersection_area_m2", "Property wetland area ≤ Property area"),
+                ]
+            )
+            validation_results["consolidated_hierarchy"] = consolidated_hierarchy
+            
+            # Check if any validation failed
+            failed_validations = [name for name, result in validation_results.items() if not result.is_valid]
+            
+            if failed_validations and self.validation_config.fail_on_validation_error:
+                from ..area_validation import ValidationException
+                failed_result = validation_results[failed_validations[0]]
+                raise ValidationException(failed_result)
+            elif failed_validations:
+                self.log.warning(f"⚠️ Validation failures detected but continuing: {failed_validations}")
+            else:
+                self.log.info("✅ All Stage 4 consolidated validations PASSED!")
+
         return {
             "total_fields": total_fields,
             "fields_with_bnbo": fields_with_bnbo,
