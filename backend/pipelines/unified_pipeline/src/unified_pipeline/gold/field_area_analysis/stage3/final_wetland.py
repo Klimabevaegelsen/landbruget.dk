@@ -257,12 +257,13 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 ).fetchone()[0]
                 self.log.info(f"  Found {spatial_count:,} property-wetland spatial intersections")
 
-                # Calculate water project coverage using field-level coverage ratios from Stage 2B
+                # ARCHITECTURAL FIX: Calculate water coverage directly from Stage 1B data
+                # No longer rely on problematic Stage 2B ratios
                 self.log.info(
-                    "  Calculating water project coverage using field-level ratios from Stage 2B"
+                    "  ✅ ARCHITECTURAL FIX: Calculating water coverage directly from Stage 1B intersections"
                 )
 
-                # Apply field-level coverage ratios to property-wetland areas
+                # Calculate water coverage by intersecting property-wetland areas with water project geometries
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE batch_property_wetland_water AS
                     SELECT 
@@ -274,12 +275,29 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                         pw.bfe_number,
                         pw.toerv_pct,
                         pw.property_wetland_area_m2,
-                        -- Apply field-level water coverage ratio from Stage 2B
-                        pw.property_wetland_area_m2 * (fw.field_wetland_water_covered_pct / 100.0) as property_wetland_covered_m2,
-                        pw.property_wetland_area_m2 * (1 - (fw.field_wetland_water_covered_pct / 100.0)) as property_wetland_uncovered_m2
+                        -- Calculate covered area by intersecting with water project wetland intersections
+                        COALESCE(
+                            (SELECT SUM(ST_Area_Spheroid(ST_Intersection(pw_geom.intersection_geometry, wpwi.intersection_geometry)))
+                             FROM water_projects_wetlands_intersections wpwi
+                             WHERE wpwi.toerv_pct = pw.toerv_pct
+                             AND ST_Intersects(pw_geom.intersection_geometry, wpwi.intersection_geometry)
+                             LIMIT 1), 0) as property_wetland_covered_m2,
+                        -- Uncovered is total minus covered
+                        pw.property_wetland_area_m2 - COALESCE(
+                            (SELECT SUM(ST_Area_Spheroid(ST_Intersection(pw_geom.intersection_geometry, wpwi.intersection_geometry)))
+                             FROM water_projects_wetlands_intersections wpwi
+                             WHERE wpwi.toerv_pct = pw.toerv_pct
+                             AND ST_Intersects(pw_geom.intersection_geometry, wpwi.intersection_geometry)
+                             LIMIT 1), 0) as property_wetland_uncovered_m2
                     FROM batch_property_wetland_spatial pw
-                    JOIN fields_wetland_water fw ON pw.field_uuid = fw.field_uuid 
-                        AND pw.year = fw.year
+                    JOIN (
+                        SELECT field_uuid, year, toerv_pct, 
+                               ST_Union(field_wetland_intersection_geometry) as intersection_geometry
+                        FROM field_wetland_intersections
+                        GROUP BY field_uuid, year, toerv_pct
+                    ) pw_geom ON pw.field_uuid = pw_geom.field_uuid 
+                        AND pw.year = pw_geom.year
+                        AND pw.toerv_pct = pw_geom.toerv_pct
                 """)
 
                 water_analysis_count = self.conn.execute(
@@ -380,41 +398,68 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                     COALESCE(pb.property_wetland_owners, NULL) as property_wetland_owners
                     
                 FROM (
-                    -- CRITICAL FIX: Aggregate multiple wetland fragments per field to single field-level record
+                    -- ARCHITECTURAL FIX: Calculate all field-level aggregations from detailed intersection data
                     SELECT 
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        field_uuid,
-                        FIRST(geometry) as geometry,  -- Take first geometry per field
-                        FIRST(field_area_m2) as field_area_m2,  -- Field area should be same across fragments
+                        fwi.field_id,
+                        fwi.block_id,
+                        fwi.cvr_number,
+                        fwi.year,
+                        fwi.field_uuid,
+                        FIRST(fwi.field_geometry) as geometry,
+                        FIRST(fwi.field_area_m2) as field_area_m2,
                         
-                        -- Aggregate wetland areas from multiple fragments
-                        SUM(field_wetland_total_m2) as field_wetland_total_m2,
-                        SUM(field_wetland_water_covered_m2) as field_wetland_water_covered_m2,
+                        -- Total wetland area from detailed intersections
+                        SUM(fwi.field_wetland_intersection_area_m2) as field_wetland_total_m2,
+                        
+                        -- Water covered area calculated from water project intersections
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN wpwi.intersection_geometry IS NOT NULL 
+                                THEN ST_Area_Spheroid(ST_Intersection(fwi.field_wetland_intersection_geometry, wpwi.intersection_geometry))
+                                ELSE 0 
+                            END
+                        ), 0) as field_wetland_water_covered_m2,
                         
                         -- Recalculate percentages from aggregated totals
                         CASE 
-                            WHEN SUM(field_wetland_total_m2) > 0 
-                            THEN (SUM(field_wetland_water_covered_m2) / SUM(field_wetland_total_m2)) * 100.0
+                            WHEN SUM(fwi.field_wetland_intersection_area_m2) > 0 
+                            THEN (COALESCE(SUM(
+                                CASE 
+                                    WHEN wpwi.intersection_geometry IS NOT NULL 
+                                    THEN ST_Area_Spheroid(ST_Intersection(fwi.field_wetland_intersection_geometry, wpwi.intersection_geometry))
+                                    ELSE 0 
+                                END
+                            ), 0) / SUM(fwi.field_wetland_intersection_area_m2)) * 100.0
                             ELSE 0 
                         END as field_wetland_water_covered_pct,
                         
                         CASE 
-                            WHEN SUM(field_wetland_total_m2) > 0 
-                            THEN ((SUM(field_wetland_total_m2) - SUM(field_wetland_water_covered_m2)) / SUM(field_wetland_total_m2)) * 100.0
+                            WHEN SUM(fwi.field_wetland_intersection_area_m2) > 0 
+                            THEN 100.0 - (COALESCE(SUM(
+                                CASE 
+                                    WHEN wpwi.intersection_geometry IS NOT NULL 
+                                    THEN ST_Area_Spheroid(ST_Intersection(fwi.field_wetland_intersection_geometry, wpwi.intersection_geometry))
+                                    ELSE 0 
+                                END
+                            ), 0) / SUM(fwi.field_wetland_intersection_area_m2)) * 100.0
                             ELSE 0 
                         END as field_wetland_water_uncovered_pct,
                         
                         CASE 
-                            WHEN FIRST(field_area_m2) > 0 
-                            THEN (SUM(field_wetland_total_m2) / FIRST(field_area_m2)) * 100.0
+                            WHEN FIRST(fwi.field_area_m2) > 0 
+                            THEN (SUM(fwi.field_wetland_intersection_area_m2) / FIRST(fwi.field_area_m2)) * 100.0
                             ELSE 0 
                         END as field_wetland_coverage_pct
                         
-                    FROM fields_batch 
-                    GROUP BY field_id, block_id, cvr_number, year, field_uuid
+                    FROM field_wetland_intersections fwi
+                    LEFT JOIN water_projects_wetlands_intersections wpwi ON fwi.toerv_pct = wpwi.toerv_pct
+                        AND ST_Intersects(fwi.field_wetland_intersection_geometry, wpwi.intersection_geometry)
+                    WHERE EXISTS (
+                        SELECT 1 FROM fields_batch fb 
+                        WHERE fwi.field_uuid = fb.field_uuid 
+                        AND fwi.year = fb.year
+                    )
+                    GROUP BY fwi.field_id, fwi.block_id, fwi.cvr_number, fwi.year, fwi.field_uuid
                 ) fab
                 LEFT JOIN (
                     SELECT 
@@ -573,6 +618,82 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 self.log.warning(f"  ⚠️ Still have {post_agg_stats[0] - post_agg_stats[1]} duplicates - needs investigation")
         else:
             self.log.info(f"  ✅ No duplicate fields found - batching worked perfectly")
+
+        # COMPREHENSIVE VALIDATION SUITE
+        if self.area_validator:
+            self.log.info("🔍 RUNNING COMPREHENSIVE VALIDATION SUITE...")
+            
+            # Run comprehensive stage validation for wetland data
+            validation_results = self.area_validator.run_comprehensive_stage_validation(
+                "final_wetland_analysis", 
+                "Stage 3 Final Wetland", 
+                "wetland"
+            )
+            
+            # Additional property-level validation
+            property_intersections_count = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
+            if property_intersections_count > 0:
+                # Validate property-level hierarchy: property wetland ≤ property area (when available)
+                property_hierarchy = self.area_validator.validate_area_hierarchy(
+                    "property_wetland_intersections",
+                    "Stage 3 Property Hierarchy",
+                    [
+                        ("property_wetland_water_covered_m2", "property_wetland_area_m2", "Property water covered ≤ Property wetland area"),
+                    ]
+                )
+                validation_results["property_hierarchy"] = property_hierarchy
+            
+            # Fragment sum consistency validation (Stage 3 aggregation from detailed intersections)
+            if final_count > 0:
+                fragment_consistency = self.area_validator.validate_fragment_sum_consistency(
+                    "field_wetland_intersections",
+                    "final_wetland_analysis", 
+                    "Stage 3 Final Aggregation Consistency",
+                    ["field_uuid", "year"],
+                    "field_wetland_intersection_area_m2",
+                    "field_wetland_total_m2"
+                )
+                validation_results["final_aggregation_consistency"] = fragment_consistency
+            
+            # Check for impossible ratios (architectural fix validation)
+            impossible_ratios = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as impossible_fields,
+                    MAX(field_wetland_total_m2 / NULLIF(field_area_m2, 0)) as max_ratio,
+                    COUNT(*) FILTER (WHERE field_wetland_total_m2 > field_area_m2 * (1 + {self.area_validator.tolerance_pct}/100.0)) as impossible_with_tolerance
+                FROM final_wetland_analysis
+                WHERE field_area_m2 > 0
+            """).fetchone()
+            
+            if impossible_ratios[0] > 0:
+                self.log.error(f"🚨 ARCHITECTURAL FIX VALIDATION FAILED: {impossible_ratios[0]} fields still have impossible ratios!")
+                self.log.error(f"   Max ratio: {impossible_ratios[1]:.1f}x")
+                self.log.error(f"   Fields exceeding {self.area_validator.tolerance_pct}% tolerance: {impossible_ratios[2]}")
+            else:
+                self.log.info("✅ ARCHITECTURAL FIX VALIDATION PASSED: No impossible wetland/field area ratios found!")
+            
+            # Check for negative covered areas
+            negative_coverage = self.conn.execute("""
+                SELECT COUNT(*) FROM final_wetland_analysis
+                WHERE field_wetland_water_covered_m2 < 0
+            """).fetchone()[0]
+            
+            if negative_coverage > 0:
+                self.log.warning(f"⚠️ Found {negative_coverage} fields with negative water coverage")
+            else:
+                self.log.info("✅ No negative water coverage values found")
+            
+            # Check if any validation failed
+            failed_validations = [name for name, result in validation_results.items() if not result.is_valid]
+            
+            if failed_validations and self.validation_config.fail_on_validation_error:
+                from ..area_validation import ValidationException
+                failed_result = validation_results[failed_validations[0]]
+                raise ValidationException(failed_result)
+            elif failed_validations:
+                self.log.warning(f"⚠️ Validation failures detected but continuing: {failed_validations}")
+            else:
+                self.log.info("✅ All Stage 3 validations PASSED!")
 
         # Get final statistics
         final_count = self.conn.execute("SELECT COUNT(*) FROM final_wetland_analysis").fetchone()[0]

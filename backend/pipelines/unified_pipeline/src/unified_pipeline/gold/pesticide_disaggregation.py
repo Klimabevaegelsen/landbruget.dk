@@ -164,6 +164,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         - Logger for tracking what's happening
         - Database connection (will be created later)
         - Cache for organic field IDs (performance optimization)
+        - Validation tracking for pesticide amount preservation
         """
         print("DEBUG: PesticideDisaggregationGold.__init__ called!")
         super().__init__(config)
@@ -175,6 +176,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Cache for organic field IDs to avoid repeated lookups
         # Organic fields are excluded from some matching strategies
         self._organic_marker_field_ids: Set[str] = set()
+
+        # Validation tracking - tracks pesticide amounts at each step
+        self._validation_data = {
+            "original_total_dosage": 0.0,
+            "original_total_acreage": 0.0,
+            "original_record_count": 0,
+            "strategy_totals": {},
+            "final_total_dosage": 0.0,
+            "final_total_acreage": 0.0,
+            "final_record_count": 0
+        }
 
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
 
@@ -188,6 +200,327 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         with open(source_file_path, "rb") as src:
             with self.gcs_access.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
+
+    def _validate_original_pesticide_totals(self) -> None:
+        """
+        Capture and validate original pesticide totals before disaggregation.
+        This establishes our baseline for validation throughout the process.
+        """
+        try:
+            # Get original totals from the raw pesticide table
+            original_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as record_count,
+                    SUM(COALESCE(DosageQuantity, 0)) as total_dosage,
+                    SUM(COALESCE(AcreageSize, 0)) as total_acreage,
+                    COUNT(CASE WHEN nopesticides IS NULL OR 
+                               CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE') 
+                          THEN 1 END) as processable_records,
+                    SUM(CASE WHEN nopesticides IS NULL OR 
+                             CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as processable_dosage,
+                    SUM(CASE WHEN nopesticides IS NULL OR 
+                             CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE') 
+                        THEN COALESCE(AcreageSize, 0) ELSE 0 END) as processable_acreage
+                FROM pesticide
+            """).fetchone()
+
+            if original_stats:
+                self._validation_data["original_record_count"] = original_stats[0]
+                self._validation_data["original_total_dosage"] = original_stats[1] or 0.0
+                self._validation_data["original_total_acreage"] = original_stats[2] or 0.0
+                self._validation_data["processable_record_count"] = original_stats[3]
+                self._validation_data["processable_total_dosage"] = original_stats[4] or 0.0
+                self._validation_data["processable_total_acreage"] = original_stats[5] or 0.0
+
+                self.log.info("📊 VALIDATION: Original pesticide totals captured")
+                self.log.info(f"   📈 Total records: {original_stats[0]:,}")
+                self.log.info(f"   📈 Total dosage: {original_stats[1]:,.2f} units")
+                self.log.info(f"   📈 Total acreage: {original_stats[2]:,.2f} ha")
+                self.log.info(f"   ✅ Processable records (excluding no-pesticides): {original_stats[3]:,}")
+                self.log.info(f"   ✅ Processable dosage: {original_stats[4]:,.2f} units")
+                self.log.info(f"   ✅ Processable acreage: {original_stats[5]:,.2f} ha")
+
+                # Calculate no-pesticides exclusions
+                excluded_records = original_stats[0] - original_stats[3]
+                excluded_dosage = (original_stats[1] or 0) - (original_stats[4] or 0)
+                if excluded_records > 0:
+                    self.log.info(f"   🚫 Excluded (no-pesticides): {excluded_records:,} records, {excluded_dosage:,.2f} dosage units")
+
+        except Exception as e:
+            self.log.error(f"❌ VALIDATION ERROR: Failed to capture original totals: {e}")
+            # Set defaults to avoid crashes
+            self._validation_data.update({
+                "original_record_count": 0,
+                "original_total_dosage": 0.0,
+                "original_total_acreage": 0.0,
+                "processable_record_count": 0,
+                "processable_total_dosage": 0.0,
+                "processable_total_acreage": 0.0
+            })
+
+    def _validate_strategy_results(self, strategy_name: str, processed_count: int) -> None:
+        """
+        Validate results after each disaggregation strategy runs.
+        Tracks cumulative progress and ensures no data corruption.
+        
+        Args:
+            strategy_name: Name of the strategy that just completed
+            processed_count: Number of records processed by this strategy
+        """
+        try:
+            if processed_count == 0:
+                self.log.info(f"📊 VALIDATION: {strategy_name} - No records processed")
+                return
+
+            # Get current disaggregated totals
+            current_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as disaggregated_count,
+                    SUM(COALESCE(DosageQuantity, 0)) as disaggregated_dosage,
+                    SUM(COALESCE(AllocatedArea, 0)) as disaggregated_acreage,
+                    COUNT(DISTINCT OriginalPesticideRowID) as unique_original_records
+                FROM disaggregated_pesticide_applications
+            """).fetchone()
+
+            # Get strategy-specific totals
+            strategy_stats = self.duckdb_conn.execute(f"""
+                SELECT 
+                    COUNT(*) as strategy_count,
+                    SUM(COALESCE(DosageQuantity, 0)) as strategy_dosage,
+                    SUM(COALESCE(AllocatedArea, 0)) as strategy_acreage,
+                    COUNT(DISTINCT OriginalPesticideRowID) as strategy_original_records
+                FROM disaggregated_pesticide_applications
+                WHERE AllocationMethod LIKE '%{self._get_strategy_method_pattern(strategy_name)}%'
+                   OR DisaggregationStrategy LIKE '%{strategy_name}%'
+            """).fetchone()
+
+            if current_stats and strategy_stats:
+                # Store strategy-specific totals
+                self._validation_data["strategy_totals"][strategy_name] = {
+                    "record_count": strategy_stats[0],
+                    "dosage": strategy_stats[1] or 0.0,
+                    "acreage": strategy_stats[2] or 0.0,
+                    "original_records": strategy_stats[3]
+                }
+
+                # Update cumulative totals
+                self._validation_data["final_record_count"] = current_stats[0]
+                self._validation_data["final_total_dosage"] = current_stats[1] or 0.0
+                self._validation_data["final_total_acreage"] = current_stats[2] or 0.0
+
+                self.log.info(f"📊 VALIDATION: {strategy_name} completed")
+                self.log.info(f"   ✅ Strategy processed: {strategy_stats[0]:,} records from {strategy_stats[3]:,} original applications")
+                self.log.info(f"   ✅ Strategy dosage: {strategy_stats[1]:,.2f} units")
+                self.log.info(f"   ✅ Strategy acreage: {strategy_stats[2]:,.2f} ha")
+                self.log.info(f"   📈 Cumulative progress: {current_stats[0]:,} records, {current_stats[1]:,.2f} dosage units")
+
+                # Check for potential issues
+                if strategy_stats[0] != processed_count:
+                    self.log.warning(f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but found {strategy_stats[0]:,} in database")
+
+        except Exception as e:
+            self.log.error(f"❌ VALIDATION ERROR: Failed to validate {strategy_name} results: {e}")
+
+    def _get_strategy_method_pattern(self, strategy_name: str) -> str:
+        """Map strategy names to their AllocationMethod patterns for querying."""
+        strategy_patterns = {
+            "Main Area Match": "Marker_ApplicationAreaToTotalFieldArea_FieldProportional",
+            "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional", 
+            "Partial Field Coverage": "Partial_Field_Coverage_SingleField",
+            "Spatial Clustering": "Adjacent_Fields_Spatial_Cluster_AreaMatched",
+            "Ethical Best-Match": "Ethical Best-Match"
+        }
+        return strategy_patterns.get(strategy_name, strategy_name)
+
+    def _validate_final_disaggregation_integrity(self) -> None:
+        """
+        Perform comprehensive validation of the final disaggregation results.
+        Checks for data integrity, coverage, and potential issues.
+        """
+        try:
+            self.log.info("🔍 VALIDATION: Running final disaggregation integrity checks")
+
+            # Get remaining pending records
+            pending_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as pending_count,
+                    SUM(COALESCE(DosageQuantity, 0)) as pending_dosage,
+                    SUM(COALESCE(AcreageSize, 0)) as pending_acreage
+                FROM pending_pesticide_rows
+            """).fetchone()
+
+            # Get final disaggregated totals
+            final_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as final_count,
+                    SUM(COALESCE(DosageQuantity, 0)) as final_dosage,
+                    SUM(COALESCE(AllocatedArea, 0)) as final_acreage,
+                    COUNT(DISTINCT OriginalPesticideRowID) as unique_original_records
+                FROM disaggregated_pesticide_applications
+            """).fetchone()
+
+            if pending_stats and final_stats:
+                pending_count, pending_dosage, pending_acreage = pending_stats
+                final_count, final_dosage, final_acreage, unique_originals = final_stats
+
+                # Calculate coverage percentages
+                processable_records = self._validation_data.get("processable_record_count", 0)
+                processable_dosage = self._validation_data.get("processable_total_dosage", 0.0)
+                processable_acreage = self._validation_data.get("processable_total_acreage", 0.0)
+
+                if processable_records > 0:
+                    record_coverage = (unique_originals / processable_records) * 100
+                    dosage_coverage = (final_dosage / processable_dosage) * 100 if processable_dosage > 0 else 0
+                    acreage_coverage = (final_acreage / processable_acreage) * 100 if processable_acreage > 0 else 0
+                else:
+                    record_coverage = dosage_coverage = acreage_coverage = 0
+
+                # Log comprehensive results
+                self.log.info("🎯 VALIDATION: Final Disaggregation Results")
+                self.log.info("=" * 60)
+                self.log.info(f"📊 INPUT DATA:")
+                self.log.info(f"   Total original records: {self._validation_data.get('original_record_count', 0):,}")
+                self.log.info(f"   Processable records: {processable_records:,}")
+                self.log.info(f"   Processable dosage: {processable_dosage:,.2f} units")
+                self.log.info(f"   Processable acreage: {processable_acreage:,.2f} ha")
+                
+                self.log.info(f"📈 DISAGGREGATION RESULTS:")
+                self.log.info(f"   Successfully disaggregated: {unique_originals:,} original applications")
+                self.log.info(f"   Total disaggregated records: {final_count:,} (multi-field expansions)")
+                self.log.info(f"   Disaggregated dosage: {final_dosage:,.2f} units")
+                self.log.info(f"   Disaggregated acreage: {final_acreage:,.2f} ha")
+                
+                self.log.info(f"📉 REMAINING UNPROCESSED:")
+                self.log.info(f"   Pending records: {pending_count:,}")
+                self.log.info(f"   Pending dosage: {pending_dosage:,.2f} units")
+                self.log.info(f"   Pending acreage: {pending_acreage:,.2f} ha")
+                
+                self.log.info(f"🎯 COVERAGE ANALYSIS:")
+                self.log.info(f"   Record coverage: {record_coverage:.1f}%")
+                self.log.info(f"   Dosage coverage: {dosage_coverage:.1f}%")
+                self.log.info(f"   Acreage coverage: {acreage_coverage:.1f}%")
+
+                # Strategy breakdown
+                self.log.info(f"📋 STRATEGY BREAKDOWN:")
+                for strategy, stats in self._validation_data.get("strategy_totals", {}).items():
+                    self.log.info(f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records")
+
+                # Data integrity checks
+                total_accounted = final_dosage + pending_dosage
+                dosage_discrepancy = abs(processable_dosage - total_accounted)
+                
+                if dosage_discrepancy > 0.01:  # Allow for small floating point errors
+                    discrepancy_pct = (dosage_discrepancy / processable_dosage) * 100 if processable_dosage > 0 else 0
+                    if discrepancy_pct > 0.1:  # Only warn if > 0.1%
+                        self.log.warning(f"⚠️ VALIDATION WARNING: Dosage discrepancy of {dosage_discrepancy:.2f} units ({discrepancy_pct:.2f}%)")
+                        self.log.warning(f"   Expected: {processable_dosage:.2f}, Accounted: {total_accounted:.2f}")
+                    else:
+                        self.log.info(f"✅ Dosage integrity check passed (discrepancy: {discrepancy_pct:.3f}%)")
+                else:
+                    self.log.info("✅ Perfect dosage integrity - all amounts accounted for")
+
+                # Check for potential data quality issues
+                self._validate_proportional_allocation_integrity()
+
+        except Exception as e:
+            self.log.error(f"❌ VALIDATION ERROR: Failed final integrity check: {e}")
+
+    def _validate_proportional_allocation_integrity(self) -> None:
+        """
+        Check that proportional allocations within each original pesticide application sum correctly.
+        This ensures we haven't lost or gained pesticide amounts during field distribution.
+        """
+        try:
+            # Check that disaggregated amounts sum back to original amounts for each application
+            allocation_check = self.duckdb_conn.execute("""
+                WITH OriginalTotals AS (
+                    SELECT 
+                        OriginalPesticideRowID,
+                        COUNT(*) as field_count,
+                        SUM(DosageQuantity) as total_disaggregated_dosage,
+                        SUM(AllocatedArea) as total_disaggregated_area
+                    FROM disaggregated_pesticide_applications
+                    GROUP BY OriginalPesticideRowID
+                ),
+                ExpectedTotals AS (
+                    SELECT 
+                        CAST(OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
+                        DosageQuantity as expected_dosage,
+                        AcreageSize as expected_area
+                    FROM pesticide
+                ),
+                AllocationValidation AS (
+                    SELECT 
+                        ot.OriginalPesticideRowID,
+                        ot.field_count,
+                        ot.total_disaggregated_dosage,
+                        et.expected_dosage,
+                        ot.total_disaggregated_area,
+                        et.expected_area,
+                        ABS(ot.total_disaggregated_dosage - et.expected_dosage) as dosage_diff,
+                        ABS(ot.total_disaggregated_area - et.expected_area) as area_diff,
+                        CASE WHEN et.expected_dosage > 0 
+                             THEN ABS(ot.total_disaggregated_dosage - et.expected_dosage) / et.expected_dosage * 100 
+                             ELSE 0 END as dosage_diff_pct,
+                        CASE WHEN et.expected_area > 0 
+                             THEN ABS(ot.total_disaggregated_area - et.expected_area) / et.expected_area * 100 
+                             ELSE 0 END as area_diff_pct
+                    FROM OriginalTotals ot
+                    JOIN ExpectedTotals et ON ot.OriginalPesticideRowID = et.OriginalPesticideRowID
+                )
+                SELECT 
+                    COUNT(*) as total_applications,
+                    COUNT(CASE WHEN dosage_diff_pct <= 0.01 THEN 1 END) as perfect_dosage_match,
+                    COUNT(CASE WHEN dosage_diff_pct > 0.01 AND dosage_diff_pct <= 1.0 THEN 1 END) as minor_dosage_diff,
+                    COUNT(CASE WHEN dosage_diff_pct > 1.0 THEN 1 END) as major_dosage_diff,
+                    AVG(dosage_diff_pct) as avg_dosage_diff_pct,
+                    MAX(dosage_diff_pct) as max_dosage_diff_pct,
+                    COUNT(CASE WHEN area_diff_pct <= 0.01 THEN 1 END) as perfect_area_match,
+                    COUNT(CASE WHEN area_diff_pct > 0.01 AND area_diff_pct <= 1.0 THEN 1 END) as minor_area_diff,
+                    COUNT(CASE WHEN area_diff_pct > 1.0 THEN 1 END) as major_area_diff,
+                    AVG(area_diff_pct) as avg_area_diff_pct,
+                    MAX(area_diff_pct) as max_area_diff_pct
+                FROM AllocationValidation
+            """).fetchone()
+
+            if allocation_check:
+                (total_apps, perfect_dosage, minor_dosage_diff, major_dosage_diff, avg_dosage_diff, max_dosage_diff,
+                 perfect_area, minor_area_diff, major_area_diff, avg_area_diff, max_area_diff) = allocation_check
+
+                self.log.info("🔍 VALIDATION: Proportional allocation integrity check")
+                self.log.info(f"   📊 Total applications checked: {total_apps:,}")
+                
+                if total_apps > 0:
+                    perfect_dosage_pct = (perfect_dosage / total_apps) * 100
+                    perfect_area_pct = (perfect_area / total_apps) * 100
+                    
+                    self.log.info(f"   💊 DOSAGE ALLOCATION:")
+                    self.log.info(f"     Perfect matches (≤0.01% diff): {perfect_dosage:,} ({perfect_dosage_pct:.1f}%)")
+                    self.log.info(f"     Minor differences (0.01-1%): {minor_dosage_diff:,}")
+                    self.log.info(f"     Major differences (>1%): {major_dosage_diff:,}")
+                    self.log.info(f"     Average difference: {avg_dosage_diff:.3f}%")
+                    self.log.info(f"     Maximum difference: {max_dosage_diff:.3f}%")
+                    
+                    self.log.info(f"   📏 AREA ALLOCATION:")
+                    self.log.info(f"     Perfect matches (≤0.01% diff): {perfect_area:,} ({perfect_area_pct:.1f}%)")
+                    self.log.info(f"     Minor differences (0.01-1%): {minor_area_diff:,}")
+                    self.log.info(f"     Major differences (>1%): {major_area_diff:,}")
+                    self.log.info(f"     Average difference: {avg_area_diff:.3f}%")
+                    self.log.info(f"     Maximum difference: {max_area_diff:.3f}%")
+
+                    # Issue warnings for significant problems
+                    if major_dosage_diff > 0:
+                        major_dosage_pct = (major_dosage_diff / total_apps) * 100
+                        self.log.warning(f"⚠️ VALIDATION WARNING: {major_dosage_diff:,} applications ({major_dosage_pct:.1f}%) have major dosage allocation discrepancies")
+                    
+                    if perfect_dosage_pct < 95.0:
+                        self.log.warning(f"⚠️ VALIDATION WARNING: Only {perfect_dosage_pct:.1f}% of applications have perfect dosage allocation")
+                    else:
+                        self.log.info(f"✅ Excellent proportional allocation integrity: {perfect_dosage_pct:.1f}% perfect matches")
+
+        except Exception as e:
+            self.log.error(f"❌ VALIDATION ERROR: Failed proportional allocation check: {e}")
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -783,6 +1116,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             Number of successfully disaggregated records, or None if processing failed
         """
         try:
+            # RESET VALIDATION DATA FOR THIS YEAR
+            # ===================================
+            # Clear any previous year's validation data
+            self.log.info(f"🔄 Resetting validation data for year {pesticide_year}")
+            self._validation_data = {
+                "original_total_dosage": 0.0,
+                "original_total_acreage": 0.0,
+                "original_record_count": 0,
+                "strategy_totals": {},
+                "final_total_dosage": 0.0,
+                "final_total_acreage": 0.0,
+                "final_record_count": 0
+            }
+
             # STEP 1: SET UP THE DATABASE
             # ===========================
             # Load both pesticide and field data into a fast in-memory database
@@ -809,6 +1156,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # These are companies that explicitly reported they used no pesticides
             self.log.info(f"🔍 Filtering pending pesticide records for year {pesticide_year}")
             self._create_pending_pesticide_rows()
+
+            # VALIDATION: Capture original pesticide totals for integrity checking
+            self.log.info(f"📊 Capturing original totals for validation for year {pesticide_year}")
+            self._validate_original_pesticide_totals()
 
             # STEP 3: QUICK FEASIBILITY CHECK
             # ===============================
@@ -849,6 +1200,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(
                 f"✅ Year {pesticide_year}: Ethical Best-Match: {processed_ethical} mixed farming records processed"
             )
+            # VALIDATION: Check ethical best-match strategy results
+            self._validate_strategy_results("Ethical Best-Match", processed_ethical)
 
             # STRATEGY 2: MAIN AREA MATCHING FOR REMAINING APPLICATIONS
             # =========================================================
@@ -860,6 +1213,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(
                 f"✅ Year {pesticide_year}: Main Area Match (remaining): {processed_main_remaining} records processed"
             )
+            # VALIDATION: Check main area matching strategy results
+            self._validate_strategy_results("Main Area Match", processed_main_remaining)
 
             # STRATEGY 3: NON-ORGANIC CLEANUP FOR EDGE CASES
             # ==============================================
@@ -871,6 +1226,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(
                 f"✅ Year {pesticide_year}: Non-Organic Cleanup: {processed_nonorg_cleanup} records processed"
             )
+            # VALIDATION: Check non-organic matching strategy results
+            self._validate_strategy_results("Non-Organic Match", processed_nonorg_cleanup)
 
             # STRATEGY 4: PARTIAL FIELD COVERAGE (HANDLES SINGLE-FIELD CASES)
             # ================================================================
@@ -885,6 +1242,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(
                 f"✅ Year {pesticide_year}: Partial Field Coverage: {processed_4} records processed"
             )
+            # VALIDATION: Check partial field coverage strategy results
+            self._validate_strategy_results("Partial Field Coverage", processed_4)
 
             # STRATEGY 5: SPATIAL CLUSTERING (REMOVED FOR SIMPLICITY)
             # =======================================================
@@ -917,6 +1276,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 f"   ✅ Successfully disaggregated: {result_count:,} ({coverage_pct:.1f}%)"
             )
             self.log.info(f"   🔢 Total processed across all strategies: {total_processed:,}")
+
+            # VALIDATION: Run comprehensive final integrity checks
+            self.log.info(f"🔍 Running final validation for year {pesticide_year}")
+            self._validate_final_disaggregation_integrity()
 
             # STEP 6: SAVE RESULTS
             # ====================
@@ -1501,50 +1864,50 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM pending_pesticide_rows p
                     JOIN MixedFarmingCombinations mfc 
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
-                        AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
-                        AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                        AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
                       AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
                 )
                 -- Process using main strategy (best_strategy = 'main')
                 INSERT INTO disaggregated_pesticide_applications (
                     OriginalPesticideRowID,
-                    cvr_number,
                     PesticideName,
                     PesticideRegistrationNumber,
+                    AcreageSize,
                     DosageQuantity,
                     DosageUnit,
+                    DisaggregatedFieldArea,
+                    DisaggregatedDosageQuantity,
+                    DisaggregatedDosageUnit,
                     MatchedFieldID,
-                    AllocatedArea,
-                    AllocationMethod,
-                    MatchConfidence,
-                    field_uuid,
-                    primary_field_id
+                    DisaggregationConfidence,
+                    DisaggregationStrategy
                 )
                 SELECT
                     p.OriginalPesticideRowID,
-                    p.cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    -- Proportional dosage based on field area
-                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    p.AcreageSize,
+                    p.DosageQuantity,
                     p.DosageUnit,
+                    m_fields.area_ha as DisaggregatedFieldArea,
+                    -- Proportional dosage based on field area
+                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DisaggregatedDosageQuantity,
+                    p.DosageUnit as DisaggregatedDosageUnit,
                     'ethical_main_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
-                    m_fields.area_ha as AllocatedArea,
-                    'Ethical Best-Match: Main Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
-                    95.0 as MatchConfidence,
-                    m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    95.0 as DisaggregationConfidence,
+                    'Ethical Best-Match: Main Strategy' as DisaggregationStrategy
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
-                    AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
+                    AND TRY_CAST(p.crop_code AS BIGINT) = main_totals.CropCode
                 JOIN marker m_fields 
                     ON main_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND main_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
@@ -1608,49 +1971,49 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM pending_pesticide_rows p
                     JOIN MixedFarmingCombinations mfc 
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
-                        AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
-                        AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                        AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                        AND TRY_CAST(p.crop_code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
                       AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
                 )
                 INSERT INTO disaggregated_pesticide_applications (
                     OriginalPesticideRowID,
-                    cvr_number,
                     PesticideName,
                     PesticideRegistrationNumber,
+                    AcreageSize,
                     DosageQuantity,
                     DosageUnit,
+                    DisaggregatedFieldArea,
+                    DisaggregatedDosageQuantity,
+                    DisaggregatedDosageUnit,
                     MatchedFieldID,
-                    AllocatedArea,
-                    AllocationMethod,
-                    MatchConfidence,
-                    field_uuid,
-                    primary_field_id
+                    DisaggregationConfidence,
+                    DisaggregationStrategy
                 )
                 SELECT
                     p.OriginalPesticideRowID,
-                    p.cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    -- Proportional dosage based on field area
-                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    p.AcreageSize,
+                    p.DosageQuantity,
                     p.DosageUnit,
+                    m_fields.area_ha as DisaggregatedFieldArea,
+                    -- Proportional dosage based on field area
+                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) * p.DosageQuantity as DisaggregatedDosageQuantity,
+                    p.DosageUnit as DisaggregatedDosageUnit,
                     'ethical_nonorg_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
-                    m_fields.area_ha as AllocatedArea,
-                    'Ethical Best-Match: Non-Organic Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
-                    95.0 as MatchConfidence,
-                    m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    95.0 as DisaggregationConfidence,
+                    'Ethical Best-Match: Non-Organic Strategy' as DisaggregationStrategy
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                    AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                    AND TRY_CAST(p.crop_code AS BIGINT) = non_organic_totals.CropCode
                 JOIN marker m_fields 
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
@@ -1667,20 +2030,24 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Remove processed applications from pending queue
             self.duckdb_conn.execute(f"""
                 DELETE FROM pending_pesticide_rows 
-                WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT CAST(da.OriginalPesticideRowID AS VARCHAR)
+                WHERE OriginalPesticideRowID IN (
+                    SELECT DISTINCT p.OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications da
-                    WHERE da.AllocationMethod LIKE 'Ethical Best-Match:%'
+                    JOIN VALUES {mixed_combinations_sql} AS mfc(CVR, CropCode) 
+                        ON da.DisaggregationStrategy LIKE 'Ethical Best-Match:%'
+                    JOIN pesticide p ON da.OriginalPesticideRowID = p.OriginalPesticideRowID
+                    WHERE TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
+                      AND TRY_CAST(p.crop_code AS BIGINT) = mfc.CropCode
                 )
             """)
             
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
                 SELECT 
-                    COUNT(CASE WHEN AllocationMethod = 'Ethical Best-Match: Main Strategy' THEN 1 END) as main_wins,
-                    COUNT(CASE WHEN AllocationMethod = 'Ethical Best-Match: Non-Organic Strategy' THEN 1 END) as nonorg_wins
+                    COUNT(CASE WHEN DisaggregationStrategy = 'Ethical Best-Match: Main Strategy' THEN 1 END) as main_wins,
+                    COUNT(CASE WHEN DisaggregationStrategy = 'Ethical Best-Match: Non-Organic Strategy' THEN 1 END) as nonorg_wins
                 FROM disaggregated_pesticide_applications
-                WHERE AllocationMethod LIKE 'Ethical Best-Match:%'
+                WHERE DisaggregationStrategy LIKE 'Ethical Best-Match:%'
             """).fetchone()
             
             if best_match_stats:
@@ -1780,7 +2147,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR 
-                                         AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
+                                         AND TRY_CAST(p.crop_code AS BIGINT) = marker_totals.CropCode
                 -- STEP 3: Join with individual fields to create one record per field
                 JOIN marker m_fields 
                     ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
@@ -1880,7 +2247,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                                         AND TRY_CAST(p.crop_code AS BIGINT) = non_organic_totals.CropCode
                 JOIN marker m_fields 
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
@@ -1954,7 +2321,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     SELECT 
                         p.OriginalPesticideRowID,
                         TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
-                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        CAST(CAST(p.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         p.AcreageSize,
                         p.PesticideName,
                         p.PesticideRegistrationNumber,
@@ -1962,7 +2329,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         p.DosageUnit
                     FROM pending_pesticide_rows p
                     WHERE p.cvr_number IS NOT NULL 
-                      AND p.Code IS NOT NULL
+                      AND p.crop_code IS NOT NULL
                       AND p.AcreageSize > 0
                 ),
                 CandidatesWithFields AS (
@@ -2085,13 +2452,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 WITH PendingCombinations AS (
                     SELECT DISTINCT
                         TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
-                        CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        CAST(CAST(p.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as pending_count
                     FROM pending_pesticide_rows p
                     WHERE p.cvr_number IS NOT NULL 
                       AND TRIM(CAST(p.cvr_number AS VARCHAR)) != '' 
                       AND REGEXP_MATCHES(TRIM(CAST(p.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND p.Code IS NOT NULL 
+                      AND p.crop_code IS NOT NULL 
                       AND p.AcreageSize > 0.0
                     GROUP BY CVR_Str, Crop_Str
                     HAVING COUNT(*) > 0
@@ -2256,7 +2623,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pending_for_chunk = self.duckdb_conn.execute(f"""
                 SELECT COUNT(*) as total_pending
                 FROM pending_pesticide_rows p
-                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.crop_code AS BIGINT) AS VARCHAR)) 
                       IN ({cvr_crop_in_clause})
             """).fetchone()[0]
 
@@ -2413,9 +2780,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM pending_pesticide_rows p
                     JOIN ClusterAreas ca ON 
                         TRIM(CAST(p.cvr_number AS VARCHAR)) = ca.CVR_Str
-                        AND CAST(CAST(p.Code AS BIGINT) AS VARCHAR) = ca.Crop_Str
+                        AND CAST(CAST(p.crop_code AS BIGINT) AS VARCHAR) = ca.Crop_Str
                     WHERE p.cvr_number IS NOT NULL 
-                      AND p.Code IS NOT NULL
+                      AND p.crop_code IS NOT NULL
                       AND p.AcreageSize > 0
                       -- CRITICAL: Area must match within tolerance (2%)
                       AND ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
