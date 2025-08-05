@@ -76,16 +76,22 @@ class FieldAreaAnalysisConfig(BaseModel):
         "fields_bnbo_water": "field_analysis_fields_bnbo_water",
         "fields_wetland_water": "field_analysis_fields_wetland_water",
         "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",  # For Stage 3 optimization
+        "field_bnbo_water_intersections": "field_analysis_field_bnbo_water_intersections",  # For Stage 3 optimization
         "field_wetland_intersections": "field_analysis_field_wetland_intersections",  # For Stage 3 optimization
+        "field_wetland_water_intersections": "field_analysis_field_wetland_water_intersections",  # For Stage 3 optimization
         # Stage 3 outputs (property-level analysis)
         "final_bnbo": "field_analysis_bnbo",
         "final_wetland": "field_analysis_wetland",
         "property_bnbo_intersections": "field_analysis_property_bnbo_intersections",  # For two-table architecture
+        "property_bnbo_water_intersections": "field_analysis_property_bnbo_water_intersections",  # For two-table architecture
         "property_wetland_intersections": "field_analysis_property_wetland_intersections",  # For two-table architecture
+        "property_wetland_water_intersections": "field_analysis_property_wetland_water_intersections",  # For two-table architecture
         # Stage 4 outputs (consolidation) - Two-Table Architecture
         "consolidated": "field_analysis",  # Legacy single table (deprecated)
-        "field_environmental_analysis": "field_environmental",  # Table 1: Field-level
-        "property_environmental_analysis": "property_environmental",  # Table 2: Property-level
+        "field_environmental_analysis": "field_environmental",  # Table 1: Field-level (legacy)
+        "field_environmental_analysis_fields": "field_environmental_analysis_fields",  # Table 1: Field-level (redesigned)
+        "property_environmental_analysis": "property_environmental",  # Table 2: Property-level (legacy)
+        "field_environmental_analysis_properties": "field_environmental_analysis_properties",  # Table 2: Property-level (redesigned)
     }
 
     # Parquet export settings for optimal performance
