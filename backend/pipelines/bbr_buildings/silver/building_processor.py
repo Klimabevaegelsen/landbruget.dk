@@ -78,6 +78,7 @@ class BuildingProcessor:
             """)
 
             # Join with INSPIRE attributes if both tables exist
+            # Fix: Cast both UUID types to VARCHAR for proper join
             conn.execute("""
                 CREATE OR REPLACE TABLE enriched_buildings AS
                 SELECT 
@@ -91,7 +92,7 @@ class BuildingProcessor:
                     ia.address,
                     ia.category_group
                 FROM joined_buildings jb
-                LEFT JOIN inspire_attributes ia ON jb.BBRUUID = ia.building_uuid
+                LEFT JOIN inspire_attributes ia ON jb.BBRUUID::VARCHAR = ia.building_uuid::VARCHAR
             """)
 
             processing_table = "enriched_buildings"
