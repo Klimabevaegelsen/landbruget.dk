@@ -102,7 +102,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE property_wetland_intersections AS
             SELECT 
                 p.field_uuid,
-                p.bfe_number as property_id,
+                p.bfe_number,
                 fwi.field_id,
                 fwi.block_id,
                 fwi.cvr_number,
@@ -121,7 +121,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE property_wetland_water_intersections AS
             SELECT 
                 p.field_uuid,
-                p.bfe_number as property_id,
+                p.bfe_number,
                 fwwi.field_id,
                 fwwi.block_id,
                 fwwi.cvr_number,
