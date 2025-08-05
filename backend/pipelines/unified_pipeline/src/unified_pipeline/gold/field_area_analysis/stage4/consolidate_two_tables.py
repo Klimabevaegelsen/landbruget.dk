@@ -218,12 +218,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT 
                 fp.field_uuid,
-                fp.property_id,
+                fp.bfe_number as property_id,
                 fp.field_id,
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                fp.bfe_number,
                 ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
                 
                 -- Environmental within this field×property intersection
@@ -238,15 +237,15 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_intersections pbi 
-                ON fp.field_uuid = pbi.field_uuid AND fp.property_id = pbi.property_id
+                ON fp.field_uuid = pbi.field_uuid AND fp.bfe_number = pbi.property_id
             LEFT JOIN property_bnbo_water_intersections pbwi 
-                ON fp.field_uuid = pbwi.field_uuid AND fp.property_id = pbwi.property_id
+                ON fp.field_uuid = pbwi.field_uuid AND fp.bfe_number = pbwi.property_id
             LEFT JOIN property_wetland_intersections pwi 
-                ON fp.field_uuid = pwi.field_uuid AND fp.property_id = pwi.property_id
+                ON fp.field_uuid = pwi.field_uuid AND fp.bfe_number = pwi.property_id
             LEFT JOIN property_wetland_water_intersections pwwi 
-                ON fp.field_uuid = pwwi.field_uuid AND fp.property_id = pwwi.property_id
-            GROUP BY fp.field_uuid, fp.property_id, fp.field_id, fp.block_id, 
-                     fp.cvr_number, fp.year, fp.bfe_number, fp.intersection_geometry
+                ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.property_id
+            GROUP BY fp.field_uuid, fp.bfe_number, fp.field_id, fp.block_id, 
+                     fp.cvr_number, fp.year, fp.intersection_geometry
         """)
         
         property_count = self.conn.execute(
@@ -272,10 +271,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         """).fetchone()
         
         # Property-level statistics
-        property_stats = self.conn.execute("""
-            SELECT 
-                COUNT(*) as total_property_combinations,
-                COUNT(DISTINCT field_uuid) as fields_with_properties,
+            property_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_property_combinations,
+                    COUNT(DISTINCT field_uuid) as fields_with_properties,
                 COUNT(CASE WHEN property_bnbo_total_m2 > 0 THEN 1 END) as properties_with_bnbo,
                 COUNT(CASE WHEN property_wetland_total_m2 > 0 THEN 1 END) 
                     as properties_with_wetlands,
@@ -283,7 +282,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 SUM(property_bnbo_total_m2) as total_property_bnbo_area_m2,
                 SUM(property_wetland_total_m2) as total_property_wetland_area_m2
             FROM field_environmental_analysis_properties
-        """).fetchone()
+            """).fetchone()
         
         stats = {
             "field_level": {
@@ -316,7 +315,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info("🎉 ALL AREA CALCULATIONS CENTRALIZED IN STAGE 4!")
         
         return stats
-        
+
     def _save_output_data(self, result: Dict[str, Any]):
         """Save both redesigned output tables to GCS."""
         
@@ -444,7 +443,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f"⚠️ Found {oversized_field_env:,} fields where environmental area > field area"
                 f" (tolerance: 1%)"
             )
-        else:
+            else:
             self.log.info(
                 "✅ All environmental areas are within reasonable bounds of field sizes"
             )
@@ -483,7 +482,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f"❌ CRITICAL: {missing_fields:,} fields in property table "
                 f"but missing from field table!"
             )
-        else:
+                else:
             self.log.info("✅ All fields in property table also exist in field table")
         
         # Validate environmental feature flags are consistent
