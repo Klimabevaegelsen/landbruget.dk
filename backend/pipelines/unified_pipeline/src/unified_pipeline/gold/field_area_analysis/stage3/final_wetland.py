@@ -39,7 +39,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
             stage1c_path, 
-            "SELECT field_uuid, property_id, bfe_number, intersection_geometry as property_geometry", 
+            "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry", 
             "field_property_intersections"
         )
         self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
@@ -102,8 +102,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE property_wetland_intersections AS
             SELECT 
                 p.field_uuid,
-                p.property_id,
-                p.bfe_number,
+                p.bfe_number as property_id,
                 fwi.field_id,
                 fwi.block_id,
                 fwi.cvr_number,
@@ -122,8 +121,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE property_wetland_water_intersections AS
             SELECT 
                 p.field_uuid,
-                p.property_id,
-                p.bfe_number,
+                p.bfe_number as property_id,
                 fwwi.field_id,
                 fwwi.block_id,
                 fwwi.cvr_number,
@@ -147,7 +145,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         ).fetchone()[0]
 
         unique_properties = self.conn.execute(
-            "SELECT COUNT(DISTINCT property_id) FROM property_wetland_intersections"
+            "SELECT COUNT(DISTINCT bfe_number) FROM property_wetland_intersections"
         ).fetchone()[0]
 
         # Validation: Geometry validity checks
@@ -254,11 +252,11 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         
         # Validate property coverage
         unique_properties_with_wetland = self.conn.execute("""
-            SELECT COUNT(DISTINCT property_id) FROM property_wetland_intersections
+            SELECT COUNT(DISTINCT bfe_number) FROM property_wetland_intersections
         """).fetchone()[0]
         
         unique_properties_with_water = self.conn.execute("""
-            SELECT COUNT(DISTINCT property_id) FROM property_wetland_water_intersections
+            SELECT COUNT(DISTINCT bfe_number) FROM property_wetland_water_intersections
         """).fetchone()[0]
         
         # Log validation results
@@ -279,10 +277,10 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         
         # Validate that water-covered wetland properties are subset of total wetlands
         water_only_properties = self.conn.execute("""
-            SELECT COUNT(DISTINCT pww.property_id)
+            SELECT COUNT(DISTINCT pww.bfe_number)
             FROM property_wetland_water_intersections pww
-            LEFT JOIN property_wetland_intersections pw ON pww.property_id = pw.property_id AND pww.field_uuid = pw.field_uuid
-            WHERE pw.property_id IS NULL
+            LEFT JOIN property_wetland_intersections pw ON pww.bfe_number = pw.bfe_number AND pww.field_uuid = pw.field_uuid
+            WHERE pw.bfe_number IS NULL
         """).fetchone()[0]
         
         if water_only_properties > 0:
@@ -291,23 +289,23 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.log.info("✅ Data consistency: All water-covered wetland properties also have total wetland records")
         
         # Validate property IDs consistency
-        invalid_property_ids = self.conn.execute("""
+        invalid_bfe_numbers = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_intersections pw
-            LEFT JOIN field_property_intersections fp ON pw.field_uuid = fp.field_uuid AND pw.property_id = fp.property_id
-            WHERE fp.property_id IS NULL
+            LEFT JOIN field_property_intersections fp ON pw.field_uuid = fp.field_uuid AND pw.bfe_number = fp.bfe_number
+            WHERE fp.bfe_number IS NULL
         """).fetchone()[0]
         
-        if invalid_property_ids > 0:
-            self.log.error(f"❌ CRITICAL: {invalid_property_ids:,} intersection records have invalid property_id references")
+        if invalid_bfe_numbers > 0:
+            self.log.error(f"❌ CRITICAL: {invalid_bfe_numbers:,} intersection records have invalid bfe_number references")
         else:
-            self.log.info("✅ All intersection records have valid property_id references")
+            self.log.info("✅ All intersection records have valid bfe_number references")
         
         # Validate no duplicate property×wetland combinations within fields
         total_records = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
         unique_combinations = self.conn.execute("""
             SELECT COUNT(*) FROM (
-                SELECT DISTINCT field_uuid, property_id FROM property_wetland_intersections
+                SELECT DISTINCT field_uuid, bfe_number FROM property_wetland_intersections
             )
         """).fetchone()[0]
         duplicates = total_records - unique_combinations
