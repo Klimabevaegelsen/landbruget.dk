@@ -271,7 +271,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         """).fetchone()
         
         # Property-level statistics
-            property_stats = self.conn.execute("""
+        property_stats = self.conn.execute("""
                 SELECT 
                     COUNT(*) as total_property_combinations,
                     COUNT(DISTINCT field_uuid) as fields_with_properties,
@@ -443,7 +443,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f"⚠️ Found {oversized_field_env:,} fields where environmental area > field area"
                 f" (tolerance: 1%)"
             )
-            else:
+        else:
             self.log.info(
                 "✅ All environmental areas are within reasonable bounds of field sizes"
             )
@@ -482,7 +482,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f"❌ CRITICAL: {missing_fields:,} fields in property table "
                 f"but missing from field table!"
             )
-                else:
+        else:
             self.log.info("✅ All fields in property table also exist in field table")
         
         # Validate environmental feature flags are consistent
