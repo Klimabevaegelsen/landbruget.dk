@@ -317,6 +317,260 @@ class FieldAreaValidator:
             )
 
 
+    def validate_area_hierarchy(self, 
+                               table_name: str,
+                               stage_name: str,
+                               hierarchy_validations: List[Tuple[str, str, str]]) -> AreaValidationResult:
+        """
+        Validate area hierarchy constraints: child areas must be ≤ parent areas.
+        
+        Args:
+            table_name: Name of table to validate
+            stage_name: Name of the stage being validated
+            hierarchy_validations: List of (child_column, parent_column, description) tuples
+            
+        Returns:
+            AreaValidationResult with validation outcome
+        """
+        validation_start = time.time()
+        self.log.info(f"🔍 Starting area hierarchy validation for {stage_name}...")
+        
+        violations = []
+        total_violations = 0
+        
+        try:
+            for child_col, parent_col, description in hierarchy_validations:
+                self.log.info(f"  Checking: {description}")
+                
+                violation_query = f"""
+                    SELECT 
+                        COUNT(*) as violation_count,
+                        MAX({child_col} / NULLIF({parent_col}, 0)) as max_ratio,
+                        AVG({child_col} / NULLIF({parent_col}, 0)) as avg_ratio
+                    FROM {table_name}
+                    WHERE {parent_col} > 0 
+                        AND {child_col} > {parent_col} * (1 + {self.tolerance_pct}/100.0)
+                """
+                
+                result = self.conn.execute(violation_query).fetchone()
+                violation_count = result[0]
+                max_ratio = result[1] or 0
+                avg_ratio = result[2] or 0
+                
+                if violation_count > 0:
+                    violation_info = {
+                        "description": description,
+                        "child_column": child_col,
+                        "parent_column": parent_col,
+                        "violation_count": violation_count,
+                        "max_ratio": max_ratio,
+                        "avg_ratio": avg_ratio
+                    }
+                    violations.append(violation_info)
+                    total_violations += violation_count
+                    
+                    self.log.error(f"    ❌ {violation_count:,} violations found (max ratio: {max_ratio:.1f}x)")
+                else:
+                    self.log.info(f"    ✅ No violations found")
+            
+            # Overall validation result
+            is_valid = total_violations == 0
+            
+            if is_valid:
+                message = f"✅ Area hierarchy validation PASSED for {stage_name}: All hierarchy constraints satisfied"
+            else:
+                message = f"❌ Area hierarchy validation FAILED for {stage_name}: {total_violations:,} total violations found"
+            
+            validation_time = time.time() - validation_start
+            details = {
+                "stage_name": stage_name,
+                "validation_time_seconds": validation_time,
+                "hierarchy_checks": hierarchy_validations,
+                "violations": violations,
+                "total_violations": total_violations
+            }
+            
+            result = AreaValidationResult(
+                is_valid=is_valid,
+                total_area_before=0,  # Not applicable for hierarchy validation
+                total_area_after=0,   # Not applicable for hierarchy validation
+                area_difference=0,    # Not applicable for hierarchy validation
+                area_difference_pct=0, # Not applicable for hierarchy validation
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=0, # Not applicable for hierarchy validation
+                field_count_after=0,  # Not applicable for hierarchy validation
+                validation_message=message,
+                details=details
+            )
+            
+            self.log.info(message)
+            self.log.info(f"⏱️ Hierarchy validation completed in {validation_time:.2f} seconds")
+            
+            return result
+            
+        except Exception as e:
+            error_message = f"❌ Area hierarchy validation ERROR for {stage_name}: {str(e)}"
+            self.log.error(error_message)
+            
+            return AreaValidationResult(
+                is_valid=False,
+                total_area_before=0, total_area_after=0,
+                area_difference=0, area_difference_pct=0,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=0, field_count_after=0,
+                validation_message=error_message,
+                details={"error": str(e), "stage_name": stage_name}
+            )
+
+    def validate_fragment_sum_consistency(self,
+                                        detail_table: str,
+                                        aggregate_table: str,
+                                        stage_name: str,
+                                        group_columns: List[str],
+                                        detail_area_column: str,
+                                        aggregate_area_column: str) -> AreaValidationResult:
+        """
+        Validate that sum of fragment areas equals aggregated totals.
+        
+        Args:
+            detail_table: Table with detailed fragments
+            aggregate_table: Table with aggregated totals
+            stage_name: Name of the stage being validated
+            group_columns: Columns to group by (e.g., ['field_uuid', 'year'])
+            detail_area_column: Area column in detail table
+            aggregate_area_column: Area column in aggregate table
+            
+        Returns:
+            AreaValidationResult with validation outcome
+        """
+        validation_start = time.time()
+        self.log.info(f"🔍 Starting fragment sum consistency validation for {stage_name}...")
+        
+        try:
+            group_by_clause = ", ".join(group_columns)
+            join_conditions = " AND ".join([f"d.{col} = a.{col}" for col in group_columns])
+            
+            validation_query = f"""
+                SELECT 
+                    COUNT(*) as total_groups,
+                    COUNT(*) FILTER (WHERE ABS(detail_sum - aggregate_total) > aggregate_total * {self.tolerance_pct}/100.0) as inconsistent_groups,
+                    MAX(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as max_difference_ratio,
+                    AVG(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as avg_difference_ratio
+                FROM (
+                    SELECT 
+                        {group_by_clause},
+                        SUM({detail_area_column}) as detail_sum,
+                        FIRST(a.{aggregate_area_column}) as aggregate_total
+                    FROM {detail_table} d
+                    JOIN {aggregate_table} a ON {join_conditions}
+                    WHERE d.{detail_area_column} > 0 AND a.{aggregate_area_column} > 0
+                    GROUP BY {group_by_clause}
+                ) consistency_check
+            """
+            
+            result = self.conn.execute(validation_query).fetchone()
+            total_groups = result[0]
+            inconsistent_groups = result[1]
+            max_difference_ratio = result[2] or 0
+            avg_difference_ratio = result[3] or 0
+            
+            is_valid = inconsistent_groups == 0
+            
+            if is_valid:
+                message = f"✅ Fragment sum consistency validation PASSED for {stage_name}: All {total_groups:,} groups consistent"
+            else:
+                message = f"❌ Fragment sum consistency validation FAILED for {stage_name}: {inconsistent_groups:,}/{total_groups:,} groups inconsistent"
+            
+            validation_time = time.time() - validation_start
+            details = {
+                "stage_name": stage_name,
+                "validation_time_seconds": validation_time,
+                "detail_table": detail_table,
+                "aggregate_table": aggregate_table,
+                "group_columns": group_columns,
+                "total_groups": total_groups,
+                "inconsistent_groups": inconsistent_groups,
+                "max_difference_ratio": max_difference_ratio,
+                "avg_difference_ratio": avg_difference_ratio,
+                "tolerance_pct": self.tolerance_pct
+            }
+            
+            result = AreaValidationResult(
+                is_valid=is_valid,
+                total_area_before=0,  # Not directly applicable
+                total_area_after=0,   # Not directly applicable
+                area_difference=0,    # Not directly applicable
+                area_difference_pct=avg_difference_ratio * 100,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=total_groups,
+                field_count_after=total_groups - inconsistent_groups,
+                validation_message=message,
+                details=details
+            )
+            
+            self.log.info(message)
+            if inconsistent_groups > 0:
+                self.log.error(f"📊 Max difference ratio: {max_difference_ratio:.3f}x")
+                self.log.error(f"📊 Avg difference ratio: {avg_difference_ratio:.3f}x")
+            self.log.info(f"⏱️ Fragment consistency validation completed in {validation_time:.2f} seconds")
+            
+            return result
+            
+        except Exception as e:
+            error_message = f"❌ Fragment sum consistency validation ERROR for {stage_name}: {str(e)}"
+            self.log.error(error_message)
+            
+            return AreaValidationResult(
+                is_valid=False,
+                total_area_before=0, total_area_after=0,
+                area_difference=0, area_difference_pct=0,
+                tolerance_pct=self.tolerance_pct,
+                field_count_before=0, field_count_after=0,
+                validation_message=error_message,
+                details={"error": str(e), "stage_name": stage_name}
+            )
+
+    def run_comprehensive_stage_validation(self,
+                                         table_name: str,
+                                         stage_name: str,
+                                         validation_type: str = "wetland") -> Dict[str, AreaValidationResult]:
+        """
+        Run comprehensive validation suite for a stage.
+        
+        Args:
+            table_name: Name of table to validate
+            stage_name: Name of the stage being validated
+            validation_type: Type of validation ("wetland" or "bnbo")
+            
+        Returns:
+            Dictionary of validation results by validation name
+        """
+        self.log.info(f"🔍 COMPREHENSIVE VALIDATION SUITE for {stage_name} ({validation_type})")
+        results = {}
+        
+        # Define hierarchy validations based on type
+        if validation_type == "wetland":
+            hierarchy_checks = [
+                ("field_wetland_water_covered_m2", "field_wetland_total_m2", "Water covered area ≤ Total wetland area"),
+                ("field_wetland_total_m2", "field_area_m2", "Total wetland area ≤ Field area")
+            ]
+        elif validation_type == "bnbo":
+            hierarchy_checks = [
+                ("field_bnbo_water_covered_m2", "field_bnbo_total_m2", "Water covered area ≤ Total BNBO area"),
+                ("field_bnbo_total_m2", "field_area_m2", "Total BNBO area ≤ Field area")
+            ]
+        else:
+            hierarchy_checks = []
+        
+        # Run hierarchy validation
+        if hierarchy_checks:
+            results["hierarchy"] = self.validate_area_hierarchy(
+                table_name, stage_name, hierarchy_checks
+            )
+        
+        return results
+
+
 class ValidationException(Exception):
     """Exception raised when area validation fails."""
     
