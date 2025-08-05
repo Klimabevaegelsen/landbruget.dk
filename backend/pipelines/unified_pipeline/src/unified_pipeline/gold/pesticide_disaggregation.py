@@ -241,7 +241,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     COUNT(DISTINCT OriginalPesticideRowID) as strategy_original_records
                 FROM disaggregated_pesticide_applications
                 WHERE AllocationMethod LIKE '%{self._get_strategy_method_pattern(strategy_name)}%'
-                   OR DisaggregationStrategy LIKE '%{strategy_name}%'
             """).fetchone()
 
             if current_stats and strategy_stats:
@@ -271,7 +270,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional", 
             "Partial Field Coverage": "Partial_Field_Coverage_SingleField",
             "Spatial Clustering": "Adjacent_Fields_Spatial_Cluster_AreaMatched",
-            "Ethical Best-Match": "Ethical Best-Match"
+            "Ethical Best-Match": "Ethical_Best_Match_"
         }
         return strategy_patterns.get(strategy_name, strategy_name)
 
@@ -1723,38 +1722,46 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 )
                 -- Process using main strategy (best_strategy = 'main')
                 INSERT INTO disaggregated_pesticide_applications (
+                    DisaggregatedID,
                     OriginalPesticideRowID,
+                    cvr_number,
                     PesticideName,
                     PesticideRegistrationNumber,
-                    AcreageSize,
                     DosageQuantity,
                     DosageUnit,
-                    DisaggregatedFieldArea,
-                    DisaggregatedDosageQuantity,
-                    DisaggregatedDosageUnit,
                     MatchedFieldID,
-                    DisaggregationConfidence,
-                    DisaggregationStrategy
+                    MatchedBlockID,
+                    AllocatedArea,
+                    AllocationMethod,
+                    MatchConfidence,
+                    IsPartialFieldCoverage,
+                    DisaggregationDate,
+                    field_uuid,
+                    primary_field_id
                 )
                 SELECT
-                    p.OriginalPesticideRowID,
+                    uuid() as DisaggregatedID,
+                    CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
+                    CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    p.AcreageSize,
-                    p.DosageQuantity,
-                    p.DosageUnit,
-                    m_fields.area_ha as DisaggregatedFieldArea,
                     -- Proportional dosage based on field area
-                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DisaggregatedDosageQuantity,
-                    p.DosageUnit as DisaggregatedDosageUnit,
+                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    p.DosageUnit,
                     'ethical_main_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
+                    'block_' || CAST(m_fields.field_id AS VARCHAR) as MatchedBlockID,
+                    p.AcreageSize * (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    'Ethical_Best_Match_Main_Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
-                    95.0 as DisaggregationConfidence,
-                    'Ethical Best-Match: Main Strategy' as DisaggregationStrategy
+                    0.95 as MatchConfidence,
+                    FALSE as IsPartialFieldCoverage,
+                    NOW() as DisaggregationDate,
+                    m_fields.field_uuid,
+                    m_fields.field_uuid as primary_field_id
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
-                    AND TRY_CAST(p.crop_code AS BIGINT) = main_totals.CropCode
+                    AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
                 JOIN marker m_fields 
                     ON main_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND main_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
@@ -1829,34 +1836,42 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                       AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
                 )
                 INSERT INTO disaggregated_pesticide_applications (
+                    DisaggregatedID,
                     OriginalPesticideRowID,
+                    cvr_number,
                     PesticideName,
                     PesticideRegistrationNumber,
-                    AcreageSize,
                     DosageQuantity,
                     DosageUnit,
-                    DisaggregatedFieldArea,
-                    DisaggregatedDosageQuantity,
-                    DisaggregatedDosageUnit,
                     MatchedFieldID,
-                    DisaggregationConfidence,
-                    DisaggregationStrategy
+                    MatchedBlockID,
+                    AllocatedArea,
+                    AllocationMethod,
+                    MatchConfidence,
+                    IsPartialFieldCoverage,
+                    DisaggregationDate,
+                    field_uuid,
+                    primary_field_id
                 )
                 SELECT
-                    p.OriginalPesticideRowID,
+                    uuid() as DisaggregatedID,
+                    CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
+                    CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    p.AcreageSize,
-                    p.DosageQuantity,
-                    p.DosageUnit,
-                    m_fields.area_ha as DisaggregatedFieldArea,
                     -- Proportional dosage based on field area
-                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) * p.DosageQuantity as DisaggregatedDosageQuantity,
-                    p.DosageUnit as DisaggregatedDosageUnit,
+                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    p.DosageUnit,
                     'ethical_nonorg_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
+                    'block_' || CAST(m_fields.field_id AS VARCHAR) as MatchedBlockID,
+                    p.AcreageSize * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as AllocatedArea,
+                    'Ethical_Best_Match_Non_Organic_Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
-                    95.0 as DisaggregationConfidence,
-                    'Ethical Best-Match: Non-Organic Strategy' as DisaggregationStrategy
+                    0.95 as MatchConfidence,
+                    FALSE as IsPartialFieldCoverage,
+                    NOW() as DisaggregationDate,
+                    m_fields.field_uuid,
+                    m_fields.field_uuid as primary_field_id
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
@@ -1874,27 +1889,23 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             
             total_processed = processed_count + nonorg_processed
             
-            # Remove processed applications from pending queue
+                        # Remove processed applications from pending queue
             self.duckdb_conn.execute(f"""
                 DELETE FROM pending_pesticide_rows 
                 WHERE OriginalPesticideRowID IN (
-                    SELECT DISTINCT p.OriginalPesticideRowID
+                    SELECT DISTINCT da.OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications da
-                    JOIN VALUES {mixed_combinations_sql} AS mfc(CVR, CropCode) 
-                        ON da.DisaggregationStrategy LIKE 'Ethical Best-Match:%'
-                    JOIN pesticide p ON da.OriginalPesticideRowID = p.OriginalPesticideRowID
-                    WHERE TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
-                                              AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
+                    WHERE da.AllocationMethod LIKE 'Ethical_Best_Match_%'
                 )
             """)
             
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
                 SELECT 
-                    COUNT(CASE WHEN DisaggregationStrategy = 'Ethical Best-Match: Main Strategy' THEN 1 END) as main_wins,
-                    COUNT(CASE WHEN DisaggregationStrategy = 'Ethical Best-Match: Non-Organic Strategy' THEN 1 END) as nonorg_wins
+                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy' THEN 1 END) as main_wins,
+                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Non_Organic_Strategy' THEN 1 END) as nonorg_wins
                 FROM disaggregated_pesticide_applications
-                WHERE DisaggregationStrategy LIKE 'Ethical Best-Match:%'
+                WHERE AllocationMethod LIKE 'Ethical_Best_Match_%'
             """).fetchone()
             
             if best_match_stats:
