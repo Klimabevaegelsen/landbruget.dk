@@ -218,7 +218,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT 
                 fp.field_uuid,
-                fp.bfe_number as property_id,
+                fp.bfe_number,
                 fp.field_id,
                 fp.block_id,
                 fp.cvr_number,
@@ -237,13 +237,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_intersections pbi 
-                ON fp.field_uuid = pbi.field_uuid AND fp.bfe_number = pbi.property_id
+                ON fp.field_uuid = pbi.field_uuid AND fp.bfe_number = pbi.bfe_number
             LEFT JOIN property_bnbo_water_intersections pbwi 
-                ON fp.field_uuid = pbwi.field_uuid AND fp.bfe_number = pbwi.property_id
+                ON fp.field_uuid = pbwi.field_uuid AND fp.bfe_number = pbwi.bfe_number
             LEFT JOIN property_wetland_intersections pwi 
-                ON fp.field_uuid = pwi.field_uuid AND fp.bfe_number = pwi.property_id
+                ON fp.field_uuid = pwi.field_uuid AND fp.bfe_number = pwi.bfe_number
             LEFT JOIN property_wetland_water_intersections pwwi 
-                ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.property_id
+                ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.bfe_number
             GROUP BY fp.field_uuid, fp.bfe_number, fp.field_id, fp.block_id, 
                      fp.cvr_number, fp.year, fp.intersection_geometry
         """)
@@ -372,7 +372,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             "SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis_properties"
         ).fetchone()[0]
         combo_query = (
-            "SELECT COUNT(DISTINCT field_uuid || '_' || property_id) "
+            "SELECT COUNT(DISTINCT field_uuid || '_' || bfe_number) "
             "FROM field_environmental_analysis_properties"
         )
         property_unique_combos = self.conn.execute(combo_query).fetchone()[0]
