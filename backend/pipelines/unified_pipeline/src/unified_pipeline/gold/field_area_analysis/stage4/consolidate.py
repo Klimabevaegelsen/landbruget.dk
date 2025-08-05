@@ -618,6 +618,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 "field_environmental_analysis",
                 "Stage 4 Consolidated Environmental",
                 [
+                    # Water areas ≤ Environmental areas
+                    ("property_bnbo_water_covered_m2", "property_bnbo_total_m2", "Property BNBO water covered ≤ Property BNBO total"),
+                    ("property_wetland_water_covered_m2", "property_wetland_total_m2", "Property wetland water covered ≤ Property wetland total"),
+                    # Environmental areas ≤ Property areas
                     ("property_bnbo_total_m2", "total_property_intersection_area_m2", "Property BNBO area ≤ Property area"),
                     ("property_wetland_total_m2", "total_property_intersection_area_m2", "Property wetland area ≤ Property area"),
                 ]
