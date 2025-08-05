@@ -304,10 +304,13 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             self.log.info("✅ All intersection records have valid property_id references")
         
         # Validate no duplicate property×wetland combinations within fields
-        duplicates = self.conn.execute("""
-            SELECT COUNT(*) - COUNT(DISTINCT field_uuid, property_id) as duplicate_count
-            FROM property_wetland_intersections
+        total_records = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
+        unique_combinations = self.conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT field_uuid, property_id FROM property_wetland_intersections
+            )
         """).fetchone()[0]
+        duplicates = total_records - unique_combinations
         
         if duplicates > 0:
             self.log.error(f"❌ CRITICAL: {duplicates:,} duplicate field×property×wetland combinations found")

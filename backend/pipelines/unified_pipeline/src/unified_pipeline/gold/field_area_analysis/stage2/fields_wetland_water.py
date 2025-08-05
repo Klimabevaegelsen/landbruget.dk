@@ -307,10 +307,13 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             self.log.info("✅ All intersection records have valid field_uuid references")
         
         # Validate no duplicate field×wetland combinations
-        duplicates = self.conn.execute("""
-            SELECT COUNT(*) - COUNT(DISTINCT field_uuid, wetland_id) as duplicate_count
-            FROM field_wetland_intersections
+        total_records = self.conn.execute("SELECT COUNT(*) FROM field_wetland_intersections").fetchone()[0]
+        unique_combinations = self.conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT field_uuid, wetland_id FROM field_wetland_intersections
+            )
         """).fetchone()[0]
+        duplicates = total_records - unique_combinations
         
         if duplicates > 0:
             self.log.error(f"❌ CRITICAL: {duplicates:,} duplicate field×wetland combinations found")

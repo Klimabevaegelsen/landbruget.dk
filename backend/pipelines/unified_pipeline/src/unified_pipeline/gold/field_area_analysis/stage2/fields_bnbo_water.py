@@ -308,10 +308,13 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             self.log.info("✅ All intersection records have valid field_uuid references")
         
         # Validate no duplicate field×BNBO combinations
-        duplicates = self.conn.execute("""
-            SELECT COUNT(*) - COUNT(DISTINCT field_uuid, bnbo_id) as duplicate_count
-            FROM field_bnbo_intersections
+        total_records = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
+        unique_combinations = self.conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT field_uuid, bnbo_id FROM field_bnbo_intersections
+            )
         """).fetchone()[0]
+        duplicates = total_records - unique_combinations
         
         if duplicates > 0:
             self.log.error(f"❌ CRITICAL: {duplicates:,} duplicate field×BNBO combinations found")
