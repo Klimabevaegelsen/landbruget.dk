@@ -252,7 +252,7 @@ def perform_uuid_join_optimized(
             print(f"   Total building area: {total_area / 1000000:.1f} km²")
 
             # Save results optimized for spatial data
-            output_file = output_dir / "joined_buildings.geoparquet"
+            output_file = output_dir / "joined_buildings.parquet"
 
             # Check if we have INSPIRE attributes
             columns_query = "DESCRIBE joined_results"
