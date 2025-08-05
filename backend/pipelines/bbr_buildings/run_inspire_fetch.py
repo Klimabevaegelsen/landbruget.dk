@@ -107,12 +107,32 @@ def _save_attributes_streaming(attributes_data, output_dir):
     """Save large attributes dataset using streaming approach with better memory management."""
     import duckdb
 
+    # SCHEMA NORMALIZATION FIX: Ensure all records have the same fields
+    print("🔧 Normalizing schema to prevent parquet write errors...")
+    
+    # Collect all possible keys from all records
+    all_keys = set()
+    for record in attributes_data:
+        all_keys.update(record.keys())
+    
+    print(f"   📋 Found {len(all_keys)} unique fields across all records")
+    
+    # Normalize all records to have the same schema
+    normalized_data = []
+    for record in attributes_data:
+        normalized_record = {}
+        for key in all_keys:
+            normalized_record[key] = record.get(key, None)  # Use None for missing fields
+        normalized_data.append(normalized_record)
+    
+    print(f"   ✅ Normalized {len(normalized_data):,} records with consistent schema")
+
     # Process in smaller chunks to avoid memory issues
     chunk_size = 25000  # Reduced chunk size for better memory management
-    total_chunks = (len(attributes_data) + chunk_size - 1) // chunk_size
+    total_chunks = (len(normalized_data) + chunk_size - 1) // chunk_size
 
     print(
-        f"🌊 Streaming {len(attributes_data):,} records in {total_chunks} chunks of {chunk_size:,}"
+        f"🌊 Streaming {len(normalized_data):,} records in {total_chunks} chunks of {chunk_size:,}"
     )
 
     conn = duckdb.connect(":memory:")
@@ -121,7 +141,7 @@ def _save_attributes_streaming(attributes_data, output_dir):
 
     try:
         # Process first chunk to create initial parquet file
-        first_chunk = attributes_data[:chunk_size]
+        first_chunk = normalized_data[:chunk_size]
         if first_chunk:
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
                 json.dump(first_chunk, f)
@@ -139,8 +159,8 @@ def _save_attributes_streaming(attributes_data, output_dir):
         # Process remaining chunks and append
         for chunk_idx in tqdm(range(1, total_chunks), desc="Processing chunks"):
             start_idx = chunk_idx * chunk_size
-            end_idx = min(start_idx + chunk_size, len(attributes_data))
-            chunk = attributes_data[start_idx:end_idx]
+            end_idx = min(start_idx + chunk_size, len(normalized_data))
+            chunk = normalized_data[start_idx:end_idx]
 
             if not chunk:
                 break
