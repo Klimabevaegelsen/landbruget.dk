@@ -339,21 +339,24 @@ jobs:
         else
           echo "🔍 No bronze timestamp provided, finding latest available..."
           
-          # Find latest GeoDanmark bronze timestamp
-          LATEST_GEODANMARK=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | sort -r | head -1 | sed 's|.*/||' | sed 's|/$||')
+          # Find latest GeoDanmark bronze timestamp using proven CHR pipeline pattern
+          LATEST_GEODANMARK=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
           
-          # Find latest INSPIRE bronze timestamp  
-          LATEST_INSPIRE=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | sort -r | head -1 | sed 's|.*/||' | sed 's|/$||')
+          # Find latest INSPIRE bronze timestamp using the same pattern
+          LATEST_INSPIRE=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+          
+          echo "🔍 Found GeoDanmark timestamp: '$LATEST_GEODANMARK'"
+          echo "🔍 Found INSPIRE timestamp: '$LATEST_INSPIRE'"
           
           # Use the most recent timestamp that has both datasets
-          if [[ "$LATEST_GEODANMARK" == "$LATEST_INSPIRE" ]]; then
+          if [[ -n "$LATEST_GEODANMARK" && "$LATEST_GEODANMARK" == "$LATEST_INSPIRE" ]]; then
             BRONZE_TIMESTAMP="$LATEST_GEODANMARK"
             echo "✅ Found matching bronze data: $BRONZE_TIMESTAMP"
-          else
+          elif [[ -n "$LATEST_GEODANMARK" && -n "$LATEST_INSPIRE" ]]; then
             echo "📋 Available GeoDanmark timestamps:"
-            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | sed 's|.*/||' | sed 's|/$||' | sort -r | head -3
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
             echo "📋 Available INSPIRE timestamps:"
-            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | sed 's|.*/||' | sed 's|/$||' | sort -r | head -3
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
             
             # Use the newer of the two (they should typically match)
             if [[ "$LATEST_GEODANMARK" > "$LATEST_INSPIRE" ]]; then
@@ -363,6 +366,12 @@ jobs:
               BRONZE_TIMESTAMP="$LATEST_INSPIRE"
               echo "⚠️ Using latest INSPIRE data: $BRONZE_TIMESTAMP"
             fi
+          else
+            echo "❌ No valid bronze timestamps found"
+            echo "🔍 Debugging - listing raw GeoDanmark directory:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ || echo "Failed to list GeoDanmark directory"
+            echo "🔍 Debugging - listing raw INSPIRE directory:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ || echo "Failed to list INSPIRE directory"
           fi
         fi
         
