@@ -447,7 +447,9 @@ class FieldAreaValidator:
         self.log.info(f"🔍 Starting fragment sum consistency validation for {stage_name}...")
         
         try:
-            group_by_clause = ", ".join(group_columns)
+            # Properly prefix group columns with table aliases
+            group_by_clause_detail = ", ".join([f"d.{col}" for col in group_columns])
+            group_by_clause_plain = ", ".join(group_columns)
             join_conditions = " AND ".join([f"d.{col} = a.{col}" for col in group_columns])
             
             validation_query = f"""
@@ -458,13 +460,13 @@ class FieldAreaValidator:
                     AVG(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as avg_difference_ratio
                 FROM (
                     SELECT 
-                        {group_by_clause},
-                        SUM({detail_area_column}) as detail_sum,
+                        {group_by_clause_detail},
+                        SUM(d.{detail_area_column}) as detail_sum,
                         FIRST(a.{aggregate_area_column}) as aggregate_total
                     FROM {detail_table} d
                     JOIN {aggregate_table} a ON {join_conditions}
                     WHERE d.{detail_area_column} > 0 AND a.{aggregate_area_column} > 0
-                    GROUP BY {group_by_clause}
+                    GROUP BY {group_by_clause_detail}
                 ) consistency_check
             """
             
