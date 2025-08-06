@@ -63,10 +63,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types AS
             SELECT 
-                soil_id,
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only keep useful Danish soil type classification
                 UNNEST(ST_Dump(geometry)).geom as geometry,
                 ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
             FROM soil_types_raw
@@ -128,10 +125,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 f.year,
                 f.field_uuid,
                 f.field_area_m2,
-                s.soil_id,
-                s.soil_code,
-                s.soil_description,
-                s.soil_type_category,
+                s.soil_description,  -- Only keep useful soil classification (Danish soil types)
                 -- Calculate intersection geometry and area in single operation
                 ST_Intersection(f.geometry, s.geometry) as intersection_geometry,
                 ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry)) as soil_intersection_area_m2
@@ -162,13 +156,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 year,
                 field_uuid,
                 field_area_m2,
-                soil_id,
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only keep useful soil classification
                 intersection_geometry,
-                soil_intersection_area_m2,
-                (soil_intersection_area_m2 / field_area_m2) * 100 as soil_area_share_pct
+                soil_intersection_area_m2
             FROM field_soil_intersections
             WHERE 
                 -- Area filtering to remove noise (post-join, non-spatial)
@@ -191,7 +181,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # STEP 3: Create foundation data for downstream stages
         foundation_start = time.time()
         self.log.info(
-            "STEP 3: Creating foundation data with soil_id for efficient downstream joins..."
+            "STEP 3: Creating foundation data for downstream processing..."
         )
 
         self.conn.execute("""
@@ -202,19 +192,15 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 field_uuid,
-                soil_id,  -- Foundation data: enables ID-based joins in later stages
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only useful soil classification
                 soil_intersection_area_m2,
-                soil_area_share_pct,
                 field_area_m2,
                 intersection_geometry  -- Preserve for property-level analysis
             FROM field_soil_meaningful
             ORDER BY field_uuid, year, soil_intersection_area_m2 DESC
         """)
 
-        # STEP 4: Create simplified areas table (backward compatibility)
+        # STEP 4: Create simplified areas table (cleaned up - removed useless columns)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_areas AS
             SELECT 
@@ -223,12 +209,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 field_uuid,
-                soil_code,
-                soil_description,
-                soil_type_category,
-                soil_intersection_area_m2 as soil_area_m2,
-                soil_area_share_pct,
-                field_area_m2
+                soil_description,  -- Only useful soil data (8 Danish soil types)
+                soil_intersection_area_m2,  -- Area data needed for Stage 4
+                field_area_m2  -- Field area for percentage calculations in Stage 4
             FROM field_soil_foundation
         """)
 
@@ -248,13 +231,12 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Get soil type statistics
         soil_stats = self.conn.execute("""
             SELECT 
-                soil_type_category,
+                soil_description,
                 COUNT(*) as intersection_count,
                 COUNT(DISTINCT field_uuid) as field_count,
-                SUM(soil_intersection_area_m2) / 1000000 as total_area_km2,
-                AVG(soil_area_share_pct) as avg_coverage_pct
+                SUM(soil_intersection_area_m2) / 1000000 as total_area_km2
             FROM field_soil_foundation
-            GROUP BY soil_type_category
+            GROUP BY soil_description
             ORDER BY field_count DESC
         """).fetchall()
 
@@ -263,18 +245,14 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             SELECT 
                 COUNT(*) as total_intersections,
                 COUNT(DISTINCT field_uuid) as fields_with_soil,
-                AVG(soil_area_share_pct) as avg_soil_coverage,
-                COUNT(DISTINCT soil_id) as unique_soil_polygons,
-                COUNT(DISTINCT soil_code) as unique_soil_codes
+                COUNT(DISTINCT soil_description) as unique_soil_types
             FROM field_soil_foundation
         """).fetchone()
 
         (
             total_intersections,
             fields_with_soil,
-            avg_coverage,
-            unique_soil_polygons,
-            unique_soil_codes,
+            unique_soil_types,
         ) = coverage_stats
 
         stats_time = time.time() - stats_start
@@ -292,14 +270,13 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info("📊 COVERAGE STATISTICS:")
         self.log.info(f"   Total field-soil intersections: {total_intersections:,}")
         self.log.info(f"   Fields with soil data: {fields_with_soil:,}")
-        self.log.info(f"   Average soil coverage: {avg_coverage:.1f}%")
-        self.log.info(f"   Unique soil polygons: {unique_soil_polygons:,}")
-        self.log.info(f"   Unique soil codes: {unique_soil_codes:,}")
+        self.log.info(f"   Unique Danish soil types: {unique_soil_types:,}")
         self.log.info("=" * 60)
-        self.log.info("🏆 TOP SOIL CATEGORIES by field count:")
-        for soil_category, intersection_count, field_count, area_km2, avg_pct in soil_stats[:5]:
+        self.log.info("🇩🇰 DANISH SOIL TYPES by field coverage:")
+        for soil_description, intersection_count, field_count, area_km2 in soil_stats[:8]:
             self.log.info(
-                f"   {soil_category}: {field_count:,} fields, {intersection_count:,} intersections, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
+                f"   {soil_description}: {field_count:,} fields, "
+                f"{intersection_count:,} intersections, {area_km2:.1f} km²"
             )
 
         # Clean up intermediate tables to save memory
@@ -309,10 +286,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         return {
             "total_intersections": total_intersections,
             "fields_with_soil": fields_with_soil,
-            "avg_soil_coverage": avg_coverage,
-            "unique_soil_polygons": unique_soil_polygons,
-            "unique_soil_codes": unique_soil_codes,
-            "soil_category_stats": soil_stats,
+            "unique_soil_types": unique_soil_types,
+            "soil_type_stats": soil_stats,
             "processing_time": total_time,
             "spatial_join_time": spatial_time,
             "raw_intersections": raw_intersections,
