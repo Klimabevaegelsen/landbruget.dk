@@ -399,8 +399,35 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         else:
             duplicate_combos = property_count - property_unique_combos
             self.log.error(
-                f"❌ CRITICAL: Property table has {duplicate_combos:,} duplicate combinations!"
+                f"❌ ANALYZING: Property table has {duplicate_combos:,} records for {property_unique_combos:,} unique field×property pairs"
             )
+            
+            # Analyze the nature of these "duplicates"
+            metadata_analysis = self.conn.execute("""
+                SELECT 
+                    SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END) as multi_year_extras,
+                    SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END) as multi_cvr_extras,
+                    SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END) as multi_block_extras,
+                    SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END) as multi_field_extras
+                FROM (
+                    SELECT field_uuid, bfe_number, COUNT(*) as combo_count,
+                           COUNT(DISTINCT year) as years,
+                           COUNT(DISTINCT cvr_number) as cvrs, 
+                           COUNT(DISTINCT block_id) as blocks,
+                           COUNT(DISTINCT field_id) as fields
+                    FROM field_environmental_analysis_properties
+                    GROUP BY field_uuid, bfe_number
+                    HAVING COUNT(*) > 1
+                )
+            """).fetchone()
+            
+            self.log.info(f"🔍 METADATA ANALYSIS of {duplicate_combos:,} extra records:")
+            self.log.info(f"   Multi-year combinations: {metadata_analysis[0]:,}")
+            self.log.info(f"   Multi-CVR combinations: {metadata_analysis[1]:,}")  
+            self.log.info(f"   Multi-block combinations: {metadata_analysis[2]:,}")
+            self.log.info(f"   Multi-field combinations: {metadata_analysis[3]:,}")
+            
+            # This tells us WHY we have "duplicates" - it's likely legitimate temporal/administrative variation
 
     def _validate_area_calculations(self):
         """Validate area calculations are reasonable."""
