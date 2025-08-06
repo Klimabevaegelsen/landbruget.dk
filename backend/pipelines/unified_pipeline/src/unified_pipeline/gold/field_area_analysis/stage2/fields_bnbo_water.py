@@ -135,8 +135,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 wpbi.project_id,
                 ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
             FROM field_bnbo_intersections fbi
-            JOIN water_projects_bnbo_intersections wpbi ON fbi.bnbo_id = wpbi.bnbo_id
-                AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+            JOIN water_projects_bnbo_intersections wpbi 
+                ON ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
         """)
 
         # Get result statistics
