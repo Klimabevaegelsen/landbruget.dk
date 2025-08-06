@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -224,12 +225,20 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 WHERE geometry_json IS NOT NULL
             """)
 
-            # Transform to target CRS if needed (DAWA API returns EPSG:4326 by default)
+            # Apply unified geometry validation and transformation
+            validate_and_transform_geometries_duckdb(
+                self.conn,
+                processed_table,
+                f"dagi_{division_type}",
+                geometry_column="geometry"
+            )
+            
+            # Transform to target CRS if needed (after validation ensures WGS84)
             if self.config.target_crs != "EPSG:4326":
                 self.conn.execute(f"""
                     UPDATE {processed_table} 
                     SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
-                    WHERE is_valid_geometry = true
+                    WHERE geometry IS NOT NULL
                 """)
 
             # Get counts for logging

@@ -931,16 +931,32 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Add metadata using DuckDB and clean column names in one query
             current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
 
+            # Add filtering for Marker data to remove fields where crop_code is null
+            where_clause = ""
+            if layer_type == "Marker":
+                # Filter out records where crop_code is null for marker data
+                where_clause = "WHERE crop_code IS NOT NULL"
+                self.log.info(f"Applying crop_code IS NOT NULL filter for Marker data in {year}")
+
             final_query = f"""
                 SELECT {column_renames},
                     {year} as year,
                     '{layer_type}' as layer_type,
                     '{current_timestamp}' as processed_at
                 FROM combined_temp
+                {where_clause}
             """
 
             # ✅ MIGRATION: Create table with unique name per year and layer type to prevent overwrites
             final_table_name = f"final_processed_{layer_type.lower()}_{year}"
+            
+            # For Marker data, log the filtering impact
+            if layer_type == "Marker":
+                total_before_filter = self.conn.execute("SELECT COUNT(*) FROM combined_temp").fetchone()[0]
+                null_crop_codes = self.conn.execute("SELECT COUNT(*) FROM combined_temp WHERE crop_code IS NULL").fetchone()[0]
+                if null_crop_codes > 0:
+                    self.log.info(f"Filtering out {null_crop_codes:,} records with null crop_code from {total_before_filter:,} total records for {year}")
+            
             self.conn.execute(f"CREATE OR REPLACE TABLE {final_table_name} AS {final_query}")
 
             # Clean up temporary table to avoid registration conflicts

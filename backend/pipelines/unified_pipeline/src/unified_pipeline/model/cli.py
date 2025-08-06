@@ -42,6 +42,7 @@ class Source(Enum):
         fvm_wfs: Danish FVM WFS Agricultural Data (Markblokke, Marker, Smaabiotoper)
         wetlands: Wetlands data source
         water_projects: Water projects data source
+        water_typology: Water typology data source (lakes, coastal waters, watercourses)
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
@@ -62,6 +63,7 @@ class Source(Enum):
     fvm_wfs = "fvm_wfs"
     wetlands = "wetlands"
     water_projects = "water_projects"
+    water_typology = "water_typology"
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"

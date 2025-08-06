@@ -126,6 +126,7 @@ class FieldAreaAnalysisRedesigned:
                 FROM fields_raw
                 WHERE geometry IS NOT NULL 
                 AND ST_IsValid(geometry)
+                AND crop_code IS NOT NULL
             """)
         elif "geometry_wkt" in column_names:
             geometry_column = "geometry_wkt"
@@ -141,6 +142,7 @@ class FieldAreaAnalysisRedesigned:
                 FROM fields_raw
                 WHERE geometry_wkt IS NOT NULL 
                 AND ST_IsValid(ST_GeomFromText(geometry_wkt))
+                AND crop_code IS NOT NULL
             """)
         else:
             raise ValueError(

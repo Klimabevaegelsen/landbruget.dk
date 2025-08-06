@@ -18,7 +18,7 @@ on:
         type: number
         default: 0
       bronze_timestamp:
-        description: 'Bronze timestamp for silver layer (e.g., 20250715_230139)'
+        description: 'Bronze timestamp for silver layer (e.g., 20250715_230139). Leave empty to use latest available.'
         type: string
         required: false
       enhance_classification:
@@ -261,7 +261,7 @@ jobs:
   process-silver:
     runs-on: ubuntu-latest
     needs: [generate-timestamp, fetch-geodanmark, fetch-inspire-bbr]
-    if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') }}
+    if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') && !cancelled() }}
     
     permissions:
       contents: 'read'
@@ -318,19 +318,70 @@ jobs:
 
     - name: Run Silver Layer Processing - Read from GCS and Process
       working-directory: backend/pipelines/bbr_buildings
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
         echo "🥈 Starting silver layer processing..."
-        echo "📊 Processing GeoDanmark buildings: ${{ needs.fetch-geodanmark.outputs.buildings-count }}"
-        echo "📊 Processing INSPIRE BBR buildings: ${{ needs.fetch-inspire-bbr.outputs.buildings-count }}"
         
         # Build silver command
         CMD="python main.py --layer silver"
         
-        # Add bronze timestamp if available (prefer input, then shared timestamp from generate-timestamp job)
-        BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp || needs.generate-timestamp.outputs.bronze-timestamp }}"
+        # Determine bronze timestamp to use
+        # Priority: 1) Input parameter, 2) Generated timestamp from bronze jobs, 3) Auto-detect latest
+        BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp }}"
+        GENERATED_TIMESTAMP="${{ needs.generate-timestamp.outputs.bronze-timestamp }}"
+        
+        if [[ -n "$BRONZE_TIMESTAMP" ]]; then
+          echo "🎯 Using provided bronze timestamp: $BRONZE_TIMESTAMP"
+        elif [[ -n "$GENERATED_TIMESTAMP" ]]; then
+          BRONZE_TIMESTAMP="$GENERATED_TIMESTAMP"
+          echo "🔗 Using generated bronze timestamp from current run: $BRONZE_TIMESTAMP"
+        else
+          echo "🔍 No bronze timestamp provided, finding latest available..."
+          
+          # Find latest GeoDanmark bronze timestamp using proven CHR pipeline pattern
+          LATEST_GEODANMARK=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+          
+          # Find latest INSPIRE bronze timestamp using the same pattern
+          LATEST_INSPIRE=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+          
+          echo "🔍 Found GeoDanmark timestamp: '$LATEST_GEODANMARK'"
+          echo "🔍 Found INSPIRE timestamp: '$LATEST_INSPIRE'"
+          
+          # Use the most recent timestamp that has both datasets
+          if [[ -n "$LATEST_GEODANMARK" && "$LATEST_GEODANMARK" == "$LATEST_INSPIRE" ]]; then
+            BRONZE_TIMESTAMP="$LATEST_GEODANMARK"
+            echo "✅ Found matching bronze data: $BRONZE_TIMESTAMP"
+          elif [[ -n "$LATEST_GEODANMARK" && -n "$LATEST_INSPIRE" ]]; then
+            echo "📋 Available GeoDanmark timestamps:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
+            echo "📋 Available INSPIRE timestamps:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
+            
+            # Use the newer of the two (they should typically match)
+            if [[ "$LATEST_GEODANMARK" > "$LATEST_INSPIRE" ]]; then
+              BRONZE_TIMESTAMP="$LATEST_GEODANMARK"
+              echo "⚠️ Using latest GeoDanmark data: $BRONZE_TIMESTAMP"
+            else
+              BRONZE_TIMESTAMP="$LATEST_INSPIRE"
+              echo "⚠️ Using latest INSPIRE data: $BRONZE_TIMESTAMP"
+            fi
+          else
+            echo "❌ No valid bronze timestamps found"
+            echo "🔍 Debugging - listing raw GeoDanmark directory:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ || echo "Failed to list GeoDanmark directory"
+            echo "🔍 Debugging - listing raw INSPIRE directory:"
+            gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ || echo "Failed to list INSPIRE directory"
+          fi
+        fi
+        
+        # Add timestamp to command
         if [[ -n "$BRONZE_TIMESTAMP" ]]; then
           CMD="$CMD --bronze-timestamp $BRONZE_TIMESTAMP"
-          echo "🕐 Using bronze timestamp: $BRONZE_TIMESTAMP"
+          echo "🕐 Final bronze timestamp: $BRONZE_TIMESTAMP"
+        else
+          echo "❌ No bronze timestamp available - pipeline will fail"
+          exit 1
         fi
         
         # Add enhancement flag

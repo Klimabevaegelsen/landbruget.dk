@@ -1,11 +1,18 @@
-"""Stage 2A: Fields × BNBO Water Coverage Analysis
+"""Stage 2A: Fields × BNBO - Redesigned Architecture
 
-Calculate BNBO coverage by water projects for each field.
-Uses pre-computed BNBO intersection geometries from Stage 1A (SPEED OPTIMIZATION).
-No longer recreates spatial intersections - reuses Stage 1A intersection geometries.
+Creates BOTH total and water-covered BNBO geometries following the architectural redesign:
+1. field_bnbo_intersections: 2-way total BNBO in fields  
+2. field_bnbo_water_intersections: 3-way water-covered BNBO in fields
 
-Optimized for DuckDB Spatial v1.2.2 with foundation data approach.
-Based on successful Stage 1 implementations.
+Key Principles:
+- GEOMETRY ONLY: No ST_Area_Spheroid() calculations (moved to Stage 4)
+- SPATIAL_JOIN Compliance: Single spatial predicates in JOIN ON clauses
+- Leverage Stage 1 Foundation Data: Reuse existing intersection geometries
+
+Architectural Benefits:
+- Eliminates fragment duplication issues
+- Ensures DuckDB Spatial PR #545 compliance
+- Creates clean geometric pipeline for Stage 3/4 consumption
 """
 
 from typing import Any, Dict
@@ -15,7 +22,7 @@ from ..config import CONFIG
 
 
 class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
-    """Calculate BNBO coverage by water projects for each field using foundation data."""
+    """Create both total and water-covered BNBO geometries following redesigned architecture."""
 
     def __init__(self, config: FieldAnalysisStageConfig = None):
         if config is None:
@@ -23,29 +30,24 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         super().__init__(config, "Stage 2A: Fields × BNBO Water Coverage")
 
     def _load_input_data(self):
-        """Load field data and water project BNBO intersections from Stage 1."""
-        # Get year-aware dataset names
+        """Load foundation data from Stage 1 for geometric intersections."""
         updated_outputs = CONFIG.update_outputs_for_year()
         
-        # Load agricultural fields (still from silver - this is the BUILD side)
+        # Load agricultural fields (BUILD side for spatial joins)
         self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
 
-        # Load Stage 0 pre-filtered BNBO data for field intersections (PROBE side optimization)
+        # Load Stage 0 pre-filtered BNBO data
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
-        # Load all columns - filtering can be done in SQL if needed
         self.gcs_access.query_parquet_direct(
             stage0_bnbo_path,
             "SELECT *",
-            "bnbo_for_fields",
+            "bnbo_prefiltered",
         )
 
-        self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered BNBO for field intersections!")
-        self.log.info("🚀 PERFORMANCE: 3.7x faster than original (3.7K → 1K BNBO polygons)")
-
-        # Load water project × BNBO intersections from Stage 1A
-        # This contains the pre-computed intersection geometries we need (OPTIMIZATION!)
+        # Load water project × BNBO intersections from Stage 1A (foundation data)
+        self.log.info("Loading Stage 1A water projects × BNBO intersections...")
         stage1a_dataset = updated_outputs["water_projects_bnbo_intersections"]
         stage1a_path = self._get_latest_gold_path(stage1a_dataset)
         # Load all columns - filtering can be done in SQL if needed
@@ -55,318 +57,270 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             "water_projects_bnbo_intersections",
         )
 
-        # Use pre-computed BNBO areas covered by water projects (SPEED OPTIMIZATION)
-        # No need to recreate - Stage 1A already computed intersection geometries!
-        self.log.info("Using pre-computed BNBO intersection geometries from Stage 1A...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_covered_by_water AS
-            SELECT 
-                status_category,
-                intersection_geometry as covered_bnbo_geometry,
-                intersection_area_m2 as covered_area_m2
-            FROM water_projects_bnbo_intersections
-            WHERE intersection_area_m2 > 100
-        """)
+        self.log.info(f"✅ Loaded foundation data for redesigned Stage 2A")
 
-        # Log loaded data
-        fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_for_fields").fetchone()[0]
-        covered_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_covered_by_water").fetchone()[
-            0
-        ]
-        intersections_count = self.conn.execute(
+        # Input validation
+        field_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_prefiltered").fetchone()[0]
+        water_bnbo_count = self.conn.execute(
             "SELECT COUNT(*) FROM water_projects_bnbo_intersections"
         ).fetchone()[0]
 
-        self.log.info("✅ Loaded data for field-level analysis:")
-        self.log.info(f"   Agricultural fields: {fields_count:,}")
-        self.log.info(f"   BNBO polygons: {bnbo_count:,}")
-        self.log.info(f"   BNBO areas covered by water projects: {covered_count:,}")
-        self.log.info(f"   Intersection records (for validation): {intersections_count:,}")
+        self.log.info(f"📊 Foundation data loaded:")
+        self.log.info(f"  Fields: {field_count:,}")
+        self.log.info(f"  BNBO areas (pre-filtered): {bnbo_count:,}")
+        self.log.info(f"  Water-covered BNBO intersections: {water_bnbo_count:,}")
+
+        if field_count == 0:
+            raise ValueError("No agricultural fields found")
+        if bnbo_count == 0:
+            self.log.warning("No BNBO areas found - pipeline will create empty result tables")
+        if water_bnbo_count == 0:
+            self.log.warning("No water-covered BNBO found - all water coverage will be 0")
+
+        return {
+            "fields_count": field_count,
+            "bnbo_count": bnbo_count,
+            "water_bnbo_count": water_bnbo_count,
+        }
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
-        Calculate BNBO coverage by water projects for each field.
-
-        DuckDB Spatial PR #545 COMPLIANCE:
-        - Separate spatial joins into distinct processing steps
-        - Single spatial predicate per join
-        - Move area filtering to post-join processing
-        - No WHERE clauses with spatial predicates on JOIN operations
-
-        CORRECT APPROACH:
-        1. Fields × BNBO: Get total BNBO area within each field (STEP 1)
-        2. Fields × (BNBO covered by water projects): Get covered BNBO area within each field (STEP 2)
-        3. Calculate field-level percentages: % BNBO in field, % of those covered by water projects
+        Redesigned Stage 2A: Create both total and water-covered BNBO geometries.
+        
+        Creates two output tables following architectural redesign:
+        1. field_bnbo_intersections: 2-way total BNBO in fields  
+        2. field_bnbo_water_intersections: 3-way water-covered BNBO in fields
+        
+        Key Principles:
+        - GEOMETRY ONLY: No ST_Area_Spheroid() calculations (moved to Stage 4)
+        - SPATIAL_JOIN Compliance: Single spatial predicates in JOIN ON clauses
+        - Leverage Stage 1 Foundation Data: Reuse existing intersection geometries
         """
 
-        self.log.info("🎯 FIELD-LEVEL BNBO WATER COVERAGE ANALYSIS")
-        self.log.info("🔧 Using BNBO-water project intersection geometries")
-        self.log.info(
-            "✅ DuckDB Spatial PR #545 COMPLIANCE: Separate spatial joins, no WHERE spatial predicates"
-        )
+        self.log.info("🎯 REDESIGNED STAGE 2A: BNBO GEOMETRIC INTERSECTIONS")
+        self.log.info("✅ GEOMETRY ONLY - All area calculations moved to Stage 4")
+        self.log.info("🔧 SPATIAL_JOIN Compliance - Single spatial predicates in JOIN ON")
 
-        # Get total field count for batching
-        total_fields = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
-        batch_size = CONFIG.stage2_batch_size
-        num_batches = (total_fields + batch_size - 1) // batch_size
-
-        self.log.info(
-            f"Processing {total_fields:,} fields in {num_batches} batches of {batch_size:,}"
-        )
-
-        # Initialize result table (field-level aggregates)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE fields_bnbo_water AS
-            SELECT 
-                CAST(NULL AS VARCHAR) as field_id,
-                CAST(NULL AS VARCHAR) as block_id,
-                CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS VARCHAR) as field_uuid,
-                CAST(NULL AS GEOMETRY) as geometry,
-                CAST(NULL AS DOUBLE) as field_area_m2,
-                CAST(NULL AS DOUBLE) as field_bnbo_total_m2,
-                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_m2,
-                CAST(NULL AS DOUBLE) as field_bnbo_water_covered_pct,
-                CAST(NULL AS DOUBLE) as field_bnbo_water_uncovered_pct,
-                CAST(NULL AS DOUBLE) as field_bnbo_coverage_pct
-            WHERE FALSE
-        """)
-
-        # Initialize detailed intersections table for Stage 3 optimization
+        # Step 1: Create 2-way field × BNBO intersections (Total BNBO in fields)
+        self.log.info("📦 Step 1: Creating field_bnbo_intersections (2-way total BNBO)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_intersections AS
             SELECT 
-                CAST(NULL AS VARCHAR) as field_id,
-                CAST(NULL AS VARCHAR) as block_id,
-                CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS INTEGER) as year,
-                CAST(NULL AS VARCHAR) as field_uuid,
-                CAST(NULL AS VARCHAR) as status_category,
-                CAST(NULL AS GEOMETRY) as field_bnbo_intersection_geometry,
-                CAST(NULL AS DOUBLE) as field_bnbo_intersection_area_m2,
-                CAST(NULL AS GEOMETRY) as field_geometry,
-                CAST(NULL AS DOUBLE) as field_area_m2
-            WHERE FALSE
+                f.field_uuid,
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                b.bnbo_id,
+                b.status_category,
+                ST_Intersection(f.geometry, b.geometry) as field_bnbo_geometry
+            FROM agricultural_fields f
+            JOIN bnbo_prefiltered b ON ST_Intersects(f.geometry, b.geometry)
         """)
 
-        total_fields_processed = 0
-        total_bnbo_intersections = 0
-        total_covered_intersections = 0
+        # Step 2: Create 3-way field × BNBO × water intersections (Water-covered BNBO in fields)
+        # SPATIAL_JOIN COMPLIANT: Uses existing geometries from Step 1 and Stage 1A foundation
+        self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
+            SELECT 
+                fbi.field_uuid,
+                fbi.field_id,
+                fbi.block_id,
+                fbi.cvr_number,
+                fbi.year,
+                fbi.bnbo_id,
+                fbi.status_category,
+                wpbi.project_id,
+                ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
+            FROM field_bnbo_intersections fbi
+            JOIN water_projects_bnbo_intersections wpbi ON fbi.bnbo_id = wpbi.bnbo_id
+                AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+        """)
 
-        # Process each batch with separated spatial joins
-        for batch_num in range(num_batches):
-            offset = batch_num * batch_size
-            progress_pct = ((batch_num + 1) / num_batches) * 100
-            self.log.info(f"📦 Batch {batch_num + 1}/{num_batches} - {progress_pct:.1f}% complete")
+        # Get result statistics
+        total_bnbo_intersections = self.conn.execute(
+            "SELECT COUNT(*) FROM field_bnbo_intersections"
+        ).fetchone()[0]
+        
+        water_covered_intersections = self.conn.execute(
+            "SELECT COUNT(*) FROM field_bnbo_water_intersections"
+        ).fetchone()[0]
 
-            # Create field batch
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE fields_batch AS
-                SELECT * FROM agricultural_fields
-                LIMIT {batch_size} OFFSET {offset}
-            """)
+        unique_fields_with_bnbo = self.conn.execute(
+            "SELECT COUNT(DISTINCT field_uuid) FROM field_bnbo_intersections"
+        ).fetchone()[0]
 
-            batch_count = self.conn.execute("SELECT COUNT(*) FROM fields_batch").fetchone()[0]
-            if batch_count == 0:
-                break
+        # Validation: Geometry validity checks
+        self._validate_geometric_output()
 
-            # STEP 1: Fields × BNBO (total BNBO area within each field)
-            # DuckDB Spatial PR #545 COMPLIANCE: Single spatial predicate only
-            self.log.info(f"  STEP 1: {batch_count:,} fields × BNBO (single spatial join)")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_bnbo_raw AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.year,
-                    f.field_uuid,
-                    f.geometry as field_geometry,
-                    ST_Area_Spheroid(f.geometry) as field_area_m2,
-                    b.bnbo_id,
-                    b.status_category,
-                    b.geometry as bnbo_geometry
-                FROM fields_batch f
-                JOIN bnbo_for_fields b ON ST_Intersects(f.geometry, b.geometry)
-            """)
-
-            # Post-join processing: Calculate areas (NO SPATIAL WHERE CLAUSES)
-            self.log.info("  Post-processing: Calculate intersection areas")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_bnbo_total AS
-                SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
-                    field_uuid,
-                    field_geometry,
-                    field_area_m2,
-                    bnbo_id,
-                    status_category,
-                    ST_Intersection(field_geometry, bnbo_geometry) as field_bnbo_intersection_geometry,
-                    ST_Area_Spheroid(ST_Intersection(field_geometry, bnbo_geometry)) as field_bnbo_area_m2
-                FROM batch_field_bnbo_raw
-            """)
-
-            # Save detailed intersections for Stage 3 optimization
-            self.log.info("  Saving detailed field-BNBO intersections for Stage 3")
-            self.conn.execute("""
-                INSERT INTO field_bnbo_intersections
-                SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
-                    field_uuid,
-                    status_category,
-                    field_bnbo_intersection_geometry,
-                    field_bnbo_area_m2 as field_bnbo_intersection_area_m2,
-                    field_geometry,
-                    field_area_m2
-                FROM batch_field_bnbo_total
-            """)
-
-            # STEP 2: Fields × (BNBO covered by water projects)
-            # DuckDB Spatial PR #545 COMPLIANCE: Separate spatial join
-            self.log.info(
-                f"  STEP 2: {batch_count:,} fields × BNBO covered by water projects (separate spatial join)"
-            )
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_bnbo_covered_raw AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.year,
-                    f.field_uuid,
-                    f.geometry as field_geometry,
-                    wpbi.status_category,
-                    wpbi.intersection_geometry as water_covered_bnbo_geometry
-                FROM fields_batch f
-                JOIN water_projects_bnbo_intersections wpbi ON ST_Intersects(f.geometry, wpbi.intersection_geometry)
-            """)
-
-            # Post-join processing: Calculate covered areas (NO SPATIAL WHERE CLAUSES)
-            self.log.info("  Post-processing: Calculate covered intersection areas")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_bnbo_covered AS
-                SELECT 
-                    field_id,
-                    block_id,
-                    cvr_number,
-                    year,
-                    field_uuid,
-                    status_category,
-                    ST_Area_Spheroid(ST_Intersection(field_geometry, water_covered_bnbo_geometry)) as field_covered_bnbo_area_m2
-                FROM batch_field_bnbo_covered_raw
-            """)
-
-            batch_bnbo_intersections = self.conn.execute(
-                "SELECT COUNT(*) FROM batch_field_bnbo_total"
-            ).fetchone()[0]
-            batch_covered_intersections = self.conn.execute(
-                "SELECT COUNT(*) FROM batch_field_bnbo_covered"
-            ).fetchone()[0]
-
-            self.log.info(f"  Found {batch_bnbo_intersections:,} total field-BNBO intersections")
-            self.log.info(
-                f"  Found {batch_covered_intersections:,} field-covered BNBO intersections"
-            )
-
-            if batch_bnbo_intersections == 0:
-                self.log.info(f"  No BNBO intersections found in batch {batch_num + 1}")
-                continue
-
-            # Aggregate to field level
-            self.log.info("  Aggregating to field-level BNBO coverage statistics")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_field_aggregates AS
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.year,
-                    f.field_uuid,
-                    f.field_geometry as geometry,
-                    f.field_area_m2,
-                    
-                    -- Total BNBO area in field
-                    COALESCE(SUM(f.field_bnbo_area_m2), 0) as field_bnbo_total_m2,
-                    
-                    -- BNBO covered by water projects
-                    COALESCE(SUM(c.field_covered_bnbo_area_m2), 0) as field_bnbo_water_covered_m2
-                    
-                FROM batch_field_bnbo_total f
-                LEFT JOIN batch_field_bnbo_covered c ON f.field_uuid = c.field_uuid 
-                    AND f.year = c.year
-                    AND f.status_category = c.status_category
-                GROUP BY f.field_id, f.block_id, f.cvr_number, f.year, f.field_uuid, f.field_geometry, f.field_area_m2
-            """)
-
-            # Calculate percentages and final metrics
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE batch_final AS
-                SELECT 
-                    *,
-                    -- Coverage percentages
-                    CASE 
-                        WHEN field_bnbo_total_m2 > 0 
-                        THEN (field_bnbo_water_covered_m2 / field_bnbo_total_m2) * 100 
-                        ELSE 0 
-                    END as field_bnbo_water_covered_pct,
-                    
-                    CASE 
-                        WHEN field_bnbo_total_m2 > 0 
-                        THEN ((field_bnbo_total_m2 - field_bnbo_water_covered_m2) / field_bnbo_total_m2) * 100 
-                        ELSE 0 
-                    END as field_bnbo_water_uncovered_pct,
-                    
-                    -- Field coverage percentage
-                    (field_bnbo_total_m2 / field_area_m2) * 100 as field_bnbo_coverage_pct
-                    
-                FROM batch_field_aggregates
-            """)
-
-            # Insert into main results table
-            self.conn.execute("""
-                INSERT INTO fields_bnbo_water 
-                SELECT * FROM batch_final
-            """)
-
-            total_fields_processed += batch_count
-            total_bnbo_intersections += batch_bnbo_intersections
-            total_covered_intersections += batch_covered_intersections
-
-            # Memory cleanup
-            self.conn.execute("DROP TABLE IF EXISTS fields_batch")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_raw")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_total")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_covered_raw")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_bnbo_covered")
-            self.conn.execute("DROP TABLE IF EXISTS batch_field_aggregates")
-            self.conn.execute("DROP TABLE IF EXISTS batch_final")
-
-        # Final summary
-        final_fields = self.conn.execute("SELECT COUNT(*) FROM fields_bnbo_water").fetchone()[0]
-
-        self.log.info(f"✅ STAGE 2A COMPLETE: {final_fields:,} fields with BNBO analysis")
-        self.log.info(f"📊 Total BNBO intersections: {total_bnbo_intersections:,}")
-        self.log.info(f"📊 Water-covered intersections: {total_covered_intersections:,}")
-        self.log.info("✅ DuckDB Spatial PR #545 COMPLIANCE: Separated spatial joins completed")
+        self.log.info(f"✅ REDESIGNED STAGE 2A COMPLETE:")
+        self.log.info(f"📊 Total field-BNBO intersections: {total_bnbo_intersections:,}")
+        self.log.info(f"📊 Water-covered intersections: {water_covered_intersections:,}")
+        self.log.info(f"📊 Unique fields with BNBO: {unique_fields_with_bnbo:,}")
+        self.log.info("🚀 GEOMETRIC PIPELINE: Ready for Stage 3 consumption")
 
         return {
-            "fields_processed": final_fields,
             "total_bnbo_intersections": total_bnbo_intersections,
-            "covered_intersections": total_covered_intersections,
+            "water_covered_intersections": water_covered_intersections,
+            "unique_fields_with_bnbo": unique_fields_with_bnbo,
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
-        """Save fields with BNBO water coverage and detailed intersections to GCS."""
-        # Save field-level aggregates
-        self._save_stage_output("fields_bnbo_water", "fields_bnbo_water")
-
-        # Save detailed field-BNBO intersections for Stage 3 optimization
+        """Save both geometric intersection tables to GCS."""
+        # Save 2-way field × BNBO intersections
         self._save_stage_output("field_bnbo_intersections", "field_bnbo_intersections")
+
+        # Save 3-way field × BNBO × water intersections  
+        self._save_stage_output("field_bnbo_water_intersections", "field_bnbo_water_intersections")
+    
+    def _validate_geometric_output(self):
+        """Comprehensive validation including geometry, record counts, and data consistency."""
+        
+        self.log.info("🔍 REDESIGNED STAGE 2A: Running comprehensive validations...")
+        
+        # 1. GEOMETRY VALIDATIONS
+        self._validate_geometry_quality()
+        
+        # 2. RECORD COUNT VALIDATIONS  
+        self._validate_record_counts()
+        
+        # 3. DATA CONSISTENCY VALIDATIONS
+        self._validate_data_consistency()
+        
+        self.log.info("✅ REDESIGNED STAGE 2A: All comprehensive validations completed")
+
+    def _validate_geometry_quality(self):
+        """Validate geometry quality and integrity."""
+        self.log.info("🔍 Validating geometry quality...")
+        
+        # Check field_bnbo_intersections geometry validity
+        invalid_bnbo = self.conn.execute("""
+            SELECT COUNT(*) 
+            FROM field_bnbo_intersections 
+            WHERE field_bnbo_geometry IS NULL OR NOT ST_IsValid(field_bnbo_geometry)
+        """).fetchone()[0]
+        
+        # Check field_bnbo_water_intersections geometry validity  
+        invalid_water = self.conn.execute("""
+            SELECT COUNT(*) 
+            FROM field_bnbo_water_intersections 
+            WHERE field_bnbo_water_geometry IS NULL OR NOT ST_IsValid(field_bnbo_water_geometry)
+        """).fetchone()[0]
+        
+        # Check for empty geometries
+        empty_bnbo = self.conn.execute("""
+            SELECT COUNT(*) 
+            FROM field_bnbo_intersections 
+            WHERE field_bnbo_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_geometry)
+        """).fetchone()[0]
+        
+        empty_water = self.conn.execute("""
+            SELECT COUNT(*) 
+            FROM field_bnbo_water_intersections 
+            WHERE field_bnbo_water_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_water_geometry)
+        """).fetchone()[0]
+        
+        # Report geometry validation results
+        total_bnbo = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
+        total_water = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_water_intersections").fetchone()[0]
+        
+        if invalid_bnbo > 0:
+            self.log.error(f"❌ Found {invalid_bnbo:,}/{total_bnbo:,} invalid/NULL geometries in field_bnbo_intersections")
+        else:
+            self.log.info(f"✅ All {total_bnbo:,} field_bnbo_intersections geometries are valid")
+            
+        if invalid_water > 0:
+            self.log.error(f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in field_bnbo_water_intersections") 
+        else:
+            self.log.info(f"✅ All {total_water:,} field_bnbo_water_intersections geometries are valid")
+            
+        if empty_bnbo > 0:
+            self.log.warning(f"⚠️ Found {empty_bnbo:,} empty geometries in field_bnbo_intersections")
+        if empty_water > 0:
+            self.log.warning(f"⚠️ Found {empty_water:,} empty geometries in field_bnbo_water_intersections")
+
+    def _validate_record_counts(self):
+        """Validate record counts and data preservation."""
+        self.log.info("🔍 Validating record counts and data preservation...")
+        
+        # Get input counts
+        fields_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_prefiltered").fetchone()[0]
+        water_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_bnbo_intersections").fetchone()[0]
+        
+        # Get output counts
+        field_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
+        field_bnbo_water_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_water_intersections").fetchone()[0]
+        
+        # Validate field coverage
+        unique_fields_with_bnbo = self.conn.execute("""
+            SELECT COUNT(DISTINCT field_uuid) FROM field_bnbo_intersections
+        """).fetchone()[0]
+        
+        unique_fields_with_water = self.conn.execute("""
+            SELECT COUNT(DISTINCT field_uuid) FROM field_bnbo_water_intersections
+        """).fetchone()[0]
+        
+        # Log validation results
+        self.log.info(f"📊 Input data: {fields_count:,} fields, {bnbo_count:,} BNBO features, {water_bnbo_count:,} water×BNBO intersections")
+        self.log.info(f"📊 Output data: {field_bnbo_count:,} field×BNBO intersections, {field_bnbo_water_count:,} field×BNBO×water intersections")
+        self.log.info(f"📊 Field coverage: {unique_fields_with_bnbo:,} fields with BNBO, {unique_fields_with_water:,} fields with water-covered BNBO")
+        
+        # Sanity checks
+        if field_bnbo_count == 0:
+            self.log.error("❌ CRITICAL: No field×BNBO intersections produced!")
+        elif field_bnbo_count > fields_count * bnbo_count:
+            self.log.warning(f"⚠️ Very high intersection count: {field_bnbo_count:,} (check for data explosion)")
+        
+        if unique_fields_with_bnbo > fields_count:
+            self.log.error(f"❌ CRITICAL: More unique fields with BNBO ({unique_fields_with_bnbo:,}) than total fields ({fields_count:,})")
+
+    def _validate_data_consistency(self):
+        """Validate data consistency and logical relationships."""
+        self.log.info("🔍 Validating data consistency...")
+        
+        # Validate that water-covered BNBO is subset of total BNBO
+        water_only_fields = self.conn.execute("""
+            SELECT COUNT(DISTINCT fbw.field_uuid)
+            FROM field_bnbo_water_intersections fbw
+            LEFT JOIN field_bnbo_intersections fb ON fbw.field_uuid = fb.field_uuid
+            WHERE fb.field_uuid IS NULL
+        """).fetchone()[0]
+        
+        if water_only_fields > 0:
+            self.log.error(f"❌ CRITICAL: {water_only_fields:,} fields have water-covered BNBO but no total BNBO (data inconsistency)")
+        else:
+            self.log.info("✅ Data consistency: All water-covered BNBO fields also have total BNBO records")
+        
+        # Validate field UUIDs consistency
+        invalid_field_uuids = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM field_bnbo_intersections fb
+            LEFT JOIN agricultural_fields f ON fb.field_uuid = f.field_uuid
+            WHERE f.field_uuid IS NULL
+        """).fetchone()[0]
+        
+        if invalid_field_uuids > 0:
+            self.log.error(f"❌ CRITICAL: {invalid_field_uuids:,} intersection records have invalid field_uuid references")
+        else:
+            self.log.info("✅ All intersection records have valid field_uuid references")
+        
+        # Validate no duplicate field×BNBO combinations
+        total_records = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
+        unique_combinations = self.conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT field_uuid, bnbo_id FROM field_bnbo_intersections
+            )
+        """).fetchone()[0]
+        duplicates = total_records - unique_combinations
+        
+        if duplicates > 0:
+            self.log.error(f"❌ CRITICAL: {duplicates:,} duplicate field×BNBO combinations found")
+        else:
+            self.log.info("✅ No duplicate field×BNBO combinations found")
+    
+    def _get_main_output_table(self) -> str:
+        """Get the name of the main output table for area validation."""
+        return "field_bnbo_intersections"

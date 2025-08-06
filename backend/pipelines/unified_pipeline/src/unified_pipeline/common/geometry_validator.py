@@ -124,16 +124,9 @@ def validate_and_transform_geometries_duckdb(
                 """)
                 logger.info(f"{dataset_name}: Removed {invalid_count} invalid geometries")
 
-        # Convert to WGS84 (EPSG:4326) - assume source is EPSG:25832
-        logger.info(f"{dataset_name}: Converting to WGS84 (EPSG:4326)")
-        conn.execute(f"""
-            UPDATE {table_name} SET 
-                {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
-            WHERE {geometry_column} IS NOT NULL
-        """)
-
-        # Check if coordinates need flipping by sampling a few geometries
-        sample_bounds = conn.execute(f"""
+        # Detect CRS before transformation by checking coordinate bounds
+        logger.info(f"{dataset_name}: Detecting coordinate reference system")
+        initial_bounds = conn.execute(f"""
             SELECT 
                 MIN(ST_XMin({geometry_column})) as min_x,
                 MAX(ST_XMax({geometry_column})) as max_x,
@@ -141,32 +134,76 @@ def validate_and_transform_geometries_duckdb(
                 MAX(ST_YMax({geometry_column})) as max_y
             FROM {table_name}
             WHERE {geometry_column} IS NOT NULL
-            LIMIT 100
+            LIMIT 1000
         """).fetchone()
+        
+        if initial_bounds:
+            min_x, max_x, min_y, max_y = initial_bounds
+            
+            # Check if coordinates are already in WGS84 (longitude/latitude ranges)
+            is_wgs84_lon_lat = (7 <= min_x <= 16 and 7 <= max_x <= 16 and 
+                               54 <= min_y <= 58 and 54 <= max_y <= 58)
+            is_wgs84_lat_lon = (54 <= min_x <= 58 and 54 <= max_x <= 58 and
+                               7 <= min_y <= 16 and 7 <= max_y <= 16)
+            is_utm = (400000 <= min_x <= 900000 and 6000000 <= min_y <= 7000000)
+            
+            if is_wgs84_lon_lat:
+                logger.info(f"{dataset_name}: Data already in WGS84 (correct lon/lat order) - skipping transformation")
+            elif is_wgs84_lat_lon:
+                logger.info(f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing")
+            elif is_utm:
+                logger.info(f"{dataset_name}: Data in Danish UTM (EPSG:25832) - transforming to WGS84")
+                conn.execute(f"""
+                    UPDATE {table_name} SET 
+                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                    WHERE {geometry_column} IS NOT NULL
+                """)
+            else:
+                logger.warning(f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM")
+                conn.execute(f"""
+                    UPDATE {table_name} SET 
+                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                    WHERE {geometry_column} IS NOT NULL
+                """)
+        else:
+            logger.warning(f"{dataset_name}: Could not detect CRS - assuming UTM and transforming")
+            conn.execute(f"""
+                UPDATE {table_name} SET 
+                    {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                WHERE {geometry_column} IS NOT NULL
+            """)
 
-        if sample_bounds:
-            min_x, max_x, min_y, max_y = sample_bounds
-
-            # Check if coordinates appear to be in wrong order (lat/lon instead of lon/lat)
-            # Denmark bounds: longitude 7-16, latitude 54-58
-            x_looks_like_latitude = (50 <= min_x <= 60) and (50 <= max_x <= 60)
-            y_looks_like_longitude = (5 <= min_y <= 20) and (5 <= max_y <= 20)
-
-            if x_looks_like_latitude and y_looks_like_longitude:
-                logger.info(
-                    f"{dataset_name}: Coordinates appear to be in wrong order, applying ST_FlipCoordinates"
-                )
+        # Apply coordinate flipping if detected during CRS analysis
+        if initial_bounds:
+            min_x, max_x, min_y, max_y = initial_bounds
+            is_wgs84_lat_lon_after = (54 <= min_x <= 58 and 54 <= max_x <= 58 and
+                                     7 <= min_y <= 16 and 7 <= max_y <= 16)
+            
+            if is_wgs84_lat_lon_after:
+                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
                 conn.execute(f"""
                     UPDATE {table_name} SET 
                         {geometry_column} = ST_FlipCoordinates({geometry_column})
                     WHERE {geometry_column} IS NOT NULL
                 """)
+                
+                # Verify the flip worked
+                final_bounds = conn.execute(f"""
+                    SELECT 
+                        MIN(ST_XMin({geometry_column})) as min_x,
+                        MAX(ST_XMax({geometry_column})) as max_x,
+                        MIN(ST_YMin({geometry_column})) as min_y,
+                        MAX(ST_YMax({geometry_column})) as max_y
+                    FROM {table_name}
+                    WHERE {geometry_column} IS NOT NULL
+                    LIMIT 100
+                """).fetchone()
+                
+                if final_bounds:
+                    final_min_x, final_max_x, final_min_y, final_max_y = final_bounds
+                    logger.info(f"{dataset_name}: Final coordinates (X: {final_min_x:.3f}-{final_max_x:.3f}, Y: {final_min_y:.3f}-{final_max_y:.3f})")
             else:
-                logger.info(
-                    f"{dataset_name}: Coordinates appear to be in correct order (X: {min_x:.3f}-{max_x:.3f}, Y: {min_y:.3f}-{max_y:.3f})"
-                )
-        else:
-            logger.warning(f"{dataset_name}: Could not determine coordinate order, skipping flip")
+                logger.info(f"{dataset_name}: Coordinates are in correct order")
 
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""

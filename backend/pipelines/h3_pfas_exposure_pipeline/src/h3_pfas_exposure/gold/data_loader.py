@@ -39,29 +39,79 @@ class H3DataLoader:
 
     def _get_latest_silver_path(self, dataset: str) -> str:
         """Get path to latest silver data file."""
-        # Use dataset-specific patterns based on actual file naming conventions
-        if dataset == "bmd":
-            # BMD data is always saved as pesticide_products.parquet
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/pesticide_products.parquet"
-        else:
-            # Standard format for other datasets
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
-        
+        # Try new standardized format first
+        pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
-        
+
         if not files:
-            raise FileNotFoundError(f"No silver data found for {dataset} with pattern {pattern}")
+            # Fallback to legacy format for backward compatibility
+            self.log.warning(f"No new format files found for {dataset}, trying legacy format")
+            legacy_pattern = f"gs://{self.config.bucket}/silver/{dataset}/*.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by filename
+
+        # Special handling for BMD data with different file naming patterns
+        if not files and dataset == "bmd":
+            self.log.warning(
+                f"No standard format files found for {dataset}, trying BMD-specific patterns"
+            )
+            # Try BMD-specific patterns
+            bmd_patterns = [
+                f"gs://{self.config.bucket}/silver/{dataset}/*/pesticide_products.parquet",
+                f"gs://{self.config.bucket}/silver/{dataset}/*/bmd_data_*.parquet",
+            ]
+
+            for pattern in bmd_patterns:
+                files = self.gcs_access.list_files(pattern)
+                if files:
+                    self.log.info(f"Found BMD files with pattern {pattern}: {len(files)} files")
+                    return sorted(files)[-1]  # Latest by timestamp
+
+        if not files:
+            raise FileNotFoundError(f"No silver data found for {dataset}")
 
         return sorted(files)[-1]  # Latest by timestamp
 
     def _get_latest_gold_path(self, dataset: str, year: int) -> str:
         """Get path to latest gold data file for a specific year."""
-        # Use the actual unified pipeline format: dataset_year/timestamp/dataset_year.parquet
-        pattern = f"gs://{self.config.bucket}/gold/{dataset}_{year}/*/{dataset}_{year}.parquet"
+        # Try new standardized format first
+        pattern = f"gs://{self.config.bucket}/gold/{dataset}/{year}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
 
         if not files:
-            raise FileNotFoundError(f"No gold data found for {dataset} {year} with pattern {pattern}")
+            # Try the actual unified pipeline format: dataset_year/timestamp/dataset_year.parquet
+            self.log.warning(
+                f"No new format files found for {dataset} {year}, trying unified pipeline format"
+            )
+            unified_pattern = (
+                f"gs://{self.config.bucket}/gold/{dataset}_{year}/*/{dataset}_{year}.parquet"
+            )
+            files = self.gcs_access.list_files(unified_pattern)
+
+            if files:
+                self.log.info(
+                    f"Found unified pipeline format files for {dataset} {year}: {len(files)} files"
+                )
+                return sorted(files)[-1]  # Latest by timestamp
+
+        if not files:
+            # Fallback to legacy format for backward compatibility
+            self.log.warning(
+                f"No unified format files found for {dataset} {year}, trying legacy format"
+            )
+            legacy_pattern = f"gs://{self.config.bucket}/gold/{dataset}/*{year}*.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset} {year}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by filename
+
+        if not files:
+            self.log.warning(f"No gold data found for {dataset} {year}")
+            return None
 
         return sorted(files)[-1]  # Latest by timestamp
 
@@ -76,7 +126,7 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}/"
+        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)
