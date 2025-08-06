@@ -305,7 +305,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         total_records = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
         unique_combinations = self.conn.execute("""
             SELECT COUNT(*) FROM (
-                SELECT DISTINCT field_uuid, bfe_number FROM property_wetland_intersections
+                SELECT DISTINCT field_uuid, bfe_number, wetland_id FROM property_wetland_intersections
             )
         """).fetchone()[0]
         duplicates = total_records - unique_combinations
