@@ -134,8 +134,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 wpwi.project_id,
                 ST_Intersection(fwi.field_wetland_geometry, wpwi.intersection_geometry) as field_wetland_water_geometry
             FROM field_wetland_intersections fwi
-            JOIN water_projects_wetlands_intersections wpwi ON fwi.wetland_id = wpwi.wetland_id
-                AND ST_Intersects(fwi.field_wetland_geometry, wpwi.intersection_geometry)
+            JOIN water_projects_wetlands_intersections wpwi 
+                ON ST_Intersects(fwi.field_wetland_geometry, wpwi.intersection_geometry)
         """)
 
         # Get result statistics
