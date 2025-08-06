@@ -223,7 +223,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
+                ST_Area_Spheroid(ST_Union_Agg(fp.intersection_geometry)) 
+                    as property_intersection_area_m2,
                 
                 -- Environmental within this field×property intersection
                 COALESCE(SUM(ST_Area_Spheroid(pbi.property_bnbo_geometry)), 0) 
@@ -245,7 +246,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             LEFT JOIN property_wetland_water_intersections pwwi 
                 ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.bfe_number
             GROUP BY fp.field_uuid, fp.bfe_number, fp.field_id, fp.block_id, 
-                     fp.cvr_number, fp.year, fp.intersection_geometry
+                     fp.cvr_number, fp.year
         """)
         
         property_count = self.conn.execute(
@@ -272,9 +273,9 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         
         # Property-level statistics
         property_stats = self.conn.execute("""
-                SELECT 
-                    COUNT(*) as total_property_combinations,
-                    COUNT(DISTINCT field_uuid) as fields_with_properties,
+            SELECT 
+                COUNT(*) as total_property_combinations,
+                COUNT(DISTINCT field_uuid) as fields_with_properties,
                 COUNT(CASE WHEN property_bnbo_total_m2 > 0 THEN 1 END) as properties_with_bnbo,
                 COUNT(CASE WHEN property_wetland_total_m2 > 0 THEN 1 END) 
                     as properties_with_wetlands,
@@ -372,7 +373,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             "SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis_properties"
         ).fetchone()[0]
         combo_query = (
-            "SELECT COUNT(DISTINCT field_uuid || '_' || bfe_number) "
+            "SELECT COUNT(DISTINCT field_uuid || '_' || property_id) "
             "FROM field_environmental_analysis_properties"
         )
         property_unique_combos = self.conn.execute(combo_query).fetchone()[0]
