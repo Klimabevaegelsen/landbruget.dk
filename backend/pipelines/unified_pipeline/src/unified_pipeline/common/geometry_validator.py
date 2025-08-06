@@ -173,9 +173,20 @@ def validate_and_transform_geometries_duckdb(
                 WHERE {geometry_column} IS NOT NULL
             """)
 
-        # Apply coordinate flipping if detected during CRS analysis
-        if initial_bounds:
-            min_x, max_x, min_y, max_y = initial_bounds
+        # Apply coordinate flipping if needed - check bounds AFTER any transformation
+        post_transform_bounds = conn.execute(f"""
+            SELECT 
+                MIN(ST_XMin({geometry_column})) as min_x,
+                MAX(ST_XMax({geometry_column})) as max_x,
+                MIN(ST_YMin({geometry_column})) as min_y,
+                MAX(ST_YMax({geometry_column})) as max_y
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
+            LIMIT 100
+        """).fetchone()
+        
+        if post_transform_bounds:
+            min_x, max_x, min_y, max_y = post_transform_bounds
             is_wgs84_lat_lon_after = (54 <= min_x <= 58 and 54 <= max_x <= 58 and
                                      7 <= min_y <= 16 and 7 <= max_y <= 16)
             
