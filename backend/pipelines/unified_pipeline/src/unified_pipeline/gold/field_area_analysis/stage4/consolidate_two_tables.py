@@ -226,30 +226,19 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f.year,
                 ST_Area_Spheroid(f.geometry) as field_area_m2,
                 
-                -- BNBO Analysis (using pre-aggregated data with safety caps)
-                LEAST(COALESCE(ba.field_bnbo_total_m2, 0), ST_Area_Spheroid(f.geometry)) 
-                    as field_bnbo_total_m2,
-                LEAST(
-                    COALESCE(bwa.field_bnbo_water_covered_m2, 0), 
-                    LEAST(COALESCE(ba.field_bnbo_total_m2, 0), ST_Area_Spheroid(f.geometry))
-                ) as field_bnbo_water_covered_m2,
+                -- BNBO Analysis (using pre-aggregated data)
+                COALESCE(ba.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
+                COALESCE(bwa.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
                 CASE 
-                    WHEN LEAST(COALESCE(ba.field_bnbo_total_m2, 0), 
-                               ST_Area_Spheroid(f.geometry)) > 0 
-                    THEN (LEAST(COALESCE(ba.field_bnbo_total_m2, 0), 
-                                ST_Area_Spheroid(f.geometry)) / 
+                    WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
+                    THEN (COALESCE(ba.field_bnbo_total_m2, 0) / 
                           ST_Area_Spheroid(f.geometry)) * 100.0
                     ELSE 0 
                 END as field_bnbo_coverage_pct,
                 CASE 
-                    WHEN LEAST(COALESCE(ba.field_bnbo_total_m2, 0), 
-                               ST_Area_Spheroid(f.geometry)) > 0 
-                    THEN (LEAST(
-                        COALESCE(bwa.field_bnbo_water_covered_m2, 0), 
-                        LEAST(COALESCE(ba.field_bnbo_total_m2, 0), 
-                              ST_Area_Spheroid(f.geometry))
-                    ) / LEAST(COALESCE(ba.field_bnbo_total_m2, 0), 
-                              ST_Area_Spheroid(f.geometry))) * 100.0
+                    WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
+                    THEN (COALESCE(bwa.field_bnbo_water_covered_m2, 0) / 
+                          COALESCE(ba.field_bnbo_total_m2, 0)) * 100.0
                     ELSE 0 
                 END as field_bnbo_water_coverage_pct,
                 
@@ -259,30 +248,19 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(ba.bnbo_action_required_hectares, 0) as bnbo_action_required_hectares,
                 COALESCE(ba.bnbo_completed_hectares, 0) as bnbo_completed_hectares,
                 
-                -- Wetland Analysis (using pre-aggregated data with safety caps)
-                LEAST(COALESCE(wa.field_wetland_total_m2, 0), ST_Area_Spheroid(f.geometry)) 
-                    as field_wetland_total_m2,
-                LEAST(
-                    COALESCE(wwa.field_wetland_water_covered_m2, 0),
-                    LEAST(COALESCE(wa.field_wetland_total_m2, 0), ST_Area_Spheroid(f.geometry))
-                ) as field_wetland_water_covered_m2,
+                -- Wetland Analysis (using pre-aggregated data)
+                COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
+                COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
                 CASE 
-                    WHEN LEAST(COALESCE(wa.field_wetland_total_m2, 0), 
-                               ST_Area_Spheroid(f.geometry)) > 0 
-                    THEN (LEAST(COALESCE(wa.field_wetland_total_m2, 0), 
-                                ST_Area_Spheroid(f.geometry)) / 
+                    WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
+                    THEN (COALESCE(wa.field_wetland_total_m2, 0) / 
                           ST_Area_Spheroid(f.geometry)) * 100.0
                     ELSE 0 
                 END as field_wetland_coverage_pct,
                 CASE 
-                    WHEN LEAST(COALESCE(wa.field_wetland_total_m2, 0), 
-                               ST_Area_Spheroid(f.geometry)) > 0 
-                    THEN (LEAST(
-                        COALESCE(wwa.field_wetland_water_covered_m2, 0),
-                        LEAST(COALESCE(wa.field_wetland_total_m2, 0), 
-                              ST_Area_Spheroid(f.geometry))
-                    ) / LEAST(COALESCE(wa.field_wetland_total_m2, 0), 
-                              ST_Area_Spheroid(f.geometry))) * 100.0
+                    WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
+                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
+                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
                     ELSE 0 
                 END as field_wetland_water_coverage_pct
                 
