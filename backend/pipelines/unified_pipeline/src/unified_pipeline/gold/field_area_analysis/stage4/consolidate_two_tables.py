@@ -168,6 +168,17 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     ELSE 0 
                 END as field_bnbo_water_coverage_pct,
                 
+                -- BNBO Status Analysis (aggregated from status_category)
+                COUNT(DISTINCT fbi.status_category) as bnbo_status_count,
+                STRING_AGG(DISTINCT fbi.status_category, ', ' ORDER BY fbi.status_category) 
+                    as bnbo_status_categories,
+                COALESCE(SUM(CASE WHEN fbi.status_category = 'action_required' 
+                    THEN ST_Area_Spheroid(fbi.field_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as bnbo_action_required_hectares,
+                COALESCE(SUM(CASE WHEN fbi.status_category = 'completed' 
+                    THEN ST_Area_Spheroid(fbi.field_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as bnbo_completed_hectares,
+                
                 -- Wetland Analysis (calculating areas from geometries)
                 COALESCE(SUM(ST_Area_Spheroid(fwi.field_wetland_geometry)), 0) 
                     as field_wetland_total_m2,
@@ -234,7 +245,18 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(SUM(ST_Area_Spheroid(pwi.property_wetland_geometry)), 0) 
                     as property_wetland_total_m2,
                 COALESCE(SUM(ST_Area_Spheroid(pwwi.property_wetland_water_geometry)), 0) 
-                    as property_wetland_water_covered_m2
+                    as property_wetland_water_covered_m2,
+                
+                -- BNBO Status Analysis (aggregated at property level)
+                COUNT(DISTINCT pbi.status_category) as property_bnbo_status_count,
+                STRING_AGG(DISTINCT pbi.status_category, ', ' ORDER BY pbi.status_category) 
+                    as property_bnbo_status_categories,
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'action_required' 
+                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as property_bnbo_action_required_hectares,
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'completed' 
+                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as property_bnbo_completed_hectares
                 
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_intersections pbi 
@@ -399,16 +421,21 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         else:
             duplicate_combos = property_count - property_unique_combos
             self.log.error(
-                f"❌ ANALYZING: Property table has {duplicate_combos:,} records for {property_unique_combos:,} unique field×property pairs"
+                f"❌ ANALYZING: Property table has {duplicate_combos:,} records for "
+                f"{property_unique_combos:,} unique field×property pairs"
             )
             
             # Analyze the nature of these "duplicates"
             metadata_analysis = self.conn.execute("""
                 SELECT 
-                    COALESCE(SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_year_extras,
-                    COALESCE(SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_cvr_extras,
-                    COALESCE(SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_block_extras,
-                    COALESCE(SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_field_extras
+                    COALESCE(SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_year_extras,
+                    COALESCE(SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_cvr_extras,
+                    COALESCE(SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_block_extras,
+                    COALESCE(SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_field_extras
                 FROM (
                     SELECT field_uuid, bfe_number, COUNT(*) as combo_count,
                            COUNT(DISTINCT year) as years,
@@ -423,11 +450,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             
             self.log.info(f"🔍 METADATA ANALYSIS of {duplicate_combos:,} extra records:")
             self.log.info(f"   Multi-year combinations: {metadata_analysis[0]:,}")
-            self.log.info(f"   Multi-CVR combinations: {metadata_analysis[1]:,}")  
+            self.log.info(f"   Multi-CVR combinations: {metadata_analysis[1]:,}")
             self.log.info(f"   Multi-block combinations: {metadata_analysis[2]:,}")
             self.log.info(f"   Multi-field combinations: {metadata_analysis[3]:,}")
             
-            # This tells us WHY we have "duplicates" - it's likely legitimate temporal/administrative variation
+            # This tells us WHY we have "duplicates" - likely legitimate temporal/admin variation
 
     def _validate_area_calculations(self):
         """Validate area calculations are reasonable."""
