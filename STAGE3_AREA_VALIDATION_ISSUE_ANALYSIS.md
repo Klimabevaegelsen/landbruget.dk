@@ -195,6 +195,16 @@ print('Fields with multiple records:', result)
 - **Fix**: Used proper distinct field selection before summing: `SELECT DISTINCT field_uuid, field_area_m2`
 - **Result**: Stage 4 validation reference now correctly handles field-property intersection fragments
 
+#### 5. **Stage 3 Final Cross-Batch Aggregation** (`final_wetland.py` + `final_bnbo.py`)
+- **Problem**: Field fragments split across different processing batches created separate records (e.g., 9,680m² + 2,420m² = 2 records instead of 1 summed record)
+- **Fix**: Added comprehensive final aggregation step to consolidate any fields split across batches using `GROUP BY field_uuid` with `SUM()` aggregation
+- **Result**: Eliminated 6 duplicate field records in wetland analysis, ensures exactly 1 record per field
+
+#### 6. **Source Data Deduplication** (`field_area_analysis.py` + `field_area_analysis_redesigned.py`)
+- **Problem**: FVM marker source data contained 11 duplicate field_uuid records from same fields appearing in different administrative applications (crop declaration vs non-crop applications)
+- **Fix**: Added `WHERE crop_code IS NOT NULL` filter to eliminate non-crop administrative records
+- **Result**: Clean source data with unique field records for field area analysis
+
 ### 📊 Verification Results
 - **Fragment Detection**: ✅ Auto-detects 140,483 records across 83,827 fields (1.68 fragments/field)
 - **Field Aggregation**: ✅ Perfect 1.0 records/field after Stage 3 aggregation
