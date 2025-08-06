@@ -221,7 +221,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE soil_field_aggregates AS
             SELECT 
                 s.field_uuid,
-                SUM(s.soil_intersection_area_m2) as field_soil_total_m2,
+                SUM(s.soil_area_for_type) as field_soil_total_m2,
                 -- Create JSON object with soil composition percentages based on ACTUAL field area
                 json_group_object(
                     s.soil_description, 
