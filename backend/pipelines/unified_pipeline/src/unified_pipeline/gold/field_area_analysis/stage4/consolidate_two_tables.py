@@ -172,15 +172,33 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid
         """)
         
-        # Pre-aggregate wetland intersections by field
-        # NOTE: Peat percentage overlaps are now handled in the silver layer,
-        # so we can simply sum the wetland areas without complex spatial operations
+        # Pre-aggregate wetland intersections by field with peat percentage prioritization
+        # BACKUP: Keep this logic until silver layer overlap fix is validated
+        # TODO: Remove this complex logic once silver layer overlap handling is confirmed working
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_field_aggregates AS
             SELECT 
                 field_uuid,
-                SUM(ST_Area_Spheroid(field_wetland_geometry)) as field_wetland_total_m2
-            FROM field_wetland_intersections
+                -- Use spatial union to merge overlapping wetland areas, prioritizing highest peat %
+                ST_Area_Spheroid(ST_Union_Agg(
+                    CASE 
+                        WHEN toerv_pct = '>12' THEN field_wetland_geometry
+                        WHEN toerv_pct = '6-12' THEN 
+                            -- Only include 6-12% areas that don't overlap with >12% areas
+                            ST_Difference(
+                                field_wetland_geometry,
+                                COALESCE(
+                                    (SELECT ST_Union_Agg(w2.field_wetland_geometry) 
+                                     FROM field_wetland_intersections w2 
+                                     WHERE w2.field_uuid = w1.field_uuid 
+                                     AND w2.toerv_pct = '>12'),
+                                    ST_GeomFromText('POLYGON EMPTY')
+                                )
+                            )
+                        ELSE field_wetland_geometry
+                    END
+                )) as field_wetland_total_m2
+            FROM field_wetland_intersections w1
             GROUP BY field_uuid
         """)
         
