@@ -405,10 +405,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             # Analyze the nature of these "duplicates"
             metadata_analysis = self.conn.execute("""
                 SELECT 
-                    SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END) as multi_year_extras,
-                    SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END) as multi_cvr_extras,
-                    SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END) as multi_block_extras,
-                    SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END) as multi_field_extras
+                    COALESCE(SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_year_extras,
+                    COALESCE(SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_cvr_extras,
+                    COALESCE(SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_block_extras,
+                    COALESCE(SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END), 0) as multi_field_extras
                 FROM (
                     SELECT field_uuid, bfe_number, COUNT(*) as combo_count,
                            COUNT(DISTINCT year) as years,
