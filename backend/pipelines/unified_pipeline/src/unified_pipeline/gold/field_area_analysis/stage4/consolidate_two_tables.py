@@ -12,6 +12,8 @@ Key Principles:
 - Uses clean geometric data from redesigned pipeline
 - Single place for all area computations
 - Two separate output tables eliminate record explosion issues
+- Includes organic farming information from FVM marker data (is_organic column)
+- Includes soil composition analysis with percentage breakdown per field (soil_composition JSON)
 """
 
 from typing import Any, Dict
@@ -213,6 +215,30 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid
         """)
         
+        # Pre-aggregate soil intersections by field with composition percentages
+        # Use actual field area (not sum of intersections) to prevent overcounting from overlaps
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE soil_field_aggregates AS
+            SELECT 
+                s.field_uuid,
+                SUM(s.soil_intersection_area_m2) as field_soil_total_m2,
+                -- Create JSON object with soil composition percentages based on ACTUAL field area
+                json_group_object(
+                    s.soil_description, 
+                    ROUND((s.soil_area_for_type / s.field_area_m2) * 100, 1)
+                ) as soil_composition
+            FROM (
+                SELECT 
+                    field_uuid,
+                    soil_description,
+                    SUM(soil_intersection_area_m2) as soil_area_for_type,
+                    MAX(field_area_m2) as field_area_m2  -- Actual field area from Stage 1D
+                FROM field_soil_intersections
+                GROUP BY field_uuid, soil_description
+            ) s
+            GROUP BY s.field_uuid
+        """)
+        
         self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
         
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
@@ -225,6 +251,9 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f.cvr_number,
                 f.year,
                 ST_Area_Spheroid(f.geometry) as field_area_m2,
+                
+                -- Organic Farming Status (from FVM marker data)
+                COALESCE(f.is_organic, FALSE) as is_organic,
                 
                 -- BNBO Analysis (using pre-aggregated data)
                 COALESCE(ba.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
@@ -262,16 +291,24 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
                           COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
                     ELSE 0 
-                END as field_wetland_water_coverage_pct
+                END as field_wetland_water_coverage_pct,
                 
                 -- Soil Analysis (from Stage 1D field_soil_intersections)
-                -- TODO: Add soil calculations from field_soil_intersections geometries
+                COALESCE(sa.field_soil_total_m2, 0) as field_soil_total_m2,
+                CASE 
+                    WHEN COALESCE(sa.field_soil_total_m2, 0) > 0 
+                    THEN (COALESCE(sa.field_soil_total_m2, 0) / 
+                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    ELSE 0 
+                END as field_soil_coverage_pct,
+                sa.soil_composition
                 
             FROM agricultural_fields f
             LEFT JOIN bnbo_field_aggregates ba ON f.field_uuid = ba.field_uuid
             LEFT JOIN bnbo_water_field_aggregates bwa ON f.field_uuid = bwa.field_uuid
             LEFT JOIN wetland_field_aggregates wa ON f.field_uuid = wa.field_uuid
             LEFT JOIN wetland_water_field_aggregates wwa ON f.field_uuid = wwa.field_uuid
+            LEFT JOIN soil_field_aggregates sa ON f.field_uuid = sa.field_uuid
         """)
         
         field_count = self.conn.execute(
@@ -553,6 +590,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT COUNT(*) FROM field_environmental_analysis_fields 
             WHERE field_bnbo_total_m2 > field_area_m2 * 1.01 
                OR field_wetland_total_m2 > field_area_m2 * 1.01
+               OR field_soil_total_m2 > field_area_m2 * 1.01
         """).fetchone()[0]
         
         if oversized_field_env > 0:
@@ -571,16 +609,25 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 AVG(field_area_m2) as avg_field_area,
                 AVG(field_bnbo_total_m2) as avg_bnbo_area,
                 AVG(field_wetland_total_m2) as avg_wetland_area,
-                MAX(field_area_m2) as max_field_area
+                AVG(field_soil_total_m2) as avg_soil_area,
+                MAX(field_area_m2) as max_field_area,
+                COUNT(*) as total_fields,
+                SUM(CASE WHEN field_soil_total_m2 > 0 THEN 1 ELSE 0 END) as fields_with_soil_data
             FROM field_environmental_analysis_fields
         """).fetchone()
         
         if field_stats:
             self.log.info(
                 f"📊 Area statistics: Avg field: {field_stats[0]:,.0f}m², "
-                f"Avg BNBO: {field_stats[1]:,.0f}m², Avg wetland: {field_stats[2]:,.0f}m²"
+                f"Avg BNBO: {field_stats[1]:,.0f}m², Avg wetland: {field_stats[2]:,.0f}m², "
+                f"Avg soil: {field_stats[3]:,.0f}m²"
             )
-            self.log.info(f"📊 Max field area: {field_stats[3]:,.0f}m²")
+            self.log.info(f"📊 Max field area: {field_stats[4]:,.0f}m²")
+            soil_coverage_pct = (field_stats[6] / field_stats[5]) * 100 if field_stats[5] > 0 else 0
+            self.log.info(
+                f"📊 Soil data coverage: {field_stats[6]:,}/{field_stats[5]:,} fields "
+                f"({soil_coverage_pct:.1f}%)"
+            )
 
     def _validate_output_data_consistency(self):
         """Validate data consistency between output tables."""
