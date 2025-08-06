@@ -223,7 +223,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                ST_Area_Spheroid(ST_Union_Agg(fp.intersection_geometry)) 
+                SUM(ST_Area_Spheroid(fp.intersection_geometry)) 
                     as property_intersection_area_m2,
                 
                 -- Environmental within this field×property intersection
