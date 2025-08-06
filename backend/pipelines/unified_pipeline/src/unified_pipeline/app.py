@@ -27,6 +27,7 @@ from unified_pipeline.bronze.jordbrugsanalyser import (
 )
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
+from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
@@ -83,6 +84,7 @@ from unified_pipeline.silver.jordbrugsanalyser import (
 )
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
+from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.log_util import Logger
 
@@ -317,6 +319,14 @@ def execute(cli_config: cli.CliConfig) -> int:
                 (WaterProjectsSilver, WaterProjectsSilverConfig),
             ],
         },
+        cli.Source.water_typology: {
+            cli.Stage.bronze: [(WaterTypologyBronze, WaterTypologyBronzeConfig)],
+            cli.Stage.silver: [(WaterTypologySilver, WaterTypologySilverConfig)],
+            cli.Stage.all: [
+                (WaterTypologyBronze, WaterTypologyBronzeConfig),
+                (WaterTypologySilver, WaterTypologySilverConfig),
+            ],
+        },
         cli.Source.property_cadastral_merge: {
             cli.Stage.gold: [(PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig)],
             cli.Stage.all: [
@@ -532,3 +542,10 @@ def run_cli(
     print(app_config)
     exit_code = execute(app_config)
     exit(exit_code)
+
+
+# TODO: Incomplete implementation - get_pipeline_jobs function not defined
+# def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
+#     """Run a specific pipeline by name and stage."""
+#     pipeline_jobs = get_pipeline_jobs(pipeline_name)
+#     asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))

@@ -1,283 +1,636 @@
 """
-Stage 4: Field Area Analysis Consolidation - Two Table Architecture
+Stage 4: Field Area Analysis Consolidation - Redesigned Architecture
 
-Creates two separate output tables:
-1. Field-Level Environmental Analysis (one record per field)
-2. Property-Level Environmental Analysis (one record per field-property combination)
+Performs ALL area calculations from geometric data produced by redesigned Stages 2 & 3.
+Creates two separate output tables following the architectural redesign:
 
-This eliminates the record explosion issue by properly separating field-level and property-level data.
+1. Field Environmental Analysis (field_environmental_analysis_fields) - One record per field
+2. Property Environmental Analysis - One record per field×property
+
+Key Principles:
+- ALL ST_Area_Spheroid() calculations happen here (removed from Stages 1-3)
+- Uses clean geometric data from redesigned pipeline
+- Single place for all area computations
+- Two separate output tables eliminate record explosion issues
 """
 
-from typing import Dict, Any
-from ..base import FieldAnalysisStageBase
+from typing import Any, Dict
+
+from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
+from ..config import CONFIG
 
 
 class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
     """
-    Stage 4: Consolidate field area analysis results into two separate tables.
+    Stage 4: Consolidate all area calculations from geometric pipeline data.
     
-    Creates:
-    - field_environmental_analysis: One record per field with field-wide environmental totals
-    - property_environmental_analysis: One record per field-property combination with property-specific data
+    Redesigned to:
+    - Process geometric outputs from redesigned Stages 2A, 2B, 3A, 3B
+    - Perform ALL ST_Area_Spheroid() calculations in single place
+    - Create two separate output tables per architectural design
     """
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
-        """Execute Stage 4 consolidation with two-table architecture."""
-        
-        # Create base tables for consolidation
-        self._create_base_tables()
-        
-        # Create the two output tables
-        self._create_field_level_table()
-        self._create_property_level_table()
-        
-        # Return statistics
-        return self._get_final_statistics()
-        
-    def _save_output_data(self, result: Dict[str, Any]):
-        """Save both output tables to GCS."""
-        
-        self.log.info("Saving output tables to GCS...")
-        
-        # Save field-level table
-        self._save_stage_output("field_environmental_analysis", "field_environmental_analysis")
-        
-        # Save property-level table  
-        self._save_stage_output("property_environmental_analysis", "property_environmental_analysis")
-        
-        self.log.info("✅ Both output tables saved successfully")
+    def __init__(self, config: FieldAnalysisStageConfig = None):
+        if config is None:
+            config = FieldAnalysisStageConfig()
+        super().__init__(config, "Stage 4: Consolidate Results - Redesigned Architecture")
 
     def _load_input_data(self):
-        """Load all required input data from previous stages."""
+        """Load geometric data from redesigned Stages 2A, 2B, 3A, 3B."""
+        updated_outputs = CONFIG.update_outputs_for_year()
         
-        updated_outputs = self.CONFIG.update_outputs_for_year()
+        # Load agricultural fields (foundation data)
+        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
         
-        self.log.info("Loading input data from previous stages...")
-        
-        # Load Stage 1 outputs
-        stage1a_path = self._get_latest_gold_path(updated_outputs["field_property_intersections"])
-        self.gcs_access.query_parquet_direct(stage1a_path, "SELECT *", "field_property_intersections")
-        
-        stage1b_path = self._get_latest_gold_path(updated_outputs["field_soil_intersections"])
-        self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
-        
-        # Load Stage 2 outputs (field-level environmental data - direct field-environment intersections)
-        stage2a_path = self._get_latest_gold_path(updated_outputs["fields_bnbo_water"])
-        self.gcs_access.query_parquet_direct(stage2a_path, "SELECT *", "fields_bnbo_water")
-        
-        stage2b_path = self._get_latest_gold_path(updated_outputs["fields_wetland_water"])
-        self.gcs_access.query_parquet_direct(stage2b_path, "SELECT *", "fields_wetland_water")
-        
-        # Load Stage 3 property-level intersection outputs (NEW!)
-        stage3a_properties_path = self._get_latest_gold_path(updated_outputs["property_bnbo_intersections"])
-        self.gcs_access.query_parquet_direct(stage3a_properties_path, "SELECT *", "property_bnbo_intersections")
-        
-        stage3b_properties_path = self._get_latest_gold_path(updated_outputs["property_wetland_intersections"])
-        self.gcs_access.query_parquet_direct(stage3b_properties_path, "SELECT *", "property_wetland_intersections")
-        
-        self.log.info("✅ All input data loaded successfully")
+        # Load Stage 1C field-property intersections (foundation data)
+        stage1c_dataset = updated_outputs["field_property_intersections"]
+        stage1c_path = self._get_latest_gold_path(stage1c_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage1c_path, "SELECT *", "field_property_intersections"
+        )
+        self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
 
-    def _create_base_tables(self):
-        """Validate input data counts."""
-        
-        self.log.info("Validating input data...")
-        
-        # Check Stage 2 outputs (field-level environmental data)
-        bnbo_fields = self.conn.execute("SELECT COUNT(*) FROM fields_bnbo_water").fetchone()[0]
-        wetland_fields = self.conn.execute("SELECT COUNT(*) FROM fields_wetland_water").fetchone()[0]
-        
-        # Check Stage 1 outputs (property intersections)
-        property_intersections = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
-        
-        self.log.info(f"✅ Stage 2: {bnbo_fields:,} fields with BNBO, {wetland_fields:,} fields with wetlands") 
-        self.log.info(f"✅ Stage 1: {property_intersections:,} field-property intersections")
+        # Load Stage 1D field-soil intersections for soil analysis
+        stage1d_dataset = updated_outputs["field_soil_intersections"]
+        stage1d_path = self._get_latest_gold_path(stage1d_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage1d_path, "SELECT *", "field_soil_intersections"
+        )
+        self.log.info(f"✅ Loaded field_soil_intersections from {stage1d_dataset}")
 
-    def _create_field_level_table(self):
-        """Create field-level environmental analysis table (one record per field)."""
+        # Load Stage 2A outputs: field × BNBO geometries
+        stage2a_bnbo_dataset = updated_outputs["field_bnbo_intersections"]
+        stage2a_bnbo_path = self._get_latest_gold_path(stage2a_bnbo_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2a_bnbo_path, "SELECT *", "field_bnbo_intersections"
+        )
         
-        self.log.info("Creating field-level environmental analysis from Stage 2 field-environment intersections...")
+        stage2a_water_dataset = updated_outputs["field_bnbo_water_intersections"]
+        stage2a_water_path = self._get_latest_gold_path(stage2a_water_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2a_water_path, "SELECT *", "field_bnbo_water_intersections"
+        )
+        self.log.info("✅ Loaded Stage 2A BNBO geometric outputs")
+
+        # Load Stage 2B outputs: field × wetland geometries
+        stage2b_wetland_dataset = updated_outputs["field_wetland_intersections"]
+        stage2b_wetland_path = self._get_latest_gold_path(stage2b_wetland_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2b_wetland_path, "SELECT *", "field_wetland_intersections"
+        )
         
-        # Start from ALL fields and LEFT JOIN environmental data
-        # This ensures we get all fields with environmental data as 0 for fields without features
+        stage2b_water_dataset = updated_outputs["field_wetland_water_intersections"]
+        stage2b_water_path = self._get_latest_gold_path(stage2b_water_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2b_water_path, "SELECT *", "field_wetland_water_intersections"
+        )
+        self.log.info("✅ Loaded Stage 2B wetland geometric outputs")
+
+        # Load Stage 3A outputs: property × BNBO geometries
+        stage3a_bnbo_dataset = updated_outputs["property_bnbo_intersections"]
+        stage3a_bnbo_path = self._get_latest_gold_path(stage3a_bnbo_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage3a_bnbo_path, "SELECT *", "property_bnbo_intersections"
+        )
+        
+        stage3a_water_dataset = updated_outputs["property_bnbo_water_intersections"]
+        stage3a_water_path = self._get_latest_gold_path(stage3a_water_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage3a_water_path, "SELECT *", "property_bnbo_water_intersections"
+        )
+        self.log.info("✅ Loaded Stage 3A property-BNBO geometric outputs")
+
+        # Load Stage 3B outputs: property × wetland geometries
+        stage3b_wetland_dataset = updated_outputs["property_wetland_intersections"]
+        stage3b_wetland_path = self._get_latest_gold_path(stage3b_wetland_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage3b_wetland_path, "SELECT *", "property_wetland_intersections"
+        )
+        
+        stage3b_water_dataset = updated_outputs["property_wetland_water_intersections"]
+        stage3b_water_path = self._get_latest_gold_path(stage3b_water_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage3b_water_path, "SELECT *", "property_wetland_water_intersections"
+        )
+        self.log.info("✅ Loaded Stage 3B property-wetland geometric outputs")
+
+        self.log.info(
+            "🚀 REDESIGNED STAGE 4: All geometric data loaded for centralized calculations"
+        )
+
+    async def _execute_stage_processing(self) -> Dict[str, Any]:
+        """Execute redesigned Stage 4 consolidation with centralized area calculations."""
+        
+        self.log.info(
+            "🎯 REDESIGNED STAGE 4: Performing ALL area calculations from geometric data"
+        )
+        
+        # Create the two output tables with all area calculations
+        self._create_field_level_analysis()
+        self._create_property_level_analysis()
+        
+        # Validate and return statistics
+        return self._get_consolidation_statistics()
+
+    def _create_field_level_analysis(self):
+        """Create field-level environmental analysis with ALL area calculations."""
+        
+        self.log.info(
+            "📦 Creating field_environmental_analysis_fields with centralized area calculations"
+        )
+        
+        # FIXED: Pre-aggregate each intersection type separately to avoid Cartesian product
+        self.log.info("🔧 PRE-AGGREGATING intersection data to prevent JOIN explosion...")
+        
+        # Pre-aggregate BNBO intersections by field
         self.conn.execute("""
-            CREATE OR REPLACE TABLE all_fields_base AS
-            SELECT DISTINCT 
-                field_id, block_id, cvr_number, year, field_uuid, 
-                field_geometry as geometry, field_area_m2
-            FROM field_property_intersections
+            CREATE OR REPLACE TABLE bnbo_field_aggregates AS
+            SELECT 
+                field_uuid,
+                SUM(ST_Area_Spheroid(field_bnbo_geometry)) as field_bnbo_total_m2,
+                COUNT(DISTINCT status_category) as bnbo_status_count,
+                STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category) 
+                    as bnbo_status_categories,
+                SUM(CASE WHEN status_category = 'Action Required' 
+                    THEN ST_Area_Spheroid(field_bnbo_geometry) ELSE 0 END) / 10000.0 
+                    as bnbo_action_required_hectares,
+                SUM(CASE WHEN status_category = 'Completed' 
+                    THEN ST_Area_Spheroid(field_bnbo_geometry) ELSE 0 END) / 10000.0 
+                    as bnbo_completed_hectares
+            FROM field_bnbo_intersections
+            GROUP BY field_uuid
         """)
         
+        # Pre-aggregate BNBO water intersections by field
         self.conn.execute("""
-            CREATE OR REPLACE TABLE field_environmental_analysis AS
+            CREATE OR REPLACE TABLE bnbo_water_field_aggregates AS
             SELECT 
-                -- Field identification (from complete field set)
+                field_uuid,
+                SUM(ST_Area_Spheroid(field_bnbo_water_geometry)) 
+                    as field_bnbo_water_covered_m2
+            FROM field_bnbo_water_intersections
+            GROUP BY field_uuid
+        """)
+        
+        # Pre-aggregate wetland intersections by field with peat percentage prioritization
+        # BACKUP: Keep this logic until silver layer overlap fix is validated
+        # TODO: Remove this complex logic once silver layer overlap handling is confirmed working
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE wetland_field_aggregates AS
+            SELECT 
+                field_uuid,
+                -- Use spatial union to merge overlapping wetland areas, prioritizing highest peat %
+                ST_Area_Spheroid(ST_Union_Agg(
+                    CASE 
+                        WHEN toerv_pct = '>12' THEN field_wetland_geometry
+                        WHEN toerv_pct = '6-12' THEN 
+                            -- Only include 6-12% areas that don't overlap with >12% areas
+                            ST_Difference(
+                                field_wetland_geometry,
+                                COALESCE(
+                                    (SELECT ST_Union_Agg(w2.field_wetland_geometry) 
+                                     FROM field_wetland_intersections w2 
+                                     WHERE w2.field_uuid = w1.field_uuid 
+                                     AND w2.toerv_pct = '>12'),
+                                    ST_GeomFromText('POLYGON EMPTY')
+                                )
+                            )
+                        ELSE field_wetland_geometry
+                    END
+                )) as field_wetland_total_m2
+            FROM field_wetland_intersections w1
+            GROUP BY field_uuid
+        """)
+        
+        # Pre-aggregate wetland water intersections by field
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE wetland_water_field_aggregates AS
+            SELECT 
+                field_uuid,
+                SUM(ST_Area_Spheroid(field_wetland_water_geometry)) 
+                    as field_wetland_water_covered_m2
+            FROM field_wetland_water_intersections
+            GROUP BY field_uuid
+        """)
+        
+        self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
+        
+        # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_environmental_analysis_fields AS
+            SELECT 
+                f.field_uuid,
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
                 f.year,
-                f.field_uuid,
-                f.geometry,
-                f.field_area_m2,
+                ST_Area_Spheroid(f.geometry) as field_area_m2,
                 
-                -- Soil data (from Stage 1 - field-soil intersections)
-                COALESCE(s.soil_type_count, 0) as soil_type_count,
-                COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
-                COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
-                COALESCE(s.dominant_soil_coverage_pct, 0) as dominant_soil_coverage_pct,
-                COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
-                COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
-                
-                -- Field-wide environmental data (from Stage 2 - direct field-environment intersections)
-                COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
-                COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_covered_by_water,
-                COALESCE(b.field_bnbo_total_m2, 0) - COALESCE(b.field_bnbo_water_covered_m2, 0) as field_area_bnbo_not_covered_by_water,
-                
-                COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
-                COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_covered_by_water,
-                COALESCE(w.field_wetland_total_m2, 0) - COALESCE(w.field_wetland_water_covered_m2, 0) as field_area_wetlands_not_covered_by_water,
-                
-                -- Environmental summary flag
+                -- BNBO Analysis (using pre-aggregated data)
+                COALESCE(ba.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
+                COALESCE(bwa.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
                 CASE 
-                    WHEN COALESCE(b.field_bnbo_total_m2, 0) > 0 OR COALESCE(w.field_wetland_total_m2, 0) > 0 
-                    THEN TRUE ELSE FALSE 
-                END as has_environmental_features
+                    WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
+                    THEN (COALESCE(ba.field_bnbo_total_m2, 0) / 
+                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    ELSE 0 
+                END as field_bnbo_coverage_pct,
+                CASE 
+                    WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
+                    THEN (COALESCE(bwa.field_bnbo_water_covered_m2, 0) / 
+                          COALESCE(ba.field_bnbo_total_m2, 0)) * 100.0
+                    ELSE 0 
+                END as field_bnbo_water_coverage_pct,
                 
-            FROM all_fields_base f
-            LEFT JOIN fields_bnbo_water b ON f.field_uuid = b.field_uuid AND f.year = b.year
-            LEFT JOIN fields_wetland_water w ON f.field_uuid = w.field_uuid AND f.year = w.year
-            LEFT JOIN (
-                SELECT 
-                    field_uuid, year,
-                    COUNT(DISTINCT soil_type_category) as soil_type_count,
-                    COUNT(DISTINCT soil_code) as unique_soil_codes,
-                    (SELECT soil_type_category FROM field_soil_areas fsa2 WHERE fsa2.field_uuid = fsa.field_uuid AND fsa2.year = fsa.year ORDER BY fsa2.soil_area_m2 DESC LIMIT 1) as dominant_soil_type,
-                    (SELECT soil_area_share_pct FROM field_soil_areas fsa2 WHERE fsa2.field_uuid = fsa.field_uuid AND fsa2.year = fsa.year ORDER BY fsa2.soil_area_m2 DESC LIMIT 1) as dominant_soil_coverage_pct,
-                    SUM(soil_area_share_pct) as total_soil_coverage_pct,
-                    '{' || STRING_AGG('"' || soil_type_category || '": {' || '"area_m2": ' || ROUND(soil_area_m2, 2) || ', "coverage_pct": ' || ROUND(soil_area_share_pct, 2) || '}', ', ' ORDER BY soil_area_m2 DESC) || '}' as soil_type_breakdown
-                FROM field_soil_areas fsa
-                GROUP BY field_uuid, year
-            ) s ON f.field_uuid = s.field_uuid AND f.year = s.year
+                -- BNBO Status Analysis (from pre-aggregated data)
+                COALESCE(ba.bnbo_status_count, 0) as bnbo_status_count,
+                ba.bnbo_status_categories,
+                COALESCE(ba.bnbo_action_required_hectares, 0) as bnbo_action_required_hectares,
+                COALESCE(ba.bnbo_completed_hectares, 0) as bnbo_completed_hectares,
+                
+                -- Wetland Analysis (using pre-aggregated data)
+                COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
+                COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
+                CASE 
+                    WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
+                    THEN (COALESCE(wa.field_wetland_total_m2, 0) / 
+                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    ELSE 0 
+                END as field_wetland_coverage_pct,
+                CASE 
+                    WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
+                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
+                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
+                    ELSE 0 
+                END as field_wetland_water_coverage_pct
+                
+                -- Soil Analysis (from Stage 1D field_soil_intersections)
+                -- TODO: Add soil calculations from field_soil_intersections geometries
+                
+            FROM agricultural_fields f
+            LEFT JOIN bnbo_field_aggregates ba ON f.field_uuid = ba.field_uuid
+            LEFT JOIN bnbo_water_field_aggregates bwa ON f.field_uuid = bwa.field_uuid
+            LEFT JOIN wetland_field_aggregates wa ON f.field_uuid = wa.field_uuid
+            LEFT JOIN wetland_water_field_aggregates wwa ON f.field_uuid = wwa.field_uuid
         """)
         
-        field_count = self.conn.execute("SELECT COUNT(*) FROM field_environmental_analysis").fetchone()[0]
-        field_unique = self.conn.execute("SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis").fetchone()[0]
-        
-        if field_count == field_unique:
-            self.log.info(f"✅ Field-level table: {field_count:,} records (exactly 1 per field)")
-        else:
-            self.log.error(f"❌ Field-level table has {field_count - field_unique:,} duplicate records!")
+        field_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_environmental_analysis_fields"
+        ).fetchone()[0]
+        self.log.info(f"✅ Created field_environmental_analysis_fields: {field_count:,} records")
 
-    def _create_property_level_table(self):
-        """Create property-level environmental analysis table (one record per field-property combination)."""
+    def _create_property_level_analysis(self):
+        """Create property-level environmental analysis with ALL area calculations."""
         
-        self.log.info("Creating property-level environmental analysis table...")
+        self.log.info(
+            "📦 Creating field_environmental_analysis_properties with centralized area calculations"
+        )
         
-        # Create property-level environmental analysis using ACTUAL property-environment intersections from Stage 3
+        # Create table with field×property combinations and environmental calculations
         self.conn.execute("""
-            CREATE OR REPLACE TABLE property_environmental_analysis AS
+            CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT 
-                -- Field and property identification
+                fp.field_uuid,
+                fp.bfe_number,
                 fp.field_id,
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                fp.field_uuid,
-                fp.bfe_number,
-                fp.field_area_m2,
-                fp.intersection_area_m2 as property_area_within_field_m2,
-                fp.field_area_share_pct as property_share_of_field_pct,
+                SUM(ST_Area_Spheroid(fp.intersection_geometry)) 
+                    as property_intersection_area_m2,
                 
-                -- ACTUAL property-environmental intersection data from Stage 3
-                COALESCE(b.property_bnbo_area_m2, 0) as property_bnbo_total_m2,
-                COALESCE(b.property_bnbo_water_covered_m2, 0) as property_area_bnbo_covered_by_water,
-                COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_area_bnbo_not_covered_by_water,
-                COALESCE(b.status_category, NULL) as bnbo_status_category,
+                -- Environmental within this field×property intersection
+                COALESCE(SUM(ST_Area_Spheroid(pbi.property_bnbo_geometry)), 0) 
+                    as property_bnbo_total_m2,
+                COALESCE(SUM(ST_Area_Spheroid(pbwi.property_bnbo_water_geometry)), 0) 
+                    as property_bnbo_water_covered_m2,
+                COALESCE(SUM(ST_Area_Spheroid(pwi.property_wetland_geometry)), 0) 
+                    as property_wetland_total_m2,
+                COALESCE(SUM(ST_Area_Spheroid(pwwi.property_wetland_water_geometry)), 0) 
+                    as property_wetland_water_covered_m2,
                 
-                COALESCE(w.property_wetland_area_m2, 0) as property_wetland_total_m2,
-                COALESCE(w.property_wetland_water_covered_m2, 0) as property_area_wetlands_covered_by_water,
-                COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_area_wetlands_not_covered_by_water,
-                COALESCE(w.toerv_pct, NULL) as wetland_type,
-                
-                -- Property environmental summary flag
-                CASE 
-                    WHEN COALESCE(b.property_bnbo_area_m2, 0) > 0 OR COALESCE(w.property_wetland_area_m2, 0) > 0 
-                    THEN TRUE ELSE FALSE 
-                END as has_environmental_features
+                -- BNBO Status Analysis (aggregated at property level)
+                COUNT(DISTINCT pbi.status_category) as property_bnbo_status_count,
+                STRING_AGG(DISTINCT pbi.status_category, ', ' ORDER BY pbi.status_category) 
+                    as property_bnbo_status_categories,
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'Action Required' 
+                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as property_bnbo_action_required_hectares,
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'Completed' 
+                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                    as property_bnbo_completed_hectares
                 
             FROM field_property_intersections fp
-            WHERE fp.bfe_number IS NOT NULL  -- Only properties, not NULL property fields
-            LEFT JOIN property_bnbo_intersections b ON fp.field_uuid = b.field_uuid 
-                AND fp.year = b.year AND fp.bfe_number = b.bfe_number
-            LEFT JOIN property_wetland_intersections w ON fp.field_uuid = w.field_uuid 
-                AND fp.year = w.year AND fp.bfe_number = w.bfe_number
+            LEFT JOIN property_bnbo_intersections pbi 
+                ON fp.field_uuid = pbi.field_uuid AND fp.bfe_number = pbi.bfe_number
+            LEFT JOIN property_bnbo_water_intersections pbwi 
+                ON fp.field_uuid = pbwi.field_uuid AND fp.bfe_number = pbwi.bfe_number
+            LEFT JOIN property_wetland_intersections pwi 
+                ON fp.field_uuid = pwi.field_uuid AND fp.bfe_number = pwi.bfe_number
+            LEFT JOIN property_wetland_water_intersections pwwi 
+                ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.bfe_number
+            GROUP BY fp.field_uuid, fp.bfe_number, fp.field_id, fp.block_id, 
+                     fp.cvr_number, fp.year
         """)
         
-        property_count = self.conn.execute("SELECT COUNT(*) FROM property_environmental_analysis").fetchone()[0]
-        property_fields = self.conn.execute("SELECT COUNT(DISTINCT field_uuid) FROM property_environmental_analysis").fetchone()[0]
-        property_combinations = self.conn.execute("SELECT COUNT(DISTINCT field_uuid || '_' || bfe_number) FROM property_environmental_analysis").fetchone()[0]
+        property_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_environmental_analysis_properties"
+        ).fetchone()[0]
+        self.log.info(
+            f"✅ Created field_environmental_analysis_properties: {property_count:,} records"
+        )
+
+    def _get_consolidation_statistics(self) -> Dict[str, Any]:
+        """Get statistics for both output tables."""
         
-        if property_count == property_combinations:
-            self.log.info(f"✅ Property-level table: {property_count:,} records (exactly 1 per field-property combination)")
-            self.log.info(f"   Covers {property_fields:,} fields with property intersections")
-        else:
-            self.log.error(f"❌ Property-level table has {property_count - property_combinations:,} duplicate combinations!")
-
-
-
-    def _get_final_statistics(self) -> Dict[str, Any]:
-        """Get final statistics for both tables."""
-        
+        # Field-level statistics
         field_stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_fields,
-                COUNT(CASE WHEN primary_bfe_number IS NULL THEN 1 END) as fields_without_properties,
-                COUNT(CASE WHEN has_environmental_features THEN 1 END) as fields_with_environmental_features,
-                COUNT(CASE WHEN field_area_bnbo_covered_by_water > 0 THEN 1 END) as fields_with_bnbo,
-                COUNT(CASE WHEN field_area_wetlands_covered_by_water > 0 THEN 1 END) as fields_with_wetlands,
+                COUNT(CASE WHEN field_bnbo_total_m2 > 0 THEN 1 END) as fields_with_bnbo,
+                COUNT(CASE WHEN field_wetland_total_m2 > 0 THEN 1 END) as fields_with_wetlands,
                 AVG(field_area_m2) as avg_field_area_m2,
-                SUM(field_area_bnbo_covered_by_water + field_area_bnbo_not_covered_by_water) as total_bnbo_area_m2,
-                SUM(field_area_wetlands_covered_by_water + field_area_wetlands_not_covered_by_water) as total_wetland_area_m2
-            FROM field_environmental_analysis
+                SUM(field_bnbo_total_m2) as total_bnbo_area_m2,
+                SUM(field_wetland_total_m2) as total_wetland_area_m2
+            FROM field_environmental_analysis_fields
         """).fetchone()
         
+        # Property-level statistics
         property_stats = self.conn.execute("""
             SELECT 
                 COUNT(*) as total_property_combinations,
                 COUNT(DISTINCT field_uuid) as fields_with_properties,
-                COUNT(DISTINCT bfe_number) as unique_properties,
-                COUNT(CASE WHEN has_environmental_features THEN 1 END) as properties_with_environmental_features,
-                AVG(property_area_within_field_m2) as avg_property_area_m2,
-                SUM(property_area_bnbo_covered_by_water + property_area_bnbo_not_covered_by_water) as total_property_bnbo_area_m2,
-                SUM(property_area_wetlands_covered_by_water + property_area_wetlands_not_covered_by_water) as total_property_wetland_area_m2
-            FROM property_environmental_analysis
-        """).fetchone()
+                COUNT(CASE WHEN property_bnbo_total_m2 > 0 THEN 1 END) as properties_with_bnbo,
+                COUNT(CASE WHEN property_wetland_total_m2 > 0 THEN 1 END) 
+                    as properties_with_wetlands,
+                AVG(property_intersection_area_m2) as avg_property_area_m2,
+                SUM(property_bnbo_total_m2) as total_property_bnbo_area_m2,
+                SUM(property_wetland_total_m2) as total_property_wetland_area_m2
+            FROM field_environmental_analysis_properties
+            """).fetchone()
         
         stats = {
             "field_level": {
                 "total_fields": field_stats[0],
-                "fields_without_properties": field_stats[1],
-                "fields_with_environmental_features": field_stats[2],
-                "fields_with_bnbo": field_stats[3],
-                "fields_with_wetlands": field_stats[4],
-                "avg_field_area_m2": field_stats[5],
-                "total_bnbo_area_m2": field_stats[6],
-                "total_wetland_area_m2": field_stats[7]
+                "fields_with_bnbo": field_stats[1],
+                "fields_with_wetlands": field_stats[2],
+                "avg_field_area_m2": field_stats[3],
+                "total_bnbo_area_m2": field_stats[4],
+                "total_wetland_area_m2": field_stats[5]
             },
             "property_level": {
                 "total_property_combinations": property_stats[0],
                 "fields_with_properties": property_stats[1],
-                "unique_properties": property_stats[2],
-                "properties_with_environmental_features": property_stats[3],
+                "properties_with_bnbo": property_stats[2],
+                "properties_with_wetlands": property_stats[3],
                 "avg_property_area_m2": property_stats[4],
                 "total_property_bnbo_area_m2": property_stats[5],
                 "total_property_wetland_area_m2": property_stats[6]
             }
         }
         
-        self.log.info("📊 FINAL STATISTICS:")
-        self.log.info(f"   Field-level table: {stats['field_level']['total_fields']:,} fields")
-        self.log.info(f"   Property-level table: {stats['property_level']['total_property_combinations']:,} field-property combinations")
-        self.log.info(f"   Fields without properties: {stats['field_level']['fields_without_properties']:,}")
-        self.log.info(f"   Fields with environmental features: {stats['field_level']['fields_with_environmental_features']:,}")
+        self.log.info("📊 REDESIGNED STAGE 4 STATISTICS:")
+        self.log.info(f"   Field-level analysis: {stats['field_level']['total_fields']:,} fields")
+        property_count = stats['property_level']['total_property_combinations']
+        self.log.info(
+            f"   Property-level analysis: {property_count:,} field-property combinations"
+        )
+        self.log.info(f"   Fields with BNBO: {stats['field_level']['fields_with_bnbo']:,}")
+        self.log.info(f"   Fields with wetlands: {stats['field_level']['fields_with_wetlands']:,}")
+        self.log.info("🎉 ALL AREA CALCULATIONS CENTRALIZED IN STAGE 4!")
         
         return stats
+
+    def _save_output_data(self, result: Dict[str, Any]):
+        """Save both redesigned output tables to GCS."""
+        
+        self.log.info("Saving redesigned output tables to GCS...")
+        
+        # Save field-level table
+        self._save_stage_output(
+            "field_environmental_analysis_fields", "field_environmental_analysis_fields"
+        )
+        
+        # Save property-level table  
+        self._save_stage_output(
+            "field_environmental_analysis_properties", "field_environmental_analysis_properties"
+        )
+        
+        self.log.info("✅ Both redesigned output tables saved to GCS")
+        
+        # Perform comprehensive validations after saving
+        self._validate_comprehensive_output()
+
+    def _validate_comprehensive_output(self):
+        """Comprehensive validation for Stage 4 redesigned outputs."""
+        
+        self.log.info("🔍 REDESIGNED STAGE 4: Running comprehensive validations...")
+        
+        # 1. RECORD COUNT VALIDATIONS
+        self._validate_output_record_counts()
+        
+        # 2. AREA SANITY CHECKS  
+        self._validate_area_calculations()
+        
+        # 3. DATA CONSISTENCY VALIDATIONS
+        self._validate_output_data_consistency()
+        
+        self.log.info("✅ REDESIGNED STAGE 4: All comprehensive validations completed")
+
+    def _validate_output_record_counts(self):
+        """Validate output record counts and coverage."""
+        self.log.info("🔍 Validating output record counts...")
+        
+        # Get field-level output counts
+        field_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_environmental_analysis_fields"
+        ).fetchone()[0]
+        field_unique = self.conn.execute(
+            "SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis_fields"
+        ).fetchone()[0]
+        
+        # Get property-level output counts
+        property_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_environmental_analysis_properties"
+        ).fetchone()[0]
+        property_unique_fields = self.conn.execute(
+            "SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis_properties"
+        ).fetchone()[0]
+        combo_query = (
+            "SELECT COUNT(DISTINCT field_uuid || '_' || bfe_number) "
+            "FROM field_environmental_analysis_properties"
+        )
+        property_unique_combos = self.conn.execute(combo_query).fetchone()[0]
+        
+        # Validate field-level table (should be 1:1 with fields)
+        if field_count == field_unique:
+            self.log.info(f"✅ Field-level table: {field_count:,} records (exactly 1 per field)")
+        else:
+            duplicate_count = field_count - field_unique
+            self.log.error(
+                f"❌ CRITICAL: Field-level table has {duplicate_count:,} duplicate field records!"
+            )
+        
+        # Validate property-level table (should be 1:1 with field×property combinations)
+        if property_count == property_unique_combos:
+            self.log.info(
+                f"✅ Property-level table: {property_count:,} records "
+                f"(exactly 1 per field×property combination)"
+            )
+            self.log.info(
+                f"   Covers {property_unique_fields:,} fields with property intersections"
+            )
+        else:
+            duplicate_combos = property_count - property_unique_combos
+            self.log.error(
+                f"❌ ANALYZING: Property table has {duplicate_combos:,} records for "
+                f"{property_unique_combos:,} unique field×property pairs"
+            )
+            
+            # Analyze the nature of these "duplicates"
+            metadata_analysis = self.conn.execute("""
+                SELECT 
+                    COALESCE(SUM(CASE WHEN years > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_year_extras,
+                    COALESCE(SUM(CASE WHEN cvrs > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_cvr_extras,
+                    COALESCE(SUM(CASE WHEN blocks > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_block_extras,
+                    COALESCE(SUM(CASE WHEN fields > 1 THEN combo_count - 1 ELSE 0 END), 0) 
+                        as multi_field_extras
+                FROM (
+                    SELECT field_uuid, bfe_number, COUNT(*) as combo_count,
+                           COUNT(DISTINCT year) as years,
+                           COUNT(DISTINCT cvr_number) as cvrs, 
+                           COUNT(DISTINCT block_id) as blocks,
+                           COUNT(DISTINCT field_id) as fields
+                    FROM field_environmental_analysis_properties
+                    GROUP BY field_uuid, bfe_number
+                    HAVING COUNT(*) > 1
+                )
+            """).fetchone()
+            
+            self.log.info(f"🔍 METADATA ANALYSIS of {duplicate_combos:,} extra records:")
+            self.log.info(f"   Multi-year combinations: {metadata_analysis[0]:,}")
+            self.log.info(f"   Multi-CVR combinations: {metadata_analysis[1]:,}")
+            self.log.info(f"   Multi-block combinations: {metadata_analysis[2]:,}")
+            self.log.info(f"   Multi-field combinations: {metadata_analysis[3]:,}")
+            
+            # This tells us WHY we have "duplicates" - likely legitimate temporal/admin variation
+
+    def _validate_area_calculations(self):
+        """Validate area calculations are reasonable."""
+        self.log.info("🔍 Validating area calculations...")
+        
+        # Check for negative areas (should never happen)
+        negative_field_areas = self.conn.execute("""
+            SELECT COUNT(*) FROM field_environmental_analysis_fields 
+            WHERE field_area_m2 < 0 OR field_bnbo_total_m2 < 0 OR field_wetland_total_m2 < 0
+        """).fetchone()[0]
+        
+        negative_property_areas = self.conn.execute("""
+            SELECT COUNT(*) FROM field_environmental_analysis_properties 
+            WHERE property_intersection_area_m2 < 0 OR property_bnbo_total_m2 < 0 
+               OR property_wetland_total_m2 < 0
+        """).fetchone()[0]
+        
+        if negative_field_areas > 0:
+            self.log.error(
+                f"❌ CRITICAL: {negative_field_areas:,} field records have negative areas!"
+            )
+        else:
+            self.log.info("✅ All field areas are non-negative")
+            
+        if negative_property_areas > 0:
+            self.log.error(
+                f"❌ CRITICAL: {negative_property_areas:,} property records have negative areas!"
+            )
+        else:
+            self.log.info("✅ All property areas are non-negative")
+        
+        # Check for unreasonably large environmental areas (larger than field)
+        oversized_field_env = self.conn.execute("""
+            SELECT COUNT(*) FROM field_environmental_analysis_fields 
+            WHERE field_bnbo_total_m2 > field_area_m2 * 1.01 
+               OR field_wetland_total_m2 > field_area_m2 * 1.01
+        """).fetchone()[0]
+        
+        if oversized_field_env > 0:
+            self.log.warning(
+                f"⚠️ Found {oversized_field_env:,} fields where environmental area > field area"
+                f" (tolerance: 1%)"
+            )
+        else:
+            self.log.info(
+                "✅ All environmental areas are within reasonable bounds of field sizes"
+            )
+        
+        # Summary statistics
+        field_stats = self.conn.execute("""
+            SELECT 
+                AVG(field_area_m2) as avg_field_area,
+                AVG(field_bnbo_total_m2) as avg_bnbo_area,
+                AVG(field_wetland_total_m2) as avg_wetland_area,
+                MAX(field_area_m2) as max_field_area
+            FROM field_environmental_analysis_fields
+        """).fetchone()
+        
+        if field_stats:
+            self.log.info(
+                f"📊 Area statistics: Avg field: {field_stats[0]:,.0f}m², "
+                f"Avg BNBO: {field_stats[1]:,.0f}m², Avg wetland: {field_stats[2]:,.0f}m²"
+            )
+            self.log.info(f"📊 Max field area: {field_stats[3]:,.0f}m²")
+
+    def _validate_output_data_consistency(self):
+        """Validate data consistency between output tables."""
+        self.log.info("🔍 Validating data consistency...")
+        
+        # Validate that all property-level fields exist in field-level table
+        missing_fields = self.conn.execute("""
+            SELECT COUNT(DISTINCT p.field_uuid)
+            FROM field_environmental_analysis_properties p
+            LEFT JOIN field_environmental_analysis_fields f ON p.field_uuid = f.field_uuid
+            WHERE f.field_uuid IS NULL
+        """).fetchone()[0]
+        
+        if missing_fields > 0:
+            self.log.error(
+                f"❌ CRITICAL: {missing_fields:,} fields in property table "
+                f"but missing from field table!"
+            )
+        else:
+            self.log.info("✅ All fields in property table also exist in field table")
+        
+        # Validate environmental feature flags are consistent
+        inconsistent_bnbo = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM field_environmental_analysis_fields
+            WHERE (field_bnbo_total_m2 > 0 AND field_bnbo_coverage_pct = 0) 
+               OR (field_bnbo_total_m2 = 0 AND field_bnbo_coverage_pct > 0)
+        """).fetchone()[0]
+        
+        inconsistent_wetland = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM field_environmental_analysis_fields
+            WHERE (field_wetland_total_m2 > 0 AND field_wetland_coverage_pct = 0) 
+               OR (field_wetland_total_m2 = 0 AND field_wetland_coverage_pct > 0)
+        """).fetchone()[0]
+        
+        if inconsistent_bnbo > 0:
+            self.log.warning(
+                f"⚠️ Found {inconsistent_bnbo:,} fields with inconsistent BNBO "
+                f"area/coverage calculations"
+            )
+        if inconsistent_wetland > 0:
+            self.log.warning(
+                f"⚠️ Found {inconsistent_wetland:,} fields with inconsistent wetland "
+                f"area/coverage calculations"
+            )
+        
+        if inconsistent_bnbo == 0 and inconsistent_wetland == 0:
+            self.log.info("✅ All environmental area and coverage calculations are consistent")
+
+    def _get_main_output_table(self) -> str:
+        """Get the main output table for area validation."""
+        return "field_environmental_analysis_fields"

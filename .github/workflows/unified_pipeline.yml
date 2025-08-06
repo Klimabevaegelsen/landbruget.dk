@@ -24,6 +24,7 @@ on:
           - soil_types
           - wetlands
           - water_projects
+          - water_typology
           - property_cadastral_merge
           - field_production
           - field_area_analysis
@@ -69,8 +70,9 @@ jobs:
             (github.event.inputs.source == 'all' &&
              fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"nles5_nitrogen_estimation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
              fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false

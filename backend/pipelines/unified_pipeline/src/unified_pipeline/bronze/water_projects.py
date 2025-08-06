@@ -27,6 +27,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class WaterProjectsBronzeConfig(BaseJobConfig):
     """
     Configuration class for the Water Projects Bronze job.
@@ -99,6 +100,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer data processor for Danish water projects.
@@ -116,7 +118,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
     - Unicode handling for various data encodings
 
     Args:
-        config: Configuration object containing job parameters    """
+        config: Configuration object containing job parameters"""
 
     def __init__(self, config: WaterProjectsBronzeConfig):
         super().__init__(config)
