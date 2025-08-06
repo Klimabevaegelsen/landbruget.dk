@@ -150,6 +150,156 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
             return None
         cleaned = str(value).strip()
         return cleaned if cleaned else None
+        
+    def _parse_gml_to_wkt(self, gml_xml: str) -> Optional[str]:
+        """
+        Parse GML geometry XML to WKT format.
+        
+        This method handles the common GML geometry types found in water typology data:
+        - MultiSurface (lakes, coastal waters) -> MULTIPOLYGON
+        - MultiCurve (watercourses) -> MULTILINESTRING
+        - Simple polygons and linestrings
+        
+        Args:
+            gml_xml (str): GML geometry XML string
+            
+        Returns:
+            Optional[str]: WKT geometry string, or None if parsing fails
+        """
+        try:
+            # Parse the GML XML
+            root = ET.fromstring(gml_xml)
+            
+            # Find posList elements which contain the coordinates
+            pos_lists = []
+            for elem in root.iter():
+                if elem.tag.endswith('posList') and elem.text:
+                    coordinates = elem.text.strip()
+                    if coordinates:
+                        pos_lists.append(coordinates)
+                        
+            if not pos_lists:
+                return None
+                
+            # Determine geometry type based on GML structure
+            gml_text = gml_xml.lower()
+            
+            if 'multisurface' in gml_text or 'multipolygon' in gml_text:
+                # Handle MultiSurface (lakes, coastal waters)
+                return self._create_multipolygon_wkt(pos_lists)
+            elif 'multicurve' in gml_text or 'multilinestring' in gml_text:
+                # Handle MultiCurve (watercourses)
+                return self._create_multilinestring_wkt(pos_lists)
+            elif 'polygon' in gml_text:
+                # Handle simple Polygon
+                return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
+            elif 'linestring' in gml_text:
+                # Handle simple LineString
+                return self._create_linestring_wkt(pos_lists[0]) if pos_lists else None
+            else:
+                # Default to polygon for unknown types
+                return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
+                
+        except Exception as e:
+            self.log.debug(f"Error parsing GML geometry: {e}")
+            return None
+            
+    def _create_multipolygon_wkt(self, pos_lists: list[str]) -> Optional[str]:
+        """Create MULTIPOLYGON WKT from coordinate lists."""
+        try:
+            polygons = []
+            for coords in pos_lists:
+                polygon_coords = self._parse_coordinates(coords)
+                if polygon_coords and len(polygon_coords) >= 3:
+                    # Ensure polygon is closed
+                    if polygon_coords[0] != polygon_coords[-1]:
+                        polygon_coords.append(polygon_coords[0])
+                    
+                    coord_pairs = [f"{x} {y}" for x, y in polygon_coords]
+                    polygons.append(f"(({', '.join(coord_pairs)}))")
+                    
+            if polygons:
+                return f"MULTIPOLYGON({', '.join(polygons)})"
+            return None
+            
+        except Exception:
+            return None
+            
+    def _create_multilinestring_wkt(self, pos_lists: list[str]) -> Optional[str]:
+        """Create MULTILINESTRING WKT from coordinate lists."""
+        try:
+            linestrings = []
+            for coords in pos_lists:
+                line_coords = self._parse_coordinates(coords)
+                if line_coords and len(line_coords) >= 2:
+                    coord_pairs = [f"{x} {y}" for x, y in line_coords]
+                    linestrings.append(f"({', '.join(coord_pairs)})")
+                    
+            if linestrings:
+                return f"MULTILINESTRING({', '.join(linestrings)})"
+            return None
+            
+        except Exception:
+            return None
+            
+    def _create_polygon_wkt(self, coords: str) -> Optional[str]:
+        """Create POLYGON WKT from coordinate string."""
+        try:
+            polygon_coords = self._parse_coordinates(coords)
+            if polygon_coords and len(polygon_coords) >= 3:
+                # Ensure polygon is closed
+                if polygon_coords[0] != polygon_coords[-1]:
+                    polygon_coords.append(polygon_coords[0])
+                
+                coord_pairs = [f"{x} {y}" for x, y in polygon_coords]
+                return f"POLYGON(({', '.join(coord_pairs)}))"
+            return None
+            
+        except Exception:
+            return None
+            
+    def _create_linestring_wkt(self, coords: str) -> Optional[str]:
+        """Create LINESTRING WKT from coordinate string."""
+        try:
+            line_coords = self._parse_coordinates(coords)
+            if line_coords and len(line_coords) >= 2:
+                coord_pairs = [f"{x} {y}" for x, y in line_coords]
+                return f"LINESTRING({', '.join(coord_pairs)})"
+            return None
+            
+        except Exception:
+            return None
+            
+    def _parse_coordinates(self, coord_string: str) -> list[tuple[float, float]]:
+        """
+        Parse coordinate string into list of (x, y) tuples.
+        
+        Args:
+            coord_string (str): Space-separated coordinate values "x1 y1 x2 y2 ..."
+            
+        Returns:
+            list[tuple[float, float]]: List of coordinate pairs
+        """
+        try:
+            # Clean up the coordinate string
+            coords = coord_string.strip().replace('\n', ' ').replace('\t', ' ')
+            # Split by whitespace and filter out empty strings
+            values = [v for v in coords.split() if v]
+            
+            # Group into coordinate pairs
+            coord_pairs = []
+            for i in range(0, len(values) - 1, 2):
+                try:
+                    x = float(values[i])
+                    y = float(values[i + 1])
+                    coord_pairs.append((x, y))
+                except (ValueError, IndexError):
+                    continue
+                    
+            return coord_pairs
+            
+        except Exception:
+            return []
 
     @timed(name="Processing XML data")  # type: ignore
     def process_xml_payload(self, payload: str, layer: str) -> Optional[str]:
@@ -341,21 +491,129 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 ADD COLUMN geometry_spatial GEOMETRY
             """)
             
-            # Parse geometries (this is a simplified version - real implementation would be more robust)
-            self.conn.execute(f"""
-                UPDATE {combined_table} 
-                SET geometry_spatial = ST_GeomFromText(
-                    CASE 
-                        WHEN geometry_xml LIKE '%<gml:Point%' THEN 'POINT(' || 
-                            REGEXP_EXTRACT(geometry_xml, '>(.*?)<', 1) || ')'
-                        ELSE NULL
-                    END
-                )
+            # Convert GML geometries to WKT using Python-based parser
+            # DuckDB doesn't have ST_GeomFromGML, so we need to parse coordinates manually
+            total_feature_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {combined_table}"
+            ).fetchone()[0]
+            self.log.info(
+                f"Converting {total_feature_count} GML geometries to spatial objects..."
+            )
+            
+            # Process geometries row by row using Python for reliable parsing
+            converted_count = 0
+            failed_count = 0
+            
+            # Get all records with geometry_xml
+            rows = self.conn.execute(f"""
+                SELECT 
+                    ROWID, 
+                    geometry_xml,
+                    layer
+                FROM {combined_table} 
                 WHERE geometry_xml IS NOT NULL
-            """)
+            """).fetchall()
+            
+            for rowid, geometry_xml, layer in rows:
+                try:
+                    # Parse the GML XML to extract coordinates
+                    wkt_geom = self._parse_gml_to_wkt(geometry_xml)
+                    
+                    if wkt_geom:
+                        # Convert to spatial geometry using DuckDB with validation & repair
+                        try:
+                            # First try direct conversion
+                            self.conn.execute(f"""
+                                UPDATE {combined_table} 
+                                SET geometry_spatial = ST_GeomFromText(?)
+                                WHERE ROWID = ?
+                            """, [wkt_geom, rowid])
+                            
+                            # Check if geometry is valid using proper type casting
+                            is_valid = self.conn.execute(
+                                "SELECT ST_IsValid(ST_GeomFromText(?))", [wkt_geom]
+                            ).fetchone()
+                            
+                            if is_valid and is_valid[0]:
+                                # Geometry is valid - success!
+                                converted_count += 1
+                            else:
+                                # Geometry is invalid - fix with ST_MakeValid
+                                try:
+                                    repaired_wkt = self.conn.execute(
+                                        "SELECT ST_AsText(ST_MakeValid(ST_GeomFromText(?)))", [wkt_geom]
+                                    ).fetchone()
+                                    
+                                    if repaired_wkt and repaired_wkt[0]:
+                                        # Update with repaired geometry
+                                        self.conn.execute(f"""
+                                            UPDATE {combined_table} 
+                                            SET geometry_spatial = ST_GeomFromText(?)
+                                            WHERE ROWID = ?
+                                        """, [repaired_wkt[0], rowid])
+                                        
+                                        # Verify the repaired geometry is valid
+                                        repair_valid = self.conn.execute(
+                                            "SELECT ST_IsValid(ST_GeomFromText(?))", [repaired_wkt[0]]
+                                        ).fetchone()
+                                        
+                                        if repair_valid and repair_valid[0]:
+                                            converted_count += 1
+                                            self.log.debug(
+                                                f"Fixed invalid geometry for row {rowid} with ST_MakeValid"
+                                            )
+                                        else:
+                                            failed_count += 1
+                                            self.log.debug(
+                                                f"ST_MakeValid repair failed validation for row {rowid}"
+                                            )
+                                    else:
+                                        failed_count += 1
+                                        self.log.debug(f"ST_MakeValid returned null for row {rowid}")
+                                        
+                                except Exception as e:
+                                    failed_count += 1
+                                    self.log.debug(f"ST_MakeValid error for row {rowid}: {e}")
+                                    
+                        except Exception as e:
+                            # Even ST_GeomFromText failed - this is a parsing error
+                            self.log.debug(f"Failed to parse WKT for row {rowid}: {e}")
+                            failed_count += 1
+                    else:
+                        failed_count += 1
+                        
+                except Exception as e:
+                    self.log.debug(f"Failed to convert geometry for row {rowid}: {e}")
+                    failed_count += 1
+                    
+            total_features = converted_count + failed_count
+            success_rate = (converted_count / total_features * 100) if total_features > 0 else 0
+            self.log.info(
+                f"GML→WKT conversion: {converted_count:,}/{total_features:,} "
+                f"({success_rate:.1f}% success)"
+            )
+            
+            if success_rate >= 95:
+                self.log.info("✅ Excellent geometry conversion rate!")
+            elif success_rate >= 80:
+                self.log.info("🟡 Good geometry conversion rate")
+            elif success_rate >= 50:
+                self.log.warning("⚠️ Moderate geometry conversion rate")
+            else:
+                self.log.error("❌ Poor geometry conversion rate")
+                
+            if failed_count > 0:
+                self.log.warning(
+                    f"⚠️ {failed_count:,} geometries failed to convert even with ST_MakeValid repair"
+                )
 
-            feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {combined_table}").fetchone()[0]
-            self.log.info(f"Combined {len(all_tables)} tables into {combined_table} with {feature_count} features")
+            final_feature_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {combined_table}"
+            ).fetchone()[0]
+            self.log.info(
+                f"Combined {len(all_tables)} tables into {combined_table} "
+                f"with {final_feature_count} features"
+            )
             
             return combined_table
 
@@ -442,13 +700,26 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 self.log.info("Processed raw data successfully")
 
                 # Apply geometry validation and transformation
-                if self.conn.execute(f"SELECT COUNT(*) FROM {table_name} WHERE geometry_spatial IS NOT NULL").fetchone()[0] > 0:
+                # Check if we have any spatial geometries to validate
+                spatial_geom_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name} WHERE geometry_spatial IS NOT NULL"
+                ).fetchone()[0]
+                
+                if spatial_geom_count > 0:
+                    self.log.info(
+                        f"Validating and transforming {spatial_geom_count:,} spatial geometries..."
+                    )
                     validate_and_transform_geometries_duckdb(
                         self.conn,
                         table_name,
                         self.config.dataset,
                         geometry_column="geometry_spatial",
                     )
+                else:
+                    self.log.warning(
+                        "⚠️ No spatial geometries found after XML conversion - skipping validation"
+                    )
+                    self.log.warning("This may indicate issues with geometry parsing from XML")
 
                 # Save processed data (NO dissolving for typology data)
                 self._save_data(
