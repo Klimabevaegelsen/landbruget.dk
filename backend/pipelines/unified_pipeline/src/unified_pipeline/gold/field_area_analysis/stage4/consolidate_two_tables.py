@@ -373,7 +373,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             "SELECT COUNT(DISTINCT field_uuid) FROM field_environmental_analysis_properties"
         ).fetchone()[0]
         combo_query = (
-            "SELECT COUNT(DISTINCT field_uuid || '_' || property_id) "
+            "SELECT COUNT(DISTINCT field_uuid || '_' || bfe_number) "
             "FROM field_environmental_analysis_properties"
         )
         property_unique_combos = self.conn.execute(combo_query).fetchone()[0]
