@@ -172,10 +172,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COUNT(DISTINCT fbi.status_category) as bnbo_status_count,
                 STRING_AGG(DISTINCT fbi.status_category, ', ' ORDER BY fbi.status_category) 
                     as bnbo_status_categories,
-                COALESCE(SUM(CASE WHEN fbi.status_category = 'action_required' 
+                COALESCE(SUM(CASE WHEN fbi.status_category = 'Action Required' 
                     THEN ST_Area_Spheroid(fbi.field_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
                     as bnbo_action_required_hectares,
-                COALESCE(SUM(CASE WHEN fbi.status_category = 'completed' 
+                COALESCE(SUM(CASE WHEN fbi.status_category = 'Completed' 
                     THEN ST_Area_Spheroid(fbi.field_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
                     as bnbo_completed_hectares,
                 
@@ -251,10 +251,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COUNT(DISTINCT pbi.status_category) as property_bnbo_status_count,
                 STRING_AGG(DISTINCT pbi.status_category, ', ' ORDER BY pbi.status_category) 
                     as property_bnbo_status_categories,
-                COALESCE(SUM(CASE WHEN pbi.status_category = 'action_required' 
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'Action Required' 
                     THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
                     as property_bnbo_action_required_hectares,
-                COALESCE(SUM(CASE WHEN pbi.status_category = 'completed' 
+                COALESCE(SUM(CASE WHEN pbi.status_category = 'Completed' 
                     THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
                     as property_bnbo_completed_hectares
                 
