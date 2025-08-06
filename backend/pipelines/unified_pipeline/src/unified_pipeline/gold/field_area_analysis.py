@@ -138,7 +138,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 field_uuid,
                 COALESCE(
                     field_uuid, 
-                    'legacy_' || CAST(cvr_number AS VARCHAR) || '_' || CAST(block_id AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
+                    'legacy_' || CAST(cvr_number AS VARCHAR) || '_' || 
+                    CAST(block_id AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
                 ) as primary_field_id,
                 {latest_year} as year,
                 CASE 
