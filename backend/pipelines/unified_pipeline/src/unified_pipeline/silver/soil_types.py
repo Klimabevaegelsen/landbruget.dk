@@ -236,7 +236,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             columns = [row[0] for row in self.conn.execute(f"DESCRIBE {table_name}").fetchall()]
             self.log.info(f"Available columns: {columns}")
 
-            # Build column mapping for standardization
+            # Build column mapping for standardization (removed useless theme_name column)
             select_parts = []
             for col in columns:
                 if col.upper() == "JORDHT":
@@ -244,7 +244,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 elif col.upper() == "JORD_TEKST":
                     select_parts.append(f"TRIM({col}) as soil_description")
                 elif col.upper() == "TEMANAVN":
-                    select_parts.append(f"TRIM({col}) as theme_name")
+                    # Skip theme_name - always NULL, not useful
+                    continue
                 elif col.upper() == "KODE":
                     select_parts.append(f"TRY_CAST({col} AS DOUBLE) as soil_code")
                 elif col.lower() in ["geom", "geometry", "wkb_geometry"]:

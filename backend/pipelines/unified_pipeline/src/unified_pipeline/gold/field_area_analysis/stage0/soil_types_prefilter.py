@@ -41,8 +41,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE soil_types_full AS
             SELECT 
                 soil_code,
-                soil_description,
-                COALESCE(theme_name, 'Unknown') as soil_type_category,
+                soil_description,  -- Only meaningful soil data (8 Danish soil types)
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM soil_types_raw
         """)
@@ -79,8 +78,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE soil_types_intersecting AS
             SELECT DISTINCT
                 s.soil_code,
-                s.soil_description,
-                s.soil_type_category,
+                s.soil_description,  -- Only meaningful Danish soil types
                 s.geometry
             FROM fields_for_filtering f
             JOIN soil_types_full s ON ST_Intersects(f.geometry, s.geometry)
@@ -95,10 +93,9 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_filtered AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY soil_type_category, soil_code, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as soil_id,
+                ROW_NUMBER() OVER (ORDER BY soil_description, soil_code, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as soil_id,
                 soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only meaningful Danish soil types
                 geometry,
                 ST_Area_Spheroid(geometry) as soil_area_m2
             FROM soil_types_intersecting
@@ -117,20 +114,20 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info(f"   Processing time: {processing_time:.1f} seconds")
         self.log.info(f"   🚀 Stage 1D will be {total_soil_types / total_filtered:.1f}x faster")
 
-        # Get soil type category breakdown
-        category_stats = self.conn.execute("""
+        # Get Danish soil type breakdown
+        soil_type_stats = self.conn.execute("""
             SELECT 
-                soil_type_category,
+                soil_description,
                 COUNT(*) as polygon_count,
                 SUM(soil_area_m2) / 1000000 as total_area_km2
             FROM soil_types_filtered
-            GROUP BY soil_type_category
+            GROUP BY soil_description
             ORDER BY polygon_count DESC
         """).fetchall()
 
-        self.log.info("   Filtered soil type categories:")
-        for category, count, area_km2 in category_stats[:5]:
-            self.log.info(f"     {category}: {count:,} polygons, {area_km2:.1f} km²")
+        self.log.info("   🇩🇰 Filtered Danish soil types:")
+        for soil_type, count, area_km2 in soil_type_stats[:8]:
+            self.log.info(f"     {soil_type}: {count:,} polygons, {area_km2:.1f} km²")
 
         # Export filtered soil types using standard pipeline pattern (like other Stage 0 jobs)
         output_path = self._get_stage0_output_path("stage0_soil_types_filtered")
@@ -142,7 +139,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time": processing_time,
             "output_path": output_path,
-            "category_breakdown": category_stats,
+            "soil_type_breakdown": soil_type_stats,
             "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing",
         }
 
