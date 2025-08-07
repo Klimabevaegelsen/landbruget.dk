@@ -145,7 +145,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
                 -- Deterministic fragment key based on initial decomposed geometry
-                uuid5('wetland_fragment', CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
+                md5(CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
                 -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)
                 ROW_NUMBER() OVER (
                     ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
