@@ -115,10 +115,10 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
         description="Whether to use multiple CPU cores - True = faster but uses more memory",
     )
 
-    # NEW: Proximity analysis configuration
+    # NEW: Proximity analysis configuration  
     enable_proximity_analysis: bool = Field(
-        default=True,
-        description="Whether to run proximity analysis after disaggregation (default: True)",
+        default=False,
+        description="Whether to run proximity analysis after disaggregation (default: False - disabled due to memory issues)",
     )
     building_proximity_distance_m: float = Field(
         default=100.0,
