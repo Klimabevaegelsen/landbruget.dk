@@ -199,18 +199,28 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Pre-aggregate soil intersections by field with detailed coverage array
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_field_aggregates AS
+            WITH soil_by_field_and_type AS (
+                SELECT 
+                    field_uuid,
+                    field_area_m2,
+                    soil_description,
+                    SUM(soil_intersection_area_m2) as soil_area_m2,
+                    (SUM(soil_intersection_area_m2) / field_area_m2) * 100.0 as coverage_pct
+                FROM field_soil_intersections
+                GROUP BY field_uuid, field_area_m2, soil_description
+            )
             SELECT 
                 field_uuid,
-                SUM(soil_intersection_area_m2) as field_soil_total_m2,
+                SUM(soil_area_m2) as field_soil_total_m2,
                 COUNT(DISTINCT soil_description) as soil_type_count,
                 -- Create array of soil descriptions with their coverage percentages
                 LIST(STRUCT_PACK(
                     description := soil_description,
-                    area_m2 := SUM(soil_intersection_area_m2),
-                    coverage_pct := (SUM(soil_intersection_area_m2) / field_area_m2) * 100.0
-                ) ORDER BY SUM(soil_intersection_area_m2) DESC) as soil_coverage_details
-            FROM field_soil_intersections fs
-            GROUP BY field_uuid, field_area_m2
+                    area_m2 := soil_area_m2,
+                    coverage_pct := coverage_pct
+                ) ORDER BY soil_area_m2 DESC) as soil_coverage_details
+            FROM soil_by_field_and_type
+            GROUP BY field_uuid
         """)
         
         self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
