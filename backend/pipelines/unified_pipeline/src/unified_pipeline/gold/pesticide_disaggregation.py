@@ -583,18 +583,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info(f"   📅 Processed years: {successful_years}")
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
         
-        # NEW: Run proximity analysis if enabled
-        if self.config.enable_proximity_analysis:
-            self.log.info("🌍 Starting proximity analysis for disaggregated pesticide data...")
-            try:
-                await self._run_proximity_analysis()
-                self.log.info("✅ Proximity analysis completed successfully!")
-            except Exception as e:
-                self.log.error(f"❌ Proximity analysis failed: {e}")
-                # Don't fail the entire pipeline if proximity analysis fails
-                self.log.warning("⚠️ Continuing without proximity analysis")
-        else:
-            self.log.info("⏭️ Proximity analysis disabled - skipping")
+        # NOTE: Proximity analysis is now integrated per-year during processing
+        # This ensures disaggregated data is still in memory when proximity analysis runs
         
         self.log.info("🏁 Pesticide disaggregation gold layer processing completed successfully")
 
@@ -623,6 +613,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 # Create the final table name for this year using agricultural year format
                 table_name = f"pesticide_disaggregation_{year}_{year + 1}"
+
+                # NEW: Run proximity analysis before saving if enabled (while tables are still in memory)
+                if self.config.enable_proximity_analysis:
+                    self.log.info(f"🌍 Running proximity analysis for year {year} disaggregation results...")
+                    try:
+                        await self._run_proximity_analysis_for_year(year)
+                        self.log.info(f"✅ Proximity analysis completed for year {year}!")
+                    except Exception as e:
+                        self.log.error(f"❌ Proximity analysis failed for year {year}: {e}")
+                        self.log.warning("⚠️ Continuing without proximity analysis")
 
                 # Create a copy of the results table with the year-specific name
                 self.log.info(f"🏗️ Creating final table {table_name}")
@@ -942,10 +942,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             target_file = file_path
 
             if target_file:
-                self.log.info(f"Found agricultural fields data at {target_file}")
+                self.log.info(f"Found FVM marker data at {target_file}")
                 return target_file
             else:
-                self.log.warning(f"No agricultural fields file found for year {year}")
+                self.log.warning(f"No FVM marker file found for year {year}")
                 return None
 
         except Exception as e:
@@ -3053,6 +3053,25 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """The proximity results are now part of the main disaggregated table, no separate save needed."""
         self.log.info("ℹ️ Proximity data is now integrated into the main disaggregated results table")
         self.log.info("💡 The enhanced table will be saved with the standard disaggregation results")
+
+    async def _run_proximity_analysis_for_year(self, year: int) -> None:
+        """Run proximity analysis for a specific year while data is still in memory."""
+        self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
+        
+        # Load proximity datasets (this loads them into DuckDB)
+        datasets = await self._load_proximity_datasets()
+        
+        # Validate datasets
+        if not self._validate_proximity_datasets(datasets):
+            raise RuntimeError("Required datasets for proximity analysis not available")
+        
+        # Perform proximity analysis (adds columns to disaggregated_pesticide_applications)
+        await self._perform_proximity_analysis(datasets)
+        
+        # Generate summary statistics
+        await self._generate_proximity_summary_statistics()
+        
+        self.log.info(f"✅ Proximity analysis integrated into year {year} results!")
     
     def _read_gold_data(self, dataset: str) -> Optional[str]:
         """Read gold layer data from GCS (e.g., our own disaggregation results)."""
