@@ -16,9 +16,11 @@ interface LayerControlsProps {
   showH3?: boolean;
   showBNBO?: boolean;
   showBBR?: boolean;
+  showKommune?: boolean;
   onToggleH3?: (visible: boolean) => void;
   onToggleBNBO?: (visible: boolean) => void;
   onToggleBBR?: (visible: boolean) => void;
+  onToggleKommune?: (visible: boolean) => void;
   onOpacityChange?: (layer: string, opacity: number) => void;
 }
 
@@ -32,11 +34,13 @@ interface LayerState {
 
 export function LayerControls({
   showH3 = true,
-  showBNBO = true,
+  showBNBO = false,
   showBBR = true,
+  showKommune = false,
   onToggleH3,
   onToggleBNBO,
   onToggleBBR,
+  onToggleKommune,
   onOpacityChange
 }: LayerControlsProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,6 +67,13 @@ export function LayerControls({
       name: 'Buildings',
       color: '#4a90e2',
       description: 'Building registry data'
+    },
+    kommune: {
+      visible: showKommune,
+      opacity: 0.6,
+      name: 'Municipalities',
+      color: '#8b5a3c',
+      description: 'Municipal boundaries with aggregated PFAS/pesticide data'
     }
   });
 
@@ -87,8 +98,11 @@ export function LayerControls({
       case 'bbr':
         onToggleBBR?.(newVisibility);
         break;
+      case 'kommune':
+        onToggleKommune?.(newVisibility);
+        break;
     }
-  }, [layers, onToggleH3, onToggleBNBO, onToggleBBR]);
+  }, [layers, onToggleH3, onToggleBNBO, onToggleBBR, onToggleKommune]);
 
   const handleOpacityChange = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => ({

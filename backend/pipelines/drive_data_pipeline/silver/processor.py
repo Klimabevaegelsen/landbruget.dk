@@ -58,6 +58,9 @@ class SilverProcessor:
 
         # Initialize schema manager if schema_dir is provided
         self.schema_manager = SchemaManager(schema_dir=schema_dir)
+        
+        # Store the silver run path for later access
+        self.silver_run_path = None
 
         # Initialize schema adapter
         self.schema_adapter = SchemaAdapter()
@@ -79,6 +82,7 @@ class SilverProcessor:
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
         from .transformers.excel_transformer import ExcelTransformer
+        from .transformers.work_permits_transformer import WorkPermitsTransformer
 
         # Initialize transformers map
         self.transformers = {
@@ -87,6 +91,7 @@ class SilverProcessor:
                 use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
                 ocr_language="dan+eng",
             ),
+            "WorkPermits": WorkPermitsTransformer(),
         }
 
         logger.info("Initialized Silver processor")
@@ -125,6 +130,7 @@ class SilverProcessor:
 
             # Create a new run directory in the Silver layer
             silver_run_path = self.silver_storage.create_run_directory()
+            self.silver_run_path = silver_run_path  # Store for later access
             processed_count = 0
 
             # Process each file from memory
@@ -201,6 +207,7 @@ class SilverProcessor:
 
             # Create a new run directory in the Silver layer
             silver_run_path = self.silver_storage.create_run_directory()
+            self.silver_run_path = silver_run_path  # Store for later access
             processed_count = 0
 
             # List all files in the Bronze run directory
@@ -257,26 +264,25 @@ class SilverProcessor:
 
             # Also check subdirectories for metadata files
             # For GCS, we need to list files recursively
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - list with recursive prefix
                 prefix = str(bronze_run_path).rstrip("/") + "/"
-                blobs = self.storage_manager.storage.bucket.list_blobs(prefix=prefix)
-                for blob in blobs:
-                    if blob.name.endswith(".metadata.json"):
-                        all_files.append(Path(blob.name))
+                if hasattr(self.storage_manager, "gcs_bucket") and self.storage_manager.gcs_bucket:
+                    blobs = self.storage_manager.gcs_bucket.list_blobs(prefix=prefix)
+                    for blob in blobs:
+                        if blob.name.endswith(".metadata.json"):
+                            all_files.append(Path(blob.name))
             else:
                 # Local storage - use recursive glob through storage manager
                 import os
 
-                for root, dirs, files in os.walk(
-                    self.storage_manager.storage.base_dir / bronze_run_path
-                ):
+                for root, dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
                     for file in files:
                         if file.endswith(".metadata.json"):
                             file_path = Path(root) / file
                             # Convert to relative path from storage base
                             relative_path = file_path.relative_to(
-                                Path(self.storage_manager.storage.base_dir)
+                                Path(self.storage_manager.base_dir)
                             )
                             all_files.append(relative_path)
 
@@ -455,31 +461,58 @@ class SilverProcessor:
                 output_path = saved_files[0]
 
             else:
-                # Single DataFrame
+                # Single result - could be DataFrame, table name, or other data
 
-                if transformed_data is None or (
+                # Check if it's a DuckDB table name (string)
+                if isinstance(transformed_data, str):
+                    # It's a DuckDB table name - use it directly
+                    table_name = transformed_data
+
+                    # Create output directory for the subfolder
+                    output_dir = self.silver_storage.create_output_directory(
+                        silver_run_path, metadata.original_subfolder
+                    )
+                    # Use original filename for single files
+                    output_filename = f"{Path(original_filename).stem}.parquet"
+                    output_path = output_dir / output_filename
+
+                    # Save the DuckDB table directly
+                    try:
+                        # Use the transformer's connection to save the table
+                        transformer.save_table_to_parquet(table_name, output_path)
+                        logger.info(f"Saved transformed data to: {output_path}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                        )
+                        return False
+
+                elif transformed_data is None or (
                     hasattr(transformed_data, "empty") and transformed_data.empty
                 ):
                     logger.warning(f"No valid data extracted from {original_filename}")
                     return False
-
-                # Create output directory for the subfolder
-                output_dir = self.silver_storage.create_output_directory(
-                    silver_run_path, metadata.original_subfolder
-                )
-                # Use original filename for single files
-                output_filename = f"{Path(original_filename).stem}.parquet"
-                output_path = output_dir / output_filename
-
-                # Save the transformed data
-                try:
-                    self.parquet_manager.save_dataframe_to_parquet(transformed_data, output_path)
-                    logger.info(f"Saved transformed data to: {output_path}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to save transformed data for {original_filename}: {str(e)}"
+                else:
+                    # It's a DataFrame or other data
+                    # Create output directory for the subfolder
+                    output_dir = self.silver_storage.create_output_directory(
+                        silver_run_path, metadata.original_subfolder
                     )
-                    return False
+                    # Use original filename for single files
+                    output_filename = f"{Path(original_filename).stem}.parquet"
+                    output_path = output_dir / output_filename
+
+                    # Save the transformed data
+                    try:
+                        self.parquet_manager.save_dataframe_to_parquet(
+                            transformed_data, output_path
+                        )
+                        logger.info(f"Saved transformed data to: {output_path}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                        )
+                        return False
 
             # Apply schema if requested
             if apply_schemas:
@@ -539,12 +572,30 @@ class SilverProcessor:
                 logger.error(f"Checksum validation failed for {file_path}")
                 return False
 
-            # Select transformer based on content type
-            if not metadata.content_type or metadata.content_type not in self.transformers:
-                logger.warning(f"Unsupported content type: {metadata.content_type}")
+            # Select transformer based on content type and file specifics
+            transformer = None
+            
+            # First, check if specialized transformers can handle this file
+            for transformer_name, potential_transformer in self.transformers.items():
+                if hasattr(potential_transformer, 'can_handle'):
+                    # Convert metadata to dict for transformer
+                    metadata_dict = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    if potential_transformer.can_handle(file_path, metadata_dict):
+                        transformer = potential_transformer
+                        logger.info(f"Using specialized transformer: {transformer_name}")
+                        break
+            
+            # If no specialized transformer found, use content type mapping
+            if not transformer:
+                if not metadata.content_type or metadata.content_type not in self.transformers:
+                    logger.warning(f"Unsupported content type: {metadata.content_type}")
+                    return False
+                transformer = self.transformers[metadata.content_type]
+                logger.info(f"Using content type transformer: {metadata.content_type}")
+            
+            if not transformer:
+                logger.error("No suitable transformer found")
                 return False
-
-            transformer = self.transformers[metadata.content_type]
 
             # Transform the file
             result = transformer.transform(

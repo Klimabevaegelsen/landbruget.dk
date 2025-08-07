@@ -42,29 +42,37 @@ class Source(Enum):
         fvm_wfs: Danish FVM WFS Agricultural Data (Markblokke, Marker, Smaabiotoper)
         wetlands: Wetlands data source
         water_projects: Water projects data source
+        water_typology: Water typology data source (lakes, coastal waters, watercourses)
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
+        pesticide_disaggregation: Pesticide disaggregation gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
+        arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
     """
 
     bnbo = "bnbo"
     agricultural_fields = "agricultural_fields"
     cadastral = "cadastral"
-    spf_su = "spf_su"
+
     soil_types = "soil_types"
     dagi = "dagi"
     jordbrugsanalyser = "jordbrugsanalyser"
     fvm_wfs = "fvm_wfs"
     wetlands = "wetlands"
     water_projects = "water_projects"
+    water_typology = "water_typology"
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
+    cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
+    arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
+    worker_safety = "worker_safety"
+    work_permits = "work_permits"
 
 
 class Stage(Enum):
@@ -78,12 +86,14 @@ class Stage(Enum):
         bronze: Initial data ingestion stage with minimal transformations
         silver: Cleaned and transformed data stage
         gold: Business-ready combined datasets stage
+        enrichment: Enrichment-only stage for post-processing existing silver data
         all: Process bronze, silver, and gold stages sequentially
     """
 
     bronze = "bronze"
     silver = "silver"
     gold = "gold"
+    enrichment = "enrichment"
     all = "all"
 
 
@@ -95,11 +105,19 @@ class FVMLayerType(Enum):
         markblokke: Field blocks data (2005-2026)
         marker: Field markers data (2008-2025)
         smaabiotoper: Small biotopes data (2023-2025)
+        organic_areas: Organic areas data (2012-2024)
+        organic_subsidies: Organic subsidies data (2019-2024)
+        grassland_subsidies: Grassland subsidies data (2019-2024)
+        environmental_subsidies: Environmental subsidies data (2019-2023)
     """
 
     markblokke = "markblokke"
     marker = "marker"
     smaabiotoper = "smaabiotoper"
+    organic_areas = "organic_areas"
+    organic_subsidies = "organic_subsidies"
+    grassland_subsidies = "grassland_subsidies"
+    environmental_subsidies = "environmental_subsidies"
 
 
 class CliConfig(BaseModel):
@@ -130,3 +148,7 @@ class CliConfig(BaseModel):
     stage: Stage
     fvm_layer_type: Optional[FVMLayerType] = None
     fvm_year: Optional[int] = None
+    # CVR enrichment specific parameters
+    test_limit: Optional[int] = None
+    parse_financial_xml: bool = True
+    max_financial_documents: int = 10

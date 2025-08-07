@@ -18,11 +18,9 @@ The processing creates a comprehensive mapping between:
 import json
 from typing import Any, Dict, Optional
 
-import duckdb
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -103,17 +101,10 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
     - Metadata for analysis and validation
     """
 
-    def __init__(self, config: DSTZoneMappingConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DSTZoneMappingConfig):
         """Initialize the DST zone mapping component."""
-        super().__init__(config, gcs_util)
-        self.conn = duckdb.connect()
-        self._configure_duckdb()
+        super().__init__(config)
         self.data_conn = None  # Track which connection has the DAGI data
-
-    def _configure_duckdb(self):
-        """Configure DuckDB with spatial extensions."""
-        self.conn.execute("INSTALL spatial")
-        self.conn.execute("LOAD spatial")
 
     def _load_dagi_data(self, bronze_data: Optional[Dict[str, Any]] = None) -> None:
         """Load DAGI data and set the connection to use for all operations."""
@@ -354,36 +345,92 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                             select_clause = ", ".join(select_parts)
 
-                            # Get the data from the GCS connection
-                            rows = conn.execute(f"""
-                                SELECT {select_clause}
-                                FROM {source_table}
-                                WHERE 1=1
-                            """).fetchall()
+                            # ✅ OPTIMIZED: Use efficient data transfer between connections
+                            if conn == self.conn:
+                                # Data is already in the main connection, just create a view/table
+                                self.conn.execute(f"""
+                                    CREATE OR REPLACE TABLE {layer} AS
+                                    SELECT {select_clause}
+                                    FROM {source_table}
+                                    WHERE 1=1
+                                """)
+                                count = self.conn.execute(
+                                    f"SELECT COUNT(*) FROM {layer}"
+                                ).fetchone()[0]
+                            else:
+                                # Data is in GCS connection, use optimized transfer
+                                try:
+                                    # Export to temporary file and import to main connection
+                                    import os
+                                    import tempfile
 
-                            # Create table in base class connection
-                            self.conn.execute(f"""
-                                CREATE TABLE {layer} (
-                                    code VARCHAR,
-                                    name VARCHAR,
-                                    region_code VARCHAR,
-                                    geometry_wkt VARCHAR,
-                                    area_m2 DOUBLE,
-                                    centroid_x DOUBLE,
-                                    centroid_y DOUBLE
-                                )
-                            """)
+                                    with tempfile.NamedTemporaryFile(
+                                        suffix=".parquet", delete=False
+                                    ) as tmp_file:
+                                        temp_path = tmp_file.name
 
-                            # Insert all rows into base class connection
-                            for row in rows:
-                                self.conn.execute(
-                                    f"""
-                                    INSERT INTO {layer} VALUES (?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                    row,
-                                )
+                                    # Create a temporary view with the selected columns in the GCS connection
+                                    conn.execute(f"""
+                                        CREATE OR REPLACE VIEW temp_layer_view AS
+                                        SELECT {select_clause}
+                                        FROM {source_table}
+                                        WHERE 1=1
+                                    """)
 
-                            count = len(rows)
+                                    # Export to temporary file
+                                    conn.execute(f"""
+                                        COPY temp_layer_view TO '{temp_path}' 
+                                        (FORMAT PARQUET, COMPRESSION zstd)
+                                    """)
+
+                                    # Import into main connection
+                                    self.conn.execute(f"""
+                                        CREATE OR REPLACE TABLE {layer} AS 
+                                        SELECT * FROM read_parquet('{temp_path}')
+                                    """)
+
+                                    # Clean up
+                                    if os.path.exists(temp_path):
+                                        os.unlink(temp_path)
+                                    conn.execute("DROP VIEW IF EXISTS temp_layer_view")
+
+                                    count = self.conn.execute(
+                                        f"SELECT COUNT(*) FROM {layer}"
+                                    ).fetchone()[0]
+
+                                except Exception as e:
+                                    self.log.warning(
+                                        f"Failed optimized transfer for {layer}, falling back to row-by-row: {e}"
+                                    )
+                                    # Fallback to row-by-row copying
+                                    rows = conn.execute(f"""
+                                        SELECT {select_clause}
+                                        FROM {source_table}
+                                        WHERE 1=1
+                                    """).fetchall()
+
+                                    # Create table in base class connection
+                                    self.conn.execute(f"""
+                                        CREATE OR REPLACE TABLE {layer} (
+                                            code VARCHAR,
+                                            name VARCHAR,
+                                            region_code VARCHAR,
+                                            geometry_wkt VARCHAR,
+                                            area_m2 DOUBLE,
+                                            centroid_x DOUBLE,
+                                            centroid_y DOUBLE
+                                        )
+                                    """)
+
+                                    # Insert all rows into base class connection
+                                    for row in rows:
+                                        self.conn.execute(
+                                            f"""
+                                            INSERT INTO {layer} VALUES (?, ?, ?, ?, ?, ?, ?)
+                                        """,
+                                            row,
+                                        )
+                                    count = len(rows)
                             self.log.info(f"Loaded {count} features for {layer} from silver")
                         else:
                             self.log.warning(f"No data found for DAGI {layer}")

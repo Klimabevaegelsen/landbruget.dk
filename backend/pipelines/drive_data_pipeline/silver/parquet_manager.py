@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -30,7 +31,7 @@ class ParquetManager(DuckDBProcessor):
 
     def __init__(
         self,
-        storage_manager: DriveStorageManager,
+        storage_manager: "DriveStorageManager",
         compression: str = "snappy",
         partition_by: list[str] | None = None,
     ):
@@ -69,7 +70,7 @@ class ParquetManager(DuckDBProcessor):
             logger.info(f"Saving DuckDB table '{table_name}' to Parquet: {output_path}")
 
             # Check if we're using GCS storage
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - write to temp file first, then upload
                 with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
                     temp_path = temp_file.name
@@ -102,7 +103,7 @@ class ParquetManager(DuckDBProcessor):
                     with open(temp_path, "rb") as f:
                         self.storage_manager.save_file(f.read(), output_path)
 
-                    logger.info(f"Saved Parquet file to GCS: {output_path}")
+                    logger.info(f"✅ Saved Parquet file to GCS: {output_path}")
                     return output_path
 
                 finally:
@@ -111,7 +112,22 @@ class ParquetManager(DuckDBProcessor):
                         os.unlink(temp_path)
             else:
                 # Local storage - direct export
-                output_path.parent.mkdir(parents=True, exist_ok=True)
+                # CRITICAL FIX: Always ensure directory exists before DuckDB writes
+                # This prevents "No such file or directory" errors in any environment
+                try:
+                    # First try to use the storage manager's directory creation
+                    self.storage_manager.ensure_directory_exists(output_path.parent)
+                except Exception as e:
+                    logger.warning(f"Storage manager directory creation failed: {e}")
+                    # Fallback to direct directory creation
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Additional safety check - ensure parent directory exists
+                if not output_path.parent.exists():
+                    logger.warning(f"Directory still doesn't exist, creating: {output_path.parent}")
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                logger.info(f"Writing DuckDB table to path: {output_path}")
 
                 # Export directly from DuckDB
                 self.conn.execute(f"""
@@ -243,7 +259,7 @@ class ParquetManager(DuckDBProcessor):
             logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
 
             # Check if we're using GCS storage
-            if hasattr(self.storage_manager.storage, "bucket"):
+            if self.storage_manager.storage_type.lower() == "gcs":
                 # GCS storage - need to convert through geopandas for GeoParquet
                 with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
                     temp_path = temp_file.name

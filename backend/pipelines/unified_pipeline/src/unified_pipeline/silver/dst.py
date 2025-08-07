@@ -20,7 +20,6 @@ import ibis
 from ibis import _
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.timing import timed
 
 
@@ -60,15 +59,13 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
     5. Saving processed data to GCS
     """
 
-    def __init__(self, config: DSTSilverConfig, gcs_util: GCSUtil):
+    def __init__(self, config: DSTSilverConfig):
         """
         Initialize the DSTSilver processor.
 
         Args:
-            config: Configuration for the silver processing job
-            gcs_util: Utility for GCS operations
-        """
-        super().__init__(config, gcs_util)
+            config: Configuration for the silver processing job"""
+        super().__init__(config)
         # Configure ibis backend
         ibis.options.interactive = True
         self.ibis_con = ibis.duckdb.connect()
@@ -463,22 +460,57 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                     continue
 
                 if processed_data is not None:
-                    # Create a DuckDB table from the Ibis expression
+                    # Create a DuckDB table from the Ibis expression in the base class connection
                     table_name = f"dst_{table_id.lower()}_processed"
+
+                    # Execute the ibis expression and create table in base class connection
+                    # First create the table in ibis connection
                     self.ibis_con.create_table(table_name, processed_data, overwrite=True)
 
-                    # Get record count for logging using the underlying DuckDB connection
-                    record_count = self.ibis_con.con.execute(
+                    # Then copy the data to the base class connection
+                    # Get the data from ibis connection
+                    result = self.ibis_con.con.execute(f"SELECT * FROM {table_name}").fetchall()
+                    columns = [
+                        desc[0]
+                        for desc in self.ibis_con.con.execute(f"DESCRIBE {table_name}").fetchall()
+                    ]
+
+                    # Create table in base class connection
+                    if result:
+                        # Create table structure in base class connection
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+                        # Create table with the same structure
+                        column_defs = []
+                        for (
+                            col_name,
+                            col_type,
+                            nullable,
+                            key,
+                            default,
+                            extra,
+                        ) in self.ibis_con.con.execute(f"DESCRIBE {table_name}").fetchall():
+                            column_defs.append(f"{col_name} {col_type}")
+
+                        create_sql = f"CREATE TABLE {table_name} ({', '.join(column_defs)})"
+                        self.conn.execute(create_sql)
+
+                        # Insert data
+                        placeholders = ", ".join(["?" for _ in columns])
+                        insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+                        self.conn.executemany(insert_sql, result)
+
+                    # Get record count for logging using the base class connection
+                    record_count = self.conn.execute(
                         f"SELECT COUNT(*) FROM {table_name}"
                     ).fetchone()[0]
 
-                    # Save using the base class method with the underlying DuckDB connection
+                    # Save using the base class method
                     self._save_data(
                         table_name,
                         f"{table_id.lower()}_processed",
                         self.config.bucket,
                         "silver",
-                        conn=self.ibis_con.con,
                     )
 
                     # Store table name for gold stage processing
@@ -487,7 +519,7 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                         f"Successfully processed {record_count:,} records for table {table_id}"
                     )
 
-                    # Clean up the temporary table
+                    # Clean up the temporary table from ibis connection
                     self.ibis_con.con.execute(f"DROP TABLE IF EXISTS {table_name}")
                 else:
                     self.log.warning(f"Failed to process data for table {table_id}")

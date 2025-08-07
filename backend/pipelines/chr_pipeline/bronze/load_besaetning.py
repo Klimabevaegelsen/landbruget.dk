@@ -168,9 +168,9 @@ def load_herd_list(
 
         # Save raw data (using the structured response directly)
         save_raw_data(
+            raw_response=serialized_response,  # Save the serialized dict
             data_type="besaetning_list",
             identifier=f"{species_code}_{usage_code}_{start_herd_number or 0}",
-            raw_response=serialized_response,  # Save the serialized dict
         )
 
         # --- Start Parsing Logic ---

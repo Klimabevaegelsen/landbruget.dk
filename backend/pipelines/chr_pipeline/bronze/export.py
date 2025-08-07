@@ -48,9 +48,59 @@ _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 
 # Get timestamp for this export run - use shared timestamp from workflow if available
 EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-logger.info(
-    f"Using export timestamp: {EXPORT_TIMESTAMP} (from {'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'})"
-)
+timestamp_source = 'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'
+logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
+
+
+def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
+    """
+    Save data immediately to GCS without buffering - fixes parallel processing issues.
+
+    This replaces the broken save_raw_data + finalize_export pattern that doesn't work
+    with parallel GitHub Actions jobs. Each job now saves its data immediately.
+
+    Args:
+        data_type: Type of data (e.g., 'vetstat_antibiotics', 'chr_dyr_movement_summaries')
+        data: The data to save (dict, list, or string)
+        identifier: Unique identifier for this data batch
+
+    Returns:
+        bool: True if save succeeded, False otherwise
+    """
+    try:
+        if not USE_GCS:
+            logger.warning("GCS not available - cannot save data immediately")
+            return False
+
+        # Determine file format based on data type
+        if isinstance(data, str) and data.strip().startswith("<"):
+            # XML data
+            filename = f"{data_type}_{identifier}.xml"
+            content = data
+            content_type = "application/xml"
+        else:
+            # JSON data (dict, list, or already-serialized JSON string)
+            filename = f"{data_type}_{identifier}.json"
+            if isinstance(data, str):
+                content = data  # Already serialized
+            else:
+                content = json.dumps(data, indent=2, default=str)
+            content_type = "application/json"
+
+        # Save directly to GCS
+        bucket = gcs_client.bucket(GCS_BUCKET)
+        blob_path = f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}"
+        blob = bucket.blob(blob_path)
+
+        blob.upload_from_string(content, content_type=content_type)
+
+        logger.info(f"✅ Saved {data_type} data immediately to gs://{GCS_BUCKET}/{blob_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to save {data_type} data immediately: {e}")
+        return False
+
 
 # --- Helper Functions ---
 
@@ -106,14 +156,8 @@ def _serialize_data(data: Any) -> Optional[str]:
         serialized_obj = serialize_object(data, target_cls=dict)
         return json.dumps(serialized_obj, default=json_serializer)
     except TypeError as type_error:
-        logger.warning(f"TypeError during serialization: {type_error}. Attempting fallback serialization.")
-        try:
-            # Try direct JSON serialization with our custom serializer
-            return json.dumps(data, default=json_serializer)
-        except TypeError as direct_error:
-            logger.error(f"Direct serialization failed: {direct_error}")
-            # As a last resort, try to get a string representation
-            return json.dumps({"fallback_repr": repr(data)})
+        logger.error(f"TypeError during serialization: {type_error}")
+        return None
     except Exception as e:
         logger.error(f"Unexpected error during serialization: {e}")
         return None
@@ -261,11 +305,42 @@ def finalize_export(clear_buffer: bool = True):
     if clear_buffer:
         _data_buffer.clear()
 
+    # CRITICAL: Comprehensive cleanup after export
+    try:
+        # Force garbage collection to free memory from large datasets
+        import gc
 
-def _save_to_gcs_streaming(filename: str, data_list: List[Any]):
-    """Save large datasets to GCS using streaming to avoid memory issues."""
+        gc.collect()
+
+        # Clean up any orphaned temporary files
+        if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true":
+            import glob
+
+            temp_files = glob.glob("/tmp/chr_streaming_*")
+            for temp_file in temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                        logger.debug(f"Cleaned up orphaned temp file: {temp_file}")
+                except Exception as e:
+                    logger.debug(f"Could not remove temp file {temp_file}: {e}")
+
+        logger.info("Completed post-export cleanup")
+
+    except Exception as e:
+        logger.warning(f"Error during post-export cleanup: {e}")
+
+
+def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str = ""):
+    """Save large datasets to GCS using streaming to avoid memory issues.
+    
+    Args:
+        filename: Target filename in GCS
+        data_list: List of data items to save
+        path_suffix: Optional suffix to add to the bronze directory path (for matrix job separation)
+    """
     bucket = gcs_client.bucket(GCS_BUCKET)
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}")
+    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{filename}")
 
     # Estimate data size for logging
     import sys
@@ -275,24 +350,39 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any]):
         f"Starting streaming upload to GCS for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
     )
 
-    # Use blob.open() for streaming writes
-    with blob.open("w", content_type="application/json") as f:
-        f.write("[\n")
+    try:
+        # Use blob.open() for streaming writes
+        with blob.open("w", content_type="application/json") as f:
+            f.write("[\n")
 
-        for i, item in enumerate(data_list):
-            if i > 0:
-                f.write(",\n")
+            for i, item in enumerate(data_list):
+                if i > 0:
+                    f.write(",\n")
 
-            # Serialize one item at a time to avoid memory buildup
-            json.dump(item, f, indent=2, default=str)
+                # Serialize one item at a time to avoid memory buildup
+                json.dump(item, f, indent=2, default=str)
 
-            # Log progress more frequently for very large datasets
-            if i > 0 and i % 1000 == 0:
-                logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
+                # Log progress more frequently for very large datasets
+                if i > 0 and i % 1000 == 0:
+                    logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
 
-        f.write("\n]")
+            f.write("\n]")
 
-    logger.info(f"Completed streaming upload to GCS for {filename}")
+        logger.info(f"Completed streaming upload to GCS for {filename}")
+
+        # CRITICAL: Clear the data_list immediately after successful upload to free memory
+        data_list.clear()
+
+        # Force garbage collection after large uploads
+        if estimated_size_mb > 10:  # For uploads > 10MB
+            import gc
+
+            gc.collect()
+            logger.debug(f"Forced garbage collection after {estimated_size_mb:.1f}MB upload")
+
+    except Exception as e:
+        logger.error(f"Error during streaming upload to GCS for {filename}: {e}")
+        raise
 
 
 def _save_locally_streaming(filepath: Path, data_list: List[Any]):
@@ -309,23 +399,38 @@ def _save_locally_streaming(filepath: Path, data_list: List[Any]):
         f"Starting streaming write to {timestamped_path} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
     )
 
-    with open(timestamped_path, "w", encoding="utf-8") as f:
-        f.write("[\n")
+    try:
+        with open(timestamped_path, "w", encoding="utf-8") as f:
+            f.write("[\n")
 
-        for i, item in enumerate(data_list):
-            if i > 0:
-                f.write(",\n")
+            for i, item in enumerate(data_list):
+                if i > 0:
+                    f.write(",\n")
 
-            # Serialize one item at a time to avoid memory buildup
-            json.dump(item, f, indent=2, default=str)
+                # Serialize one item at a time to avoid memory buildup
+                json.dump(item, f, indent=2, default=str)
 
-            # Log progress more frequently for very large datasets
-            if i > 0 and i % 1000 == 0:
-                logger.info(f"Streamed {i}/{len(data_list)} records to file ({(i / len(data_list) * 100):.1f}%)")
+                # Log progress more frequently for very large datasets
+                if i > 0 and i % 1000 == 0:
+                    logger.info(f"Streamed {i}/{len(data_list)} records to file ({(i / len(data_list) * 100):.1f}%)")
 
-        f.write("\n]")
+            f.write("\n]")
 
-    logger.info(f"Completed streaming write to {timestamped_path}")
+        logger.info(f"Completed streaming write to {timestamped_path}")
+
+        # CRITICAL: Clear the data_list immediately after successful write to free memory
+        data_list.clear()
+
+        # Force garbage collection after large writes
+        if estimated_size_mb > 10:  # For writes > 10MB
+            import gc
+
+            gc.collect()
+            logger.debug(f"Forced garbage collection after {estimated_size_mb:.1f}MB write")
+
+    except Exception as e:
+        logger.error(f"Error during streaming write to {timestamped_path}: {e}")
+        raise
 
 
 # --- Cleanup Function (Optional) ---

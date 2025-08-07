@@ -69,7 +69,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -226,7 +231,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -257,6 +267,8 @@ jobs:
     - name: Run pipeline for folder - ${{ matrix.folder }}
       working-directory: backend/pipelines/drive_data_pipeline
       env:
+        ENVIRONMENT: production
+        STORAGE_TYPE: gcs
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
@@ -317,7 +329,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd backend/pipelines/drive_data_pipeline
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+        
+        # Install drive pipeline dependencies
+        cd ../drive_data_pipeline
         sudo apt-get update
         sudo apt-get install -y tesseract-ocr poppler-utils
         uv pip install --system -e .
@@ -348,6 +365,8 @@ jobs:
     - name: Run Google Drive Pipeline (Single Mode)
       working-directory: backend/pipelines/drive_data_pipeline
       env:
+        ENVIRONMENT: production
+        STORAGE_TYPE: gcs
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |

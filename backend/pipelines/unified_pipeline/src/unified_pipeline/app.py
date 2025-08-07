@@ -26,10 +26,18 @@ from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronzeConfig,
 )
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
-from unified_pipeline.bronze.spf_su import SpfSuBronze, SpfSuBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
+from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+from unified_pipeline.gold.arbejdstilsynet_inspections import (
+    ArbjdstilsynetInspectionsGold,
+    ArbjdstilsynetInspectionsGoldConfig,
+)
+from unified_pipeline.gold.cvr_enrichment import (
+    CVREnrichmentGold,
+    CVREnrichmentGoldConfig,
+)
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -42,12 +50,19 @@ from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig,
 )
+from unified_pipeline.gold.worker_safety import (
+    WorkerSafetyGold,
+    WorkerSafetyGoldConfig,
+)
+from unified_pipeline.gold.work_permits import (
+    WorkPermitsGold,
+    WorkPermitsGoldConfig,
+)
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
 )
 from unified_pipeline.model import cli
-from unified_pipeline.model.app_config import GCSConfig
 from unified_pipeline.silver.agricultural_fields import (
     AgriculturalFieldsSilver,
     AgriculturalFieldsSilverConfig,
@@ -64,18 +79,17 @@ from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilverConfig,
 )
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
-from unified_pipeline.silver.spf_su import SpfSuSilver, SpfSuSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
+from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
-from unified_pipeline.util.gcs_util import GCSUtil
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
 
 
 async def execute_pipeline_jobs(
-    jobs: list, gcs_util: GCSUtil, stage: cli.Stage, cli_config: cli.CliConfig
-) -> None:
+    jobs: list, stage: cli.Stage, cli_config: cli.CliConfig
+) -> tuple[int, int]:
     """
     Execute pipeline jobs with support for gold layer and in-memory data passing.
 
@@ -86,13 +100,17 @@ async def execute_pipeline_jobs(
 
     Args:
         jobs: List of (job_class, config_class) tuples to execute
-        gcs_util: GCS utility instance
         stage: The stage being executed (bronze, silver, or all)
         cli_config: CLI configuration containing filtering parameters
+
+    Returns:
+        tuple[int, int]: (successful_jobs, total_jobs) counts
     """
     log = Logger.get_logger()
     bronze_data = None
     silver_data = {}
+    successful_jobs = 0
+    total_jobs = len(jobs)
 
     for job_cls, config_cls in jobs:
         log.info(f"Running {job_cls.__name__} for stage {stage}")
@@ -102,37 +120,102 @@ async def execute_pipeline_jobs(
         if hasattr(config_instance, "apply_cli_filters"):
             config_instance.apply_cli_filters(cli_config)
 
-        instance = job_cls(config=config_instance, gcs_util=gcs_util)
+        instance = job_cls(config=config_instance)
+        job_successful = False
 
-        if issubclass(job_cls, BronzeJobInterface):
-            # Bronze stage - get data for memory passing
-            bronze_data = await instance.run()
-            log.info(f"Bronze job {job_cls.__name__} completed with data for in-memory passing")
+        try:
+            if issubclass(job_cls, BronzeJobInterface):
+                # Bronze stage - get data for memory passing
+                bronze_data = await instance.run()
+                if bronze_data is not None:
+                    job_successful = True
+                    log.info(
+                        f"Bronze job {job_cls.__name__} completed successfully with data for in-memory passing"
+                    )
+                else:
+                    log.error(f"Bronze job {job_cls.__name__} failed - no data returned")
 
-        elif issubclass(job_cls, SilverJobInterface):
-            # Silver stage - pass in-memory data if available and collect results
-            result = await instance.run(bronze_data=bronze_data)
-            # Collect silver data for gold stage
-            dataset_name = instance.config.dataset
-            silver_data[dataset_name] = result
-            log.info(
-                f"Silver job {job_cls.__name__} completed using {'in-memory' if bronze_data is not None else 'storage'} data"
-            )
+                # 🧹 CLEANUP: Bronze data will be cleared AFTER silver processing to allow in-memory passing
+                # Log the size for monitoring purposes
+                if bronze_data and isinstance(bronze_data, dict):
+                    total_size = (
+                        sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                    )
+                    if total_size > 10_000_000:  # More than 10MB of string data
+                        log.info(
+                            f"📊 Bronze data size: {total_size:,} chars (will be cleared after silver processing)"
+                        )
 
-        elif issubclass(job_cls, GoldJobInterface):
-            # Gold stage - pass collected silver data
-            await instance.run(silver_data=silver_data)
-            log.info(f"Gold job {job_cls.__name__} completed using silver data")
+            elif issubclass(job_cls, SilverJobInterface):
+                # Check if this is an enrichment-only job
+                if stage == cli.Stage.enrichment and hasattr(instance, 'run_enrichment_only'):
+                    # Enrichment stage - run only enrichment functions
+                    result = await instance.run_enrichment_only()
+                    stage_description = "enrichment-only"
+                else:
+                    # Silver stage - pass in-memory data if available and collect results
+                    result = await instance.run(bronze_data=bronze_data)
+                    stage_description = f"{'in-memory' if bronze_data is not None else 'storage'} data"
+                
+                if result is not None:
+                    job_successful = True
+                    # Collect silver data for gold stage
+                    dataset_name = instance.config.dataset
+                    silver_data[dataset_name] = result
+                    log.info(
+                        f"Silver job {job_cls.__name__} completed successfully using {stage_description}"
+                    )
+                else:
+                    log.error(f"Silver job {job_cls.__name__} failed - no data returned")
 
-        else:
-            # Legacy support - jobs that don't implement the new interfaces
-            await instance.run()
-            log.info(f"Legacy job {job_cls.__name__} completed")
+                # 🧹 CLEANUP: Clear bronze data after silver processing to free memory
+                if bronze_data:
+                    # Check if bronze_data is large (indicating it might cause memory issues)
+                    if isinstance(bronze_data, dict):
+                        total_size = (
+                            sum(len(str(v)) for v in bronze_data.values()) if bronze_data else 0
+                        )
+                        if total_size > 10_000_000:  # More than 10MB of string data
+                            log.info(
+                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                            )
 
-        log.info(f"Finished {job_cls.__name__} for stage {stage}")
+                    bronze_data = None
+                    import gc
+
+                    gc.collect()
+
+            elif issubclass(job_cls, GoldJobInterface):
+                # Gold stage - pass collected silver data
+                await instance.run(silver_data=silver_data)
+                # Gold jobs don't return data, so we consider them successful if they don't raise an exception
+                job_successful = True
+                log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
+
+                # 🧹 CLEANUP: Clear silver data after gold processing to free memory
+                if silver_data:
+                    log.info("🧹 Clearing silver data after gold processing")
+                    silver_data.clear()
+                    import gc
+
+                    gc.collect()
+
+            else:
+                log.error(f"Unknown job interface for {job_cls.__name__}")
+
+            if job_successful:
+                successful_jobs += 1
+
+        except Exception as e:
+            log.error(f"Error executing {job_cls.__name__}: {e}")
+            import traceback
+
+            log.error(f"Traceback: {traceback.format_exc()}")
+
+    return successful_jobs, total_jobs
 
 
-def execute(cli_config: cli.CliConfig) -> None:
+def execute(cli_config: cli.CliConfig) -> int:
     """
     Main execution function for processing pipeline data.
 
@@ -143,13 +226,14 @@ def execute(cli_config: cli.CliConfig) -> None:
     Args:
         cli_config (cli.CliConfig): Configuration containing source and stage settings
 
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+
     Raises:
         ValueError: If the requested source/stage combination is not supported
     """
     log = Logger.get_logger()
     log.info("Starting Unified Pipeline.")
-
-    gcs_util = GCSUtil(GCSConfig())
 
     # Define pipeline mapping for sources and stages
     pipeline_map = {
@@ -175,14 +259,6 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (CadastralBronze, CadastralBronzeConfig),
                 (CadastralSilver, CadastralSilverConfig),
-            ],
-        },
-        cli.Source.spf_su: {
-            cli.Stage.bronze: [(SpfSuBronze, SpfSuBronzeConfig)],
-            cli.Stage.silver: [(SpfSuSilver, SpfSuSilverConfig)],
-            cli.Stage.all: [
-                (SpfSuBronze, SpfSuBronzeConfig),
-                (SpfSuSilver, SpfSuSilverConfig),
             ],
         },
         cli.Source.soil_types: {
@@ -216,6 +292,7 @@ def execute(cli_config: cli.CliConfig) -> None:
         cli.Source.fvm_wfs: {
             cli.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
             cli.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli.Stage.enrichment: [(FVMWFSSilver, FVMWFSSilverConfig)],
             cli.Stage.all: [
                 (FVMWFSBronze, FVMWFSBronzeConfig),
                 (FVMWFSSilver, FVMWFSSilverConfig),
@@ -235,6 +312,14 @@ def execute(cli_config: cli.CliConfig) -> None:
             cli.Stage.all: [
                 (WaterProjectsBronze, WaterProjectsBronzeConfig),
                 (WaterProjectsSilver, WaterProjectsSilverConfig),
+            ],
+        },
+        cli.Source.water_typology: {
+            cli.Stage.bronze: [(WaterTypologyBronze, WaterTypologyBronzeConfig)],
+            cli.Stage.silver: [(WaterTypologySilver, WaterTypologySilverConfig)],
+            cli.Stage.all: [
+                (WaterTypologyBronze, WaterTypologyBronzeConfig),
+                (WaterTypologySilver, WaterTypologySilverConfig),
             ],
         },
         cli.Source.property_cadastral_merge: {
@@ -270,6 +355,14 @@ def execute(cli_config: cli.CliConfig) -> None:
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
+        cli.Source.cvr_enrichment: {
+            cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
+            cli.Stage.all: [
+                # Note: This collects CVR numbers from all pipeline CVR collections
+                # and fetches CVR register data for enrichment
+                (CVREnrichmentGold, CVREnrichmentGoldConfig),
+            ],
+        },
         cli.Source.dst: {
             cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
             cli.Stage.silver: [(DSTSilver, DSTSilverConfig)],
@@ -286,6 +379,27 @@ def execute(cli_config: cli.CliConfig) -> None:
                 (DMISilver, DMISilverConfig),
             ],
         },
+        cli.Source.arbejdstilsynet_inspections: {
+            cli.Stage.gold: [(ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires arbejdstilsynet_inspections silver data to be available
+                (ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig),
+            ],
+        },
+        cli.Source.worker_safety: {
+            cli.Stage.gold: [(WorkerSafetyGold, WorkerSafetyGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires worker safety silver data to be available
+                (WorkerSafetyGold, WorkerSafetyGoldConfig),
+            ],
+        },
+        cli.Source.work_permits: {
+            cli.Stage.gold: [(WorkPermitsGold, WorkPermitsGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires work permits silver data from drive pipeline to be available
+                (WorkPermitsGold, WorkPermitsGoldConfig),
+            ],
+        },
     }
 
     # Retrieve jobs for given source and stage
@@ -295,9 +409,24 @@ def execute(cli_config: cli.CliConfig) -> None:
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing
-    asyncio.run(execute_pipeline_jobs(jobs, gcs_util, cli_config.stage, cli_config))
+    successful_jobs, total_jobs = asyncio.run(
+        execute_pipeline_jobs(jobs, cli_config.stage, cli_config)
+    )
 
-    log.info(f"Finished running source {cli_config.source} in stage {cli_config.stage}.")
+    # Determine exit code based on job success
+    if successful_jobs == 0:
+        log.error(f"❌ Pipeline failed: No jobs completed successfully (0/{total_jobs})")
+        return 1
+    elif successful_jobs < total_jobs:
+        log.warning(
+            f"⚠️  Pipeline completed with partial success: {successful_jobs}/{total_jobs} jobs completed successfully"
+        )
+        return 0  # Still consider it a success if at least one job completed
+    else:
+        log.info(
+            f"✅ Pipeline completed successfully: {successful_jobs}/{total_jobs} jobs completed successfully"
+        )
+        return 0
 
 
 @click.command()
@@ -339,12 +468,35 @@ def execute(cli_config: cli.CliConfig) -> None:
     help="Year filter for FVM matrix jobs (e.g., 2024).",
     required=False,
 )
+@click.option(
+    "--test-limit",
+    "test_limit",
+    type=int,
+    help="Limit number of CVR numbers to process for testing (CVR enrichment only).",
+    required=False,
+)
+@click.option(
+    "--parse-financial-xml/--no-parse-financial-xml",
+    "parse_financial_xml",
+    default=True,
+    help="Whether to download and parse XML financial documents (CVR enrichment only).",
+)
+@click.option(
+    "--max-financial-documents",
+    "max_financial_documents",
+    type=int,
+    default=10,
+    help="Maximum number of financial documents to fetch per company (CVR enrichment only).",
+)
 def run_cli(
     env: str,
     source: str,
     stage: str,
     fvm_layer_type: str = None,
     fvm_year: int = None,
+    test_limit: int = None,
+    parse_financial_xml: bool = True,
+    max_financial_documents: int = 10,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -370,6 +522,17 @@ def run_cli(
         stage=cli.Stage(stage),
         fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
         fvm_year=fvm_year,
+        test_limit=test_limit,
+        parse_financial_xml=parse_financial_xml,
+        max_financial_documents=max_financial_documents,
     )
     print(app_config)
-    execute(app_config)
+    exit_code = execute(app_config)
+    exit(exit_code)
+
+
+# TODO: Incomplete implementation - get_pipeline_jobs function not defined
+# def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
+#     """Run a specific pipeline by name and stage."""
+#     pipeline_jobs = get_pipeline_jobs(pipeline_name)
+#     asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))

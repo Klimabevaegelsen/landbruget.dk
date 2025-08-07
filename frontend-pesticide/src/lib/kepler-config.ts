@@ -12,7 +12,6 @@ interface KeplerConfigOptions {
 export function generateKeplerConfig(options: KeplerConfigOptions) {
   const {
     selectedYear,
-    showPesticides,
     showPFAS,
     showBNBO,
     showBBR,
@@ -44,8 +43,8 @@ export function generateKeplerConfig(options: KeplerConfigOptions) {
               dataId: 'h3_data',
               label: showPFAS ? 'PFAS Exposure (grams)' : 'Pesticide Load (kg/ha)',
               color: showPFAS ? 
-                generateColorScale('pfas_grams', 'Reds') : 
-                generateColorScale('pesticide_load', 'Blues'),
+                generateColorScale('pfas_grams') : 
+                generateColorScale('pesticide_load'),
               columns: {
                 hex_id: 'h3_id'
               },

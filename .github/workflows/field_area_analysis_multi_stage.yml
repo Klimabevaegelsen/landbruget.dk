@@ -1,0 +1,763 @@
+name: Field Area Analysis Multi-Stage Pipeline
+
+# WORKFLOW MODES:
+# - 'all': Runs stages SEQUENTIALLY with proper dependencies (stage0→stage1→stage2→stage3→stage4)
+# - Individual stages (e.g. 'stage3'): Run INDEPENDENTLY using latest GCS data
+# Each stage uses _get_latest_gold_path() to find the most recent timestamped data from previous stages
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Specific stage to run (optional)'
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - 'stage0'
+          - 'stage1'
+          - 'stage2'
+          - 'stage3'
+          - 'stage4'
+        default: 'all'
+      job:
+        description: 'Specific job within stage (optional)'
+        required: false
+        type: string
+      agricultural_fields_year:
+        description: 'Agricultural fields year to process'
+        required: false
+        type: choice
+        options:
+          - '2024'
+          - '2025'
+          - 'both'
+        default: 'both'
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly Monday 2AM
+
+env:
+  ENVIRONMENT: production
+  GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+
+jobs:
+  # Stage 0: Pre-filtering (Concurrent - operations are independent)
+  stage0-properties-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Properties Pre-filtering (Critical - 90% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=properties_prefilter
+
+  stage0-wetlands-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Wetlands Pre-filtering (85% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=wetlands_prefilter
+
+  stage0-bnbo-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run BNBO Pre-filtering (70% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=bnbo_prefilter
+
+  stage0-water-projects-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Water Projects Pre-filtering (80% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=water_projects_prefilter
+
+  stage0-soil-types-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Soil Types Pre-filtering (40% reduction)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=soil_types_prefilter
+
+  # Stage 1: Base Intersections (Parallel - now using pre-filtered data)
+  stage1-water-projects-bnbo:
+    needs: [stage0-bnbo-prefilter, stage0-water-projects-prefilter]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Water Projects × BNBO Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=1 --job=water_projects_bnbo
+
+  stage1-water-projects-wetlands:
+    needs: [stage0-wetlands-prefilter, stage0-water-projects-prefilter]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Water Projects × Wetlands Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=1 --job=water_projects_wetlands
+
+  stage1-fields-properties:
+    needs: [stage0-properties-prefilter]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space for memory-intensive processing
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+          
+          echo "=== Freeing up disk space for memory-intensive processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+          
+          sudo docker system prune -af
+          sudo docker image prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Fields × Properties Intersection
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=1 --job=fields_properties
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          sudo rm -rf /tmp/duckdb* || true
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+
+  stage1-fields-soil-types:
+    needs: [stage0-soil-types-prefilter]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Fields × Soil Types Analysis
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=1 --job=fields_soil_types
+
+  # Stage 2: Environmental Coverage (Parallel)
+  stage2-fields-bnbo-water:
+    needs: [stage1-water-projects-bnbo]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Fields × BNBO Water Coverage
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=2 --job=fields_bnbo_water
+
+  stage2-fields-wetland-water:
+    needs: [stage1-water-projects-wetlands]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Fields × Wetland Water Coverage
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=2 --job=fields_wetland_water
+
+  # Stage 3A: Final Analysis (Sequential mode - only when 'all')
+  stage3-final-bnbo-sequential:
+    needs: [stage2-fields-bnbo-water, stage1-fields-properties]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final BNBO Analysis (Sequential)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_bnbo
+
+  # Stage 3B: Final Analysis (Independent mode - uses latest GCS data)
+  stage3-final-bnbo-independent:
+    if: ${{ github.event.inputs.stage == 'stage3' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final BNBO Analysis (Independent)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_bnbo
+
+  # Stage 3C: Final Wetland Analysis (Sequential mode - only when 'all')
+  stage3-final-wetland-sequential:
+    needs: [stage2-fields-wetland-water, stage1-fields-properties]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final Wetland Analysis (Sequential)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_wetland
+
+  # Stage 3D: Final Wetland Analysis (Independent mode - uses latest GCS data)
+  stage3-final-wetland-independent:
+    if: ${{ github.event.inputs.stage == 'stage3' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final Wetland Analysis (Independent)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_wetland
+
+  # Stage 4A: Consolidation (Sequential mode - waits for stage 3 and needs stage 1 data)
+  stage4-consolidate-sequential:
+    needs: [stage3-final-bnbo-sequential, stage3-final-wetland-sequential, stage1-fields-properties, stage1-fields-soil-types]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Consolidate Results (Sequential)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=4 --job=consolidate
+
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "🎉 Field Area Analysis Multi-Stage Pipeline Completed"
+          echo "✅ All stages executed successfully"
+          echo "📊 Final consolidated results available in GCS"
+
+  # Stage 4B: Consolidation (Independent mode - uses latest GCS data) 
+  stage4-consolidate-independent:
+    if: ${{ github.event.inputs.stage == 'stage4' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Consolidate Results (Independent)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=4 --job=consolidate
+
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "🎉 Field Area Analysis Stage 4 Completed"
+          echo "✅ Consolidation executed successfully using latest GCS data"
+          echo "📊 Final consolidated results available in GCS" 

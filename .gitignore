@@ -1,3 +1,125 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+.venv
+
+# Data files
+data/
+*.wsdl
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Project specific
+backend/pipelines/chr_pipeline/data/
+bin/
+
+# Sensitive files
+**/.env
+**/.env.*
+!.env.example
+**/vetstat.p12
+**/vetstat.*.p12
+backend/pipelines/sync_secrets.sh
+backend/pipelines/vetstat.p12
+
+# Data files
+*.csv
+*.geojson
+*.parquet
+*.shp
+*.shx
+*.dbf
+*.prj
+*.zip
+*.pmtiles
+backend/data/
+data/bronze/
+temp_data/
+temp_carbon/
+cadastral_schema.txt
+
+# Node
+node_modules/
+build/
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+cadastral_sync.log
+test_cadastral.log
+cloud-sql-proxy
+backend/test_wfs.py
+backend/tests/
+backend/test_*.py
+*.test.js
+*.spec.js
+coverage/
+.coverage
+htmlcov/
+pytest_cache/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+
+# Logs and debugging
+*.log
+debug/
+logs/
+cloud-sql-proxy
+cadastral_sync.log
+test_cadastral.log
+
 # Development tools
 cloud-sql-proxy
 backend/test_wfs.py
@@ -36,3 +158,7 @@ devenv.yaml
 /data_cache/
 /cvr_analysis_31373077/
 /scripts/
+
+# PMTiles (generated files, should be stored in GCS)
+pmtiles/
+*.pmtiles

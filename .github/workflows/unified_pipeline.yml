@@ -18,19 +18,32 @@ on:
           - cadastral
           - agricultural_fields
           - bnbo
-          - spf_su
           - dagi
           - jordbrugsanalyser
           - fvm_wfs
           - soil_types
           - wetlands
           - water_projects
+          - water_typology
           - property_cadastral_merge
           - field_production
           - field_area_analysis
           - pesticide_disaggregation
+          - arbejdstilsynet_inspections
+          - worker_safety
+          - work_permits
           - dst
           - dmi
+          - cvr_enrichment
+      agricultural_fields_year:
+        description: 'Agricultural fields year (for field_area_analysis only)'
+        required: false
+        type: choice
+        options:
+          - '2024'
+          - '2025'
+          - 'both'
+        default: 'both'
 
 jobs:
   run-unified-pipeline:
@@ -44,16 +57,17 @@ jobs:
       matrix:
         include: >-
           ${{
-            (github.event.inputs.source == 'fvm_wfs' && 
+            (github.event.inputs.source == 'fvm_wfs' &&
              fromJson('[
                {"source":"fvm_wfs","layer_type":"markblokke","year":2005},{"source":"fvm_wfs","layer_type":"markblokke","year":2006},{"source":"fvm_wfs","layer_type":"markblokke","year":2007},{"source":"fvm_wfs","layer_type":"markblokke","year":2008},{"source":"fvm_wfs","layer_type":"markblokke","year":2009},{"source":"fvm_wfs","layer_type":"markblokke","year":2010},{"source":"fvm_wfs","layer_type":"markblokke","year":2011},{"source":"fvm_wfs","layer_type":"markblokke","year":2012},{"source":"fvm_wfs","layer_type":"markblokke","year":2013},{"source":"fvm_wfs","layer_type":"markblokke","year":2014},{"source":"fvm_wfs","layer_type":"markblokke","year":2015},{"source":"fvm_wfs","layer_type":"markblokke","year":2016},{"source":"fvm_wfs","layer_type":"markblokke","year":2017},{"source":"fvm_wfs","layer_type":"markblokke","year":2018},{"source":"fvm_wfs","layer_type":"markblokke","year":2019},{"source":"fvm_wfs","layer_type":"markblokke","year":2020},{"source":"fvm_wfs","layer_type":"markblokke","year":2021},{"source":"fvm_wfs","layer_type":"markblokke","year":2022},{"source":"fvm_wfs","layer_type":"markblokke","year":2023},{"source":"fvm_wfs","layer_type":"markblokke","year":2024},{"source":"fvm_wfs","layer_type":"markblokke","year":2025},{"source":"fvm_wfs","layer_type":"markblokke","year":2026},
                {"source":"fvm_wfs","layer_type":"marker","year":2008},{"source":"fvm_wfs","layer_type":"marker","year":2009},{"source":"fvm_wfs","layer_type":"marker","year":2010},{"source":"fvm_wfs","layer_type":"marker","year":2011},{"source":"fvm_wfs","layer_type":"marker","year":2012},{"source":"fvm_wfs","layer_type":"marker","year":2013},{"source":"fvm_wfs","layer_type":"marker","year":2014},{"source":"fvm_wfs","layer_type":"marker","year":2015},{"source":"fvm_wfs","layer_type":"marker","year":2016},{"source":"fvm_wfs","layer_type":"marker","year":2017},{"source":"fvm_wfs","layer_type":"marker","year":2018},{"source":"fvm_wfs","layer_type":"marker","year":2019},{"source":"fvm_wfs","layer_type":"marker","year":2020},{"source":"fvm_wfs","layer_type":"marker","year":2021},{"source":"fvm_wfs","layer_type":"marker","year":2022},{"source":"fvm_wfs","layer_type":"marker","year":2023},{"source":"fvm_wfs","layer_type":"marker","year":2024},{"source":"fvm_wfs","layer_type":"marker","year":2025},
-               {"source":"fvm_wfs","layer_type":"smaabiotoper","year":2023},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2024},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2025}
+               {"source":"fvm_wfs","layer_type":"smaabiotoper","year":2023},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2024},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2025},
+               {"source":"fvm_wfs","layer_type":"organic_areas","year":2012},{"source":"fvm_wfs","layer_type":"organic_areas","year":2013},{"source":"fvm_wfs","layer_type":"organic_areas","year":2014},{"source":"fvm_wfs","layer_type":"organic_areas","year":2015},{"source":"fvm_wfs","layer_type":"organic_areas","year":2016},{"source":"fvm_wfs","layer_type":"organic_areas","year":2017},{"source":"fvm_wfs","layer_type":"organic_areas","year":2018},{"source":"fvm_wfs","layer_type":"organic_areas","year":2019},{"source":"fvm_wfs","layer_type":"organic_areas","year":2020},{"source":"fvm_wfs","layer_type":"organic_areas","year":2021},{"source":"fvm_wfs","layer_type":"organic_areas","year":2022},{"source":"fvm_wfs","layer_type":"organic_areas","year":2023},{"source":"fvm_wfs","layer_type":"organic_areas","year":2024}
              ]')) ||
             (github.event_name == 'schedule' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"spf_su"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
@@ -68,6 +82,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Free up disk space for memory-intensive jobs
+        if: matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge' || matrix.source == 'pesticide_disaggregation'
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+
+          echo "=== Freeing up disk space for memory-intensive processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+
+          sudo docker system prune -af
+          sudo docker image prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+          AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+          echo "Available space: ${AVAILABLE_GB}GB"
+
+          if [ $AVAILABLE_GB -lt 12 ]; then
+            echo "❌ ERROR: Not enough disk space for memory-intensive processing! Available: ${AVAILABLE_GB}GB, Required: ~12GB"
+            exit 1
+          fi
+
+          echo "✅ Sufficient disk space for memory-intensive processing: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -88,6 +134,32 @@ jobs:
 
       - name: Run Unified Pipeline for ${{ matrix.source || matrix.layer_type }}
         run: |
+          # Start resource monitoring for memory-intensive jobs
+          if [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "property_cadastral_merge" ] || [ "${{ matrix.source }}" = "pesticide_disaggregation" ]; then
+            echo "🔍 Starting resource monitoring for memory-intensive job: ${{ matrix.source }}"
+            (while true; do
+              sleep 60  # Check every minute
+              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+              echo "$(date): Temp: $(du -sh /tmp 2>/dev/null || echo 'N/A')"
+
+              # Check for critical resource usage
+              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+
+              if [ $MEMORY_USED_PCT -gt 90 ]; then
+                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+              fi
+
+              if [ $DISK_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+              fi
+            done) &
+            MONITOR_PID=$!
+            echo "Resource monitoring started with PID: $MONITOR_PID"
+          fi
+
+          # Run the pipeline
           if [ -n "${{ matrix.layer_type }}" ]; then
             # FVM WFS matrix job with specific layer and year
             echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
@@ -101,8 +173,46 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
               -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
             echo "FVM WFS matrix workflow triggered successfully with stage=all"
+          elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
+            # Field Area Analysis - trigger the dedicated matrix workflow
+            SELECTED_YEAR="${{ github.event.inputs.agricultural_fields_year || 'both' }}"
+            echo "Field Area Analysis detected - triggering dedicated matrix workflow with year: $SELECTED_YEAR"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"$SELECTED_YEAR\"}}"
+            echo "Field Area Analysis matrix workflow triggered successfully with year: $SELECTED_YEAR"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }}"
             python -m unified_pipeline -s ${{ matrix.source }} -j all
           fi
+
+          # Stop resource monitoring
+          if [ -n "$MONITOR_PID" ]; then
+            kill $MONITOR_PID 2>/dev/null || true
+            echo "Resource monitoring stopped"
+          fi
+
+      - name: Cleanup temporary files for memory-intensive jobs
+        if: always() && (matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge' || matrix.source == 'pesticide_disaggregation')
+        run: |
+          echo "🧹 Cleaning up temporary files after memory-intensive job..."
+
+          # Clean up DuckDB temp files
+          sudo rm -rf /tmp/duckdb* || true
+          sudo rm -rf /tmp/duckdb_field_analysis/* || true
+
+          # Clean up any large temporary files
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+
+          # Clean up Python cache
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+          echo "=== Final disk usage ==="
+          df -h
+          echo "=== Temp directory usage ==="
+          du -sh /tmp 2>/dev/null || echo "N/A"
+          echo "✅ Cleanup completed"

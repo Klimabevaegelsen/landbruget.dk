@@ -1,0 +1,12 @@
+{
+  "pipeline": "bmd_scraper",
+  "stage": "silver",
+  "generated_at": "2025-07-05T09:19:45",
+  "tables": [
+    "bmd_processed"
+  ],
+  "files_generated": [
+    "docs/schemas/silver/bmd_processed.md",
+    "docs/schemas/silver/overview.md"
+  ]
+}

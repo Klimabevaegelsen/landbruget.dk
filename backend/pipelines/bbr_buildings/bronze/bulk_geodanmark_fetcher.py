@@ -16,6 +16,7 @@ from pathlib import Path
 import duckdb
 import requests
 from requests.adapters import HTTPAdapter
+from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 # Configure logging
@@ -273,10 +274,11 @@ class BulkGeoDanmarkFetcher:
             return False
 
     def bulk_download_buildings(self, batch_size: int = 30000):
-        """Download all buildings in batches and save to GeoParquet."""
+        """
+        Download all GeoDanmark buildings in batches with progress tracking.
 
-        # Don't rely on get_total_building_count() as WFS service limits it to 30,000
-        # Instead, keep fetching until we get fewer records than batch_size
+        This method continuously fetches batches until no more data is available.
+        """
         logger.info("🚀 Starting bulk download - will fetch until no more data available")
         logger.info(f"Using batch size: {batch_size:,}")
 
@@ -285,55 +287,69 @@ class BulkGeoDanmarkFetcher:
         total_buildings_downloaded = 0
         batch_tables = []
 
-        while True:
-            start_index = batch_num * batch_size
+        # Initialize progress bar (we don't know total batches, so use unknown total)
+        progress_bar = tqdm(desc="Downloading batches", unit="batch", ncols=80, disable=False)
 
-            logger.info(f"Processing batch {batch_num + 1} (starting at index {start_index:,})")
+        try:
+            while True:
+                start_index = batch_num * batch_size
 
-            # Fetch batch
-            gml_content = self.fetch_buildings_batch(start_index, batch_size)
-            if not gml_content:
-                logger.error(f"Failed to fetch batch {batch_num + 1}, stopping download")
-                break
+                progress_bar.set_description(f"Batch {batch_num + 1} (index {start_index:,})")
 
-            # Parse to DuckDB table
-            table_name = f"buildings_batch_{batch_num}"
-            success = self.parse_gml_to_duckdb_table(gml_content, table_name)
-            if not success:
-                logger.error(f"Failed to parse batch {batch_num + 1}, stopping download")
-                break
+                # Fetch batch
+                gml_content = self.fetch_buildings_batch(start_index, batch_size)
+                if not gml_content:
+                    logger.error(f"Failed to fetch batch {batch_num + 1}, stopping download")
+                    break
 
-            # Get batch size
-            result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-            current_batch_size = result[0] if result else 0
+                # Parse to DuckDB table
+                table_name = f"buildings_batch_{batch_num}"
+                success = self.parse_gml_to_duckdb_table(gml_content, table_name)
+                if not success:
+                    logger.error(f"Failed to parse batch {batch_num + 1}, stopping download")
+                    break
 
-            total_buildings_downloaded += current_batch_size
-            logger.info(f"Downloaded {current_batch_size:,} buildings in batch {batch_num + 1}")
-            logger.info(f"Total buildings downloaded so far: {total_buildings_downloaded:,}")
+                # Get batch size
+                result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                current_batch_size = result[0] if result else 0
 
-            if current_batch_size == 0:
-                logger.info("No more buildings to download - reached end of dataset")
-                break
+                total_buildings_downloaded += current_batch_size
 
-            batch_tables.append(table_name)
-            successful_batches += 1
-
-            # Save intermediate results every 10 batches
-            if len(batch_tables) >= 10:
-                self._save_intermediate_results(batch_tables, batch_num)
-                batch_tables = []
-
-            # Check if we got fewer records than requested - indicates end of dataset
-            if current_batch_size < batch_size:
-                logger.info(
-                    f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                # Update progress bar with current stats
+                progress_bar.set_postfix(
+                    {
+                        "buildings": f"{total_buildings_downloaded:,}",
+                        "batch_size": f"{current_batch_size:,}",
+                    }
                 )
-                break
+                progress_bar.update(1)
 
-            batch_num += 1
+                if current_batch_size == 0:
+                    logger.info("No more buildings to download - reached end of dataset")
+                    break
 
-            # Rate limiting
-            time.sleep(0.5)
+                batch_tables.append(table_name)
+                successful_batches += 1
+
+                # Save intermediate results every 10 batches
+                if len(batch_tables) >= 10:
+                    self._save_intermediate_results(batch_tables, batch_num)
+                    batch_tables = []
+
+                # Check if we got fewer records than requested - indicates end of dataset
+                if current_batch_size < batch_size:
+                    logger.info(
+                        f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                    )
+                    break
+
+                batch_num += 1
+
+                # Rate limiting
+                time.sleep(0.5)
+
+        finally:
+            progress_bar.close()
 
         # Save any remaining results
         if batch_tables:
@@ -351,8 +367,52 @@ class BulkGeoDanmarkFetcher:
             return
 
         try:
-            # Combine all batch tables using UNION ALL
-            union_query = " UNION ALL ".join([f"SELECT * FROM {table}" for table in table_names])
+            # First, get all unique columns across all tables to normalize schemas
+            all_columns = set()
+            table_schemas = {}
+
+            for table_name in table_names:
+                columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                table_columns = [col[0] for col in columns_info]
+                table_schemas[table_name] = table_columns
+                all_columns.update(table_columns)
+
+            # Sort columns for consistent ordering
+            all_columns = sorted(all_columns)
+
+            logger.info(
+                f"Normalizing schemas across {len(table_names)} tables with {len(all_columns)} total columns"
+            )
+
+            # Build normalized SELECT statements for each table
+            normalized_selects = []
+            for table_name in table_names:
+                table_columns = table_schemas[table_name]
+
+                # Build SELECT with all columns, using NULL for missing ones
+                select_parts = []
+                for col in all_columns:
+                    if col in table_columns:
+                        select_parts.append(f'"{col}"')
+                    else:
+                        # Use appropriate NULL type based on common column patterns
+                        if col in ["geometry", "geom"]:
+                            select_parts.append('CAST(NULL AS GEOMETRY) as "' + col + '"')
+                        elif any(keyword in col.lower() for keyword in ["id", "uuid", "nummer"]):
+                            select_parts.append('CAST(NULL AS VARCHAR) as "' + col + '"')
+                        elif any(
+                            keyword in col.lower()
+                            for keyword in ["area", "length", "width", "height"]
+                        ):
+                            select_parts.append('CAST(NULL AS DOUBLE) as "' + col + '"')
+                        else:
+                            select_parts.append('CAST(NULL AS VARCHAR) as "' + col + '"')
+
+                normalized_select = f"SELECT {', '.join(select_parts)} FROM {table_name}"
+                normalized_selects.append(normalized_select)
+
+            # Combine all normalized tables using UNION ALL
+            union_query = " UNION ALL ".join(normalized_selects)
 
             # Save to intermediate GeoParquet file
             output_file = self.output_dir / f"geodanmark_buildings_batch_{batch_num:04d}.geoparquet"
@@ -375,6 +435,14 @@ class BulkGeoDanmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error saving intermediate results: {e}")
+            # Log table schemas for debugging
+            try:
+                logger.info("Table schemas for debugging:")
+                for table_name in table_names:
+                    columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                    logger.info(f"  {table_name}: {[col[0] for col in columns_info]}")
+            except:
+                pass
 
     def _combine_intermediate_files(self):
         """Combine all intermediate files into final GeoParquet."""

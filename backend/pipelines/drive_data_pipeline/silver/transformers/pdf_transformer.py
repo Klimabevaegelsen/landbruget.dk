@@ -153,12 +153,39 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             if len(processed_tables) == 1:
                 final_table = processed_tables[0]
             else:
-                # Union all tables (they should have same structure after standardization)
+                # Union all tables - but handle different column structures
                 final_table = f"pdf_combined_{filename.replace('.', '_')}"
-                union_query = " UNION ALL ".join(
-                    [f"SELECT * FROM {table}" for table in processed_tables]
-                )
-                self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
+
+                # Find common columns across all tables
+                all_columns = {}
+                for table in processed_tables:
+                    columns = self.conn.execute(f"DESCRIBE {table}").fetchall()
+                    all_columns[table] = [col[0] for col in columns]
+
+                # Find intersection of all column sets
+                common_columns = set(all_columns[processed_tables[0]])
+                for table in processed_tables[1:]:
+                    common_columns = common_columns.intersection(set(all_columns[table]))
+
+                if common_columns:
+                    # Union with common columns only
+                    common_cols_list = sorted(list(common_columns))  # Sort for consistency
+                    common_cols_str = ", ".join([f'"{col}"' for col in common_cols_list])
+
+                    union_query = " UNION ALL ".join(
+                        [f"SELECT {common_cols_str} FROM {table}" for table in processed_tables]
+                    )
+                    self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
+
+                    logger.info(
+                        f"Combined {len(processed_tables)} tables using {len(common_columns)} common columns"
+                    )
+                else:
+                    # No common columns - just use the first table as fallback
+                    logger.warning(
+                        f"No common columns found across {len(processed_tables)} tables, using first table only"
+                    )
+                    final_table = processed_tables[0]
 
             logger.info(f"Successfully transformed PDF {filename} into table {final_table}")
             return final_table
@@ -228,48 +255,66 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             select_parts = []
 
             for col_name, col_type, *_ in columns_info:
+                # Properly escape column names with double quotes
+                escaped_col_name = f'"{col_name}"'
+
                 # Standardize column names (convert to snake_case)
                 clean_col_name = self._standardize_column_name(col_name)
 
-                # Apply data type standardization
+                # Apply data type standardization based on column type
                 if "VARCHAR" in col_type.upper() or "TEXT" in col_type.upper():
                     # Handle string columns - try to detect dates, booleans, numbers
                     select_parts.append(f"""
                         CASE 
-                            WHEN {col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
-                                 {col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
-                            THEN TRY_CAST({col_name} AS DATE)::VARCHAR
-                            WHEN LOWER({col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
-                            THEN CASE LOWER({col_name}) 
+                            WHEN {escaped_col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
+                                 {escaped_col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                            THEN TRY_CAST({escaped_col_name} AS DATE)::VARCHAR
+                            WHEN LOWER({escaped_col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
+                            THEN CASE LOWER({escaped_col_name}) 
                                      WHEN 'yes' THEN '1'
                                      WHEN 'true' THEN '1' 
                                      WHEN 'ja' THEN '1'
                                      WHEN 'no' THEN '0'
                                      WHEN 'false' THEN '0'
                                      WHEN 'nej' THEN '0'
-                                     ELSE {col_name}
+                                     ELSE {escaped_col_name}
                                  END
-                            WHEN {col_name} ~ '^-?\\d+\\.?\\d*$' 
-                            THEN TRY_CAST({col_name} AS DOUBLE)::VARCHAR
-                            ELSE {col_name}
+                            WHEN {escaped_col_name} ~ '^-?\\d+\\.?\\d*$' 
+                            THEN TRY_CAST({escaped_col_name} AS DOUBLE)::VARCHAR
+                            ELSE {escaped_col_name}
                         END AS {clean_col_name}
                     """)
+                elif "INTEGER" in col_type.upper() or "BIGINT" in col_type.upper():
+                    # Handle integer columns - cast to string first, then apply date pattern detection
+                    select_parts.append(f"""
+                        CASE 
+                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
+                                 CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                            THEN TRY_CAST(CAST({escaped_col_name} AS VARCHAR) AS DATE)::VARCHAR
+                            ELSE CAST({escaped_col_name} AS VARCHAR)
+                        END AS {clean_col_name}
+                    """)
+                elif "DOUBLE" in col_type.upper() or "FLOAT" in col_type.upper():
+                    # Handle float columns - convert to string
+                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
                 else:
-                    # Keep numeric/date columns as-is but with clean names
-                    select_parts.append(f"{col_name} AS {clean_col_name}")
+                    # Keep other column types as-is but with clean names, cast to string for consistency
+                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
 
             # Add metadata columns
             select_parts.append(f"{table_number} AS table_number")
             select_parts.append(f"'{source_file}' AS source_file")
 
-            # Create the cleaned table
+            # Create the cleaned table - also properly escape column names in WHERE clause
+            escaped_column_nulls = [f'"{col[0]}" IS NULL' for col in columns_info]
+
             self.conn.execute(f"""
                 CREATE TABLE {clean_table} AS
                 SELECT {", ".join(select_parts)}
                 FROM {table_name}
                 WHERE NOT (
                     -- Remove rows where all original columns are null
-                    {" AND ".join([f"{col[0]} IS NULL" for col in columns_info])}
+                    {" AND ".join(escaped_column_nulls)}
                 )
             """)
 
@@ -282,7 +327,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return table_name
 
     def _standardize_column_name(self, col_name: str) -> str:
-        """Convert column name to snake_case.
+        """Convert column name to snake_case with domain-specific mappings.
 
         Args:
             col_name: Original column name
@@ -291,6 +336,11 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             Standardized column name
         """
         import re
+
+        # First try domain-specific mappings
+        mapped_name = self._apply_domain_specific_mappings(col_name)
+        if mapped_name:
+            return mapped_name
 
         # Convert to lowercase and replace spaces/special chars with underscores
         clean_name = re.sub(r"[^a-zA-Z0-9]", "_", str(col_name).lower())
@@ -306,6 +356,92 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             clean_name = f"col_{clean_name}"
 
         return clean_name or "unnamed_column"
+
+    def _apply_domain_specific_mappings(self, col_name: str) -> str:
+        """Apply domain-specific column name mappings for known data types.
+
+        Args:
+            col_name: Original column name
+
+        Returns:
+            Mapped column name or None if no mapping applies
+        """
+        # Normalize column name for comparison (lowercase, no spaces)
+        normalized_name = col_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+        # VISA-specific column mappings (Danish and English)
+        visa_mappings = {
+            # Year variations
+            "aar": "year",
+            "år": "year", 
+            "year": "year",
+            "aarig": "year",
+            "årig": "year",
+            
+            # Nationality variations
+            "nationalitet": "nationality",
+            "nationality": "nationality",
+            "land": "nationality",
+            "country": "nationality", 
+            "oprindelsesland": "nationality",
+            "statsborger": "nationality",
+            "citizenship": "nationality",
+            
+            # First permits count variations
+            "foerstetilladelser": "first_permits_count",
+            "førstegangsarbejdstilladelser": "first_permits_count",
+            "firstpermits": "first_permits_count",
+            "foerstetilladelse": "first_permits_count",
+            "førstegangs": "first_permits_count",
+            "initialpermits": "first_permits_count",
+            "nyetilladelser": "first_permits_count",
+            "newtilladelser": "first_permits_count",
+            "antal": "count",
+            "count": "count",
+            "tael": "count",
+            "tal": "count",
+            
+            # CVR mappings (for company identification)
+            "cvr": "cvr_number",
+            "cvrno": "cvr_number",
+            "cvrnr": "cvr_number",
+            "cvrnummer": "cvr_number",
+            "virksomhedsnummer": "cvr_number",
+            "companyid": "cvr_number",
+            "company_id": "cvr_number",
+            "firmaid": "cvr_number",
+            "firma_id": "cvr_number",
+            
+            # Company name variations
+            "virksomhedsnavn": "company_name",
+            "firmanavn": "company_name",  
+            "companyname": "company_name",
+            "arbejdsgiver": "company_name",
+            "employer": "company_name",
+        }
+
+        # Check if this matches any VISA column
+        if normalized_name in visa_mappings:
+            return visa_mappings[normalized_name]
+
+        # Check for partial matches on common VISA terms
+        visa_partial_patterns = {
+            "tilladelse": "permits",
+            "permit": "permits", 
+            "arbejds": "work",
+            "work": "work",
+            "visa": "visa",
+            "visum": "visa",
+        }
+        
+        for pattern, mapped in visa_partial_patterns.items():
+            if pattern in normalized_name:
+                # If it contains count/number indicators, add _count suffix
+                if any(count_term in normalized_name for count_term in ["antal", "count", "tal", "tael", "number"]):
+                    return f"{mapped}_count"
+                return mapped
+
+        return None
 
     def _create_schema_dict_from_table(self, table_name: str) -> dict:
         """Create schema dictionary from DuckDB table.

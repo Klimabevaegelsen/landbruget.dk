@@ -25,8 +25,6 @@ from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig
 )
-from unified_pipeline.util.gcs_util import GCSUtil
-from unified_pipeline.model.app_config import GCSConfig
 
 # Create configuration
 config = PesticideDisaggregationGoldConfig(
@@ -36,8 +34,7 @@ config = PesticideDisaggregationGoldConfig(
 )
 
 # Initialize processor
-gcs_util = GCSUtil(GCSConfig())
-processor = PesticideDisaggregationGold(config, gcs_util)
+processor = PesticideDisaggregationGold(config)
 
 # Run processing
 import asyncio
@@ -88,11 +85,13 @@ The processor implements 4 strategies in exact order from the original pipeline:
 - For cases where pesticide area < field area
 - Flags results as partial coverage with spatial uncertainty
 
-### 4. Adjacent Fields Single Cluster
+### 4. Adjacent Fields Single Cluster (Corrected Implementation)
 
-- Handles multi-field CVR+crop combinations
-- Allocates proportionally across clustered fields
-- Simplified spatial clustering logic
+- Finds spatial clusters of adjacent fields (within 10m buffer)
+- **Matches cluster area against pesticide area** (within 2% tolerance)
+- Only allocates when both spatial coherence AND area match exist
+- Prevents spurious correlations from random field combinations
+- Uses connected components algorithm for proper clustering
 
 ## Output Schema
 
@@ -134,7 +133,7 @@ Results are tagged with allocation methods to track strategy effectiveness:
 - `Marker_ApplicationAreaToTotalFieldArea_FieldProportional` - Main strategy
 - `Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional` - Non-organic strategy  
 - `Partial_Field_Coverage_SingleField` - Partial coverage strategy
-- `Adjacent_Fields_Single_Cluster_Proportional` - Clustering strategy
+- `Adjacent_Fields_Spatial_Cluster_AreaMatched` - Spatial clustering with area matching
 
 ## Performance
 

@@ -33,18 +33,20 @@ const getCachedSupabaseClient = cache(() => {
 export const supabase: SupabaseClient<Database> = getCachedSupabaseClient();
 
 // Utility function for error handling
-export function handleSupabaseError(error: any): never {
+export function handleSupabaseError(error: unknown): never {
   console.error('Supabase error:', error);
   
-  if (error?.code === 'PGRST116') {
-    throw new Error('No data found for the specified criteria');
+  if (error && typeof error === 'object' && 'code' in error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('No data found for the specified criteria');
+    }
+    
+    if (error.code === 'PGRST301') {
+      throw new Error('Database connection error');
+    }
   }
   
-  if (error?.code === 'PGRST301') {
-    throw new Error('Database connection error');
-  }
-  
-  if (error?.message) {
+  if (error && typeof error === 'object' && 'message' in error) {
     throw new Error(`Database error: ${error.message}`);
   }
   
@@ -115,7 +117,7 @@ export function buildBboxQuery(bbox: {
 // Connection health check
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('h3_pfas_exposure')
       .select('id')
       .limit(1);

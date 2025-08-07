@@ -257,7 +257,6 @@ export class DataVirtualizer {
    * Get maximum points allowed for zoom level and layer type
    */
   private getMaxPointsForZoom(zoom: number, layerType: 'h3' | 'bnbo' | 'bbr'): number {
-    const performanceMultiplier = this.getPerformanceMultiplier();
     const config = this.getLayerConfigForZoom(zoom);
     
     switch (layerType) {
@@ -353,7 +352,7 @@ export class DataVirtualizer {
   /**
    * Calculate memory usage estimate for dataset
    */
-  estimateMemoryUsage(data: any[]): number {
+  estimateMemoryUsage(data: unknown[]): number {
     // Rough estimate: 1KB per data point
     return data.length * 1024;
   }
@@ -361,7 +360,7 @@ export class DataVirtualizer {
   /**
    * Check if dataset should be virtualized based on size
    */
-  shouldVirtualize(data: any[], layerType: 'h3' | 'bnbo' | 'bbr'): boolean {
+  shouldVirtualize(data: unknown[], layerType: 'h3' | 'bnbo' | 'bbr'): boolean {
     const thresholds = {
       h3: 5000,
       bnbo: 2000,

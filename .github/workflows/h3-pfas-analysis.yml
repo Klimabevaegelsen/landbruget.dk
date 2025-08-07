@@ -1,0 +1,540 @@
+name: H3 PFAS Exposure Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2022,2023" or leave empty for all)'
+        required: false
+        default: ''
+      analysis_modes:
+        description: 'Analysis modes to run'
+        required: true
+        default: 'h3,kommune'
+        type: choice
+        options:
+          - 'h3'
+          - 'kommune'
+          - 'h3,kommune'
+      h3_resolutions:
+        description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for all resolutions)'
+        required: false
+        default: '7,8,9,10'
+      memory_limit:
+        description: 'Memory limit for processing (optimized for 16GB GitHub Actions free tier)'
+        required: false
+        default: '14GB'
+      thread_count:
+        description: 'Number of threads (optimized for 4 CPU GitHub Actions free tier - max available)'
+        required: false
+        default: '4'
+      chunk_size:
+        description: 'H3 cells per chunk (optimized for 16GB RAM)'
+        required: false
+        default: '10000'
+  
+  schedule:
+    # Run weekly on Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+  
+  push:
+    paths:
+      - 'backend/pipelines/h3_pfas_exposure_pipeline/**'
+      - '.github/workflows/h3-pfas-analysis.yml'
+    branches:
+      - main
+
+env:
+  GCS_BUCKET: landbrugsdata-raw-data
+  PIPELINE_DIR: backend/pipelines/h3_pfas_exposure_pipeline
+
+jobs:
+  # Prepare matrix strategy
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set year-based matrix (optimized to avoid redundant annual data downloads)
+        id: set-matrix
+        run: |
+          # Parse analysis modes (h3 and kommune are different aggregation levels)
+          analysis_modes_input="${{ github.event.inputs.analysis_modes || 'h3,kommune' }}"
+          if [[ "$analysis_modes_input" == *","* ]]; then
+            IFS=',' read -ra modes <<< "$analysis_modes_input"
+          else
+            modes=("$analysis_modes_input")
+          fi
+          
+          # Parse H3 resolutions (only relevant for h3 mode)
+          h3_resolutions_input="${{ github.event.inputs.h3_resolutions || '7,8,9,10' }}"
+          if [[ "$h3_resolutions_input" == *","* ]]; then
+            IFS=',' read -ra resolutions <<< "$h3_resolutions_input"
+          else
+            resolutions=("$h3_resolutions_input")
+          fi
+          
+          # Parse years - create one job per year
+          if [[ -n "${{ github.event.inputs.years }}" ]]; then
+            if [[ "${{ github.event.inputs.years }}" == *","* ]]; then
+              IFS=',' read -ra years <<< "${{ github.event.inputs.years }}"
+            else
+              years=("${{ github.event.inputs.years }}")
+            fi
+          else
+            # Default to all available years (2015-2023)
+            years=("2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
+          fi
+          
+          # Build matrix combinations - one job per YEAR
+          # Each job processes ALL requested aggregation levels (h3 resolutions + kommune) for that year
+          # This avoids downloading the same large annual data files (pesticide disaggregation, FVM fields) multiple times
+          matrix_items=()
+          for year in "${years[@]}"; do
+            # Build list of all aggregation levels to process
+            aggregation_levels=()
+            
+            # Add H3 resolutions if h3 mode is requested
+            if [[ " ${modes[@]} " =~ " h3 " ]]; then
+              for res in "${resolutions[@]}"; do
+                aggregation_levels+=("h3:$res")
+              done
+            fi
+            
+            # Add kommune if kommune mode is requested
+            if [[ " ${modes[@]} " =~ " kommune " ]]; then
+              aggregation_levels+=("kommune")
+            fi
+            
+            # Convert to comma-separated string
+            aggregation_levels_str=$(IFS=','; echo "${aggregation_levels[*]}")
+            
+            matrix_items+=("{\"year\":\"$year\",\"aggregation_levels\":\"$aggregation_levels_str\"}")
+          done
+          
+          # Convert to JSON array
+          matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "Generated optimized matrix (one job per year, processes all aggregation levels): $matrix_json"
+
+  # Matrix job for parallel analysis by year and resolution
+  h3-pfas-analysis:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+      fail-fast: false  # Allow other jobs to continue if one fails
+      max-parallel: 10  # Allow up to 10 concurrent jobs for faster processing
+    
+    name: Process Year ${{ matrix.year }} - All Aggregation Levels
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgeos-dev \
+            libproj-dev \
+            libgdal-dev \
+            git \
+            libsqlite3-dev \
+            zlib1g-dev
+          
+          # Install tippecanoe for PMTiles generation
+          echo "🗺️ Installing tippecanoe for PMTiles generation..."
+          
+          # Build tippecanoe from source (no pre-built binaries available)
+          echo "Building tippecanoe from source using all 4 available CPU cores..."
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          # Use all 4 CPU cores for maximum build speed on GitHub Actions free tier (4-vCPU, 16GB RAM)
+          make -j4
+          sudo make install
+          cd /
+          rm -rf /tmp/tippecanoe
+          
+          # Verify installation
+          if command -v tippecanoe &> /dev/null; then
+            echo "✅ Tippecanoe installed successfully: $(tippecanoe --version)"
+          else
+            echo "❌ Tippecanoe installation failed"
+            exit 1
+          fi
+      
+      - name: Install Python dependencies
+        working-directory: ${{ env.PIPELINE_DIR }}
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd ../unified_pipeline
+          uv pip install --system -e .
+          
+          # Install H3 PFAS pipeline dependencies
+          cd ../h3_pfas_exposure_pipeline
+          uv pip install --system -e ".[production]"
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Verify GCS access
+        run: |
+          gsutil ls gs://${{ env.GCS_BUCKET }}/ | head -5
+      
+      - name: Run H3 PFAS Analysis - Year ${{ matrix.year }} - All Aggregation Levels
+        working-directory: ${{ env.PIPELINE_DIR }}
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          # Optimized for single-year, multi-aggregation processing with 16GB RAM, 4 CPU
+          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
+          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
+          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
+          LOG_LEVEL: INFO
+          ENABLE_PROGRESS_TRACKING: true
+          LOG_CHUNK_DETAILS: false
+          LOG_STAGE_TIMINGS: false
+          PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
+        run: |
+          # Parse aggregation levels for this year
+          IFS=',' read -ra aggregation_levels <<< "${{ matrix.aggregation_levels }}"
+          
+          # Optimized parameters for GitHub Actions 16GB RAM, 4 CPU
+          memory_limit="${{ github.event.inputs.memory_limit || '14GB' }}"
+          thread_count="${{ github.event.inputs.thread_count || '4' }}"
+          chunk_size="${{ github.event.inputs.chunk_size || '10000' }}"
+          
+          echo "🚀 Running H3 PFAS Analysis with optimized single-year processing:"
+          echo "   💾 Memory: $memory_limit (of 16GB available - free tier - max available)"
+          echo "   ⚙️ Threads: $thread_count (of 4 CPUs available - free tier - max available)"
+          echo "   📦 Chunk size: $chunk_size (optimized for 16GB RAM)"
+          echo "   📅 Year: ${{ matrix.year }} (SINGLE YEAR PER JOB)"
+          echo "   🎯 Aggregation levels: ${{ matrix.aggregation_levels }}"
+          echo "   ⚡ Efficiency: Large annual data files (pesticide disaggregation, FVM fields) downloaded once per year"
+          echo ""
+          
+          # Build single command with all aggregation levels to avoid redundant processing
+          # This ensures data is loaded once and cached across all aggregation levels
+          cmd="python main.py --verbose"
+          cmd="$cmd --years ${{ matrix.year }}"
+          cmd="$cmd --memory-limit $memory_limit"
+          cmd="$cmd --thread-count $thread_count"
+          cmd="$cmd --chunk-size $chunk_size"
+          
+          # Parse aggregation levels and build mode-specific arguments
+          h3_resolutions=()
+          include_kommune=false
+          
+          for level in "${aggregation_levels[@]}"; do
+            if [[ "$level" == "kommune" ]]; then
+              include_kommune=true
+            elif [[ "$level" == h3:* ]]; then
+              resolution="${level#h3:}"
+              h3_resolutions+=("$resolution")
+            fi
+          done
+          
+          # Add mode arguments based on what's requested
+          if [[ ${#h3_resolutions[@]} -gt 0 ]]; then
+            cmd="$cmd --mode h3"
+            # Join resolutions with commas for multi-resolution support
+            h3_res_str=$(IFS=','; echo "${h3_resolutions[*]}")
+            cmd="$cmd --h3-resolution $h3_res_str"
+            
+            if [[ "$include_kommune" == true ]]; then
+              cmd="$cmd --include-kommune"
+            fi
+          elif [[ "$include_kommune" == true ]]; then
+            cmd="$cmd --mode kommune"
+          fi
+          
+          echo "🚀 Running optimized single-process analysis for year ${{ matrix.year }}"
+          echo "   🎯 Aggregation levels: ${{ matrix.aggregation_levels }}"
+          echo "   ⚡ Efficiency: Single process, shared data loading and caching"
+          echo "Command: $cmd"
+          eval $cmd
+          
+          echo "✅ Completed all aggregation levels for year ${{ matrix.year }}"
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-year${{ matrix.year }}-${{ github.run_id }}
+          path: |
+            ${{ env.PIPELINE_DIR }}/*.log
+            /tmp/*.log
+          retention-days: 7
+      
+      - name: Collect output paths and save as artifacts
+        run: |
+          echo "Collecting GCS output paths for year ${{ matrix.year }}..."
+          
+          # Create artifacts directory
+          mkdir -p artifacts
+          
+          # Find H3 outputs for this year
+          echo "🔍 Finding H3 outputs..."
+          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_${{ matrix.year }}_res*/*/h3_pesticide_${{ matrix.year }}_res*.parquet > artifacts/h3_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No H3 outputs found"
+          
+          # Find kommune outputs for this year  
+          echo "🔍 Finding kommune outputs..."
+          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_${{ matrix.year }}/*/kommune_pesticide_${{ matrix.year }}.parquet > artifacts/kommune_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No kommune outputs found"
+          
+          # Show what we found
+          echo "📊 Found outputs for year ${{ matrix.year }}:"
+          if [[ -s artifacts/h3_paths_${{ matrix.year }}.txt ]]; then
+            echo "H3 outputs:"
+            cat artifacts/h3_paths_${{ matrix.year }}.txt
+          fi
+          if [[ -s artifacts/kommune_paths_${{ matrix.year }}.txt ]]; then
+            echo "Kommune outputs:"
+            cat artifacts/kommune_paths_${{ matrix.year }}.txt
+          fi
+          
+          # Create a summary file with metadata
+          echo "{" > artifacts/summary_${{ matrix.year }}.json
+          echo "  \"year\": ${{ matrix.year }}," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"aggregation_levels\": \"${{ matrix.aggregation_levels }}\"," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"h3_files\": [" >> artifacts/summary_${{ matrix.year }}.json
+          if [[ -s artifacts/h3_paths_${{ matrix.year }}.txt ]]; then
+            sed 's/.*/"&"/' artifacts/h3_paths_${{ matrix.year }}.txt | paste -sd, >> artifacts/summary_${{ matrix.year }}.json
+          fi
+          echo "  ]," >> artifacts/summary_${{ matrix.year }}.json
+          echo "  \"kommune_files\": [" >> artifacts/summary_${{ matrix.year }}.json
+          if [[ -s artifacts/kommune_paths_${{ matrix.year }}.txt ]]; then
+            sed 's/.*/"&"/' artifacts/kommune_paths_${{ matrix.year }}.txt | paste -sd, >> artifacts/summary_${{ matrix.year }}.json
+          fi
+          echo "  ]" >> artifacts/summary_${{ matrix.year }}.json
+          echo "}" >> artifacts/summary_${{ matrix.year }}.json
+          
+          echo "📄 Summary file for year ${{ matrix.year }}:"
+          cat artifacts/summary_${{ matrix.year }}.json
+
+      - name: Upload output paths as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-paths-year${{ matrix.year }}
+          path: artifacts/
+          retention-days: 1  # Only need these for the cumulative job
+
+  # Cumulative analysis job - runs after all individual years are processed
+  cumulative-analysis:
+    needs: [prepare-matrix, h3-pfas-analysis]
+    runs-on: ubuntu-latest
+    if: needs.h3-pfas-analysis.result == 'success'
+    
+    name: Generate Cumulative Analysis (All Years Combined)
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgeos-dev \
+            libproj-dev \
+            libgdal-dev \
+            git \
+            libsqlite3-dev \
+            zlib1g-dev
+          
+          # Install tippecanoe for PMTiles generation
+          echo "🗺️ Installing tippecanoe for PMTiles generation..."
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j4
+          sudo make install
+          cd /
+          rm -rf /tmp/tippecanoe
+          
+          # Verify installation
+          if command -v tippecanoe &> /dev/null; then
+            echo "✅ Tippecanoe installed successfully: $(tippecanoe --version)"
+          else
+            echo "❌ Tippecanoe installation failed"
+            exit 1
+          fi
+      
+      - name: Install Python dependencies
+        working-directory: ${{ env.PIPELINE_DIR }}
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd ../unified_pipeline
+          uv pip install --system -e .
+          
+          # Install H3 PFAS pipeline dependencies
+          cd ../h3_pfas_exposure_pipeline
+          uv pip install --system -e ".[production]"
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Download output path artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: output-paths-year*
+          path: downloaded-artifacts/
+          merge-multiple: true
+      
+      - name: List available artifacts
+        run: |
+          echo "📦 Downloaded artifacts:"
+          find downloaded-artifacts/ -type f -name "*.json" | sort
+          echo ""
+          echo "📄 Artifact contents:"
+          for file in downloaded-artifacts/summary_*.json; do
+            if [[ -f "$file" ]]; then
+              echo "=== $(basename $file) ==="
+              cat "$file"
+              echo ""
+            fi
+          done
+      
+      - name: Run Cumulative Analysis
+        working-directory: ${{ env.PIPELINE_DIR }}
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
+          THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
+          CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
+          LOG_LEVEL: INFO
+          ENABLE_PROGRESS_TRACKING: true
+          PYTHONPATH: ${{ github.workspace }}/${{ env.PIPELINE_DIR }}/src
+        run: |
+          echo "🚀 Running Cumulative Analysis (All Years Combined)"
+          echo "   💾 Memory: ${{ github.event.inputs.memory_limit || '14GB' }}"
+          echo "   ⚙️ Threads: ${{ github.event.inputs.thread_count || '4' }}"
+          echo "   📦 Chunk size: ${{ github.event.inputs.chunk_size || '10000' }}"
+          echo "   📊 Analysis: Cumulative data across all available years"
+          echo ""
+          
+          # Run cumulative analysis
+          python main.py --verbose \
+            --mode cumulative \
+            --include-kommune \
+            --memory-limit ${{ github.event.inputs.memory_limit || '14GB' }} \
+            --thread-count ${{ github.event.inputs.thread_count || '4' }} \
+            --chunk-size ${{ github.event.inputs.chunk_size || '10000' }}
+          
+          echo "✅ Completed cumulative analysis"
+      
+      - name: Verify cumulative output
+        run: |
+          echo "Checking for cumulative output files in GCS..."
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
+
+  # Summary job
+  analysis-summary:
+    needs: [prepare-matrix, h3-pfas-analysis, cumulative-analysis]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Check job results
+        run: |
+          echo "=== H3 PFAS Analysis Summary ==="
+          echo "Matrix jobs: ${{ needs.prepare-matrix.outputs.matrix }}"
+          echo "Individual year analyses: ${{ needs.h3-pfas-analysis.result }}"
+          echo "Cumulative analysis: ${{ needs.cumulative-analysis.result }}"
+          
+          if [[ "${{ needs.h3-pfas-analysis.result }}" == "success" ]] && [[ "${{ needs.cumulative-analysis.result }}" == "success" ]]; then
+            echo "✅ All analyses completed successfully!"
+          else
+            echo "❌ Some analyses failed. Check the logs for details."
+            if [[ "${{ needs.h3-pfas-analysis.result }}" != "success" ]]; then
+              echo "  - Individual year analyses: ${{ needs.h3-pfas-analysis.result }}"
+            fi
+            if [[ "${{ needs.cumulative-analysis.result }}" != "success" ]]; then
+              echo "  - Cumulative analysis: ${{ needs.cumulative-analysis.result }}"
+            fi
+            exit 1
+          fi
+      
+      - name: Authenticate to Google Cloud
+        if: needs.h3-pfas-analysis.result == 'success'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        if: needs.h3-pfas-analysis.result == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: List final outputs
+        if: needs.h3-pfas-analysis.result == 'success' && needs.cumulative-analysis.result == 'success'
+        run: |
+          echo "=== Final Output Files ==="
+          echo "Recent H3 outputs (individual years):"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_*/*/h3_pesticide_*.parquet | tail -10
+          echo ""
+          echo "Recent kommune outputs (individual years):"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_*/*/kommune_pesticide_*.parquet | tail -10
+          echo ""
+          echo "Cumulative PMTiles files:"
+          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/pmtiles/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
+
+  # Notification job
+  notify:
+    needs: [analysis-summary]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name != 'push'
+    
+    steps:
+      - name: Send notification
+        if: needs.analysis-summary.result == 'success'
+        run: |
+          echo "🎉 H3 PFAS Analysis completed successfully!"
+          echo "✅ All individual years processed with resource isolation"
+          echo "✅ Cumulative analysis generated for 'Total' year option"
+          echo "Check the Actions tab for detailed logs and output locations."
+      
+      - name: Send failure notification
+        if: needs.analysis-summary.result == 'failure'
+        run: |
+          echo "❌ H3 PFAS Analysis failed!"
+          echo "Check the Actions tab for error details and logs." 

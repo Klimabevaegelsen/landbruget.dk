@@ -1,14 +1,26 @@
 # Svineflytning Pipeline
 
-This pipeline fetches pig movement data from the SvineflytningWS SOAP service and processes it into a standardized format.
+This pipeline fetches pig movement data from the SvineflytningWS SOAP service and processes it into a standardized format following the Medallion architecture (Bronze → Silver).
 
 ## Features
 
+### Bronze Layer
 - Fetches pig movement data for the last 5 years by default
 - Processes data in parallel using multiple workers
 - Handles pagination and chunking of requests (max 3 days per request as per API requirements)
-- Runs daily via GitHub Actions
-- Exports data in a structured format
+- Exports raw data in JSON format
+
+### Silver Layer
+- Transforms raw pig movement data into clean, structured tables
+- Creates three main tables: movements, properties, and vehicles
+- Performs data quality checks and validation
+- Standardizes column names and data types
+- Exports processed data in Parquet format
+
+### Automation
+- Runs via GitHub Actions with configurable stages
+- Supports both bronze and silver processing
+- Can process specific bronze timestamps for silver layer
 
 ## Prerequisites
 
@@ -34,26 +46,38 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 
 ### Using Docker Compose (recommended)
 
-1. Build and run the pipeline:
+1. Build and run the complete pipeline (bronze + silver):
    ```bash
    docker-compose up --build
    ```
 
-2. To specify a custom date range:
+2. Run only bronze stage:
    ```bash
-   docker-compose run --rm svineflytning-pipeline --start-date 2024-01-01 --end-date 2024-03-31
+   docker-compose run --rm svineflytning-pipeline --stage bronze --start-date 2024-01-01 --end-date 2024-03-31
+   ```
+
+3. Run only silver stage (processes latest bronze data):
+   ```bash
+   docker-compose run --rm svineflytning-pipeline --stage silver
+   ```
+
+4. Run silver stage for specific bronze timestamp:
+   ```bash
+   docker-compose run --rm svineflytning-pipeline --stage silver --bronze-timestamp 20240707_065654
    ```
 
 ### Available Options
 
-- `--start-date`: Start date in YYYY-MM-DD format (default: 5 years ago)
-- `--end-date`: End date in YYYY-MM-DD format (default: today)
-- `--workers`: Number of parallel workers (default: 10)
+- `--stage`: Pipeline stage to run (bronze, silver, all) - default: all
+- `--start-date`: Start date in YYYY-MM-DD format (default: 5 years ago) - bronze stage only
+- `--end-date`: End date in YYYY-MM-DD format (default: today) - bronze stage only
+- `--bronze-timestamp`: Specific bronze timestamp to process (YYYYMMDD_HHMMSS) - silver stage only
 - `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
 - `--progress`: Show progress information
-- `--environment`: Environment to use (prod, test)
-- `--test`: Run in test mode with limited data
-- `--gcs-bucket`: Google Cloud Storage bucket for export
+- `--environment`: Environment to use (prod, test) - bronze stage only
+- `--test`: Run in test mode with limited data - bronze stage only
+- `--max-concurrent-fetches`: Number of parallel API calls (default: 5) - bronze stage only
+- `--buffer-size`: Number of responses to buffer (default: 50) - bronze stage only
 
 ### Example Commands
 
@@ -75,9 +99,40 @@ This pipeline fetches pig movement data from the SvineflytningWS SOAP service an
 ## Data Output
 
 The pipeline outputs data to the following locations:
-- Raw data: `/data/raw/svineflytning/`
-- Bronze layer transformations: `bronze/`
-- Silver layer transformations: `silver/`
+
+### Bronze Layer
+- **Local**: `/data/raw/svineflytning/{timestamp}/svineflytning.json`
+- **GCS**: `gs://landbrugsdata-raw-data/bronze/svineflytning/{timestamp}/svineflytning.json`
+
+### Silver Layer
+- **Local**: `/data/silver/svineflytning/{timestamp}/`
+  - `movements.parquet` - Main pig movement records
+  - `properties.parquet` - Property/farm information
+  - `vehicles.parquet` - Transport vehicle data
+- **GCS**: `gs://landbrugsdata-raw-data/silver/svineflytning/{timestamp}/`
+
+### Data Schema
+
+#### Movements Table
+- `movement_id` - Unique movement identifier
+- `movement_date` - Date of pig movement
+- `sender_chr_number` - Sender farm CHR number
+- `receiver_chr_number` - Receiver farm CHR number
+- `total_animals` - Number of animals moved
+- `vehicle_registration` - Transport vehicle registration
+- Data quality flags and processing metadata
+
+#### Properties Table
+- `chr_number` - CHR number (farm identifier)
+- `address` - Farm address
+- `municipality_code` - Municipality code
+- `postal_code` - Postal code
+
+#### Vehicles Table
+- `vehicle_registration` - Vehicle registration number
+- `usage_count` - Number of times used
+- `first_movement_date` - First recorded movement
+- `last_movement_date` - Last recorded movement
 
 ## Troubleshooting
 

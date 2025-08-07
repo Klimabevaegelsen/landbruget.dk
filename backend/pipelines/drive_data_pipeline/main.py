@@ -22,12 +22,159 @@ from drive_data_pipeline.silver import SilverProcessor
 from drive_data_pipeline.utils.logging import get_logger, setup_logging
 from drive_data_pipeline.utils.storage import get_storage_manager
 
+# Try to import CVR collection utilities
+try:
+    from unified_pipeline.util.cvr_collection import (
+        extract_cvr_numbers_from_table,
+        save_pipeline_cvr_numbers,
+    )
+    from unified_pipeline.util.gcs_access import GCSDataAccess
+
+    CVR_COLLECTION_AVAILABLE = True
+    print("✅ CVR collection utilities imported successfully")
+except ImportError as e:
+    print(f"⚠️ CVR collection utilities not available: {e}")
+    CVR_COLLECTION_AVAILABLE = False
+    extract_cvr_numbers_from_table = None
+    save_pipeline_cvr_numbers = None
+    GCSDataAccess = None
+
 # Load .env file directly - check current directory first, then parent
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 if not os.path.exists(env_path):
     # Try parent directory
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
+
+
+def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetime, logger) -> None:
+    """
+    Extract and save CVR numbers discovered in the drive data pipeline silver data.
+
+    Args:
+        silver_path: Path to silver data directory
+        pipeline_start_time: Pipeline start time for timestamp generation
+        logger: Logger instance
+    """
+    try:
+        logger.info("📊 Starting CVR collection for drive data pipeline")
+
+        # Strategy 1: First try to find local parquet files from current pipeline run
+        # Ensure silver directory exists before searching for files
+        if silver_path.exists():
+            local_parquet_files = list(silver_path.rglob("*.parquet"))
+        else:
+            logger.info(f"⚠️ Silver directory does not exist: {silver_path}")
+            local_parquet_files = []
+        
+        files_to_process = []
+        source_description = ""
+        
+        if local_parquet_files:
+            logger.info(f"✅ Found {len(local_parquet_files)} local parquet files from current run")
+            files_to_process = [(str(f), "local") for f in local_parquet_files]
+            source_description = "local files"
+        else:
+            # Strategy 2: Fallback to downloading recent files from GCS
+            logger.info("🔍 No local parquet files found, searching GCS for recent files")
+            
+            try:
+                gcs_access = GCSDataAccess()
+                bucket = "landbrugsdata-raw-data"
+                
+                # Find parquet files in GCS silver directory with pattern matching
+                silver_pattern = f"gs://{bucket}/silver/*/*/*.parquet"
+                parquet_files = gcs_access.list_files(silver_pattern)
+                
+                # Filter to only recent files (within reasonable timeframe of pipeline run)
+                pipeline_date = pipeline_start_time.strftime("%Y%m%d")
+                recent_files = [f for f in parquet_files if pipeline_date in f]
+                
+                if not recent_files:
+                    # Fallback to most recent files if no files from today
+                    logger.warning(f"⚠️ No files found for date {pipeline_date}, using most recent files")
+                    recent_files = sorted(parquet_files, reverse=True)[:20]  # Most recent 20 files
+                    
+                files_to_process = [(f, "gcs") for f in recent_files[:20]]  # Limit to avoid excessive processing
+                source_description = f"GCS files (filtered for {pipeline_date})"
+                
+            except Exception as e:
+                logger.error(f"❌ Could not access GCS files: {e}")
+                return
+
+        if not files_to_process:
+            logger.warning("⚠️ No parquet files found in local directory or GCS")
+            return
+
+        logger.info(f"📂 Processing {len(files_to_process)} files from {source_description}")
+
+        import duckdb
+        conn = duckdb.connect()
+        all_cvr_numbers = []
+
+        # Initialize GCS access only if needed
+        gcs_access = None
+        if any(source == "gcs" for _, source in files_to_process):
+            gcs_access = GCSDataAccess()
+
+        # Process each parquet file
+        for i, (file_path, source) in enumerate(files_to_process):
+            try:
+                table_name = f"drive_table_{i + 1}"
+                file_display_name = Path(file_path).name if source == "local" else file_path.split("/")[-1]
+                
+                if source == "gcs":
+                    # Download from GCS and load into DuckDB
+                    with gcs_access._temp_download(file_path) as temp_file:
+                        conn.execute(
+                            f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                        )
+                else:
+                    # Local file - use directly
+                    conn.execute(
+                        f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                    )
+
+                # Extract CVR numbers from this table
+                cvr_numbers = extract_cvr_numbers_from_table(
+                    table_name=table_name,
+                    connection=conn,
+                    cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                )
+
+                if cvr_numbers:
+                    all_cvr_numbers.extend(cvr_numbers)
+                    logger.info(f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})")
+                else:
+                    logger.debug(f"   • {file_display_name}: No CVR numbers found ({source})")
+
+            except Exception as e:
+                logger.warning(f"   • {file_display_name}: Error extracting CVR numbers - {e}")
+
+        # Remove duplicates and sort
+        unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+
+        if unique_cvr_numbers:
+            # Initialize GCS access for saving if not already done
+            if gcs_access is None:
+                gcs_access = GCSDataAccess()
+                
+            timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+            gcs_path = save_pipeline_cvr_numbers(
+                pipeline_name="drive_data_pipeline",
+                cvr_numbers=unique_cvr_numbers,
+                gcs_access=gcs_access,
+                bucket="landbrugsdata-raw-data",
+                timestamp=timestamp,
+            )
+
+            logger.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+        else:
+            logger.warning("⚠️ No CVR numbers found in drive data pipeline")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to save CVR numbers for drive data pipeline: {e}")
 
 
 class ProgressTracker:
@@ -214,6 +361,7 @@ def main() -> int:
         storage_manager = get_storage_manager(
             storage_type=settings.storage_type.value,
             bucket_name=settings.gcs_bucket,
+            base_dir=str(settings.base_path),
         )
 
         # Initialize metadata manager
@@ -296,8 +444,11 @@ def main() -> int:
                 # Traditional mode - just get the run path
                 bronze_run_path = bronze_processor.run_path
 
-        # Process Silver layer if not bronze_only
+        # Process Silver layer if requested
+        silver_processed_count = 0
         if not args.bronze_only:
+            logger.info("Starting Silver layer processing")
+
             # Initialize Silver processor with progress tracking
             silver_processor = SilverProcessor(
                 settings=settings,
@@ -361,7 +512,7 @@ def main() -> int:
                 progress.start_silver_operation(files_to_process_count)
 
                 # Process from memory
-                silver_processor.process_from_memory(
+                silver_processed_count = silver_processor.process_from_memory(
                     bronze_data=bronze_data,
                     specific_subfolders=subfolders,
                     supported_file_types=file_types,
@@ -378,16 +529,17 @@ def main() -> int:
                     )
 
                     # For GCS storage, also check recursively
-                    if hasattr(storage_manager.storage, "bucket"):
+                    if storage_manager.storage_type.lower() == "gcs":
                         # GCS storage - list with recursive prefix
                         prefix = str(bronze_run_path).rstrip("/") + "/"
-                        blobs = storage_manager.storage.bucket.list_blobs(prefix=prefix)
-                        additional_files = [
-                            Path(blob.name)
-                            for blob in blobs
-                            if blob.name.endswith(".metadata.json")
-                        ]
-                        metadata_files.extend(additional_files)
+                        if hasattr(storage_manager, "gcs_bucket") and storage_manager.gcs_bucket:
+                            blobs = storage_manager.gcs_bucket.list_blobs(prefix=prefix)
+                            additional_files = [
+                                Path(blob.name)
+                                for blob in blobs
+                                if blob.name.endswith(".metadata.json")
+                            ]
+                            metadata_files.extend(additional_files)
 
                     # Filter by file types if specified
                     files_to_process_count = len(metadata_files)
@@ -414,7 +566,7 @@ def main() -> int:
                 progress.start_silver_operation(files_to_process_count)
 
                 logger.info(f"Processing Bronze files to Silver layer from: {bronze_run_path}")
-                silver_processor.process_bronze_files(
+                silver_processed_count = silver_processor.process_bronze_files(
                     bronze_run_path=bronze_run_path,
                     specific_subfolders=subfolders,
                     supported_file_types=file_types,
@@ -424,9 +576,27 @@ def main() -> int:
                 logger.error(error_msg)
                 if not args.quiet:
                     print(f"Error: {error_msg}")
+                return 1  # Return failure immediately if no data to process
 
         # Print summary at the end
         progress.print_summary()
+
+        # Determine success based on actual processed files
+        bronze_processed = progress.bronze_stats["downloaded_files"]
+        silver_processed = progress.silver_stats["processed_files"]
+
+        # Check if we actually processed any files
+        if not args.silver_only and bronze_processed == 0:
+            logger.error("Pipeline failed: No files were downloaded in Bronze layer")
+            if not args.quiet:
+                print("Error: No files were downloaded")
+            return 1
+
+        if not args.bronze_only and silver_processed == 0:
+            logger.error("Pipeline failed: No files were processed in Silver layer")
+            if not args.quiet:
+                print("Error: No files were processed in Silver layer")
+            return 1
 
         # Generate schema documentation for processed data
         if not args.bronze_only:
@@ -513,6 +683,22 @@ def main() -> int:
                     f"Failed to generate drive data schema documentation: {e}", exc_info=True
                 )
                 # Don't fail the pipeline if schema documentation fails
+
+        # Save CVR numbers after Silver processing is complete
+        if not args.bronze_only and CVR_COLLECTION_AVAILABLE:
+            # Use the actual silver run path from the processor if available
+            actual_silver_path = Path(settings.silver_path)
+            if 'silver_processor' in locals() and hasattr(silver_processor, 'silver_run_path') and silver_processor.silver_run_path:
+                actual_silver_path = storage_manager.base_dir / silver_processor.silver_run_path
+                logger.info(f"Using actual silver run path for CVR extraction: {actual_silver_path}")
+            else:
+                logger.info(f"Using base silver path for CVR extraction: {actual_silver_path}")
+            
+            _save_discovered_cvr_numbers(
+                silver_path=actual_silver_path,
+                pipeline_start_time=pipeline_start_time,
+                logger=logger,
+            )
 
         logger.info("Google Drive Data Pipeline completed successfully")
         return 0
