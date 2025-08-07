@@ -241,8 +241,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 END as field_wetland_coverage_pct,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
-                    THEN (LEAST(COALESCE(wwa.field_wetland_water_covered_m2, 0), COALESCE(wa.field_wetland_total_m2, 0)) / 
-                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
+                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) /                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
                     THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) /                END as field_wetland_water_coverage_pct
                 
                 -- Soil Analysis (from Stage 1D field_soil_intersections)
