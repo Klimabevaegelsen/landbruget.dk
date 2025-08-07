@@ -61,16 +61,33 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             FROM water_projects_raw
         """)
 
-        self.log.info("Using Stage 0 pre-filtered wetlands with consistent wetland_ids...")
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE wetlands AS
-            SELECT 
-                wetland_key, -- Deterministic fragment key for stable joins
-                wetland_id,  -- Legacy numeric ID retained for compatibility
-                toerv_pct,   -- Keep wetland type for analysis
-                geometry     -- Already decomposed by Stage 0 ST_Dump
-            FROM wetlands_raw
-        """)
+        self.log.info("Using Stage 0 pre-filtered wetlands; ensuring deterministic wetland_key is present...")
+        # Detect if wetlands_raw has wetland_key; if not, compute it from geometry
+        cols = [r[0] for r in self.conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_raw'"
+        ).fetchall()]
+
+        if 'wetland_key' in [c.lower() for c in cols]:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE wetlands AS
+                SELECT 
+                    wetland_key, -- Deterministic fragment key for stable joins
+                    wetland_id,  -- Legacy numeric ID retained for compatibility
+                    toerv_pct,   -- Keep wetland type for analysis
+                    geometry     -- Already decomposed by Stage 0 ST_Dump
+                FROM wetlands_raw
+            """)
+        else:
+            self.log.warning("wetland_key missing in wetlands_raw; computing deterministic key from geometry")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE wetlands AS
+                SELECT 
+                    uuid5('wetland_fragment', CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
+                    wetland_id,
+                    toerv_pct,
+                    geometry
+                FROM wetlands_raw
+            """)
 
         # Log table sizes
         wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
@@ -140,6 +157,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
                 SELECT 
+                    wetland_key,
                     wetland_id,
                     toerv_pct,
                     geometry
@@ -151,6 +169,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
+                    wetland_key,
                     wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
                     geometry,
