@@ -61,13 +61,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             FROM water_projects_raw
         """)
 
-        self.log.info("Decomposing ALL wetlands with ST_Dump and adding unique IDs...")
+        self.log.info("Using Stage 0 pre-filtered wetlands with consistent wetland_ids...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT 
-                ROW_NUMBER() OVER () as wetland_id,  -- Add unique wetland ID
-                toerv_pct,  -- Keep wetland type for analysis
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                wetland_key, -- Deterministic fragment key for stable joins
+                wetland_id,  -- Legacy numeric ID retained for compatibility
+                toerv_pct,   -- Keep wetland type for analysis
+                geometry     -- Already decomposed by Stage 0 ST_Dump
             FROM wetlands_raw
         """)
 
@@ -107,7 +108,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Create intersection results table
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_water_intersections (
-                wetland_id BIGINT,  -- Unique wetland identifier for efficient joins
+                wetland_key VARCHAR,  -- Deterministic fragment key for stable joins
+                wetland_id BIGINT,    -- Legacy numeric ID for compatibility/metrics
                 toerv_pct VARCHAR,  -- Wetland type for analysis
                 project_id VARCHAR,
                 intersection_geometry GEOMETRY,  -- Intersection geometry for Stage 2 to use directly
@@ -211,7 +213,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
             SELECT 
-                wb.wetland_id,  -- Unique wetland identifier for efficient joins
+                wb.wetland_key,
+                wb.wetland_id,
                 wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
                 ST_Intersection(wb.geometry, wp.geometry) as intersection_geometry,  -- Save intersection geometry for Stage 2

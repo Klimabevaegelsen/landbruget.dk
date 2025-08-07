@@ -140,11 +140,16 @@ class WetlandsPreFilter(PreFilteringStageBase):
             )
 
             # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
-        self.log.info("Adding unique IDs to filtered wetland polygons...")
+        self.log.info("Adding deterministic keys to filtered wetland polygons (and keeping legacy IDs)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as wetland_id,
+                -- Deterministic fragment key based on initial decomposed geometry
+                uuid5('wetland_fragment', CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
+                -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)
+                ROW_NUMBER() OVER (
+                    ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
+                ) AS wetland_id,
                 toerv_pct,
                 geometry,
                 ST_Area_Spheroid(geometry) as wetland_area_m2
