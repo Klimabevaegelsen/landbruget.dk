@@ -3124,8 +3124,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
         """)
         
-        # Process in batches of 5,000 fields to avoid memory issues
-        batch_size = 5000
+        # Process in batches of 100 fields to avoid memory issues (very small due to spatial complexity)
+        # This ensures fields are on build side for optimal SPATIAL_JOIN performance
+        batch_size = 100
         processed = 0
         
         while processed < total_fields:
