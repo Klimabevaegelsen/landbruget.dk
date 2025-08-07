@@ -618,7 +618,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 if self.config.enable_proximity_analysis:
                     self.log.info(f"🌍 Running proximity analysis for year {year} disaggregation results...")
                     try:
-                        await self._run_proximity_analysis_for_year(year)
+                        self._run_proximity_analysis_for_year_sync(year)
                         self.log.info(f"✅ Proximity analysis completed for year {year}!")
                     except Exception as e:
                         self.log.error(f"❌ Proximity analysis failed for year {year}: {e}")
@@ -3054,24 +3054,183 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("ℹ️ Proximity data is now integrated into the main disaggregated results table")
         self.log.info("💡 The enhanced table will be saved with the standard disaggregation results")
 
-    async def _run_proximity_analysis_for_year(self, year: int) -> None:
+    def _run_proximity_analysis_for_year_sync(self, year: int) -> None:
         """Run proximity analysis for a specific year while data is still in memory."""
         self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
         
         # Load proximity datasets (this loads them into DuckDB)
-        datasets = await self._load_proximity_datasets()
+        datasets = self._load_proximity_datasets_sync()
         
         # Validate datasets
         if not self._validate_proximity_datasets(datasets):
             raise RuntimeError("Required datasets for proximity analysis not available")
         
         # Perform proximity analysis (adds columns to disaggregated_pesticide_applications)
-        await self._perform_proximity_analysis(datasets)
+        self._perform_proximity_analysis_sync(datasets)
         
         # Generate summary statistics
-        await self._generate_proximity_summary_statistics()
+        self._generate_proximity_summary_statistics_sync()
         
         self.log.info(f"✅ Proximity analysis integrated into year {year} results!")
+
+    def _load_proximity_datasets_sync(self) -> Dict[str, Optional[str]]:
+        """Load datasets required for proximity analysis (synchronous version)."""
+        datasets = {}
+        
+        self.log.info("📥 Loading datasets for proximity analysis...")
+        
+        # We already have agricultural fields loaded as 'marker' table with geometry!
+        # And we have disaggregated results in memory (disaggregated_pesticide_applications table)
+        self.log.info("🗺️ Using already-loaded agricultural fields data (marker table)")
+        datasets['fields'] = 'marker'  # Already loaded in memory
+        
+        # Load buildings data (silver layer)
+        self.log.info("🏢 Loading buildings data...")
+        datasets['buildings'] = self._read_silver_data(self.config.buildings_dataset)
+        
+        # Load water typology data (silver layer)
+        self.log.info("🌊 Loading water typology data...")
+        datasets['water'] = self._read_silver_data(self.config.water_typology_dataset)
+        
+        return datasets
+
+    def _perform_proximity_analysis_sync(self, datasets: Dict[str, str]) -> None:
+        """Perform proximity analysis and add columns to disaggregated_pesticide_applications table (sync)."""
+        self.log.info("🔄 Performing proximity analysis...")
+        
+        # SQL query to create proximity analysis - this is a big query!
+        analysis_query = f"""
+        CREATE OR REPLACE TABLE field_proximity_analysis AS
+        WITH unique_fields AS (
+            SELECT DISTINCT field_uuid 
+            FROM disaggregated_pesticide_applications 
+            WHERE field_uuid IS NOT NULL
+        ),
+        fields_with_geometry AS (
+            SELECT 
+                uf.field_uuid,
+                ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
+            FROM unique_fields uf 
+            JOIN {datasets['fields']} f ON uf.field_uuid = f.field_uuid
+            WHERE f.geometry IS NOT NULL
+        ),
+        buildings_utm AS (
+            SELECT 
+                address,
+                category_group,
+                ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+            FROM {datasets['buildings']} 
+            WHERE geometry IS NOT NULL 
+              AND address IS NOT NULL 
+              AND current_use IS NOT NULL
+        ),
+        residential_proximity AS (
+            SELECT 
+                fg.field_uuid,
+                array_agg(DISTINCT b.address) as residential_addresses_100m,
+                array_agg(DISTINCT ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1)) as residential_distances_m
+            FROM fields_with_geometry fg 
+            JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+            WHERE b.category_group = 'residential'
+            GROUP BY fg.field_uuid
+        ),
+        educational_proximity AS (
+            SELECT 
+                fg.field_uuid,
+                array_agg(DISTINCT b.address) as educational_addresses_100m,
+                array_agg(DISTINCT ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1)) as educational_distances_m
+            FROM fields_with_geometry fg 
+            JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+            WHERE b.category_group = 'publicServices'
+            GROUP BY fg.field_uuid
+        ),
+        water_features_utm AS (
+            SELECT 
+                ov_navn,
+                ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
+            FROM {datasets['water']} 
+            WHERE geometry_spatial IS NOT NULL
+        ),
+        water_proximity AS (
+            SELECT 
+                fg.field_uuid,
+                MIN(ST_Distance(fg.field_geom_utm, w.water_geom_utm)) as closest_water_distance_m
+            FROM fields_with_geometry fg 
+            JOIN water_features_utm w ON ST_DWithin(fg.field_geom_utm, w.water_geom_utm, {self.config.water_proximity_distance_m})
+            GROUP BY fg.field_uuid
+        )
+        SELECT 
+            fg.field_uuid,
+            COALESCE(rp.residential_addresses_100m, []) as residential_addresses_100m,
+            COALESCE(rp.residential_distances_m, []) as residential_distances_m,
+            COALESCE(ep.educational_addresses_100m, []) as educational_addresses_100m,
+            COALESCE(ep.educational_distances_m, []) as educational_distances_m,
+            ROUND(wp.closest_water_distance_m, 1) as closest_water_distance_m
+        FROM fields_with_geometry fg
+        LEFT JOIN residential_proximity rp ON fg.field_uuid = rp.field_uuid
+        LEFT JOIN educational_proximity ep ON fg.field_uuid = ep.field_uuid
+        LEFT JOIN water_proximity wp ON fg.field_uuid = wp.field_uuid
+        """
+        
+        self.log.info("🚀 Executing proximity analysis query (this may take a few minutes)...")
+        self.conn.execute(analysis_query)
+        
+        # Add new columns to the main disaggregated table
+        self.log.info("📊 Adding proximity columns to disaggregated results...")
+        alter_queries = [
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN residential_addresses_100m VARCHAR[]",
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN residential_distances_m DOUBLE[]", 
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN educational_addresses_100m VARCHAR[]",
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN educational_distances_m DOUBLE[]",
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN closest_water_distance_m DOUBLE"
+        ]
+        
+        for query in alter_queries:
+            self.conn.execute(query)
+        
+        # Update main table with proximity data
+        self.log.info("🔄 Updating main table with proximity analysis results...")
+        update_query = """
+        UPDATE disaggregated_pesticide_applications
+        SET
+            residential_addresses_100m = fp.residential_addresses_100m,
+            residential_distances_m = fp.residential_distances_m,
+            educational_addresses_100m = fp.educational_addresses_100m,
+            educational_distances_m = fp.educational_distances_m,
+            closest_water_distance_m = fp.closest_water_distance_m
+        FROM field_proximity_analysis fp
+        WHERE disaggregated_pesticide_applications.field_uuid = fp.field_uuid
+        """
+        self.conn.execute(update_query)
+        
+        # Clean up temporary table
+        self.conn.execute("DROP TABLE field_proximity_analysis")
+        
+        self.log.info("✅ Proximity analysis data integrated into main results table!")
+
+    def _generate_proximity_summary_statistics_sync(self) -> None:
+        """Generate and log summary statistics for proximity analysis (sync)."""
+        try:
+            # Get basic statistics
+            stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(*) FILTER (WHERE len(residential_addresses_100m) > 0) as with_residential,
+                    COUNT(*) FILTER (WHERE len(educational_addresses_100m) > 0) as with_educational,
+                    COUNT(*) FILTER (WHERE closest_water_distance_m IS NOT NULL AND closest_water_distance_m <= 100) as near_water
+                FROM disaggregated_pesticide_applications
+            """).fetchone()
+            
+            total, with_residential, with_educational, near_water = stats
+            
+            self.log.info("📈 Proximity Analysis Summary:")
+            self.log.info(f"   Total records processed: {total:,}")
+            self.log.info(f"   Records with residential buildings within 100m: {with_residential:,} ({with_residential/total*100:.1f}%)")
+            self.log.info(f"   Records with educational facilities within 100m: {with_educational:,} ({with_educational/total*100:.1f}%)")
+            self.log.info(f"   Records within 100m of water: {near_water:,} ({near_water/total*100:.1f}%)")
+            
+        except Exception as e:
+            self.log.error(f"❌ Error generating proximity summary statistics: {e}")
     
     def _read_gold_data(self, dataset: str) -> Optional[str]:
         """Read gold layer data from GCS (e.g., our own disaggregation results)."""
