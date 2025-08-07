@@ -1,12 +1,12 @@
 # CVR Enrichment Pipeline
-# Runs weekly on Tuesdays to enrich CVR data using existing CVR collections from previous pipeline runs
+# Runs monthly on the 1st of each month to enrich CVR data using existing CVR collections from previous pipeline runs
 # This pipeline does NOT rerun other pipelines - it uses existing CVR collections in GCS
 
 name: CVR Enrichment Pipeline
 
 on:
   schedule:
-    - cron: '0 2 1-7 * 2'  # First Tuesday of each month at 2 AM UTC (uses existing CVR collections from weekend runs)
+    - cron: '0 2 1 * *'  # Monthly on the 1st at 2 AM UTC (uses existing CVR collections from weekend runs)
   workflow_dispatch:
     # Allow manual triggering
     inputs:
