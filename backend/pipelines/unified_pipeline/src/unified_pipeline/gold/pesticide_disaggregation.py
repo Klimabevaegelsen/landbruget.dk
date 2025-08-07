@@ -439,18 +439,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # STEP 3: PROCESS EACH YEAR PAIR
         # ==============================
         
-        # NEW: Pre-load proximity datasets if proximity analysis is enabled
-        # This avoids "table already exists" errors when running proximity analysis per year
-        if self.config.enable_proximity_analysis:
-            self.log.info("📥 Pre-loading proximity datasets for reuse across all years...")
-            try:
-                self.proximity_datasets = self._preload_proximity_datasets()
-                self.log.info("✅ Proximity datasets pre-loaded successfully!")
-            except Exception as e:
-                self.log.error(f"❌ Failed to pre-load proximity datasets: {e}")
-                self.log.warning("⚠️ Proximity analysis will be disabled")
-                # Disable proximity analysis if we can't load the datasets
-                self.config.enable_proximity_analysis = False
+        # NOTE: Proximity datasets will be loaded fresh for each year to avoid table persistence issues
         
         # Process each pesticide year with its corresponding field year
         # This is the main processing loop - each iteration handles one year of data
@@ -3072,8 +3061,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Run proximity analysis for a specific year while data is still in memory."""
         self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
         
-        # Use pre-loaded proximity datasets to avoid table conflicts
-        datasets = self._get_proximity_datasets_for_year()
+        # Load proximity datasets fresh for this year to avoid table persistence issues
+        datasets = self._load_proximity_datasets_fresh()
         
         # Validate datasets
         if not self._validate_proximity_datasets(datasets):
@@ -3087,26 +3076,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         
         self.log.info(f"✅ Proximity analysis integrated into year {year} results!")
 
-    def _load_proximity_datasets_sync(self) -> Dict[str, Optional[str]]:
-        """Load datasets required for proximity analysis (synchronous version)."""
-        datasets = {}
-        
-        self.log.info("📥 Loading datasets for proximity analysis...")
-        
-        # We already have agricultural fields loaded as 'marker' table with geometry!
-        # And we have disaggregated results in memory (disaggregated_pesticide_applications table)
-        self.log.info("🗺️ Using already-loaded agricultural fields data (marker table)")
-        datasets['fields'] = 'marker'  # Already loaded in memory
-        
-        # Load buildings data (silver layer)
-        self.log.info("🏢 Loading buildings data...")
-        datasets['buildings'] = self._read_silver_data(self.config.buildings_dataset)
-        
-        # Load water typology data (silver layer)
-        self.log.info("🌊 Loading water typology data...")
-        datasets['water'] = self._read_silver_data(self.config.water_typology_dataset)
-        
-        return datasets
+
 
     def _perform_proximity_analysis_sync(self, datasets: Dict[str, str]) -> None:
         """Perform proximity analysis and add columns to disaggregated_pesticide_applications table (sync)."""
@@ -3284,46 +3254,38 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"❌ Error generating proximity summary statistics: {e}")
 
-    def _preload_proximity_datasets(self) -> Dict[str, str]:
-        """Pre-load proximity datasets once to avoid table name conflicts."""
+    def _load_proximity_datasets_fresh(self) -> Dict[str, str]:
+        """Load proximity datasets fresh for the current year's analysis."""
         datasets = {}
         
-        self.log.info("📥 Loading proximity datasets...")
+        self.log.info("📥 Loading fresh proximity datasets for this analysis...")
         
-        # Load buildings data (silver layer) with unique table name
+        # Load buildings data (silver layer)
         self.log.info("🏢 Loading buildings data...")
         buildings_table = self._read_silver_data(self.config.buildings_dataset)
         if buildings_table:
             datasets['buildings'] = buildings_table
+            self.log.info(f"✅ Loaded buildings table: {buildings_table}")
         else:
             raise RuntimeError("Failed to load buildings dataset")
         
-        # Load water typology data (silver layer) with unique table name  
+        # Load water typology data (silver layer)
         self.log.info("🌊 Loading water typology data...")
         water_table = self._read_silver_data(self.config.water_typology_dataset)
         if water_table:
             datasets['water'] = water_table
+            self.log.info(f"✅ Loaded water table: {water_table}")
         else:
             raise RuntimeError("Failed to load water typology dataset")
         
-        self.log.info(f"✅ Pre-loaded proximity datasets: {list(datasets.keys())}")
+        # Add the already-loaded agricultural fields (marker table)
+        datasets['fields'] = 'marker'  # This table is already loaded in memory
+        self.log.info("✅ Using existing agricultural fields table: marker")
+        
+        self.log.info(f"✅ Fresh proximity datasets ready: {list(datasets.keys())}")
         return datasets
 
-    def _get_proximity_datasets_for_year(self) -> Dict[str, str]:
-        """Get proximity datasets for current year processing (uses pre-loaded data)."""
-        datasets = {}
-        
-        # Use pre-loaded datasets (should be available if pre-loading succeeded)
-        if hasattr(self, 'proximity_datasets'):
-            datasets.update(self.proximity_datasets)
-        else:
-            raise RuntimeError("Proximity datasets not pre-loaded - this is a bug")
-        
-        # Add the currently loaded marker table (agricultural fields)
-        datasets['fields'] = 'marker'  # Already loaded in memory for this year
-        
-        self.log.info(f"🗺️ Using pre-loaded datasets: {list(datasets.keys())}")
-        return datasets
+
     
     def _read_gold_data(self, dataset: str) -> Optional[str]:
         """Read gold layer data from GCS (e.g., our own disaggregation results)."""
