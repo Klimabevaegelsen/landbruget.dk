@@ -439,16 +439,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # STEP 3: PROCESS EACH YEAR PAIR
         # ==============================
         
-        # NEW: Pre-load proximity datasets once to avoid expensive GCS downloads per year
-        if self.config.enable_proximity_analysis:
-            self.log.info("📥 Pre-loading proximity datasets once for all years...")
-            try:
-                self._preload_proximity_datasets_once()
-                self.log.info("✅ Proximity datasets pre-loaded successfully and will persist!")
-            except Exception as e:
-                self.log.error(f"❌ Failed to pre-load proximity datasets: {e}")
-                self.log.warning("⚠️ Proximity analysis will be disabled")
-                self.config.enable_proximity_analysis = False
+        # Track whether proximity analysis should be used (can't modify frozen config)
+        self.proximity_analysis_enabled = self.config.enable_proximity_analysis
         
         # Process each pesticide year with its corresponding field year
         # This is the main processing loop - each iteration handles one year of data
@@ -627,14 +619,28 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 table_name = f"pesticide_disaggregation_{year}_{year + 1}"
 
                 # NEW: Run proximity analysis before saving if enabled (while tables are still in memory)
-                if self.config.enable_proximity_analysis:
+                if self.proximity_analysis_enabled:
                     self.log.info(f"🌍 Running proximity analysis for year {year} disaggregation results...")
-                    try:
-                        self._run_proximity_analysis_for_year_sync(year)
-                        self.log.info(f"✅ Proximity analysis completed for year {year}!")
-                    except Exception as e:
-                        self.log.error(f"❌ Proximity analysis failed for year {year}: {e}")
-                        self.log.warning("⚠️ Continuing without proximity analysis")
+                    
+                    # Lazy load proximity datasets on first use (after DuckDB connection is available)
+                    if not hasattr(self, 'proximity_datasets_loaded'):
+                        self.log.info("📥 Loading proximity datasets (first time)...")
+                        try:
+                            self._preload_proximity_datasets_once()
+                            self.proximity_datasets_loaded = True
+                        except Exception as e:
+                            self.log.error(f"❌ Failed to load proximity datasets: {e}")
+                            self.log.warning("⚠️ Disabling proximity analysis for all years")
+                            self.proximity_analysis_enabled = False
+                            continue
+                    
+                    if self.proximity_analysis_enabled:  # Check again in case it was disabled above
+                        try:
+                            self._run_proximity_analysis_for_year_sync(year)
+                            self.log.info(f"✅ Proximity analysis completed for year {year}!")
+                        except Exception as e:
+                            self.log.error(f"❌ Proximity analysis failed for year {year}: {e}")
+                            self.log.warning("⚠️ Continuing without proximity analysis")
 
                 # Create a copy of the results table with the year-specific name
                 self.log.info(f"🏗️ Creating final table {table_name}")
