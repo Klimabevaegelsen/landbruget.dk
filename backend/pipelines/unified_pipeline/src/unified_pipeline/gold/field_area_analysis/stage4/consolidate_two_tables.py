@@ -196,6 +196,23 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid
         """)
         
+        # Pre-aggregate soil intersections by field with detailed coverage array
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE soil_field_aggregates AS
+            SELECT 
+                field_uuid,
+                SUM(soil_intersection_area_m2) as field_soil_total_m2,
+                COUNT(DISTINCT soil_description) as soil_type_count,
+                -- Create array of soil descriptions with their coverage percentages
+                LIST(STRUCT_PACK(
+                    description := soil_description,
+                    area_m2 := SUM(soil_intersection_area_m2),
+                    coverage_pct := (SUM(soil_intersection_area_m2) / field_area_m2) * 100.0
+                ) ORDER BY SUM(soil_intersection_area_m2) DESC) as soil_coverage_details
+            FROM field_soil_intersections fs
+            GROUP BY field_uuid, field_area_m2
+        """)
+        
         self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
         
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
@@ -231,9 +248,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(ba.bnbo_action_required_hectares, 0) as bnbo_action_required_hectares,
                 COALESCE(ba.bnbo_completed_hectares, 0) as bnbo_completed_hectares,
                 
-                -- Wetland Analysis (using pre-aggregated data with DATA INTEGRITY VALIDATION)
+                -- Wetland Analysis (using pre-aggregated data)
                 COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
-                COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,                CASE 
+                COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
+                CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
                     THEN (COALESCE(wa.field_wetland_total_m2, 0) / 
                           ST_Area_Spheroid(f.geometry)) * 100.0
@@ -241,17 +259,28 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 END as field_wetland_coverage_pct,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
-                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) /                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
-                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) /                END as field_wetland_water_coverage_pct
+                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
+                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
+                    ELSE 0 
+                END as field_wetland_water_coverage_pct,
                 
                 -- Soil Analysis (from Stage 1D field_soil_intersections)
-                -- TODO: Add soil calculations from field_soil_intersections geometries
+                COALESCE(sa.field_soil_total_m2, 0) as field_soil_total_m2,
+                CASE 
+                    WHEN COALESCE(sa.field_soil_total_m2, 0) > 0 
+                    THEN (COALESCE(sa.field_soil_total_m2, 0) / 
+                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    ELSE 0 
+                END as field_soil_coverage_pct,
+                COALESCE(sa.soil_type_count, 0) as soil_type_count,
+                sa.soil_coverage_details
                 
             FROM agricultural_fields f
             LEFT JOIN bnbo_field_aggregates ba ON f.field_uuid = ba.field_uuid
             LEFT JOIN bnbo_water_field_aggregates bwa ON f.field_uuid = bwa.field_uuid
             LEFT JOIN wetland_field_aggregates wa ON f.field_uuid = wa.field_uuid
             LEFT JOIN wetland_water_field_aggregates wwa ON f.field_uuid = wwa.field_uuid
+            LEFT JOIN soil_field_aggregates sa ON f.field_uuid = sa.field_uuid
         """)
         
         field_count = self.conn.execute(
