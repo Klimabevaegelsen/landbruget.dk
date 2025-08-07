@@ -155,25 +155,14 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 ST_Area_Spheroid(geometry) as wetland_area_m2
             FROM wetlands_intersecting
         """)
-
-        # SAFETY: Ensure wetland_key exists before export (guards against accidental schema drift)
+        # DIAGNOSTIC: Assert wetland_key exists immediately; fail fast to expose root cause
         cols = [r[0] for r in self.conn.execute(
             "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
         ).fetchall()]
         if 'wetland_key' not in [c.lower() for c in cols]:
-            self.log.warning("wetland_key missing on wetlands_filtered; computing deterministic key before export")
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE wetlands_filtered AS
-                SELECT 
-                    uuid5('wetland_fragment', CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
-                    ROW_NUMBER() OVER (
-                        ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
-                    ) AS wetland_id,
-                    toerv_pct,
-                    geometry,
-                    ST_Area_Spheroid(geometry) as wetland_area_m2
-                FROM wetlands_intersecting
-            """)
+            schema = self.conn.execute("DESCRIBE wetlands_filtered").fetchall()
+            self.log.error(f"wetlands_filtered schema: {schema}")
+            raise RuntimeError("Stage 0: wetlands_filtered missing wetland_key after creation")
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM wetlands_filtered").fetchone()[0]
 
