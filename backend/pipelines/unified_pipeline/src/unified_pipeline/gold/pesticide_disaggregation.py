@@ -3102,93 +3102,131 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
 
     def _perform_proximity_analysis_sync(self, datasets: Dict[str, str]) -> None:
-        """Perform proximity analysis and add columns to disaggregated_pesticide_applications table (sync)."""
-        self.log.info("🔄 Performing proximity analysis...")
+        """Perform proximity analysis and add columns to disaggregated_pesticide_applications table (sync) - BATCHED."""
+        self.log.info("🔄 Performing proximity analysis using batching to avoid memory issues...")
         
-        # SQL query to create proximity analysis - this is a big query!
-        analysis_query = f"""
-        CREATE OR REPLACE TABLE field_proximity_analysis AS
-        WITH unique_fields AS (
-            SELECT DISTINCT field_uuid 
+        # Get total number of unique fields to process
+        total_fields = self.duckdb_conn.execute("""
+            SELECT COUNT(DISTINCT field_uuid) 
             FROM disaggregated_pesticide_applications 
             WHERE field_uuid IS NOT NULL
-        ),
-        fields_with_geometry AS (
-            SELECT 
-                uf.field_uuid,
-                ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
-            FROM unique_fields uf 
-            JOIN {datasets['fields']} f ON uf.field_uuid = f.field_uuid
-            WHERE f.geometry IS NOT NULL
-        ),
-        buildings_utm AS (
-            SELECT 
-                inspire_address as address,
-                inspire_category_group as category_group,
-                ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
-            FROM {datasets['buildings']} 
-            WHERE geometry IS NOT NULL 
-              AND inspire_address IS NOT NULL 
-              AND inspire_category_group IS NOT NULL
-        ),
-        water_features_utm AS (
-            SELECT 
-                ov_navn,
-                ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
-            FROM {datasets['water']} 
-            WHERE geometry_spatial IS NOT NULL
-        ),
-        residential_formatted AS (
-            SELECT 
-                fg.field_uuid,
-                CASE 
-                    WHEN COUNT(b.address) > 0 THEN
-                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
-                    ELSE ''
-                END as residential_buildings_formatted
-            FROM fields_with_geometry fg 
-            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
-                AND b.category_group = 'residential'
-            GROUP BY fg.field_uuid
-        ),
-        educational_formatted AS (
-            SELECT 
-                fg.field_uuid,
-                CASE 
-                    WHEN COUNT(b.address) > 0 THEN
-                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
-                    ELSE ''
-                END as educational_facilities_formatted
-            FROM fields_with_geometry fg 
-            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
-                AND b.category_group = 'publicServices'
-            GROUP BY fg.field_uuid
-        ),
-        water_proximity AS (
-            SELECT 
-                fg.field_uuid,
-                MIN(ST_Distance(fg.field_geom_utm, w.water_geom_utm)) as closest_water_distance_m
-            FROM fields_with_geometry fg 
-            JOIN water_features_utm w ON ST_DWithin(fg.field_geom_utm, w.water_geom_utm, {self.config.water_proximity_distance_m})
-            GROUP BY fg.field_uuid
-        )
-        SELECT 
-            fg.field_uuid,
-            COALESCE(rf.residential_buildings_formatted, '') as residential_buildings_formatted,
-            COALESCE(ef.educational_facilities_formatted, '') as educational_facilities_formatted,
-            CASE 
-                WHEN wp.closest_water_distance_m IS NOT NULL 
-                THEN ROUND(wp.closest_water_distance_m, 1) || 'm'
-                ELSE ''
-            END as water_distance_formatted
-        FROM fields_with_geometry fg
-        LEFT JOIN residential_formatted rf ON fg.field_uuid = rf.field_uuid
-        LEFT JOIN educational_formatted ef ON fg.field_uuid = ef.field_uuid
-        LEFT JOIN water_proximity wp ON fg.field_uuid = wp.field_uuid
-        """
+        """).fetchone()[0]
         
-        self.log.info("🚀 Executing proximity analysis query (this may take a few minutes)...")
-        self.duckdb_conn.execute(analysis_query)
+        self.log.info(f"📊 Processing {total_fields:,} unique fields in batches to prevent memory crash")
+        
+        # Create empty results table
+        self.duckdb_conn.execute("""
+            CREATE OR REPLACE TABLE field_proximity_analysis (
+                field_uuid VARCHAR,
+                residential_buildings_formatted VARCHAR,
+                educational_facilities_formatted VARCHAR,
+                water_distance_formatted VARCHAR
+            )
+        """)
+        
+        # Process in batches of 5,000 fields to avoid memory issues
+        batch_size = 5000
+        processed = 0
+        
+        while processed < total_fields:
+            self.log.info(f"🔄 Processing batch {processed//batch_size + 1}: fields {processed:,} to {min(processed + batch_size, total_fields):,}")
+            
+            # Batch-specific proximity analysis
+            batch_query = f"""
+            INSERT INTO field_proximity_analysis
+            WITH unique_fields_batch AS (
+                SELECT DISTINCT field_uuid 
+                FROM disaggregated_pesticide_applications 
+                WHERE field_uuid IS NOT NULL
+                ORDER BY field_uuid
+                LIMIT {batch_size} OFFSET {processed}
+            ),
+            fields_with_geometry AS (
+                SELECT 
+                    uf.field_uuid,
+                    ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
+                FROM unique_fields_batch uf 
+                JOIN {datasets['fields']} f ON uf.field_uuid = f.field_uuid
+                WHERE f.geometry IS NOT NULL
+            ),
+            buildings_utm AS (
+                SELECT 
+                    inspire_address as address,
+                    inspire_category_group as category_group,
+                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+                FROM {datasets['buildings']} 
+                WHERE geometry IS NOT NULL 
+                  AND inspire_address IS NOT NULL 
+                  AND inspire_category_group IS NOT NULL
+            ),
+            water_features_utm AS (
+                SELECT 
+                    ov_navn,
+                    ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
+                FROM {datasets['water']} 
+                WHERE geometry_spatial IS NOT NULL
+            ),
+            residential_formatted AS (
+                SELECT 
+                    fg.field_uuid,
+                    CASE 
+                        WHEN COUNT(b.address) > 0 THEN
+                            array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                        ELSE ''
+                    END as residential_buildings_formatted
+                FROM fields_with_geometry fg 
+                LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                    AND b.category_group = 'residential'
+                GROUP BY fg.field_uuid
+            ),
+            educational_formatted AS (
+                SELECT 
+                    fg.field_uuid,
+                    CASE 
+                        WHEN COUNT(b.address) > 0 THEN
+                            array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                        ELSE ''
+                    END as educational_facilities_formatted
+                FROM fields_with_geometry fg 
+                LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                    AND b.category_group = 'publicServices'
+                GROUP BY fg.field_uuid
+            ),
+            water_proximity AS (
+                SELECT 
+                    fg.field_uuid,
+                    MIN(ST_Distance(fg.field_geom_utm, w.water_geom_utm)) as closest_water_distance_m
+                FROM fields_with_geometry fg 
+                JOIN water_features_utm w ON ST_DWithin(fg.field_geom_utm, w.water_geom_utm, {self.config.water_proximity_distance_m})
+                GROUP BY fg.field_uuid
+            )
+            SELECT 
+                fg.field_uuid,
+                COALESCE(rf.residential_buildings_formatted, '') as residential_buildings_formatted,
+                COALESCE(ef.educational_facilities_formatted, '') as educational_facilities_formatted,
+                CASE 
+                    WHEN wp.closest_water_distance_m IS NOT NULL 
+                    THEN ROUND(wp.closest_water_distance_m, 1) || 'm'
+                    ELSE ''
+                END as water_distance_formatted
+            FROM fields_with_geometry fg
+            LEFT JOIN residential_formatted rf ON fg.field_uuid = rf.field_uuid
+            LEFT JOIN educational_formatted ef ON fg.field_uuid = ef.field_uuid
+            LEFT JOIN water_proximity wp ON fg.field_uuid = wp.field_uuid
+            """
+            
+            try:
+                self.duckdb_conn.execute(batch_query)
+                processed += batch_size
+                self.log.info(f"✅ Completed batch {processed//batch_size}: {min(processed, total_fields):,}/{total_fields:,} fields processed")
+            except Exception as e:
+                self.log.error(f"❌ Batch {processed//batch_size + 1} failed: {e}")
+                # Continue with next batch rather than failing completely
+                processed += batch_size
+                continue
+        
+        total_results = self.duckdb_conn.execute("SELECT COUNT(*) FROM field_proximity_analysis").fetchone()[0]
+        self.log.info(f"🎉 Batched proximity analysis complete! Generated results for {total_results:,} fields")
         
         # Add new proximity columns to the main disaggregated table (formatted versions)
         self.log.info("📊 Adding formatted proximity columns to disaggregated results...")
