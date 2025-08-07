@@ -3273,42 +3273,62 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
     def _preload_proximity_datasets_once(self) -> None:
         """Pre-load proximity datasets once with stable table names for all year processing."""
-        self.log.info("📥 Pre-loading proximity datasets with stable table names...")
+        self.log.info("📥 Loading proximity datasets directly into stable tables...")
         
         try:
-            # Load buildings data with explicit stable table name
-            self.log.info("🏢 Loading buildings data...")
-            buildings_table = self._read_silver_data(self.config.buildings_dataset)
-            if buildings_table:
-                # Copy to a stable table name to ensure persistence
+            # Load buildings data directly into stable table
+            self.log.info("🏢 Loading buildings data directly...")
+            buildings_path = self._get_latest_silver_data_path(self.config.buildings_dataset)
+            if buildings_path:
                 stable_buildings_name = "proximity_buildings_stable"
-                self.log.info(f"🔄 Copying {buildings_table} to {stable_buildings_name}...")
-                self.duckdb_conn.execute(f"CREATE TABLE {stable_buildings_name} AS SELECT * FROM {buildings_table}")
+                self.log.info(f"📥 Loading {buildings_path} into {stable_buildings_name}...")
+                self.gcs_access.load_parquet_to_duckdb(
+                    bucket=self.config.bucket,
+                    gcs_path=buildings_path,
+                    table_name=stable_buildings_name,
+                    conn=self.duckdb_conn
+                )
                 # Verify it worked
                 count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_buildings_name}").fetchone()[0]
-                self.log.info(f"✅ Buildings data copied to stable table: {stable_buildings_name} ({count:,} records)")
+                self.log.info(f"✅ Buildings loaded directly: {stable_buildings_name} ({count:,} records)")
             else:
-                raise RuntimeError("_read_silver_data returned None for buildings dataset")
+                raise RuntimeError("No buildings dataset found in silver layer")
             
-            # Load water typology data with explicit stable table name  
-            self.log.info("🌊 Loading water typology data...")
-            water_table = self._read_silver_data(self.config.water_typology_dataset)
-            if water_table:
-                # Copy to a stable table name to ensure persistence
+            # Load water typology data directly into stable table
+            self.log.info("🌊 Loading water typology data directly...")
+            water_path = self._get_latest_silver_data_path(self.config.water_typology_dataset)
+            if water_path:
                 stable_water_name = "proximity_water_stable" 
-                self.log.info(f"🔄 Copying {water_table} to {stable_water_name}...")
-                self.duckdb_conn.execute(f"CREATE TABLE {stable_water_name} AS SELECT * FROM {water_table}")
+                self.log.info(f"📥 Loading {water_path} into {stable_water_name}...")
+                self.gcs_access.load_parquet_to_duckdb(
+                    bucket=self.config.bucket,
+                    gcs_path=water_path,
+                    table_name=stable_water_name,
+                    conn=self.duckdb_conn
+                )
                 # Verify it worked
                 count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_water_name}").fetchone()[0]
-                self.log.info(f"✅ Water data copied to stable table: {stable_water_name} ({count:,} records)")
+                self.log.info(f"✅ Water loaded directly: {stable_water_name} ({count:,} records)")
             else:
-                raise RuntimeError("_read_silver_data returned None for water_typology dataset")
+                raise RuntimeError("No water_typology dataset found in silver layer")
             
-            self.log.info("✅ All proximity datasets pre-loaded with stable table names!")
+            self.log.info("✅ All proximity datasets loaded directly into stable tables!")
             
         except Exception as e:
-            self.log.error(f"❌ Error during proximity datasets preloading: {e}")
+            self.log.error(f"❌ Error during proximity datasets loading: {e}")
             raise
+
+    def _get_latest_silver_data_path(self, dataset: str) -> Optional[str]:
+        """Get the latest silver data path for a dataset."""
+        try:
+            return self.gcs_access.get_latest_data_path(
+                bucket=self.config.bucket,
+                dataset=dataset,
+                stage="silver"
+            )
+        except Exception as e:
+            self.log.error(f"Failed to get latest silver path for {dataset}: {e}")
+            return None
 
     def _get_preloaded_proximity_datasets(self) -> Dict[str, str]:
         """Get the preloaded proximity dataset table names."""
