@@ -140,3 +140,30 @@ backend/test_wfs.py
 # PMTiles (generated files, should be stored in GCS)
 pmtiles/
 *.pmtiles
+
+# Root level files that shouldn't be committed
+/Landbrugsstoette_2023.xlsx
+/Landbrugsvisum_statistik.pdf
+/STAGE3_AREA_VALIDATION_ISSUE_ANALYSIS.md
+/chr_bronze_movements.json
+/chr_context.json
+/chr_latest_movements.json
+/cvr_collection_summary.json
+/cvr_processing_summary.json
+/debug_chr_api_response.json
+/debug_dma_cvr.py
+/debug_sample_animal.json
+/extract_all_dma_cvrs_final.py
+/extract_dma_cvrs_fixed.py
+/save_dma_cvrs_result.py
+/setup_env.sh
+/test_dma_cvr_one.py
+/uv.lock
+/veterinary_timeline_analysis.txt
+
+# Root level directories that shouldn't be committed
+/cvr_collections/
+/energy_labels_pipeline_backup/
+
+# Testing directory (already covered by /scripts/ but being explicit)
+/scripts/testing/
