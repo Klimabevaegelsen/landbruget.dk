@@ -3114,7 +3114,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         
         self.log.info(f"📊 Processing {total_fields:,} unique fields in batches to prevent memory crash")
         
-        # Create empty results table
+        # Create empty results table (or replace if exists from previous year)
         self.duckdb_conn.execute("""
             CREATE OR REPLACE TABLE field_proximity_analysis (
                 field_uuid VARCHAR,
@@ -3303,7 +3303,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Load buildings from cache
             self.log.info(f"🏢 Loading buildings from {buildings_cache}...")
             self.duckdb_conn.execute(f"""
-                CREATE TABLE proximity_buildings_stable AS 
+                CREATE OR REPLACE TABLE proximity_buildings_stable AS 
                 SELECT * FROM read_parquet('{buildings_cache}')
             """)
             count = self.duckdb_conn.execute("SELECT COUNT(*) FROM proximity_buildings_stable").fetchone()[0]
@@ -3312,7 +3312,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Load water from cache
             self.log.info(f"🌊 Loading water from {water_cache}...")
             self.duckdb_conn.execute(f"""
-                CREATE TABLE proximity_water_stable AS 
+                CREATE OR REPLACE TABLE proximity_water_stable AS 
                 SELECT * FROM read_parquet('{water_cache}')
             """)
             count = self.duckdb_conn.execute("SELECT COUNT(*) FROM proximity_water_stable").fetchone()[0]
