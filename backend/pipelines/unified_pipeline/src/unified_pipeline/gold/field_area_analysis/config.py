@@ -72,9 +72,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "water_projects_wetlands_intersections": "field_analysis_water_projects_wetlands_intersections",
         "field_property_intersections": "field_analysis_property_intersections",
         "field_soil_intersections": "field_analysis_soil_intersections",
-        # Stage 2 outputs (field-level analysis with pre-filtered data)
-        "fields_bnbo_water": "field_analysis_fields_bnbo_water",
-        "fields_wetland_water": "field_analysis_fields_wetland_water",
+        # Stage 2 outputs (field-level intersection geometries only - aggregations moved to Stage 4)
         "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",  # For Stage 3 optimization
         "field_bnbo_water_intersections": "field_analysis_field_bnbo_water_intersections",  # For Stage 3 optimization
         "field_wetland_intersections": "field_analysis_field_wetland_intersections",  # For Stage 3 optimization
