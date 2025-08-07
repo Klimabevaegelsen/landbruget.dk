@@ -3117,13 +3117,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         ),
         buildings_utm AS (
             SELECT 
-                address,
-                category_group,
+                inspire_address as address,
+                inspire_category_group as category_group,
                 ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
             FROM {datasets['buildings']} 
             WHERE geometry IS NOT NULL 
-              AND address IS NOT NULL 
-              AND current_use IS NOT NULL
+              AND inspire_address IS NOT NULL 
+              AND inspire_category_group IS NOT NULL
         ),
         water_features_utm AS (
             SELECT 
