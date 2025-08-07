@@ -3272,51 +3272,81 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"❌ Error generating proximity summary statistics: {e}")
 
     def _preload_proximity_datasets_once(self) -> None:
-        """Pre-load proximity datasets once with stable table names for all year processing."""
-        self.log.info("📥 Loading proximity datasets directly into stable tables...")
+        """Pre-load proximity datasets once using local filesystem caching for efficiency."""
+        import os
+        
+        cache_dir = "/tmp/proximity_data"
+        buildings_cache = f"{cache_dir}/buildings.parquet"
+        water_cache = f"{cache_dir}/water.parquet"
         
         try:
-            # Load buildings data directly into stable table
-            self.log.info("🏢 Loading buildings data directly...")
-            buildings_path = self._get_latest_silver_data_path(self.config.buildings_dataset)
-            if buildings_path:
-                stable_buildings_name = "proximity_buildings_stable"
-                self.log.info(f"📥 Loading {buildings_path} into {stable_buildings_name}...")
-                self.gcs_access.load_parquet_to_duckdb(
-                    bucket=self.config.bucket,
-                    gcs_path=buildings_path,
-                    table_name=stable_buildings_name,
-                    conn=self.duckdb_conn
-                )
-                # Verify it worked
-                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_buildings_name}").fetchone()[0]
-                self.log.info(f"✅ Buildings loaded directly: {stable_buildings_name} ({count:,} records)")
+            # Download to local cache if not already cached
+            if not os.path.exists(buildings_cache) or not os.path.exists(water_cache):
+                self.log.info("📥 Downloading proximity datasets to local cache (one-time per pipeline run)...")
+                self._download_proximity_data_to_cache(cache_dir, buildings_cache, water_cache)
             else:
-                raise RuntimeError("No buildings dataset found in silver layer")
+                self.log.info("✅ Using cached proximity datasets from local filesystem")
             
-            # Load water typology data directly into stable table
-            self.log.info("🌊 Loading water typology data directly...")
-            water_path = self._get_latest_silver_data_path(self.config.water_typology_dataset)
-            if water_path:
-                stable_water_name = "proximity_water_stable" 
-                self.log.info(f"📥 Loading {water_path} into {stable_water_name}...")
-                self.gcs_access.load_parquet_to_duckdb(
-                    bucket=self.config.bucket,
-                    gcs_path=water_path,
-                    table_name=stable_water_name,
-                    conn=self.duckdb_conn
-                )
-                # Verify it worked
-                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_water_name}").fetchone()[0]
-                self.log.info(f"✅ Water loaded directly: {stable_water_name} ({count:,} records)")
-            else:
-                raise RuntimeError("No water_typology dataset found in silver layer")
+            # Load cached files into DuckDB tables
+            self.log.info("🔄 Loading proximity datasets from cache into DuckDB...")
             
-            self.log.info("✅ All proximity datasets loaded directly into stable tables!")
+            # Load buildings from cache
+            self.log.info(f"🏢 Loading buildings from {buildings_cache}...")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE proximity_buildings_stable AS 
+                SELECT * FROM read_parquet('{buildings_cache}')
+            """)
+            count = self.duckdb_conn.execute("SELECT COUNT(*) FROM proximity_buildings_stable").fetchone()[0]
+            self.log.info(f"✅ Buildings loaded: proximity_buildings_stable ({count:,} records)")
+            
+            # Load water from cache
+            self.log.info(f"🌊 Loading water from {water_cache}...")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE proximity_water_stable AS 
+                SELECT * FROM read_parquet('{water_cache}')
+            """)
+            count = self.duckdb_conn.execute("SELECT COUNT(*) FROM proximity_water_stable").fetchone()[0]
+            self.log.info(f"✅ Water loaded: proximity_water_stable ({count:,} records)")
+            
+            self.log.info("✅ All proximity datasets loaded from cache into stable tables!")
             
         except Exception as e:
             self.log.error(f"❌ Error during proximity datasets loading: {e}")
             raise
+
+    def _download_proximity_data_to_cache(self, cache_dir: str, buildings_cache: str, water_cache: str) -> None:
+        """Download proximity datasets from GCS to local cache files."""
+        import os
+        
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Download buildings data
+        self.log.info("🏢 Downloading buildings data from GCS...")
+        buildings_path = self._get_latest_silver_data_path(self.config.buildings_dataset)
+        if not buildings_path:
+            raise RuntimeError("No buildings dataset found in silver layer")
+        
+        full_gcs_path = f"gs://{self.config.bucket}/{buildings_path}"
+        self.log.info(f"📥 Downloading {full_gcs_path} to {buildings_cache}...")
+        
+        with self.gcs_access.fs.open(full_gcs_path, 'rb') as src:
+            with open(buildings_cache, 'wb') as dst:
+                dst.write(src.read())
+        
+        # Download water data  
+        self.log.info("🌊 Downloading water data from GCS...")
+        water_path = self._get_latest_silver_data_path(self.config.water_typology_dataset)
+        if not water_path:
+            raise RuntimeError("No water_typology dataset found in silver layer")
+            
+        full_gcs_path = f"gs://{self.config.bucket}/{water_path}"
+        self.log.info(f"📥 Downloading {full_gcs_path} to {water_cache}...")
+        
+        with self.gcs_access.fs.open(full_gcs_path, 'rb') as src:
+            with open(water_cache, 'wb') as dst:
+                dst.write(src.read())
+        
+        self.log.info("✅ Proximity datasets downloaded to local cache!")
 
     def _get_latest_silver_data_path(self, dataset: str) -> Optional[str]:
         """Get the latest silver data path for a dataset."""
