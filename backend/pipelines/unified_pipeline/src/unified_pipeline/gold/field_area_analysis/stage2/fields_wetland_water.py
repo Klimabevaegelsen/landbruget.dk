@@ -42,7 +42,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
         self.gcs_access.query_parquet_direct(
             stage0_wetlands_path,
-            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2",
+            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2",
             "wetlands_prefiltered",
         )
 
@@ -52,7 +52,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(
             stage1b_path,
-            "SELECT wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2",
+            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2",
             "water_projects_wetlands_intersections",
         )
 
@@ -111,6 +111,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 f.block_id,
                 f.cvr_number,
                 f.year,
+                w.wetland_key,
                 w.wetland_id,
                 w.toerv_pct,
                 ST_Intersection(f.geometry, w.geometry) as field_wetland_geometry
@@ -119,24 +120,28 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         """)
 
         # Step 2: Create 3-way field × wetland × water intersections (Water-covered wetlands in fields)
-        # SPATIAL_JOIN COMPLIANT: Uses existing geometries from Step 1 and Stage 1B foundation
+        # ALGORITHMIC FIX: Compute triple intersection directly instead of intersecting two separate intersection geometries
+        # Problem was: field∩wetland might not spatially intersect with water∩wetland even for the same wetland
         self.log.info("📦 Step 2: Creating field_wetland_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_water_intersections AS
             SELECT 
-                fwi.field_uuid,
-                fwi.field_id,
-                fwi.block_id,
-                fwi.cvr_number,
-                fwi.year,
-                fwi.wetland_id,
-                fwi.toerv_pct,
+                f.field_uuid,
+                f.field_id,
+                f.block_id,
+                f.cvr_number,
+                f.year,
+                w.wetland_key,
+                w.wetland_id,
+                w.toerv_pct,
                 wpwi.project_id,
-                ST_Intersection(fwi.field_wetland_geometry, wpwi.intersection_geometry) as field_wetland_water_geometry
-            FROM field_wetland_intersections fwi
+                ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry) as field_wetland_water_geometry
+            FROM agricultural_fields f
+            JOIN wetlands_prefiltered w ON ST_Intersects(f.geometry, w.geometry)
             JOIN water_projects_wetlands_intersections wpwi 
-                ON fwi.wetland_id = wpwi.wetland_id  -- FIX: Ensure same wetland to prevent cross-contamination
-                AND ST_Intersects(fwi.field_wetland_geometry, wpwi.intersection_geometry)
+                ON w.wetland_key = wpwi.wetland_key
+                AND ST_Intersects(f.geometry, wpwi.intersection_geometry)  -- Field must intersect water-covered part
+            WHERE ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry)) > 0
         """)
 
         # Get result statistics
