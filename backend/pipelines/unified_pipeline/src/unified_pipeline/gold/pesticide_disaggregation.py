@@ -3138,24 +3138,38 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
               AND address IS NOT NULL 
               AND current_use IS NOT NULL
         ),
-        residential_proximity AS (
+        water_proximity AS (
             SELECT 
                 fg.field_uuid,
-                array_agg(DISTINCT b.address) as residential_addresses_100m,
-                array_agg(DISTINCT ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1)) as residential_distances_m
+                MIN(ST_Distance(fg.field_geom_utm, w.water_geom_utm)) as closest_water_distance_m
             FROM fields_with_geometry fg 
-            JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
-            WHERE b.category_group = 'residential'
+            JOIN water_features_utm w ON ST_DWithin(fg.field_geom_utm, w.water_geom_utm, {self.config.water_proximity_distance_m})
             GROUP BY fg.field_uuid
         ),
-        educational_proximity AS (
+        residential_formatted AS (
             SELECT 
                 fg.field_uuid,
-                array_agg(DISTINCT b.address) as educational_addresses_100m,
-                array_agg(DISTINCT ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1)) as educational_distances_m
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                    ELSE ''
+                END as residential_buildings_formatted
             FROM fields_with_geometry fg 
-            JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
-            WHERE b.category_group = 'publicServices'
+            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                AND b.category_group = 'residential'
+            GROUP BY fg.field_uuid
+        ),
+        educational_formatted AS (
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                    ELSE ''
+                END as educational_facilities_formatted
+            FROM fields_with_geometry fg 
+            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                AND b.category_group = 'publicServices'
             GROUP BY fg.field_uuid
         ),
         water_features_utm AS (
