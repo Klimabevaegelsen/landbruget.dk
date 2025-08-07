@@ -95,8 +95,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Enhanced CRS and area debugging
         self._debug_crs_and_areas(self.conn)
 
-        # Get total wetland count for batching
-        total_wetlands = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
+        # Get total wetland count for batching (use decomposed wetlands table)
+        total_wetlands = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
         batch_size = 100000  # Smaller batches for foundation data creation
         num_batches = (total_wetlands + batch_size - 1) // batch_size
 
@@ -134,21 +134,22 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             offset = batch_num * batch_size
             self.log.info(f"Processing batch {batch_num + 1}/{num_batches} (offset: {offset:,})")
 
-            # Create wetlands batch with ST_Dump and unique IDs
+            # Create wetlands batch (ST_Dump already applied in wetlands table)  
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
                 SELECT 
+                    wetland_id,
                     toerv_pct,
-                    UNNEST(ST_Dump(geometry)).geom as geometry
-                FROM wetlands_raw
+                    geometry
+                FROM wetlands
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
-            # Add IDs and calculate areas in separate step to avoid subquery issues
+            # Calculate areas (wetland_id already exists from main wetlands table)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
-                    ROW_NUMBER() OVER () + {offset} as wetland_id,  -- Ensure unique IDs across batches
+                    wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
                     geometry,
                     ST_Area_Spheroid(geometry) as wetland_area_m2
