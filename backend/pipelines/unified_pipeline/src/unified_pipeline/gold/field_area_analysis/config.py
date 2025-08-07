@@ -109,7 +109,9 @@ class FieldAreaAnalysisConfig(BaseModel):
         updated_outputs = {}
         for key, dataset_name in self.stage_outputs.items():
             # Add year suffix to main field analysis outputs
-            if "field_analysis" in dataset_name and "stage0" not in dataset_name:
+            # Match both "field_analysis" and "field_environmental_analysis" patterns
+            if (("field_analysis" in dataset_name or "field_environmental_analysis" in dataset_name) 
+                and "stage0" not in dataset_name):
                 updated_outputs[key] = f"{dataset_name}_{self.agricultural_fields_year}"
             else:
                 updated_outputs[key] = dataset_name
