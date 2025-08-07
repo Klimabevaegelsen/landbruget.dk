@@ -942,10 +942,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             target_file = file_path
 
             if target_file:
-                self.log.info(f"Found FVM marker data at {target_file}")
+                self.log.info(f"Found agricultural fields data at {target_file}")
                 return target_file
             else:
-                self.log.warning(f"No FVM marker file found for year {year}")
+                self.log.warning(f"No agricultural fields file found for year {year}")
                 return None
 
         except Exception as e:
