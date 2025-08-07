@@ -3315,50 +3315,38 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             raise
 
     def _download_proximity_data_to_cache(self, cache_dir: str, buildings_cache: str, water_cache: str) -> None:
-        """Download proximity datasets from GCS to local cache files."""
+        """Load proximity datasets using existing infrastructure and save to cache."""
         import os
         
         os.makedirs(cache_dir, exist_ok=True)
         
-        # Download buildings data
-        self.log.info("🏢 Downloading buildings data from GCS...")
-        buildings_path = self._get_latest_silver_data_path(self.config.buildings_dataset)
-        if not buildings_path:
-            raise RuntimeError("No buildings dataset found in silver layer")
+        # Load buildings data using existing method and export to cache
+        self.log.info("🏢 Loading buildings data using existing method...")
+        buildings_table = self._read_silver_data(self.config.buildings_dataset)
+        if buildings_table:
+            self.log.info(f"📤 Exporting {buildings_table} to {buildings_cache}...")
+            self.duckdb_conn.execute(f"""
+                COPY (SELECT * FROM {buildings_table}) 
+                TO '{buildings_cache}' (FORMAT PARQUET)
+            """)
+        else:
+            raise RuntimeError("Failed to load buildings dataset")
         
-        full_gcs_path = f"gs://{self.config.bucket}/{buildings_path}"
-        self.log.info(f"📥 Downloading {full_gcs_path} to {buildings_cache}...")
+        # Load water data using existing method and export to cache  
+        self.log.info("🌊 Loading water data using existing method...")
+        water_table = self._read_silver_data(self.config.water_typology_dataset)
+        if water_table:
+            self.log.info(f"📤 Exporting {water_table} to {water_cache}...")
+            self.duckdb_conn.execute(f"""
+                COPY (SELECT * FROM {water_table}) 
+                TO '{water_cache}' (FORMAT PARQUET)
+            """)
+        else:
+            raise RuntimeError("Failed to load water_typology dataset")
         
-        with self.gcs_access.fs.open(full_gcs_path, 'rb') as src:
-            with open(buildings_cache, 'wb') as dst:
-                dst.write(src.read())
-        
-        # Download water data  
-        self.log.info("🌊 Downloading water data from GCS...")
-        water_path = self._get_latest_silver_data_path(self.config.water_typology_dataset)
-        if not water_path:
-            raise RuntimeError("No water_typology dataset found in silver layer")
-            
-        full_gcs_path = f"gs://{self.config.bucket}/{water_path}"
-        self.log.info(f"📥 Downloading {full_gcs_path} to {water_cache}...")
-        
-        with self.gcs_access.fs.open(full_gcs_path, 'rb') as src:
-            with open(water_cache, 'wb') as dst:
-                dst.write(src.read())
-        
-        self.log.info("✅ Proximity datasets downloaded to local cache!")
+        self.log.info("✅ Proximity datasets exported to local cache!")
 
-    def _get_latest_silver_data_path(self, dataset: str) -> Optional[str]:
-        """Get the latest silver data path for a dataset."""
-        try:
-            return self.gcs_access.get_latest_data_path(
-                bucket=self.config.bucket,
-                dataset=dataset,
-                stage="silver"
-            )
-        except Exception as e:
-            self.log.error(f"Failed to get latest silver path for {dataset}: {e}")
-            return None
+
 
     def _get_preloaded_proximity_datasets(self) -> Dict[str, str]:
         """Get the preloaded proximity dataset table names."""
