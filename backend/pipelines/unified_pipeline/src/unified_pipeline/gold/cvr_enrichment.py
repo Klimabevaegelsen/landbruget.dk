@@ -40,7 +40,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
     dataset: str = "cvr_enrichment"
     type: str = "cvr_api"
     description: str = "CVR register data enrichment from distribution.virk.dk"
-    frequency: str = "weekly"
+    frequency: str = "monthly"
     bucket: str = "landbrugsdata-raw-data"
 
     # CVR API configuration
