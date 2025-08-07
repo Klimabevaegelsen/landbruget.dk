@@ -20,7 +20,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     soil_types_dataset: str = "soil_types"
     bnbo_status_dataset: str = "bnbo_status_dissolved"
     wetlands_dataset: str = (
-        "wetlands"  # Use original wetlands to preserve gridcode/toerv_pct attributes
+        "wetlands_dissolved"  # Use dissolved wetlands - now preserves toerv_pct AND eliminates overlaps
     )
     water_projects_dataset: str = "water_projects_dissolved"
 

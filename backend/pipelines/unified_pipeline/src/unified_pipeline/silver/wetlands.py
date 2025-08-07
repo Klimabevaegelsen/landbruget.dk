@@ -589,7 +589,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             high_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'").fetchone()[0]
             medium_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'").fetchone()[0]
             
-            self.log.info(f"✅ Peat overlap resolution completed:")
+            self.log.info("✅ Peat overlap resolution completed:")
             self.log.info(f"   Original features: {original_count:,}")
             self.log.info(f"   Processed features: {processed_count:,}")
             self.log.info(f"   >12% peat areas: {high_peat_count:,}")
@@ -754,8 +754,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         CREATE TABLE wetlands_dissolved_temp (
                             wetland_id INTEGER,
                             final_group_id INTEGER,
-                            merged_count INTEGER,
-                            geometry GEOMETRY
+                            geometry GEOMETRY,
+                            dominant_toerv_pct VARCHAR
                         )
                     """)
 
@@ -772,8 +772,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                             SELECT 
                                 ROW_NUMBER() OVER () + {offset} as wetland_id,
                                 final_group_id,
-                                COUNT(*) as merged_count,
-                                ST_Union_Agg(ws.geometry) as geometry
+                                ST_Union_Agg(ws.geometry) as geometry,
+                                -- Select dominant peat percentage with >12% priority
+                                CASE 
+                                    WHEN bool_or(ws.toerv_pct = '>12') THEN '>12'
+                                    WHEN bool_or(ws.toerv_pct = '6-12') THEN '6-12'
+                                    ELSE mode(ws.toerv_pct)  -- Most frequent for other values
+                                END as dominant_toerv_pct
                             FROM wetland_groups wg
                             JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
                             WHERE final_group_id >= {offset + 1} AND final_group_id <= {batch_end}
@@ -787,8 +792,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         SELECT 
                             ROW_NUMBER() OVER () as wetland_id,
                             final_group_id,
-                            COUNT(*) as merged_count,
-                            ST_Union_Agg(ws.geometry) as geometry
+                            ST_Union_Agg(ws.geometry) as geometry,
+                            -- Select dominant peat percentage with >12% priority
+                            CASE 
+                                WHEN bool_or(ws.toerv_pct = '>12') THEN '>12'
+                                WHEN bool_or(ws.toerv_pct = '6-12') THEN '6-12'
+                                ELSE mode(ws.toerv_pct)  -- Most frequent for other values
+                            END as dominant_toerv_pct
                         FROM wetland_groups wg
                         JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
                         GROUP BY final_group_id
@@ -802,19 +812,22 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     SELECT 
                         wetland_id,
                         wetland_id as final_group_id,
-                        1 as merged_count,
-                        geometry
+                        geometry,
+                        toerv_pct as dominant_toerv_pct
                     FROM wetlands_spatial
                 """)
 
-            # Create final dissolved table
+            # Create final dissolved table WITH PEAT PERCENTAGE PRESERVATION
             dissolved_table_name = f"{dataset}_dissolved"
             conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
+            
+            # Create final dissolved table - just wetland_id, geometry, and toerv_pct
             conn.execute(f"""
                 CREATE TABLE {dissolved_table_name} AS
                 SELECT 
                     wetland_id,
-                    geometry
+                    geometry,
+                    dominant_toerv_pct as toerv_pct
                 FROM wetlands_dissolved_temp
                 ORDER BY wetland_id
             """)
