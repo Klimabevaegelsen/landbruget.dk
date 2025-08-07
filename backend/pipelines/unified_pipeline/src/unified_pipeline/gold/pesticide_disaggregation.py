@@ -117,8 +117,8 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
 
     # NEW: Proximity analysis configuration  
     enable_proximity_analysis: bool = Field(
-        default=False,
-        description="Whether to run proximity analysis after disaggregation (default: False - disabled due to memory issues)",
+        default=True,
+        description="Whether to run proximity analysis after disaggregation (default: True - uses batching to prevent memory issues)",
     )
     building_proximity_distance_m: float = Field(
         default=100.0,
