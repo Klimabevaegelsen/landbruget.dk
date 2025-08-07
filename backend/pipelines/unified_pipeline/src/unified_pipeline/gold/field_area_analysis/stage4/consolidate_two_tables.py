@@ -269,7 +269,67 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             "📦 Creating field_environmental_analysis_properties with centralized area calculations"
         )
         
-        # Create table with field×property combinations and environmental calculations
+        # OPTIMIZATION: Pre-aggregate property intersection data to prevent JOIN explosion
+        self.log.info("🔧 PRE-AGGREGATING property intersection data to prevent JOIN explosion...")
+        
+        # Pre-aggregate property BNBO intersections by (field_uuid, bfe_number)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_bnbo_aggregates AS
+            SELECT 
+                field_uuid,
+                bfe_number,
+                SUM(ST_Area_Spheroid(property_bnbo_geometry)) as property_bnbo_total_m2,
+                COUNT(DISTINCT status_category) as property_bnbo_status_count,
+                STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category) 
+                    as property_bnbo_status_categories,
+                SUM(CASE WHEN status_category = 'Action Required' 
+                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0 
+                    as property_bnbo_action_required_hectares,
+                SUM(CASE WHEN status_category = 'Completed' 
+                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0 
+                    as property_bnbo_completed_hectares
+            FROM property_bnbo_intersections
+            GROUP BY field_uuid, bfe_number
+        """)
+        
+        # Pre-aggregate property BNBO water intersections
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_bnbo_water_aggregates AS
+            SELECT 
+                field_uuid,
+                bfe_number,
+                SUM(ST_Area_Spheroid(property_bnbo_water_geometry)) 
+                    as property_bnbo_water_covered_m2
+            FROM property_bnbo_water_intersections
+            GROUP BY field_uuid, bfe_number
+        """)
+        
+        # Pre-aggregate property wetland intersections
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_wetland_aggregates AS
+            SELECT 
+                field_uuid,
+                bfe_number,
+                SUM(ST_Area_Spheroid(property_wetland_geometry)) as property_wetland_total_m2
+            FROM property_wetland_intersections
+            GROUP BY field_uuid, bfe_number
+        """)
+        
+        # Pre-aggregate property wetland water intersections
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_wetland_water_aggregates AS
+            SELECT 
+                field_uuid,
+                bfe_number,
+                SUM(ST_Area_Spheroid(property_wetland_water_geometry)) 
+                    as property_wetland_water_covered_m2
+            FROM property_wetland_water_intersections
+            GROUP BY field_uuid, bfe_number
+        """)
+        
+        self.log.info("✅ Property pre-aggregation completed - no more massive JOINs!")
+        
+        # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT 
@@ -279,41 +339,33 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                SUM(ST_Area_Spheroid(fp.intersection_geometry)) 
-                    as property_intersection_area_m2,
+                ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
                 
-                -- Environmental within this field×property intersection
-                COALESCE(SUM(ST_Area_Spheroid(pbi.property_bnbo_geometry)), 0) 
-                    as property_bnbo_total_m2,
-                COALESCE(SUM(ST_Area_Spheroid(pbwi.property_bnbo_water_geometry)), 0) 
+                -- Environmental data from pre-aggregated tables
+                COALESCE(pba.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
+                COALESCE(pbwa.property_bnbo_water_covered_m2, 0) 
                     as property_bnbo_water_covered_m2,
-                COALESCE(SUM(ST_Area_Spheroid(pwi.property_wetland_geometry)), 0) 
-                    as property_wetland_total_m2,
-                COALESCE(SUM(ST_Area_Spheroid(pwwi.property_wetland_water_geometry)), 0) 
+                COALESCE(pwa.property_wetland_total_m2, 0) as property_wetland_total_m2,
+                COALESCE(pwwa.property_wetland_water_covered_m2, 0) 
                     as property_wetland_water_covered_m2,
                 
-                -- BNBO Status Analysis (aggregated at property level)
-                COUNT(DISTINCT pbi.status_category) as property_bnbo_status_count,
-                STRING_AGG(DISTINCT pbi.status_category, ', ' ORDER BY pbi.status_category) 
-                    as property_bnbo_status_categories,
-                COALESCE(SUM(CASE WHEN pbi.status_category = 'Action Required' 
-                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                -- BNBO Status Analysis (from pre-aggregated data)
+                COALESCE(pba.property_bnbo_status_count, 0) as property_bnbo_status_count,
+                pba.property_bnbo_status_categories,
+                COALESCE(pba.property_bnbo_action_required_hectares, 0) 
                     as property_bnbo_action_required_hectares,
-                COALESCE(SUM(CASE WHEN pbi.status_category = 'Completed' 
-                    THEN ST_Area_Spheroid(pbi.property_bnbo_geometry) ELSE 0 END), 0) / 10000.0 
+                COALESCE(pba.property_bnbo_completed_hectares, 0) 
                     as property_bnbo_completed_hectares
                 
             FROM field_property_intersections fp
-            LEFT JOIN property_bnbo_intersections pbi 
-                ON fp.field_uuid = pbi.field_uuid AND fp.bfe_number = pbi.bfe_number
-            LEFT JOIN property_bnbo_water_intersections pbwi 
-                ON fp.field_uuid = pbwi.field_uuid AND fp.bfe_number = pbwi.bfe_number
-            LEFT JOIN property_wetland_intersections pwi 
-                ON fp.field_uuid = pwi.field_uuid AND fp.bfe_number = pwi.bfe_number
-            LEFT JOIN property_wetland_water_intersections pwwi 
-                ON fp.field_uuid = pwwi.field_uuid AND fp.bfe_number = pwwi.bfe_number
-            GROUP BY fp.field_uuid, fp.bfe_number, fp.field_id, fp.block_id, 
-                     fp.cvr_number, fp.year
+            LEFT JOIN property_bnbo_aggregates pba 
+                ON fp.field_uuid = pba.field_uuid AND fp.bfe_number = pba.bfe_number
+            LEFT JOIN property_bnbo_water_aggregates pbwa 
+                ON fp.field_uuid = pbwa.field_uuid AND fp.bfe_number = pbwa.bfe_number
+            LEFT JOIN property_wetland_aggregates pwa 
+                ON fp.field_uuid = pwa.field_uuid AND fp.bfe_number = pwa.bfe_number
+            LEFT JOIN property_wetland_water_aggregates pwwa 
+                ON fp.field_uuid = pwwa.field_uuid AND fp.bfe_number = pwwa.bfe_number
         """)
         
         property_count = self.conn.execute(
