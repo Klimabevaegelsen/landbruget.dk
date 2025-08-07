@@ -3075,8 +3075,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Run proximity analysis for a specific year while data is still in memory."""
         self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
         
-        # Use preloaded proximity datasets (loaded once at start of run)
         try:
+            # Check if proximity tables exist, if not create them (first time only)
+            if not hasattr(self, '_proximity_datasets_loaded'):
+                self.log.info("📥 Loading proximity datasets (first time)...")
+                self._preload_proximity_datasets_once()
+                self._proximity_datasets_loaded = True
+            
+            # Get the preloaded datasets
             datasets = self._get_preloaded_proximity_datasets()
             
             # Perform proximity analysis (adds columns to disaggregated_pesticide_applications)
