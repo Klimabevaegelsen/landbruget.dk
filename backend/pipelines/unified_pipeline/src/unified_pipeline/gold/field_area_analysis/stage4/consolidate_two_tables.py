@@ -231,9 +231,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(ba.bnbo_action_required_hectares, 0) as bnbo_action_required_hectares,
                 COALESCE(ba.bnbo_completed_hectares, 0) as bnbo_completed_hectares,
                 
-                -- Wetland Analysis (using pre-aggregated data)
+                -- Wetland Analysis (using pre-aggregated data with DATA INTEGRITY VALIDATION)
                 COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
-                COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
+                -- BUG FIX: Cap water coverage at wetland area to prevent mathematical impossibilities
+                LEAST(COALESCE(wwa.field_wetland_water_covered_m2, 0), COALESCE(wa.field_wetland_total_m2, 0)) as field_wetland_water_covered_m2,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
                     THEN (COALESCE(wa.field_wetland_total_m2, 0) / 
@@ -242,7 +243,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 END as field_wetland_coverage_pct,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
-                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
+                    THEN (LEAST(COALESCE(wwa.field_wetland_water_covered_m2, 0), COALESCE(wa.field_wetland_total_m2, 0)) / 
                           COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
                     ELSE 0 
                 END as field_wetland_water_coverage_pct

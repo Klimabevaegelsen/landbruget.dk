@@ -56,7 +56,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         stage2b_water_dataset = updated_outputs["field_wetland_water_intersections"]
         stage2b_water_path = self._get_latest_gold_path(stage2b_water_dataset)
         self.gcs_access.query_parquet_direct(
-            stage2b_water_path, "SELECT *", "field_wetland_water_intersections"
+            stage2b_water_path, "SELECT *", "stage3b_field_wetland_water_intersections"
         )
         self.log.info(f"✅ Loaded field_wetland_water_intersections from {stage2b_water_dataset}")
 
@@ -65,7 +65,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Input validation
         property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
         wetland_count = self.conn.execute("SELECT COUNT(*) FROM field_wetland_intersections").fetchone()[0]
-        water_wetland_count = self.conn.execute("SELECT COUNT(*) FROM field_wetland_water_intersections").fetchone()[0]
+        water_wetland_count = self.conn.execute("SELECT COUNT(*) FROM stage3b_field_wetland_water_intersections").fetchone()[0]
 
         self.log.info(f"📊 Input data loaded:")
         self.log.info(f"  Field-property intersections: {property_count:,}")
@@ -131,7 +131,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 fwwi.project_id,
                 ST_Intersection(p.property_geometry, fwwi.field_wetland_water_geometry) as property_wetland_water_geometry
             FROM field_property_intersections p
-            JOIN field_wetland_water_intersections fwwi ON p.field_uuid = fwwi.field_uuid
+            JOIN stage3b_field_wetland_water_intersections fwwi ON p.field_uuid = fwwi.field_uuid
                 AND ST_Intersects(p.property_geometry, fwwi.field_wetland_water_geometry)
         """)
 
@@ -244,7 +244,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Get input counts
         field_property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
         field_wetland_count = self.conn.execute("SELECT COUNT(*) FROM field_wetland_intersections").fetchone()[0]
-        field_wetland_water_count = self.conn.execute("SELECT COUNT(*) FROM field_wetland_water_intersections").fetchone()[0]
+        field_wetland_water_count = self.conn.execute("SELECT COUNT(*) FROM stage3b_field_wetland_water_intersections").fetchone()[0]
         
         # Get output counts
         property_wetland_count = self.conn.execute("SELECT COUNT(*) FROM property_wetland_intersections").fetchone()[0]
