@@ -439,7 +439,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # STEP 3: PROCESS EACH YEAR PAIR
         # ==============================
         
-        # NOTE: Proximity datasets will be loaded fresh for each year to avoid table persistence issues
+        # NEW: Pre-load proximity datasets once to avoid expensive GCS downloads per year
+        if self.config.enable_proximity_analysis:
+            self.log.info("📥 Pre-loading proximity datasets once for all years...")
+            try:
+                self._preload_proximity_datasets_once()
+                self.log.info("✅ Proximity datasets pre-loaded successfully and will persist!")
+            except Exception as e:
+                self.log.error(f"❌ Failed to pre-load proximity datasets: {e}")
+                self.log.warning("⚠️ Proximity analysis will be disabled")
+                self.config.enable_proximity_analysis = False
         
         # Process each pesticide year with its corresponding field year
         # This is the main processing loop - each iteration handles one year of data
@@ -3061,20 +3070,23 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Run proximity analysis for a specific year while data is still in memory."""
         self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
         
-        # Load proximity datasets fresh for this year to avoid table persistence issues
-        datasets = self._load_proximity_datasets_fresh()
-        
-        # Validate datasets
-        if not self._validate_proximity_datasets(datasets):
-            raise RuntimeError("Required datasets for proximity analysis not available")
-        
-        # Perform proximity analysis (adds columns to disaggregated_pesticide_applications)
-        self._perform_proximity_analysis_sync(datasets)
-        
-        # Generate summary statistics
-        self._generate_proximity_summary_statistics_sync()
-        
-        self.log.info(f"✅ Proximity analysis integrated into year {year} results!")
+        # Use preloaded proximity datasets (loaded once at start of run)
+        try:
+            datasets = self._get_preloaded_proximity_datasets()
+            
+            # Perform proximity analysis (adds columns to disaggregated_pesticide_applications)
+            self._perform_proximity_analysis_sync(datasets)
+            
+            # Generate summary statistics
+            self._generate_proximity_summary_statistics_sync()
+            
+            self.log.info(f"✅ Proximity analysis integrated into year {year} results!")
+            
+        except Exception as e:
+            # If proximity analysis fails for any reason, just log and continue
+            # The main disaggregation results will still be saved
+            self.log.error(f"❌ Proximity analysis failed for year {year}: {e}")
+            raise RuntimeError(f"Proximity analysis failed: {e}")
 
 
 
@@ -3254,36 +3266,65 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"❌ Error generating proximity summary statistics: {e}")
 
-    def _load_proximity_datasets_fresh(self) -> Dict[str, str]:
-        """Load proximity datasets fresh for the current year's analysis."""
-        datasets = {}
+    def _preload_proximity_datasets_once(self) -> None:
+        """Pre-load proximity datasets once with stable table names for all year processing."""
+        self.log.info("📥 Pre-loading proximity datasets with stable table names...")
         
-        self.log.info("📥 Loading fresh proximity datasets for this analysis...")
+        try:
+            # Load buildings data with explicit stable table name
+            self.log.info("🏢 Loading buildings data...")
+            buildings_table = self._read_silver_data(self.config.buildings_dataset)
+            if buildings_table:
+                # Copy to a stable table name to ensure persistence
+                stable_buildings_name = "proximity_buildings_stable"
+                self.log.info(f"🔄 Copying {buildings_table} to {stable_buildings_name}...")
+                self.duckdb_conn.execute(f"CREATE TABLE {stable_buildings_name} AS SELECT * FROM {buildings_table}")
+                # Verify it worked
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_buildings_name}").fetchone()[0]
+                self.log.info(f"✅ Buildings data copied to stable table: {stable_buildings_name} ({count:,} records)")
+            else:
+                raise RuntimeError("_read_silver_data returned None for buildings dataset")
+            
+            # Load water typology data with explicit stable table name  
+            self.log.info("🌊 Loading water typology data...")
+            water_table = self._read_silver_data(self.config.water_typology_dataset)
+            if water_table:
+                # Copy to a stable table name to ensure persistence
+                stable_water_name = "proximity_water_stable" 
+                self.log.info(f"🔄 Copying {water_table} to {stable_water_name}...")
+                self.duckdb_conn.execute(f"CREATE TABLE {stable_water_name} AS SELECT * FROM {water_table}")
+                # Verify it worked
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {stable_water_name}").fetchone()[0]
+                self.log.info(f"✅ Water data copied to stable table: {stable_water_name} ({count:,} records)")
+            else:
+                raise RuntimeError("_read_silver_data returned None for water_typology dataset")
+            
+            self.log.info("✅ All proximity datasets pre-loaded with stable table names!")
+            
+        except Exception as e:
+            self.log.error(f"❌ Error during proximity datasets preloading: {e}")
+            raise
+
+    def _get_preloaded_proximity_datasets(self) -> Dict[str, str]:
+        """Get the preloaded proximity dataset table names."""
+        # Check if tables were preloaded and actually exist
+        buildings_table = "proximity_buildings_stable"
+        water_table = "proximity_water_stable"
+        fields_table = "marker"
         
-        # Load buildings data (silver layer)
-        self.log.info("🏢 Loading buildings data...")
-        buildings_table = self._read_silver_data(self.config.buildings_dataset)
-        if buildings_table:
-            datasets['buildings'] = buildings_table
-            self.log.info(f"✅ Loaded buildings table: {buildings_table}")
-        else:
-            raise RuntimeError("Failed to load buildings dataset")
+        # Validate that the tables actually exist before returning them
+        for name, table in [("buildings", buildings_table), ("water", water_table), ("fields", fields_table)]:
+            try:
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                self.log.info(f"   {name} ({table}): {count:,} records")
+            except Exception as e:
+                raise RuntimeError(f"Required table {table} for {name} not found: {e}")
         
-        # Load water typology data (silver layer)
-        self.log.info("🌊 Loading water typology data...")
-        water_table = self._read_silver_data(self.config.water_typology_dataset)
-        if water_table:
-            datasets['water'] = water_table
-            self.log.info(f"✅ Loaded water table: {water_table}")
-        else:
-            raise RuntimeError("Failed to load water typology dataset")
-        
-        # Add the already-loaded agricultural fields (marker table)
-        datasets['fields'] = 'marker'  # This table is already loaded in memory
-        self.log.info("✅ Using existing agricultural fields table: marker")
-        
-        self.log.info(f"✅ Fresh proximity datasets ready: {list(datasets.keys())}")
-        return datasets
+        return {
+            'buildings': buildings_table,
+            'water': water_table,
+            'fields': fields_table
+        }
 
 
     
