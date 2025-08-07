@@ -2850,7 +2850,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             
         # Check that main disaggregated table exists and has data
         try:
-            disaggregated_count = self.conn.execute("SELECT COUNT(*) FROM disaggregated_pesticide_applications").fetchone()[0]
+            disaggregated_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM disaggregated_pesticide_applications").fetchone()[0]
             self.log.info(f"   disaggregated_pesticide_applications: {disaggregated_count:,} records")
             
             if disaggregated_count == 0:
@@ -2864,7 +2864,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for dataset_name, table_name in datasets.items():
             if table_name:
                 try:
-                    count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                    count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                     self.log.info(f"   {dataset_name}: {count:,} records")
                     
                     if count == 0:
@@ -3229,7 +3229,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         
         self.log.info("🚀 Executing proximity analysis query (this may take a few minutes)...")
-        self.conn.execute(analysis_query)
+        self.duckdb_conn.execute(analysis_query)
         
         # Add new proximity columns to the main disaggregated table (formatted versions)
         self.log.info("📊 Adding formatted proximity columns to disaggregated results...")
@@ -3240,7 +3240,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         ]
         
         for query in alter_queries:
-            self.conn.execute(query)
+            self.duckdb_conn.execute(query)
         
         # Update main table with formatted proximity data  
         self.log.info("🔄 Updating main table with formatted proximity analysis results...")
@@ -3253,10 +3253,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         FROM field_proximity_analysis fp
         WHERE disaggregated_pesticide_applications.field_uuid = fp.field_uuid
         """
-        self.conn.execute(update_query)
+        self.duckdb_conn.execute(update_query)
         
         # Clean up temporary table
-        self.conn.execute("DROP TABLE field_proximity_analysis")
+        self.duckdb_conn.execute("DROP TABLE field_proximity_analysis")
         
         self.log.info("✅ Proximity analysis data integrated into main results table!")
 
@@ -3264,7 +3264,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Generate and log summary statistics for proximity analysis (sync)."""
         try:
             # Get basic statistics using formatted columns
-            stats = self.conn.execute("""
+            stats = self.duckdb_conn.execute("""
                 SELECT 
                     COUNT(*) as total_records,
                     COUNT(*) FILTER (WHERE residential_buildings_formatted != '') as with_residential,
