@@ -632,7 +632,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             self.log.error(f"❌ Failed to load proximity datasets: {e}")
                             self.log.warning("⚠️ Disabling proximity analysis for all years")
                             self.proximity_analysis_enabled = False
-                            continue
                     
                     if self.proximity_analysis_enabled:  # Check again in case it was disabled above
                         try:
