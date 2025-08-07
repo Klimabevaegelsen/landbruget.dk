@@ -172,43 +172,25 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid
         """)
         
-        # Pre-aggregate wetland intersections by field with peat percentage prioritization
-        # BACKUP: Keep this logic until silver layer overlap fix is validated
-        # TODO: Remove this complex logic once silver layer overlap handling is confirmed working
+        # Pre-aggregate wetland intersections by field
+        # OPTIMIZED: Simple aggregation since dissolved wetlands already handle peat overlaps
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_field_aggregates AS
             SELECT 
                 field_uuid,
-                -- Use spatial union to merge overlapping wetland areas, prioritizing highest peat %
-                ST_Area_Spheroid(ST_Union_Agg(
-                    CASE 
-                        WHEN toerv_pct = '>12' THEN field_wetland_geometry
-                        WHEN toerv_pct = '6-12' THEN 
-                            -- Only include 6-12% areas that don't overlap with >12% areas
-                            ST_Difference(
-                                field_wetland_geometry,
-                                COALESCE(
-                                    (SELECT ST_Union_Agg(w2.field_wetland_geometry) 
-                                     FROM field_wetland_intersections w2 
-                                     WHERE w2.field_uuid = w1.field_uuid 
-                                     AND w2.toerv_pct = '>12'),
-                                    ST_GeomFromText('POLYGON EMPTY')
-                                )
-                            )
-                        ELSE field_wetland_geometry
-                    END
-                )) as field_wetland_total_m2
-            FROM field_wetland_intersections w1
+                -- Simple area sum - overlaps already resolved in wetlands_dissolved silver layer
+                SUM(ST_Area_Spheroid(field_wetland_geometry)) as field_wetland_total_m2
+            FROM field_wetland_intersections
             GROUP BY field_uuid
         """)
         
         # Pre-aggregate wetland water intersections by field
-        # OVERLAP FIX: Use ST_Union_Agg to eliminate overlapping wetland water coverage 
+        # OPTIMIZED: Simple aggregation since dissolved wetlands eliminate overlaps
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_water_field_aggregates AS
             SELECT 
                 field_uuid,
-                ST_Area_Spheroid(ST_Union_Agg(field_wetland_water_geometry)) 
+                SUM(ST_Area_Spheroid(field_wetland_water_geometry)) 
                     as field_wetland_water_covered_m2
             FROM field_wetland_water_intersections
             GROUP BY field_uuid

@@ -519,7 +519,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             # Create index to improve spatial query performance
             conn.execute("CREATE INDEX idx_wetlands_staging_geometry ON wetlands_staging USING RTREE (geometry)")
             
-            # Handle peat percentage overlaps: >12% takes priority over 6-12%
+            # Handle peat percentage overlaps using SPATIAL_JOIN operator (PR #545)
+            # Strategy: Exclude overlapping 6-12% areas entirely, keep >12% priority
+            
             # Step 1: Keep all >12% areas unchanged
             conn.execute("""
                 CREATE TABLE wetlands_high_peat AS
@@ -528,26 +530,17 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 WHERE toerv_pct = '>12'
             """)
             
-            # Step 2: For 6-12% areas, remove overlaps with >12% areas using ST_Difference
+            # Step 2: Keep only 6-12% areas that DON'T overlap with >12% areas
+            # Uses ST_Intersects in JOIN to trigger optimized SPATIAL_JOIN operator
             conn.execute("""
                 CREATE TABLE wetlands_medium_peat AS
-                SELECT 
-                    ws.temp_id,
-                    ws.id,
-                    ws.gridcode,
-                    ws.toerv_pct,
-                    CASE 
-                        WHEN high_peat_union.geometry IS NOT NULL THEN
-                            ST_Difference(ws.geometry, high_peat_union.geometry)
-                        ELSE
-                            ws.geometry
-                    END as geometry
+                SELECT ws.temp_id, ws.id, ws.gridcode, ws.toerv_pct, ws.geometry
                 FROM wetlands_staging ws
-                LEFT JOIN (
-                    SELECT ST_Union_Agg(geometry) as geometry
-                    FROM wetlands_high_peat
-                ) high_peat_union ON ST_Intersects(ws.geometry, high_peat_union.geometry)
                 WHERE ws.toerv_pct = '6-12'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM wetlands_high_peat hp 
+                      WHERE ST_Intersects(ws.geometry, hp.geometry)
+                  )
             """)
             
             # Step 3: Keep all other peat percentage areas unchanged
@@ -558,7 +551,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 WHERE toerv_pct NOT IN ('>12', '6-12')
             """)
             
-            # Step 4: Combine all areas and filter out empty geometries from ST_Difference operations
+            # Step 4: Combine all non-overlapping areas (no complex geometry filtering needed)
             conn.execute("""
                 CREATE TABLE wetlands_spatial AS
                 SELECT 
@@ -571,7 +564,6 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_high_peat
                     UNION ALL
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_medium_peat
-                    WHERE NOT ST_IsEmpty(geometry) AND ST_Area(geometry) > 1  -- Keep areas > 1 m²
                     UNION ALL
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_other_peat
                 ) combined_wetlands
@@ -589,11 +581,11 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             high_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'").fetchone()[0]
             medium_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'").fetchone()[0]
             
-            self.log.info("✅ Peat overlap resolution completed:")
+            self.log.info("✅ Peat overlap resolution completed using SPATIAL_JOIN optimization (PR #545):")
             self.log.info(f"   Original features: {original_count:,}")
             self.log.info(f"   Processed features: {processed_count:,}")
             self.log.info(f"   >12% peat areas: {high_peat_count:,}")
-            self.log.info(f"   6-12% peat areas after deduplication: {medium_peat_count:,}")
+            self.log.info(f"   6-12% peat areas (non-overlapping): {medium_peat_count:,}")
 
             # ✅ DuckDB-spatial optimization: No explicit indexing needed
             # DuckDB spatial extension automatically creates temporary spatial indexes
