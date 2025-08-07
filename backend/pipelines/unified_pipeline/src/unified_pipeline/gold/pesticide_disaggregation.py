@@ -438,6 +438,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # STEP 3: PROCESS EACH YEAR PAIR
         # ==============================
+        
+        # NEW: Pre-load proximity datasets if proximity analysis is enabled
+        # This avoids "table already exists" errors when running proximity analysis per year
+        if self.config.enable_proximity_analysis:
+            self.log.info("📥 Pre-loading proximity datasets for reuse across all years...")
+            try:
+                self.proximity_datasets = self._preload_proximity_datasets()
+                self.log.info("✅ Proximity datasets pre-loaded successfully!")
+            except Exception as e:
+                self.log.error(f"❌ Failed to pre-load proximity datasets: {e}")
+                self.log.warning("⚠️ Proximity analysis will be disabled")
+                # Disable proximity analysis if we can't load the datasets
+                self.config.enable_proximity_analysis = False
+        
         # Process each pesticide year with its corresponding field year
         # This is the main processing loop - each iteration handles one year of data
         for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
@@ -3058,8 +3072,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Run proximity analysis for a specific year while data is still in memory."""
         self.log.info(f"🎯 Setting up proximity analysis for year {year}...")
         
-        # Load proximity datasets (this loads them into DuckDB)
-        datasets = self._load_proximity_datasets_sync()
+        # Use pre-loaded proximity datasets to avoid table conflicts
+        datasets = self._get_proximity_datasets_for_year()
         
         # Validate datasets
         if not self._validate_proximity_datasets(datasets):
@@ -3231,6 +3245,47 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             
         except Exception as e:
             self.log.error(f"❌ Error generating proximity summary statistics: {e}")
+
+    def _preload_proximity_datasets(self) -> Dict[str, str]:
+        """Pre-load proximity datasets once to avoid table name conflicts."""
+        datasets = {}
+        
+        self.log.info("📥 Loading proximity datasets...")
+        
+        # Load buildings data (silver layer) with unique table name
+        self.log.info("🏢 Loading buildings data...")
+        buildings_table = self._read_silver_data(self.config.buildings_dataset)
+        if buildings_table:
+            datasets['buildings'] = buildings_table
+        else:
+            raise RuntimeError("Failed to load buildings dataset")
+        
+        # Load water typology data (silver layer) with unique table name  
+        self.log.info("🌊 Loading water typology data...")
+        water_table = self._read_silver_data(self.config.water_typology_dataset)
+        if water_table:
+            datasets['water'] = water_table
+        else:
+            raise RuntimeError("Failed to load water typology dataset")
+        
+        self.log.info(f"✅ Pre-loaded proximity datasets: {list(datasets.keys())}")
+        return datasets
+
+    def _get_proximity_datasets_for_year(self) -> Dict[str, str]:
+        """Get proximity datasets for current year processing (uses pre-loaded data)."""
+        datasets = {}
+        
+        # Use pre-loaded datasets (should be available if pre-loading succeeded)
+        if hasattr(self, 'proximity_datasets'):
+            datasets.update(self.proximity_datasets)
+        else:
+            raise RuntimeError("Proximity datasets not pre-loaded - this is a bug")
+        
+        # Add the currently loaded marker table (agricultural fields)
+        datasets['fields'] = 'marker'  # Already loaded in memory for this year
+        
+        self.log.info(f"🗺️ Using pre-loaded datasets: {list(datasets.keys())}")
+        return datasets
     
     def _read_gold_data(self, dataset: str) -> Optional[str]:
         """Read gold layer data from GCS (e.g., our own disaggregation results)."""
