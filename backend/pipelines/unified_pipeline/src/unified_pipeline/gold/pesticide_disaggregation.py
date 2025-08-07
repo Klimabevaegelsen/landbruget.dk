@@ -3325,7 +3325,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         buildings_table = self._read_silver_data(self.config.buildings_dataset)
         if buildings_table:
             self.log.info(f"📤 Exporting {buildings_table} to {buildings_cache}...")
-            self.duckdb_conn.execute(f"""
+            # Use self.conn (same connection that _read_silver_data uses)
+            self.conn.execute(f"""
                 COPY (SELECT * FROM {buildings_table}) 
                 TO '{buildings_cache}' (FORMAT PARQUET)
             """)
@@ -3337,7 +3338,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         water_table = self._read_silver_data(self.config.water_typology_dataset)
         if water_table:
             self.log.info(f"📤 Exporting {water_table} to {water_cache}...")
-            self.duckdb_conn.execute(f"""
+            # Use self.conn (same connection that _read_silver_data uses)
+            self.conn.execute(f"""
                 COPY (SELECT * FROM {water_table}) 
                 TO '{water_cache}' (FORMAT PARQUET)
             """)
