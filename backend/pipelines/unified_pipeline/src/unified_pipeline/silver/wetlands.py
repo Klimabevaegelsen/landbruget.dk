@@ -843,7 +843,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             self.log.error(f"Error during DuckDB-spatial dissolve operation: {str(e)}")
             raise e
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[dict[str, Any]]:
         """
         Run the wetlands silver layer processing pipeline.
 
@@ -860,7 +860,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         The method handles error conditions at each step and logs progress.
 
         Returns:
-            None
+            dict[str, Any]: Success information including dataset name, timestamps, and status
+            None: If processing failed
 
         Note:
             This is the main entry point for the silver layer processing of wetlands data.
@@ -878,7 +879,12 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
                     # Create table directly without  conversion
                     conn.execute(
-                        "CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR, source VARCHAR, created_at TIMESTAMP, updated_at TIMESTAMP)"
+                        """CREATE OR REPLACE TABLE temp_raw_data (
+                            payload VARCHAR, 
+                            source VARCHAR, 
+                            created_at TIMESTAMP, 
+                            updated_at TIMESTAMP
+                        )"""
                     )
 
                     # Insert data directly into table
@@ -894,14 +900,14 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     self.log.error(
                         f"Expected list of XML strings from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
                 raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
                 if raw_data is None:
                     self.log.error("Failed to read raw data")
-                    return
+                    return None
 
             self.log.info("Read raw data successfully")
 
@@ -916,7 +922,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             table_name = self._process_xml_data(processing_input)
             if table_name is None:
                 self.log.error("Failed to process raw data")
-                return
+                return None
             self.log.info("Processed raw data successfully")
 
             # Note: Dissolved table is created within _process_xml_data before coordinate transformation
@@ -931,3 +937,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 "silver",
             )
             self.log.info("Saved processed data successfully")
+            
+            # Return success information for the main app
+            return {
+                "dataset": self.config.dataset,
+                "processed_at": self.conn.execute("SELECT current_timestamp")
+                .fetchone()[0]
+                .isoformat(),
+                "status": "completed",
+                "tables_created": [self.config.dataset, f"{self.config.dataset}_dissolved"],
+            }
