@@ -3172,46 +3172,70 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             FROM fields_with_geometry fg 
             JOIN water_features_utm w ON ST_DWithin(fg.field_geom_utm, w.water_geom_utm, {self.config.water_proximity_distance_m})
             GROUP BY fg.field_uuid
+        ),
+        residential_formatted AS (
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                    ELSE ''
+                END as residential_buildings_formatted
+            FROM fields_with_geometry fg 
+            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                AND b.category_group = 'residential'
+            GROUP BY fg.field_uuid
+        ),
+        educational_formatted AS (
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(b.address || ':' || ROUND(ST_Distance(fg.field_geom_utm, b.building_geom_utm), 1) || 'm' ORDER BY ST_Distance(fg.field_geom_utm, b.building_geom_utm)), chr(10))
+                    ELSE ''
+                END as educational_facilities_formatted
+            FROM fields_with_geometry fg 
+            LEFT JOIN buildings_utm b ON ST_DWithin(fg.field_geom_utm, b.building_geom_utm, {self.config.building_proximity_distance_m})
+                AND b.category_group = 'publicServices'
+            GROUP BY fg.field_uuid
         )
         SELECT 
             fg.field_uuid,
-            COALESCE(rp.residential_addresses_100m, []) as residential_addresses_100m,
-            COALESCE(rp.residential_distances_m, []) as residential_distances_m,
-            COALESCE(ep.educational_addresses_100m, []) as educational_addresses_100m,
-            COALESCE(ep.educational_distances_m, []) as educational_distances_m,
-            ROUND(wp.closest_water_distance_m, 1) as closest_water_distance_m
+            COALESCE(rf.residential_buildings_formatted, '') as residential_buildings_formatted,
+            COALESCE(ef.educational_facilities_formatted, '') as educational_facilities_formatted,
+            CASE 
+                WHEN wp.closest_water_distance_m IS NOT NULL 
+                THEN ROUND(wp.closest_water_distance_m, 1) || 'm'
+                ELSE ''
+            END as water_distance_formatted
         FROM fields_with_geometry fg
-        LEFT JOIN residential_proximity rp ON fg.field_uuid = rp.field_uuid
-        LEFT JOIN educational_proximity ep ON fg.field_uuid = ep.field_uuid
+        LEFT JOIN residential_formatted rf ON fg.field_uuid = rf.field_uuid
+        LEFT JOIN educational_formatted ef ON fg.field_uuid = ef.field_uuid
         LEFT JOIN water_proximity wp ON fg.field_uuid = wp.field_uuid
         """
         
         self.log.info("🚀 Executing proximity analysis query (this may take a few minutes)...")
         self.conn.execute(analysis_query)
         
-        # Add new columns to the main disaggregated table
-        self.log.info("📊 Adding proximity columns to disaggregated results...")
+        # Add new proximity columns to the main disaggregated table (formatted versions)
+        self.log.info("📊 Adding formatted proximity columns to disaggregated results...")
         alter_queries = [
-            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN residential_addresses_100m VARCHAR[]",
-            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN residential_distances_m DOUBLE[]", 
-            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN educational_addresses_100m VARCHAR[]",
-            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN educational_distances_m DOUBLE[]",
-            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN closest_water_distance_m DOUBLE"
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN residential_buildings_formatted VARCHAR",
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN educational_facilities_formatted VARCHAR", 
+            "ALTER TABLE disaggregated_pesticide_applications ADD COLUMN water_distance_formatted VARCHAR"
         ]
         
         for query in alter_queries:
             self.conn.execute(query)
         
-        # Update main table with proximity data
-        self.log.info("🔄 Updating main table with proximity analysis results...")
+        # Update main table with formatted proximity data  
+        self.log.info("🔄 Updating main table with formatted proximity analysis results...")
         update_query = """
         UPDATE disaggregated_pesticide_applications
         SET
-            residential_addresses_100m = fp.residential_addresses_100m,
-            residential_distances_m = fp.residential_distances_m,
-            educational_addresses_100m = fp.educational_addresses_100m,
-            educational_distances_m = fp.educational_distances_m,
-            closest_water_distance_m = fp.closest_water_distance_m
+            residential_buildings_formatted = fp.residential_buildings_formatted,
+            educational_facilities_formatted = fp.educational_facilities_formatted,
+            water_distance_formatted = fp.water_distance_formatted
         FROM field_proximity_analysis fp
         WHERE disaggregated_pesticide_applications.field_uuid = fp.field_uuid
         """
@@ -3225,13 +3249,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _generate_proximity_summary_statistics_sync(self) -> None:
         """Generate and log summary statistics for proximity analysis (sync)."""
         try:
-            # Get basic statistics
+            # Get basic statistics using formatted columns
             stats = self.conn.execute("""
                 SELECT 
                     COUNT(*) as total_records,
-                    COUNT(*) FILTER (WHERE len(residential_addresses_100m) > 0) as with_residential,
-                    COUNT(*) FILTER (WHERE len(educational_addresses_100m) > 0) as with_educational,
-                    COUNT(*) FILTER (WHERE closest_water_distance_m IS NOT NULL AND closest_water_distance_m <= 100) as near_water
+                    COUNT(*) FILTER (WHERE residential_buildings_formatted != '') as with_residential,
+                    COUNT(*) FILTER (WHERE educational_facilities_formatted != '') as with_educational,
+                    COUNT(*) FILTER (WHERE water_distance_formatted != '') as near_water
                 FROM disaggregated_pesticide_applications
             """).fetchone()
             
