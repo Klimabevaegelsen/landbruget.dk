@@ -47,6 +47,7 @@ class Source(Enum):
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
         pesticide_disaggregation: Pesticide disaggregation gold layer
+        pesticide_proximity: Pesticide proximity analysis gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
         arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
@@ -65,8 +66,9 @@ class Source(Enum):
     water_typology = "water_typology"
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
-    field_area_analysis = "field_area_analysis"
+    field_area_analysis = "field_area_analysis" 
     pesticide_disaggregation = "pesticide_disaggregation"
+    pesticide_proximity = "pesticide_proximity"
     cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
