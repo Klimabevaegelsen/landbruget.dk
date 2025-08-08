@@ -118,54 +118,31 @@ def perform_uuid_join_optimized(
             SELECT * FROM read_parquet('{geodanmark_path}')
         """)
 
-        # Skip building_ids filtering since they don't match - use all GeoDanmark for direct join
-        print("🎯 Using all GeoDanmark buildings for direct join with INSPIRE attributes...")
-        conn.execute("""
-            CREATE OR REPLACE TABLE geodanmark_buildings_filtered AS
-            SELECT * FROM geodanmark_buildings_raw
-        """)
-
-        # Drop the full table to save memory
-        conn.execute("DROP TABLE geodanmark_buildings_raw")
-
-        # Check how much we filtered
-        filtered_count = conn.execute(
-            "SELECT COUNT(*) FROM geodanmark_buildings_filtered"
-        ).fetchone()[0]
-        print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
-
-        # Fix: Use ST_Union to merge multi-part geometries instead of ST_Dump
-        # This prevents duplicate rows for buildings with complex geometries
+        # OPTIMIZATION: Skip expensive ST_Union_Agg - use buildings directly for faster processing
+        print("🎯 Using all GeoDanmark buildings directly (no expensive aggregation)...")
         conn.execute("""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
             SELECT 
                 BBRUUID,
                 bygningstype,
-                ST_Union_Agg(geometri) as geometry,
-                ST_Area_Spheroid(ST_Union_Agg(geometri)) as building_area_m2
-            FROM geodanmark_buildings_filtered
+                geometri as geometry,
+                ST_Area_Spheroid(geometri) as building_area_m2
+            FROM geodanmark_buildings_raw
             WHERE ST_IsValid(geometri)
-            GROUP BY BBRUUID, bygningstype
+            AND ST_Area_Spheroid(geometri) > 5  -- Basic size filter
         """)
 
-        # Create INSPIRE building IDs table for efficient UUID matching
-        print("📋 Creating INSPIRE buildings table for UUID-based join...")
+        # Drop the raw table to save memory
+        conn.execute("DROP TABLE geodanmark_buildings_raw")
 
-        # Convert building IDs to table format for proper JOIN
-        building_ids_str = "', '".join(building_ids)
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE inspire_building_ids AS
-            SELECT unnest(['{building_ids_str}']) as BBRUUID
-        """)
+        # Check how many buildings we have
+        building_count = conn.execute(
+            "SELECT COUNT(*) FROM geodanmark_buildings"
+        ).fetchone()[0]
+        print(f"✅ Loaded {building_count:,} valid GeoDanmark buildings")
 
-        inspire_count = conn.execute("SELECT COUNT(*) FROM inspire_building_ids").fetchone()[0]
-        geodanmark_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
-
-        print("✅ Prepared data for UUID-based join:")
-        print(f"   INSPIRE building IDs: {inspire_count:,}")
-        print(f"   GeoDanmark buildings (filtered): {geodanmark_count:,}")
-
-        print("⚡ Executing optimized UUID-based join...")
+        # Skip building IDs table - we're doing direct join between attributes and GeoDanmark
+        print("⚡ Executing direct join (attributes ↔ GeoDanmark)...")
 
         # Direct join between INSPIRE attributes and GeoDanmark (skip building_ids)
         if attributes_df is not None:
