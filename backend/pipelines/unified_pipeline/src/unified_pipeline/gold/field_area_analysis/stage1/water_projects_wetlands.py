@@ -39,9 +39,9 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 raise FileNotFoundError(f"No gold data found for {dataset}")
             for file_path in files:
                 try:
-                    # Read schema only - properly escape the path
-                    query = "DESCRIBE read_parquet(?)"
-                    cols = self.conn.execute(query, [file_path]).fetchall()
+                    # Read schema only - use direct string interpolation since DuckDB doesn't support parameterized read_parquet
+                    query = f"DESCRIBE read_parquet('{file_path}')"
+                    cols = self.conn.execute(query).fetchall()
                     colnames_lower = [c[0].lower() for c in cols]
                     if required_column.lower() in colnames_lower:
                         return file_path
