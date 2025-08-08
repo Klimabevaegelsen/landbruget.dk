@@ -111,88 +111,119 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.conn.execute('LOAD spatial')
         self.log.info("✅ DuckDB spatial extension loaded")
 
-    async def _load_datasets(self) -> Dict[str, Optional[str]]:
+    async def _load_datasets(self) -> Dict[str, list]:
         """Load required datasets for proximity analysis."""
         datasets = {}
         
         self.log.info("📥 Loading input datasets...")
         
-        # Load disaggregated pesticide data
-        datasets['disaggregation'] = self._read_gold_data(self.config.pesticide_disaggregation_dataset)
+        # Load disaggregated pesticide data - get available years
+        datasets['disaggregation'] = self._get_pesticide_disaggregation_files()
         if not datasets['disaggregation']:
-            raise ValueError(f"Pesticide disaggregation dataset not found: {self.config.pesticide_disaggregation_dataset}")
+            raise ValueError(f"No pesticide disaggregation data found")
         
-        # Load agricultural fields (marker data) 
-        datasets['fields'] = self._read_silver_data(self.config.agricultural_fields_dataset)
-        if not datasets['fields']:
-            raise ValueError(f"Agricultural fields dataset not found: {self.config.agricultural_fields_dataset}")
+        # Agricultural fields will be loaded year-specifically in _load_year_data
+        datasets['fields'] = None  # Will be loaded per year
             
         # Load buildings data
-        datasets['buildings'] = self._read_silver_data(self.config.buildings_dataset)
-        if not datasets['buildings']:
-            self.log.warning(f"Buildings dataset not available: {self.config.buildings_dataset}")
+        try:
+            self._read_silver_data(self.config.buildings_dataset)
+            datasets['buildings'] = f"data_{self.config.buildings_dataset}_silver"
+        except Exception as e:
+            self.log.warning(f"Buildings dataset not available: {e}")
+            datasets['buildings'] = None
             
         # Load water typology data
-        datasets['water'] = self._read_silver_data(self.config.water_typology_dataset) 
-        if not datasets['water']:
-            self.log.warning(f"Water typology dataset not available: {self.config.water_typology_dataset}")
+        try:
+            self._read_silver_data(self.config.water_typology_dataset)
+            datasets['water'] = f"data_{self.config.water_typology_dataset}_silver"
+        except Exception as e:
+            self.log.warning(f"Water typology dataset not available: {e}")
+            datasets['water'] = None
         
         self.log.info("✅ Input datasets loaded")
         return datasets
 
-    async def _get_available_years(self, disaggregation_table: str) -> list:
-        """Get list of available years from disaggregated pesticide data."""
-        # Extract year from table name pattern: pesticide_disaggregation_{year}_{year+1}
-        query = f"""
-        SELECT DISTINCT 
-            CAST(SPLIT_PART(table_name, '_', 3) AS INTEGER) as year
-        FROM duckdb_tables()
-        WHERE table_name LIKE '{disaggregation_table}_%'
-        ORDER BY year
-        """
+    def _get_pesticide_disaggregation_files(self) -> Dict[int, str]:
+        """Get mapping of years to pesticide disaggregation file paths."""
+        pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/*.parquet"
+        files = self.gcs_access.list_files(pattern)
         
-        result = self.conn.execute(query).fetchall()
-        years = [row[0] for row in result if row[0] is not None]
-        
-        if not years:
-            # Fallback: check if there's a main table without year suffix
-            tables = self.conn.execute("SHOW TABLES").fetchall()
-            table_names = [t[0] for t in tables]
-            if disaggregation_table in table_names:
-                self.log.info("Using main disaggregation table (no year suffix)")
-                return [2023]  # Default to 2023 if no year-specific tables found
-        
-        return years
+        year_files = {}
+        for file_path in files:
+            # Extract year from path: .../pesticide_disaggregation_YYYY_YYYY+1/...
+            parts = file_path.split('/')
+            for part in parts:
+                if part.startswith('pesticide_disaggregation_'):
+                    try:
+                        # Format: pesticide_disaggregation_2023_2024
+                        year_part = part.replace('pesticide_disaggregation_', '')
+                        year = int(year_part.split('_')[0])
+                        year_files[year] = file_path
+                        break
+                    except (ValueError, IndexError):
+                        continue
+                        
+        self.log.info(f"📅 Found pesticide disaggregation data for years: {sorted(year_files.keys())}")
+        return year_files
 
-    async def _load_year_data(self, year: int, datasets: Dict[str, str]) -> None:
+    async def _get_available_years(self, disaggregation_files: Dict[int, str]) -> list:
+        """Get list of available years from disaggregated pesticide files."""
+        return sorted(disaggregation_files.keys())
+
+    async def _load_year_data(self, year: int, datasets: Dict[str, Any]) -> None:
         """Load data for a specific year."""
         
-        # Load disaggregated data for this year
-        year_table = f"{datasets['disaggregation']}_{year}_{year + 1}"
+        # Load disaggregated data for this year from the file path
+        if year not in datasets['disaggregation']:
+            raise ValueError(f"No disaggregation data found for year {year}")
+        
+        file_path = datasets['disaggregation'][year]
+        self.log.info(f"📂 Loading disaggregation data for year {year} from {file_path}")
         
         try:
-            # Check if year-specific table exists
-            tables = self.conn.execute("SHOW TABLES").fetchall()
-            table_names = [t[0] for t in tables]
+            # Load the parquet file into a table
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_disaggregation AS
+                SELECT * FROM read_parquet('{file_path}')
+            """)
             
-            if year_table in table_names:
-                self.conn.execute(f"CREATE OR REPLACE VIEW current_disaggregation AS SELECT * FROM {year_table}")
-            else:
-                # Fallback to main table with year filter if available
-                self.conn.execute(f"""
-                    CREATE OR REPLACE VIEW current_disaggregation AS 
-                    SELECT * FROM {datasets['disaggregation']} 
-                    WHERE EXTRACT(year FROM application_date) = {year}
-                """)
+            # Check the loaded data
+            count_result = self.conn.execute("SELECT COUNT(*) FROM current_disaggregation").fetchone()
+            record_count = count_result[0] if count_result else 0
+            self.log.info(f"✅ Loaded {record_count:,} disaggregated records for year {year}")
+            
+            # Load year-specific FVM marker data
+            # For pesticide year YYYY, we need field data from year YYYY+1  
+            field_year = year + 1
+            field_dataset = f"fvm_marker_{field_year}"
+            
+            self.log.info(f"🗺️ Loading agricultural fields data for field year {field_year}")
+            try:
+                self._read_silver_data(field_dataset)
+                field_table = f"data_{field_dataset}_silver"
+                
+                # Check field data 
+                field_count_result = self.conn.execute(f"SELECT COUNT(*) FROM {field_table}").fetchone()
+                field_record_count = field_count_result[0] if field_count_result else 0
+                self.log.info(f"✅ Loaded {field_record_count:,} field records for field year {field_year}")
+                
+            except Exception as e:
+                self.log.error(f"Failed to load FVM marker data for field year {field_year}: {e}")
+                raise
                 
         except Exception as e:
-            self.log.error(f"Failed to load disaggregation data for year {year}: {e}")
+            self.log.error(f"Failed to load data for year {year}: {e}")
             raise
 
     async def _perform_proximity_analysis(self, year: int) -> int:
         """Perform spatial proximity analysis for the current year."""
         
         self.log.info(f"🌍 Performing spatial proximity analysis for year {year}...")
+        
+        # Get the field table name for this year
+        field_year = year + 1
+        field_table = f"data_fvm_marker_{field_year}_silver"
         
         # Get unique fields from current disaggregation data
         unique_fields = self.conn.execute("""
@@ -215,7 +246,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                     cd.field_uuid,
                     ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
                 FROM current_disaggregation cd
-                JOIN {datasets['fields']} f ON cd.field_uuid = f.field_uuid
+                JOIN {field_table} f ON cd.field_uuid = f.field_uuid
                 WHERE f.geometry IS NOT NULL
             ),
             residential_proximity AS (
@@ -231,7 +262,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as residential_buildings_formatted
                 FROM fields_with_geometry fg
-                LEFT JOIN {datasets['buildings']} b ON ST_DWithin(
+                LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
                     fg.field_geom_utm,
                     ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
                     {self.config.building_proximity_distance_m}
@@ -252,7 +283,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as educational_facilities_formatted
                 FROM fields_with_geometry fg
-                LEFT JOIN {datasets['buildings']} b ON ST_DWithin(
+                LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
                     fg.field_geom_utm,
                     ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
                     {self.config.building_proximity_distance_m}
@@ -269,7 +300,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as water_distance_formatted
                 FROM fields_with_geometry fg
-                LEFT JOIN {datasets['water']} w ON ST_DWithin(
+                LEFT JOIN data_water_typology_silver w ON ST_DWithin(
                     fg.field_geom_utm,
                     ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'),
                     {self.config.water_proximity_distance_m}
