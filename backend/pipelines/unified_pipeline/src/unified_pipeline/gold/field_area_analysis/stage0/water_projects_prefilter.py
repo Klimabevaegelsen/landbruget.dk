@@ -40,8 +40,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects_full AS
             SELECT 
-                project_id,
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                titel as project_id,  -- Use titel as project_id for individual water projects
+                UNNEST(ST_Dump(geometry_spatial)).geom as geometry
             FROM water_projects_raw
         """)
 
