@@ -164,6 +164,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     geometry,
                     property_area_m2
                 FROM properties
+                ORDER BY bestemtFastEjendomBFENr
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
