@@ -182,14 +182,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info(f"📂 Loading disaggregation data for year {year} from {file_path}")
         
         try:
-            # Load the parquet file into a table
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE current_disaggregation AS
-                SELECT * FROM read_parquet('{file_path}')
-            """)
+            # Load the parquet file into a table using proper GCS access
+            table_name = "current_disaggregation"
+            self.gcs_access.create_table_from_gcs(table_name, file_path)
             
             # Check the loaded data
-            count_result = self.conn.execute("SELECT COUNT(*) FROM current_disaggregation").fetchone()
+            count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
             record_count = count_result[0] if count_result else 0
             self.log.info(f"✅ Loaded {record_count:,} disaggregated records for year {year}")
             
