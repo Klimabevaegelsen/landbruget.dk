@@ -2160,20 +2160,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     SELECT 
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        COUNT(DISTINCT m.field_id) as FieldCount,
-                        ANY_VALUE(m.field_id) as FieldID,
-                        ANY_VALUE(m.area_ha) as FieldArea,
-                        ANY_VALUE(m.field_id) as FieldIdentifier,
-                        ANY_VALUE(m.field_uuid) as field_uuid,
-                        ANY_VALUE(m.field_uuid) as primary_field_id
+                        COUNT(*) as FieldCount,
+                        m.field_id as FieldID,
+                        m.area_ha as FieldArea,
+                        m.field_id as FieldIdentifier,
+                                                 ANY_VALUE(m.field_uuid) as field_uuid,
+                         ANY_VALUE(m.field_uuid) as primary_field_id
                     FROM marker m
                     WHERE m.cvr_number IS NOT NULL 
                       AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL 
                       AND m.area_ha > 0.0
-                    GROUP BY CVR_Str, Crop_Str
-                    HAVING COUNT(DISTINCT m.field_id) = 1  -- Only single field per CVR/Crop combination
+                    GROUP BY 1, 2, 4, 5, 6
+                    HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
                 ),
                 PendingForSingleFields AS (
                     SELECT 
