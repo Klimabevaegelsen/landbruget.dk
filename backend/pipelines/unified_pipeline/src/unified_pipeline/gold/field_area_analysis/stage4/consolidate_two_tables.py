@@ -241,14 +241,32 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(bwa.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
                 CASE 
                     WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
-                    THEN (COALESCE(ba.field_bnbo_total_m2, 0) / 
-                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    THEN (
+                        -- Cap BNBO area to field area if difference is small (≤0.1 m²) to handle spatial precision errors
+                        LEAST(
+                            COALESCE(ba.field_bnbo_total_m2, 0),
+                            CASE 
+                                WHEN COALESCE(ba.field_bnbo_total_m2, 0) - ST_Area_Spheroid(f.geometry) <= 0.1
+                                THEN ST_Area_Spheroid(f.geometry)
+                                ELSE COALESCE(ba.field_bnbo_total_m2, 0)
+                            END
+                        ) / ST_Area_Spheroid(f.geometry)
+                    ) * 100.0
                     ELSE 0 
                 END as field_bnbo_coverage_pct,
                 CASE 
                     WHEN COALESCE(ba.field_bnbo_total_m2, 0) > 0 
-                    THEN (COALESCE(bwa.field_bnbo_water_covered_m2, 0) / 
-                          COALESCE(ba.field_bnbo_total_m2, 0)) * 100.0
+                    THEN (
+                        -- Cap water area to BNBO area if difference is small (≤0.1 m²) to handle spatial precision errors
+                        LEAST(
+                            COALESCE(bwa.field_bnbo_water_covered_m2, 0),
+                            CASE 
+                                WHEN COALESCE(bwa.field_bnbo_water_covered_m2, 0) - COALESCE(ba.field_bnbo_total_m2, 0) <= 0.1
+                                THEN COALESCE(ba.field_bnbo_total_m2, 0)
+                                ELSE COALESCE(bwa.field_bnbo_water_covered_m2, 0)
+                            END
+                        ) / COALESCE(ba.field_bnbo_total_m2, 0)
+                    ) * 100.0
                     ELSE 0 
                 END as field_bnbo_water_coverage_pct,
                 
@@ -263,14 +281,33 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
-                    THEN (COALESCE(wa.field_wetland_total_m2, 0) / 
-                          ST_Area_Spheroid(f.geometry)) * 100.0
+                    THEN (
+                        -- Cap wetland area to field area if difference is small (≤0.1 m²) to handle spatial precision errors
+                        LEAST(
+                            COALESCE(wa.field_wetland_total_m2, 0),
+                            CASE 
+                                WHEN COALESCE(wa.field_wetland_total_m2, 0) - ST_Area_Spheroid(f.geometry) <= 0.1
+                                THEN ST_Area_Spheroid(f.geometry)
+                                ELSE COALESCE(wa.field_wetland_total_m2, 0)
+                            END
+                        ) / ST_Area_Spheroid(f.geometry)
+                    ) * 100.0
                     ELSE 0 
                 END as field_wetland_coverage_pct,
                 CASE 
                     WHEN COALESCE(wa.field_wetland_total_m2, 0) > 0 
-                    THEN (COALESCE(wwa.field_wetland_water_covered_m2, 0) / 
-                          COALESCE(wa.field_wetland_total_m2, 0)) * 100.0
+                    THEN (
+                        -- Cap water area to wetland area if difference is small (≤0.1 m²) to handle spatial precision errors
+                        -- This preserves legitimate high coverage while fixing tiny calculation discrepancies
+                        LEAST(
+                            COALESCE(wwa.field_wetland_water_covered_m2, 0),
+                            CASE 
+                                WHEN COALESCE(wwa.field_wetland_water_covered_m2, 0) - COALESCE(wa.field_wetland_total_m2, 0) <= 0.1
+                                THEN COALESCE(wa.field_wetland_total_m2, 0)
+                                ELSE COALESCE(wwa.field_wetland_water_covered_m2, 0)
+                            END
+                        ) / COALESCE(wa.field_wetland_total_m2, 0)
+                    ) * 100.0
                     ELSE 0 
                 END as field_wetland_water_coverage_pct,
                 
