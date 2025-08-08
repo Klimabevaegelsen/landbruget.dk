@@ -28,7 +28,7 @@ on:
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_disaggregation
+          - pesticide_proximity
           - arbejdstilsynet_inspections
           - worker_safety
           - work_permits
@@ -65,9 +65,9 @@ jobs:
                {"source":"fvm_wfs","layer_type":"organic_areas","year":2012},{"source":"fvm_wfs","layer_type":"organic_areas","year":2013},{"source":"fvm_wfs","layer_type":"organic_areas","year":2014},{"source":"fvm_wfs","layer_type":"organic_areas","year":2015},{"source":"fvm_wfs","layer_type":"organic_areas","year":2016},{"source":"fvm_wfs","layer_type":"organic_areas","year":2017},{"source":"fvm_wfs","layer_type":"organic_areas","year":2018},{"source":"fvm_wfs","layer_type":"organic_areas","year":2019},{"source":"fvm_wfs","layer_type":"organic_areas","year":2020},{"source":"fvm_wfs","layer_type":"organic_areas","year":2021},{"source":"fvm_wfs","layer_type":"organic_areas","year":2022},{"source":"fvm_wfs","layer_type":"organic_areas","year":2023},{"source":"fvm_wfs","layer_type":"organic_areas","year":2024}
              ]')) ||
             (github.event_name == 'schedule' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_disaggregation"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Free up disk space for memory-intensive jobs
-        if: matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge' || matrix.source == 'pesticide_disaggregation'
+        if: matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge'
         run: |
           echo "=== Initial disk usage ==="
           df -h
@@ -135,7 +135,7 @@ jobs:
       - name: Run Unified Pipeline for ${{ matrix.source || matrix.layer_type }}
         run: |
           # Start resource monitoring for memory-intensive jobs
-          if [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "property_cadastral_merge" ] || [ "${{ matrix.source }}" = "pesticide_disaggregation" ]; then
+          if [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "property_cadastral_merge" ]; then
             echo "🔍 Starting resource monitoring for memory-intensive job: ${{ matrix.source }}"
             (while true; do
               sleep 60  # Check every minute
@@ -196,7 +196,7 @@ jobs:
           fi
 
       - name: Cleanup temporary files for memory-intensive jobs
-        if: always() && (matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge' || matrix.source == 'pesticide_disaggregation')
+        if: always() && (matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge')
         run: |
           echo "🧹 Cleaning up temporary files after memory-intensive job..."
 
@@ -216,3 +216,225 @@ jobs:
           echo "=== Temp directory usage ==="
           du -sh /tmp 2>/dev/null || echo "N/A"
           echo "✅ Cleanup completed"
+
+  # Pesticide Processing Matrix Jobs
+  pesticide-disaggregation:
+    if: ${{ contains(fromJson('["all", "pesticide_proximity"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      fail-fast: false
+      matrix:
+        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+    name: Pesticide Disaggregation Year ${{ matrix.year }}
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space for pesticide processing
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+
+          echo "=== Freeing up disk space for memory-intensive processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+
+          sudo docker system prune -af
+          sudo docker image prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+          AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+          echo "Available space: ${AVAILABLE_GB}GB"
+
+          if [ $AVAILABLE_GB -lt 12 ]; then
+            echo "❌ ERROR: Not enough disk space for pesticide processing! Available: ${AVAILABLE_GB}GB, Required: ~12GB"
+            exit 1
+          fi
+
+          echo "✅ Sufficient disk space for pesticide processing: ${AVAILABLE_GB}GB"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Pesticide Disaggregation for ${{ matrix.year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🧪 Processing pesticide disaggregation for year: ${{ matrix.year }}"
+          echo "📅 Pesticide year ${{ matrix.year }} uses field data from year $((${{ matrix.year }} + 1))"
+          
+          # Start resource monitoring
+          (while true; do
+            sleep 60
+            echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+            echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+            
+            MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+            DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            
+            if [ $MEMORY_USED_PCT -gt 90 ]; then
+              echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+            fi
+            
+            if [ $DISK_USED_PCT -gt 85 ]; then
+              echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+            fi
+          done) &
+          MONITOR_PID=$!
+          
+          # Run the pipeline
+          python -m unified_pipeline.app gold pesticide_disaggregation
+          
+          # Stop monitoring
+          kill $MONITOR_PID 2>/dev/null || true
+          echo "✅ Pesticide disaggregation completed for year ${{ matrix.year }}"
+
+      - name: Cleanup after disaggregation
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files after disaggregation..."
+          sudo rm -rf /tmp/duckdb* || true
+          sudo rm -rf /tmp/duckdb_field_analysis/* || true
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+  pesticide-proximity:
+    needs: [pesticide-disaggregation]
+    if: ${{ contains(fromJson('["all", "pesticide_proximity"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      fail-fast: false
+      matrix:
+        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+    name: Pesticide Proximity Year ${{ matrix.year }}
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space for proximity processing
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+
+          echo "=== Freeing up disk space for spatial processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+
+          sudo docker system prune -af
+          sudo docker image prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+          AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+          echo "Available space: ${AVAILABLE_GB}GB"
+
+          if [ $AVAILABLE_GB -lt 10 ]; then
+            echo "❌ ERROR: Not enough disk space for spatial processing! Available: ${AVAILABLE_GB}GB, Required: ~10GB"
+            exit 1
+          fi
+
+          echo "✅ Sufficient disk space for proximity processing: ${AVAILABLE_GB}GB"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Proximity Analysis for ${{ matrix.year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌍 Processing proximity analysis for year: ${{ matrix.year }}"
+          echo "🏠 Analyzing building proximity (100m radius)"
+          echo "🌊 Analyzing water feature proximity (100m radius)"
+          
+          # Start resource monitoring
+          (while true; do
+            sleep 60
+            echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+            echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+            
+            MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+            DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            
+            if [ $MEMORY_USED_PCT -gt 90 ]; then
+              echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+            fi
+            
+            if [ $DISK_USED_PCT -gt 85 ]; then
+              echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+            fi
+          done) &
+          MONITOR_PID=$!
+          
+          # Run the pipeline
+          python -m unified_pipeline.app gold pesticide_proximity
+          
+          # Stop monitoring
+          kill $MONITOR_PID 2>/dev/null || true
+          echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
+
+      - name: Cleanup after proximity analysis
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files after proximity analysis..."
+          sudo rm -rf /tmp/duckdb* || true
+          sudo rm -rf /tmp/duckdb_field_analysis/* || true
+          sudo rm -rf /tmp/proximity_data/* || true
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete 2>/dev/null || true
