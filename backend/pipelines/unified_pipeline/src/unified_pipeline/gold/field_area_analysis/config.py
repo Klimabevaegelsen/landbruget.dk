@@ -22,7 +22,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     wetlands_dataset: str = (
         "wetlands_dissolved"  # Use dissolved wetlands - now preserves toerv_pct AND eliminates overlaps
     )
-    water_projects_dataset: str = "water_projects_dissolved"
+    water_projects_dataset: str = "water_projects"
 
     # Stage 0 pre-filtered dataset names (dramatically reduced sizes)
     properties_filtered_dataset: str = "stage0_properties_filtered"  # 6.5M → ~500K (90% reduction)
