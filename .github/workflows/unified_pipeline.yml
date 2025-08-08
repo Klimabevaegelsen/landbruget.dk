@@ -28,7 +28,7 @@ on:
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_proximity
+          - pesticide_disaggregation
           - arbejdstilsynet_inspections
           - worker_safety
           - work_permits
@@ -219,7 +219,7 @@ jobs:
 
   # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity per year
   pesticide-processing:
-    if: ${{ contains(fromJson('["all", "pesticide_proximity"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
+    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
