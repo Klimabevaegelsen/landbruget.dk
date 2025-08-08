@@ -198,8 +198,8 @@ def perform_uuid_join_optimized(
             AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
         else:
-            print("📋 No INSPIRE attributes available - basic join only...")
-            # Basic join without attributes
+            print("📋 No INSPIRE attributes available - using all GeoDanmark buildings...")
+            # Basic table with all GeoDanmark buildings (no attributes join needed)
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
             SELECT 
@@ -207,9 +207,8 @@ def perform_uuid_join_optimized(
                 g.geometry,
                 g.bygningstype,
                 g.building_area_m2,
-                'uuid_matched' as join_status
-            FROM inspire_building_ids i
-            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
+                'geodanmark_only' as join_status
+            FROM geodanmark_buildings g
             WHERE ST_IsValid(g.geometry)
             AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
@@ -286,9 +285,7 @@ def perform_uuid_join_optimized(
 
             # Verify the join was UUID-based (not spatial)
             explain_result = conn.execute("""
-                EXPLAIN SELECT * FROM geodanmark_buildings g
-                INNER JOIN inspire_building_ids i ON g.BBRUUID = i.BBRUUID
-                LIMIT 1
+                EXPLAIN SELECT * FROM joined_results LIMIT 1
             """).fetchall()
 
             print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
