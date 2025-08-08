@@ -180,7 +180,23 @@ def perform_uuid_join_optimized(
             # Register attributes DataFrame with DuckDB
             conn.register("inspire_attributes", attributes_df)
 
-            # Direct join using BLOB UUID conversion - this actually works!
+            # OPTIMIZATION: Pre-compute UUID strings to avoid expensive join-time conversion
+            print("🔧 Pre-computing UUID strings for faster join...")
+            conn.execute("""
+                CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
+                SELECT 
+                    *,
+                    LOWER(CONCAT(
+                        SUBSTR(hex(building_uuid), 1, 8), '-',
+                        SUBSTR(hex(building_uuid), 9, 4), '-',
+                        SUBSTR(hex(building_uuid), 13, 4), '-',
+                        SUBSTR(hex(building_uuid), 17, 4), '-',
+                        SUBSTR(hex(building_uuid), 21, 12)
+                    )) as building_uuid_string
+                FROM inspire_attributes
+            """)
+
+            # Fast direct join using pre-computed UUID strings
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
             SELECT 
@@ -200,13 +216,7 @@ def perform_uuid_join_optimized(
                 ia.bbr_usage_code,
                 ia.category_group
             FROM geodanmark_buildings g
-            INNER JOIN inspire_attributes ia ON g.BBRUUID = LOWER(CONCAT(
-                SUBSTR(hex(ia.building_uuid), 1, 8), '-',
-                SUBSTR(hex(ia.building_uuid), 9, 4), '-',
-                SUBSTR(hex(ia.building_uuid), 13, 4), '-',
-                SUBSTR(hex(ia.building_uuid), 17, 4), '-',
-                SUBSTR(hex(ia.building_uuid), 21, 12)
-            ))
+            INNER JOIN inspire_attributes_with_uuid ia ON g.BBRUUID = ia.building_uuid_string
             WHERE ST_IsValid(g.geometry)
             AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
