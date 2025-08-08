@@ -183,6 +183,10 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
               -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"$SELECTED_YEAR\"}}"
             echo "Field Area Analysis matrix workflow triggered successfully with year: $SELECTED_YEAR"
+          elif [ "${{ matrix.source }}" = "pesticide_disaggregation" ]; then
+            # Pesticide disaggregation uses dedicated matrix jobs - skip main pipeline
+            echo "Pesticide disaggregation detected - using dedicated matrix jobs instead"
+            echo "Main pipeline job skipped for pesticide_disaggregation (matrix jobs handle this)"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }}"

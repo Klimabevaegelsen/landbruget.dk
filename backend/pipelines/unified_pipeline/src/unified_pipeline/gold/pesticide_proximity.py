@@ -14,7 +14,6 @@ Key Features:
 """
 
 import os
-import time
 from typing import Dict, Optional, Any
 from loguru import logger
 from pydantic import Field, ConfigDict
@@ -129,19 +128,39 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         try:
             self._read_silver_data(self.config.buildings_dataset)
             datasets['buildings'] = f"data_{self.config.buildings_dataset}_silver"
+            
+            # Verify buildings data loaded
+            building_count = self.conn.execute(f"SELECT COUNT(*) FROM {datasets['buildings']}").fetchone()[0]
+            self.log.info(f"✅ Buildings dataset loaded: {building_count:,} records")
         except Exception as e:
-            self.log.warning(f"Buildings dataset not available: {e}")
+            self.log.error(f"❌ Failed to load buildings dataset: {e}")
+            self.log.error("Buildings data is required for proximity analysis!")
             datasets['buildings'] = None
             
         # Load water typology data
         try:
             self._read_silver_data(self.config.water_typology_dataset)
             datasets['water'] = f"data_{self.config.water_typology_dataset}_silver"
+            
+            # Verify water data loaded
+            water_count = self.conn.execute(f"SELECT COUNT(*) FROM {datasets['water']}").fetchone()[0]
+            self.log.info(f"✅ Water typology dataset loaded: {water_count:,} records")
         except Exception as e:
-            self.log.warning(f"Water typology dataset not available: {e}")
+            self.log.error(f"❌ Failed to load water typology dataset: {e}")
+            self.log.error("Water data is required for proximity analysis!")
             datasets['water'] = None
         
-        self.log.info("✅ Input datasets loaded")
+        # Validate that critical datasets are available
+        missing_datasets = []
+        if not datasets['buildings']:
+            missing_datasets.append('buildings')
+        if not datasets['water']:
+            missing_datasets.append('water_typology')
+            
+        if missing_datasets:
+            raise ValueError(f"Critical datasets missing for proximity analysis: {', '.join(missing_datasets)}")
+        
+        self.log.info("✅ All input datasets loaded and validated")
         return datasets
 
     def _get_pesticide_disaggregation_files(self) -> Dict[int, str]:
@@ -326,17 +345,21 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
     async def _save_year_results(self, year: int, record_count: int) -> None:
         """Save proximity analysis results for the year."""
         
-        output_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}/{year}_{year + 1}"
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dataset_name = f"{self.config.dataset}_{year}_{year + 1}"
+        output_path = f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/pesticide_proximity_{year}_{year + 1}.parquet"
+        
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
         
         # Export results to GCS
         self.gcs_access.upload_duckdb_table(
             "proximity_results",
-            f"{self.config.dataset}/{year}_{year + 1}",
+            f"{dataset_name}",
             create_folder_structure=True
         )
         
-        self.log.info(f"✅ Year {year} results saved successfully")
+        self.log.info(f"✅ Year {year} proximity results saved to: {output_path}")
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Return schema information for the proximity analysis output."""
