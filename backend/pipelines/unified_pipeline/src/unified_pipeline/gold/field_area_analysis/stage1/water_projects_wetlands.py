@@ -38,11 +38,16 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             if not files:
                 raise FileNotFoundError(f"No gold data found for {dataset}")
             for file_path in files:
-                # Read schema only
-                cols = self.conn.execute(f"DESCRIBE read_parquet('{file_path}')").fetchall()
-                colnames_lower = [c[0].lower() for c in cols]
-                if required_column.lower() in colnames_lower:
-                    return file_path
+                try:
+                    # Read schema only - properly escape the path
+                    query = "DESCRIBE read_parquet(?)"
+                    cols = self.conn.execute(query, [file_path]).fetchall()
+                    colnames_lower = [c[0].lower() for c in cols]
+                    if required_column.lower() in colnames_lower:
+                        return file_path
+                except Exception as e:
+                    self.log.warning(f"Could not read schema from {file_path}: {e}")
+                    continue
             raise RuntimeError(
                 f"No partition of {dataset} contains required column '{required_column}'. "
                 f"Checked {len(files)} candidates; ensure Stage 0 produced it."
