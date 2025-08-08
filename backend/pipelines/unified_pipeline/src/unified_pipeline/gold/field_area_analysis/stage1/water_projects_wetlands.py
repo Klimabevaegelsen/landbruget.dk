@@ -30,7 +30,25 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Load Stage 0 pre-filtered wetlands (1.6M → ~200K, 85% reduction)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
         stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
-        stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
+
+        # Pick the latest Stage 0 partition that contains the required wetland_key column
+        def _latest_gold_with_column(dataset: str, required_column: str) -> str:
+            pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
+            files = sorted(self.gcs_access.list_files(pattern), reverse=True)
+            if not files:
+                raise FileNotFoundError(f"No gold data found for {dataset}")
+            for file_path in files:
+                # Read schema only
+                cols = self.conn.execute(f"DESCRIBE read_parquet('{file_path}')").fetchall()
+                colnames_lower = [c[0].lower() for c in cols]
+                if required_column.lower() in colnames_lower:
+                    return file_path
+            raise RuntimeError(
+                f"No partition of {dataset} contains required column '{required_column}'. "
+                f"Checked {len(files)} candidates; ensure Stage 0 produced it."
+            )
+
+        stage0_wetlands_path = _latest_gold_with_column(stage0_wetlands_dataset, "wetland_key")
         self.gcs_access.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
         self.log.info(f"✅ Loaded wetlands from {stage0_wetlands_dataset}")
 
