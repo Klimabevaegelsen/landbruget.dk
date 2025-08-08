@@ -39,14 +39,34 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 raise FileNotFoundError(f"No gold data found for {dataset}")
             for file_path in files:
                 try:
-                    # Read schema only - use DuckDB's proper path handling
-                    # Try reading just one row to check schema instead of DESCRIBE
-                    query = f"SELECT * FROM read_parquet('{file_path}') LIMIT 0"
-                    result = self.conn.execute(query)
-                    cols = [(desc[0], desc[1]) for desc in result.description]
-                    colnames_lower = [c[0].lower() for c in cols]
-                    if required_column.lower() in colnames_lower:
-                        return file_path
+                    # Download file temporarily to check schema (avoid DuckDB auth issues)
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                        tmp_path = tmp_file.name
+                    
+                    try:
+                        # Download just to check schema
+                        self.gcs_access.download_file(file_path, tmp_path)
+                        
+                        # Check schema using local file
+                        query = f"SELECT * FROM read_parquet('{tmp_path}') LIMIT 0"
+                        result = self.conn.execute(query)
+                        cols = [(desc[0], desc[1]) for desc in result.description]
+                        colnames_lower = [c[0].lower() for c in cols]
+                        
+                        # Clean up temp file
+                        os.unlink(tmp_path)
+                        
+                        if required_column.lower() in colnames_lower:
+                            return file_path
+                    except Exception as download_error:
+                        # Clean up temp file if it exists
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                        raise download_error
+                        
                 except Exception as e:
                     self.log.warning(f"Could not read schema from {file_path}: {e}")
                     continue
