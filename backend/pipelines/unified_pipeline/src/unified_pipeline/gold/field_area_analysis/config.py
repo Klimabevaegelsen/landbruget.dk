@@ -13,7 +13,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
     
     # Year configuration for agricultural fields
-    agricultural_fields_year: int = int(os.getenv("AGRICULTURAL_FIELDS_YEAR", "2025"))
+    agricultural_fields_year: int = int(os.getenv("AGRICULTURAL_FIELDS_YEAR", "2024"))
 
     # Dataset names - using consistent naming from silver layer
     properties_dataset: str = "property_cadastral_merged"
