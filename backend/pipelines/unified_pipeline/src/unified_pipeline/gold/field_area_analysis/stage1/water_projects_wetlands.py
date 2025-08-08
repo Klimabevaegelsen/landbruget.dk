@@ -176,6 +176,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     toerv_pct,
                     geometry
                 FROM wetlands
+                ORDER BY wetland_id
                 LIMIT {batch_size} OFFSET {offset}
             """)
 

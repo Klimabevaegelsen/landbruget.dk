@@ -98,13 +98,14 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 f"📦 Chunk {chunk_num + 1}/{num_chunks} (offset: {offset:,}) - {progress_pct:.1f}%"
             )
 
-            # Create wetlands chunk
+            # Create wetlands chunk with deterministic ordering to prevent cross-chunk duplicates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_chunk AS
                 SELECT 
                     toerv_pct,
                     geometry
                 FROM wetlands_full
+                ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
