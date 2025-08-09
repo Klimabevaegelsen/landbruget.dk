@@ -312,6 +312,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetland_water_intersections AS
                 SELECT 
+                    CAST(NULL AS VARCHAR) as wetland_key,  -- Missing column that caused the error!
                     CAST(NULL AS BIGINT) as wetland_id,
                     CAST(NULL AS VARCHAR) as toerv_pct,
                     CAST(NULL AS VARCHAR) as project_id,
