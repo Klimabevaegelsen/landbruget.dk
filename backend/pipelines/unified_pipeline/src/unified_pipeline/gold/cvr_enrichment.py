@@ -1096,30 +1096,30 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     SELECT 
                         company_uuid(cvr_number) as company_uuid,
                         cvr_number,
-                        address_parsed.full_address,
-                        address_parsed.street_name,
-                        address_parsed.house_number,
-                        address_parsed.floor,
-                        address_parsed.door,
-                        address_parsed.postal_code,
-                        address_parsed.city,
-                        address_parsed.municipality_code,
-                        address_parsed.municipality_name,
-                        address_parsed.country_code,
-                        address_parsed.adresse_id,
-                        address_parsed.period_start,
-                        address_parsed.period_end,
-                        address_parsed.is_current,
-                        address_parsed.latitude::DOUBLE as latitude,
-                        address_parsed.longitude::DOUBLE as longitude,
-                        address_parsed.coordinate_system,
-                        address_parsed.srid::INTEGER as srid,
-                        address_parsed.geometry_wkt,
-                        address_parsed.geometry_geojson,
-                        address_parsed.coordinate_quality,
-                        address_parsed.coordinate_source,
-                        address_parsed.dawa_enriched::BOOLEAN as dawa_enriched,
-                        address_parsed.dawa_fetch_timestamp
+                        TRY(address_parsed.full_address) as full_address,
+                        TRY(address_parsed.street_name) as street_name,
+                        TRY(address_parsed.house_number) as house_number,
+                        TRY(address_parsed.floor) as floor,
+                        TRY(address_parsed.door) as door,
+                        TRY(address_parsed.postal_code) as postal_code,
+                        TRY(address_parsed.city) as city,
+                        TRY(address_parsed.municipality_code) as municipality_code,
+                        TRY(address_parsed.municipality_name) as municipality_name,
+                        TRY(address_parsed.country_code) as country_code,
+                        TRY(address_parsed.adresse_id) as adresse_id,
+                        TRY(address_parsed.period_start) as period_start,
+                        TRY(address_parsed.period_end) as period_end,
+                        TRY(address_parsed.is_current) as is_current,
+                        TRY(address_parsed.latitude::DOUBLE) as latitude,
+                        TRY(address_parsed.longitude::DOUBLE) as longitude,
+                        TRY(address_parsed.coordinate_system) as coordinate_system,
+                        TRY(address_parsed.srid::INTEGER) as srid,
+                        TRY(address_parsed.geometry_wkt) as geometry_wkt,
+                        TRY(address_parsed.geometry_geojson) as geometry_geojson,
+                        TRY(address_parsed.coordinate_quality) as coordinate_quality,
+                        TRY(address_parsed.coordinate_source) as coordinate_source,
+                        TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
+                        TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
                     FROM addresses_flattened
                 """, [json_strings, addresses_schema[0]])
 
@@ -1194,50 +1194,50 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         financial_parsed.publication_type,
                         financial_parsed.publication_time,
                         financial_parsed.case_number,
-                        financial_parsed.reporting_period.start_date as reporting_period_start,
-                        financial_parsed.reporting_period.end_date as reporting_period_end,
+                        TRY(financial_parsed.reporting_period.start_date) as reporting_period_start,
+                        TRY(financial_parsed.reporting_period.end_date) as reporting_period_end,
                         financial_parsed.document_count,
                         financial_parsed.xml_size_bytes,
                         financial_parsed.download_success,
-                        financial_parsed.financial_metrics.duration_context,
-                        financial_parsed.financial_metrics.instant_context,
-                        financial_parsed.financial_metrics.income_statement_start_date,
-                        financial_parsed.financial_metrics.income_statement_end_date,
-                        financial_parsed.financial_metrics.balance_sheet_date,
-                        financial_parsed.financial_metrics.net_profit_loss,
-                        financial_parsed.financial_metrics.gross_profit_loss,
-                        financial_parsed.financial_metrics.operating_profit_loss,
-                        financial_parsed.financial_metrics.profit_loss_before_tax,
-                        financial_parsed.financial_metrics.employee_benefits_expense,
-                        financial_parsed.financial_metrics.average_number_of_employees,
-                        financial_parsed.financial_metrics.depreciation_expense,
-                        financial_parsed.financial_metrics.other_finance_income,
-                        financial_parsed.financial_metrics.other_finance_expenses,
-                        financial_parsed.financial_metrics.tax_expense,
-                        financial_parsed.financial_metrics.total_assets,
-                        financial_parsed.financial_metrics.total_equity,
-                        financial_parsed.financial_metrics.noncurrent_assets,
-                        financial_parsed.financial_metrics.current_assets,
-                        financial_parsed.financial_metrics.cash_and_cash_equivalents,
-                        financial_parsed.financial_metrics.liabilities_other_than_provisions,
-                        financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions,
-                        financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions,
-                        financial_parsed.financial_metrics.provisions,
-                        financial_parsed.financial_metrics.property_plant_equipment,
-                        financial_parsed.financial_metrics.contributed_capital,
+                        TRY(financial_parsed.financial_metrics.duration_context) as duration_context,
+                        TRY(financial_parsed.financial_metrics.instant_context) as instant_context,
+                        TRY(financial_parsed.financial_metrics.income_statement_start_date) as income_statement_start_date,
+                        TRY(financial_parsed.financial_metrics.income_statement_end_date) as income_statement_end_date,
+                        TRY(financial_parsed.financial_metrics.balance_sheet_date) as balance_sheet_date,
+                        TRY(financial_parsed.financial_metrics.net_profit_loss) as net_profit_loss,
+                        TRY(financial_parsed.financial_metrics.gross_profit_loss) as gross_profit_loss,
+                        TRY(financial_parsed.financial_metrics.operating_profit_loss) as operating_profit_loss,
+                        TRY(financial_parsed.financial_metrics.profit_loss_before_tax) as profit_loss_before_tax,
+                        TRY(financial_parsed.financial_metrics.employee_benefits_expense) as employee_benefits_expense,
+                        TRY(financial_parsed.financial_metrics.average_number_of_employees) as average_number_of_employees,
+                        TRY(financial_parsed.financial_metrics.depreciation_expense) as depreciation_expense,
+                        TRY(financial_parsed.financial_metrics.other_finance_income) as other_finance_income,
+                        TRY(financial_parsed.financial_metrics.other_finance_expenses) as other_finance_expenses,
+                        TRY(financial_parsed.financial_metrics.tax_expense) as tax_expense,
+                        TRY(financial_parsed.financial_metrics.total_assets) as total_assets,
+                        TRY(financial_parsed.financial_metrics.total_equity) as total_equity,
+                        TRY(financial_parsed.financial_metrics.noncurrent_assets) as noncurrent_assets,
+                        TRY(financial_parsed.financial_metrics.current_assets) as current_assets,
+                        TRY(financial_parsed.financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
+                        TRY(financial_parsed.financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.provisions) as provisions,
+                        TRY(financial_parsed.financial_metrics.property_plant_equipment) as property_plant_equipment,
+                        TRY(financial_parsed.financial_metrics.contributed_capital) as contributed_capital,
                         CASE 
-                            WHEN financial_parsed.financial_metrics.total_assets > 0 
-                            THEN financial_parsed.financial_metrics.total_equity / financial_parsed.financial_metrics.total_assets 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as equity_ratio,
                         CASE 
-                            WHEN financial_parsed.financial_metrics.average_number_of_employees > 0 
-                            THEN financial_parsed.financial_metrics.net_profit_loss / financial_parsed.financial_metrics.average_number_of_employees 
+                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
                             ELSE NULL 
                         END as profit_per_employee,
                         CASE 
-                            WHEN financial_parsed.financial_metrics.total_assets > 0 
-                            THEN financial_parsed.financial_metrics.net_profit_loss / financial_parsed.financial_metrics.total_assets 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as return_on_assets
                     FROM financial_flattened
