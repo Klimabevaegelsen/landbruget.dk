@@ -284,6 +284,20 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Load each file and union into the table
         for file_path in latest_files:
             self.logger.info(f"📥 Loading pesticide file: {file_path}")
+            
+            # Extract agricultural year from filename (e.g., pesticiddata_2023_2024.parquet -> 2023_2024)
+            import re
+            filename = file_path.split('/')[-1]  # Get filename from path
+            year_match = re.search(r'pesticiddata_(\d{4}_\d{4})\.parquet', filename)
+            agricultural_year = year_match.group(1) if year_match else None
+            
+            if not agricultural_year:
+                self.logger.warning(f"Could not extract agricultural year from filename: {filename}")
+                continue
+            
+            # Extract the end year for application_year (e.g., 2023_2024 -> 2024)
+            end_year = int(agricultural_year.split('_')[1])
+            
             with self.gcs_access._temp_download(file_path) as temp_file:
                 self.conn.execute(f"""
                     INSERT INTO pesticide_applications
@@ -296,16 +310,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         dosage_quantity,
                         dosage_unit,
                         crop_code,
-                        -- Parse application date
-                        TRY_CAST(aar AS INTEGER) as application_year,
-                        -- Create agricultural year mapping (year-1 to year: e.g. 2024 data = 2023_2024 season)
-                        CASE 
-                            WHEN TRY_CAST(aar AS INTEGER) IS NOT NULL THEN
-                                CAST((TRY_CAST(aar AS INTEGER) - 1) AS VARCHAR) || '_' || CAST(TRY_CAST(aar AS INTEGER) AS VARCHAR)
-                            ELSE NULL
-                        END as agricultural_year,
-                        -- Additional fields
-                        aar as original_year_field
+                        -- Use end year from filename
+                        {end_year} as application_year,
+                        -- Use agricultural year from filename
+                        '{agricultural_year}' as agricultural_year,
+                        -- Store original filename for reference
+                        '{filename}' as original_year_field
                     FROM read_parquet('{temp_file}')
                     WHERE pesticide_registration_number IS NOT NULL
                     AND pesticide_registration_number != ''
