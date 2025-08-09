@@ -47,6 +47,12 @@ class PesticideProximityGoldConfig(BaseJobConfig):
     buildings_dataset: str = "bbr_buildings"
     water_typology_dataset: str = "water_typology"
 
+    # Year filtering for matrix jobs (process single year instead of all years)
+    pesticide_year: Optional[int] = Field(
+        default=None,
+        description="Specific pesticide year to process (if None, processes all available years)",
+    )
+
     # Performance settings
     batch_size: int = Field(
         default=1000,
@@ -54,6 +60,19 @@ class PesticideProximityGoldConfig(BaseJobConfig):
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI filtering for matrix job processing.
+        
+        This method sets the pesticide_year from CLI parameters to enable
+        processing of specific years for parallel matrix jobs.
+        
+        Args:
+            cli_config: CLI configuration containing pesticide_year filter
+        """
+        if cli_config.pesticide_year:
+            object.__setattr__(self, "pesticide_year", cli_config.pesticide_year)
 
 
 class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobInterface):
@@ -79,8 +98,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         datasets = await self._load_datasets()
         
         # Get available years from disaggregated pesticide data
-        years = await self._get_available_years(datasets['disaggregation'])
-        self.log.info(f"📅 Found {len(years)} years to process: {years}")
+        if self.config.pesticide_year:
+            # Matrix job mode: process only specified year
+            years = [self.config.pesticide_year]
+            self.log.info(f"🎯 Matrix job mode: Processing only year {self.config.pesticide_year}")
+        else:
+            # Regular mode: process all available years
+            years = await self._get_available_years(datasets['disaggregation'])
+            self.log.info(f"📅 Found {len(years)} years to process: {years}")
         
         # Process each year
         for year in years:
