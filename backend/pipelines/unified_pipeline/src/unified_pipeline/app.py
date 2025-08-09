@@ -94,6 +94,8 @@ load_dotenv()
 async def execute_pipeline_jobs(
     jobs: list, stage: cli.Stage, cli_config: cli.CliConfig
 ) -> tuple[int, int]:
+    print(f"🚨 EXECUTE_JOBS: Starting with {len(jobs)} jobs for stage {stage}")
+    print(f"🚨 EXECUTE_JOBS: CLI config pesticide_year = {cli_config.pesticide_year}")
     """
     Execute pipeline jobs with support for gold layer and in-memory data passing.
 
@@ -234,6 +236,9 @@ async def execute_pipeline_jobs(
 
 
 def execute(cli_config: cli.CliConfig) -> int:
+    print(f"🚨 APP EXECUTE: Starting with config: {cli_config}")
+    print(f"🚨 APP EXECUTE: Source = {cli_config.source}, Stage = {cli_config.stage}")
+    print(f"🚨 APP EXECUTE: pesticide_year = {cli_config.pesticide_year}")
     """
     Main execution function for processing pipeline data.
 
@@ -429,15 +434,20 @@ def execute(cli_config: cli.CliConfig) -> int:
     }
 
     # Retrieve jobs for given source and stage
+    print(f"🚨 APP: Looking up pipeline for source={cli_config.source}, stage={cli_config.stage}")
     try:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
+        print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
     except KeyError:
+        print(f"🚨 APP: KeyError - source/stage combination not found in pipeline_map")
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing
+    print(f"🚨 APP: About to execute {len(jobs)} jobs with asyncio.run")
     successful_jobs, total_jobs = asyncio.run(
         execute_pipeline_jobs(jobs, cli_config.stage, cli_config)
     )
+    print(f"🚨 APP: Execution completed - {successful_jobs}/{total_jobs} successful")
 
     # Determine exit code based on job success
     if successful_jobs == 0:
