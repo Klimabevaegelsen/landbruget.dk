@@ -681,6 +681,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
             self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
             self.log.info(f"📁 GCS Path: {full_gcs_path}")
+            print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            print(f"📁 GCS Path: {full_gcs_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
@@ -737,6 +739,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Check if we should process only a specific year (for matrix jobs)
         if self.config.pesticide_year:
             self.log.info(f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}")
+            print(f"🎯 MATRIX JOB: Processing only pesticide year {self.config.pesticide_year}")
             pesticide_years = {self.config.pesticide_year}
         else:
             self.log.info("🔍 Discovering all available pesticide and field years")
@@ -837,6 +840,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 datasets["pesticides"] = pesticide_path
                 self.log.info(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
                 self.log.info(f"📁 Pesticide Data Path: {pesticide_path}")
+                print(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                print(f"📁 Pesticide Data Path: {pesticide_path}")
             else:
                 self.log.error(f"❌ No pesticide data found for year {pesticide_year}")
                 datasets["pesticides"] = None
