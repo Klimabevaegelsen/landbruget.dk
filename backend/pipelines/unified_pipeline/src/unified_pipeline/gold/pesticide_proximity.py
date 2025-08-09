@@ -102,6 +102,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Matrix job mode: process only specified year
             years = [self.config.pesticide_year]
             self.log.info(f"🎯 Matrix job mode: Processing only year {self.config.pesticide_year}")
+            print(f"🎯 PROXIMITY MATRIX JOB: Processing only year {self.config.pesticide_year}")
         else:
             # Regular mode: process all available years
             years = await self._get_available_years(datasets['disaggregation'])
@@ -387,6 +388,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
         self.log.info(f"📁 Proximity GCS Path: {output_path}")
+        print(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
+        print(f"📁 Proximity GCS Path: {output_path}")
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Return schema information for the proximity analysis output."""
