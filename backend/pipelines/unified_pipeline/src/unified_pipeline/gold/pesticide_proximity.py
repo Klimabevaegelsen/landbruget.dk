@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 
 from loguru import logger
 from pydantic import ConfigDict, Field
+from tqdm import tqdm
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
@@ -57,7 +58,7 @@ class PesticideProximityGoldConfig(BaseJobConfig):
 
     # Performance settings
     batch_size: int = Field(
-        default=500,
+        default=5000,
         description="Number of fields to process per batch for memory management",
     )
 
@@ -316,6 +317,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         processed = 0
         total_chunks = (total_fields + self.config.batch_size - 1) // self.config.batch_size
         
+        # Create progress bar for residential processing
+        residential_pbar = tqdm(
+            total=total_fields, 
+            desc="🏠 Residential proximity", 
+            unit="fields",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+        
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
@@ -363,8 +372,19 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
             
             chunk_time = time.time() - chunk_start
-            processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
+            batch_processed = min(self.config.batch_size, total_fields - offset)
+            processed += batch_processed
+            
+            # Update progress bar
+            residential_pbar.update(batch_processed)
+            residential_pbar.set_postfix({
+                'batch_time': f'{chunk_time:.1f}s',
+                'rate': f'{batch_processed/chunk_time:.0f} fields/s'
+            })
+            
+            self.log.info(f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed/chunk_time:.0f} fields/s")
+        
+        residential_pbar.close()
         
         # Step 4: Create educational proximity using step-by-step approach
         self.log.info("🏫 Processing educational facility proximity...")
@@ -379,6 +399,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         # Process in chunks for memory safety
         processed = 0
+        
+        # Create progress bar for educational processing
+        educational_pbar = tqdm(
+            total=total_fields, 
+            desc="🏫 Educational proximity", 
+            unit="fields",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+        )
         
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
@@ -427,8 +455,19 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
             
             chunk_time = time.time() - chunk_start
-            processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
+            batch_processed = min(self.config.batch_size, total_fields - offset)
+            processed += batch_processed
+            
+            # Update progress bar
+            educational_pbar.update(batch_processed)
+            educational_pbar.set_postfix({
+                'batch_time': f'{chunk_time:.1f}s',
+                'rate': f'{batch_processed/chunk_time:.0f} fields/s'
+            })
+            
+            self.log.info(f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed/chunk_time:.0f} fields/s")
+        
+        educational_pbar.close()
         
         # Step 5: Create water proximity using step-by-step approach  
         self.log.info("💧 Processing water feature proximity...")
@@ -443,6 +482,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         # Process in chunks for memory safety
         processed = 0
+        
+        # Create progress bar for water processing
+        water_pbar = tqdm(
+            total=total_fields, 
+            desc="💧 Water proximity", 
+            unit="fields",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+        )
         
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
@@ -483,8 +530,19 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
             
             chunk_time = time.time() - chunk_start
-            processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
+            batch_processed = min(self.config.batch_size, total_fields - offset)
+            processed += batch_processed
+            
+            # Update progress bar
+            water_pbar.update(batch_processed)
+            water_pbar.set_postfix({
+                'batch_time': f'{chunk_time:.1f}s',
+                'rate': f'{batch_processed/chunk_time:.0f} fields/s'
+            })
+            
+            self.log.info(f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed/chunk_time:.0f} fields/s")
+        
+        water_pbar.close()
         
         # Step 5: Create final results table
         self.conn.execute("""
