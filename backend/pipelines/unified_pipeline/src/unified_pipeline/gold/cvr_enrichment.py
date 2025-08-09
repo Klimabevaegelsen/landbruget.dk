@@ -150,6 +150,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             enable_geocoding=self.config.enable_address_geocoding
         )
 
+        # Set up company UUID generation
+        self._setup_company_uuid_function()
+
         # Log configuration
         self.log.info("CVR enrichment gold layer initialized")
         self.log.info(f"📋 Configuration:")
@@ -157,6 +160,31 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled'}")
         self.log.info(f"   • Financial documents: {'enabled' if self.config.fetch_financial_documents else 'disabled'}")
         self.log.info(f"   • Test limit: {self.config.test_limit or 'none'}")
+
+    def _setup_company_uuid_function(self):
+        """Set up company UUID generation function in DuckDB."""
+        # Install crypto extension for consistent SHA-1 hashing
+        self.conn.execute("INSTALL crypto FROM community")
+        self.conn.execute("LOAD crypto")
+        
+        # Create company UUID function using UUID5 with consistent namespace
+        self.conn.execute("""
+            CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
+                SELECT CASE 
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END
+            )
+        """)
+        self.log.info("✅ Company UUID function created using crypto extension SHA-1")
 
     @timed(name="CVR enrichment processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -409,10 +437,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             import json
             json_strings = [json.dumps(company) for company in companies_data]
             
-            # 1. Main companies table
+            # 1. Main companies table WITH UUIDs
             self.conn.execute(f"""
                 CREATE TABLE {table_name} AS 
                 SELECT 
+                    -- Add consistent company UUID as the first column
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                     json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
@@ -463,6 +493,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         AND json_array_length(json_extract(json_data, '$.addresses')) > 0
                     )
                     SELECT 
+                        company_uuid(cvr_number) as company_uuid,
                         cvr_number,
                         -- Address information
                         address_parsed.full_address,
@@ -497,6 +528,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 # Fallback: create empty addresses table
                 self.conn.execute(f"""
                     CREATE TABLE {table_name}_addresses (
+                        company_uuid VARCHAR,
                         cvr_number INTEGER,
                         full_address VARCHAR,
                         latitude DOUBLE,
@@ -530,6 +562,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 self.conn.execute(f"""
                     CREATE TABLE {table_name}_leadership AS
                     SELECT 
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_parsed
                     FROM unnest($1) as t(json_data)
@@ -540,6 +573,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 # Fallback: create empty table
                 self.conn.execute(f"""
                     CREATE TABLE {table_name}_leadership (
+                        company_uuid VARCHAR,
                         cvr_number INTEGER,
                         leadership_data VARCHAR
                     )
@@ -572,6 +606,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
                     )
                     SELECT 
+                        company_uuid(cvr_number) as company_uuid,
                         cvr_number,
                         -- Document metadata
                         financial_parsed.publication_type,
@@ -633,6 +668,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 # Fallback: create empty table with proper schema
                 self.conn.execute(f"""
                     CREATE TABLE {table_name}_financial (
+                        company_uuid VARCHAR,
                         cvr_number INTEGER,
                         publication_type VARCHAR,
                         reporting_period_start VARCHAR,
