@@ -135,6 +135,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """
         super().__init__(config)
 
+        # Apply DuckDB memory optimizations for large datasets
+        self._apply_memory_optimizations()
+
         # Initialize CVR collection manager
         self.cvr_collection_manager = CVRCollectionManager(
             gcs_access=self.gcs_access, bucket=self.config.bucket
@@ -185,6 +188,53 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             )
         """)
         self.log.info("✅ Company UUID function created using crypto extension SHA-1")
+
+    def _apply_memory_optimizations(self):
+        """
+        Apply DuckDB-specific memory optimizations for handling large CVR datasets.
+        
+        Based on DuckDB performance tuning recommendations:
+        https://duckdb.org/docs/stable/guides/performance/how_to_tune_workloads
+        """
+        try:
+            # CRITICAL: Reduce threads for memory-constrained environment (GitHub Actions: 16GB RAM)
+            # DuckDB recommendation: Lower thread count reduces memory pressure
+            self.conn.execute("SET threads = 2")  # Reduced from default 4 to 2
+            
+            # CRITICAL: Reduce memory limit to leave more buffer for OS and other processes
+            # GitHub Actions runner has ~16GB, we were using 12GB, now use 8GB for safety
+            self.conn.execute("SET memory_limit = '8GB'")  # Reduced from 12GB to 8GB
+            self.conn.execute("SET max_memory = '8GB'")
+            
+            # CRITICAL: Enable more aggressive memory management
+            # DuckDB recommendation: Disable insertion order preservation for better memory efficiency
+            self.conn.execute("SET preserve_insertion_order = false")  # Already set in base, but ensure it's applied
+            
+            # ADDITIONAL: More frequent checkpoints to clear temporary data
+            self.conn.execute("SET checkpoint_threshold = '256MB'")  # More frequent checkpoints
+            
+            # ADDITIONAL: Disable progress bar to reduce memory overhead
+            self.conn.execute("SET enable_progress_bar = false")
+            
+            # ADDITIONAL: More aggressive temporary directory management
+            self.conn.execute("SET temp_directory = '/tmp/duckdb_cvr'")
+            self.conn.execute("SET max_temp_directory_size = '4GB'")  # Reduced from 14GB to 4GB
+            
+            # ADDITIONAL: Enable object cache for better memory reuse
+            self.conn.execute("SET enable_object_cache = true")
+            
+            # ADDITIONAL: More frequent WAL checkpoints to free memory
+            self.conn.execute("SET wal_autocheckpoint = 100")  # More frequent than default
+            
+            self.log.info("✅ Applied DuckDB memory optimizations for CVR enrichment:")
+            self.log.info("   • Threads: 2 (reduced for memory efficiency)")
+            self.log.info("   • Memory limit: 8GB (conservative for 16GB system)")
+            self.log.info("   • Checkpoint threshold: 256MB (frequent cleanup)")
+            self.log.info("   • Temp directory: 4GB max (reduced disk usage)")
+            self.log.info("   • Progress bar: disabled (reduced overhead)")
+            
+        except Exception as e:
+            self.log.warning(f"Could not apply all memory optimizations: {e}")
 
     @timed(name="CVR enrichment processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -435,7 +485,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"🔍 Creating normalized tables for {len(companies_data)} companies using chunked processing")
             
             # Process companies in chunks to avoid memory issues
-            chunk_size = 100  # Process 100 companies at a time
+            # DuckDB recommendation: Use smaller chunks for memory-constrained environments
+            chunk_size = 50  # Process 50 companies at a time (reduced from 100 for safety)
             total_companies = len(companies_data)
             num_chunks = (total_companies + chunk_size - 1) // chunk_size
             
@@ -1267,14 +1318,33 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     """, [json_strings, employment_schema[0]])
 
     def _cleanup_memory_after_chunk(self) -> None:
-        """Clean up memory after processing a chunk."""
+        """
+        Aggressive memory cleanup after processing a chunk.
+        
+        Based on DuckDB recommendations for memory-constrained environments.
+        """
         try:
-            # Force garbage collection
-            import gc
-            gc.collect()
+            # DuckDB-specific cleanup
+            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            self.conn.execute("PRAGMA optimize")  # Optimize database structure
             
-            # Clear DuckDB temporary data
-            self.conn.execute("CHECKPOINT")
+            # Force Python garbage collection
+            import gc
+            collected = gc.collect()
+            
+            # Additional DuckDB memory management
+            try:
+                # Clear any cached query plans
+                self.conn.execute("PRAGMA cache_size = 0")
+                self.conn.execute("PRAGMA cache_size = -2000")  # Reset to reasonable cache
+                
+                # Force temporary directory cleanup
+                self.conn.execute("PRAGMA temp_store = memory")
+                
+            except Exception as pragma_e:
+                self.log.debug(f"Pragma cleanup warning: {pragma_e}")
+                
+            self.log.debug(f"Memory cleanup: collected {collected} objects, checkpoint completed")
             
         except Exception as e:
             self.log.debug(f"Memory cleanup warning: {e}")
