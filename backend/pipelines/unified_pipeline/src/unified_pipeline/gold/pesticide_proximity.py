@@ -57,7 +57,7 @@ class PesticideProximityGoldConfig(BaseJobConfig):
 
     # Performance settings
     batch_size: int = Field(
-        default=1000,
+        default=500,
         description="Number of fields to process per batch for memory management",
     )
 
@@ -314,8 +314,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         # Process in chunks for memory safety
         processed = 0
-        for offset in range(0, total_fields, self.config.batch_size):
+        total_chunks = (total_fields + self.config.batch_size - 1) // self.config.batch_size
+        
+        for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
+            self.log.info(f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
             # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
             self.conn.execute(f"""
@@ -361,8 +364,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         # Process in chunks for memory safety
         processed = 0
-        for offset in range(0, total_fields, self.config.batch_size):
+        
+        for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
+            self.log.info(f"🔄 Processing educational batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
             # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
             self.conn.execute(f"""
@@ -408,8 +413,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         # Process in chunks for memory safety
         processed = 0
-        for offset in range(0, total_fields, self.config.batch_size):
+        
+        for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
+            self.log.info(f"🔄 Processing water batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
             # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
             self.conn.execute(f"""
