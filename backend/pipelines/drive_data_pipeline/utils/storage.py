@@ -141,9 +141,14 @@ class DriveStorageManager:
                     # Remove base_dir prefix to get relative path
                     gcs_relative_path = gcs_relative_path[len(str(self.base_dir)):].lstrip("/\\")
                 
-                # Ensure we have silver/ prefix for drive data pipeline
-                if not gcs_relative_path.startswith("silver/"):
-                    gcs_relative_path = f"silver/{gcs_relative_path}"
+                # Ensure we have the correct layer prefix based on the path
+                if not gcs_relative_path.startswith(("bronze/", "silver/")):
+                    # Determine the correct prefix based on the path content
+                    if "bronze" in gcs_relative_path or "/bronze/" in str(path):
+                        gcs_relative_path = f"bronze/{gcs_relative_path}"
+                    else:
+                        # Default to silver for drive data pipeline output
+                        gcs_relative_path = f"silver/{gcs_relative_path}"
                 
                 if self.use_optimized and self.gcs_access:
                     # Use optimized GCS access
