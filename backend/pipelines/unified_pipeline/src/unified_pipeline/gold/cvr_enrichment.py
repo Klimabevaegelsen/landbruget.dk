@@ -78,6 +78,15 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
     parse_financial_xml: bool = Field(
         default=True, description="Whether to download and parse XML financial documents"
     )
+    
+    # Address geocoding configuration
+    enable_address_geocoding: bool = Field(
+        default=True, description="Whether to enrich addresses with geometry via DAWA API"
+    )
+    
+    geocoding_current_addresses_only: bool = Field(
+        default=True, description="Whether to geocode only current addresses (not historical)"
+    )
 
     model_config = {"frozen": True}
 
@@ -98,6 +107,12 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
             
         if hasattr(cli_config, 'max_financial_documents'):
             object.__setattr__(self, 'max_financial_documents', cli_config.max_financial_documents)
+            
+        if hasattr(cli_config, 'enable_address_geocoding'):
+            object.__setattr__(self, 'enable_address_geocoding', cli_config.enable_address_geocoding)
+            
+        if hasattr(cli_config, 'geocoding_current_addresses_only'):
+            object.__setattr__(self, 'geocoding_current_addresses_only', cli_config.geocoding_current_addresses_only)
 
 
 class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
@@ -129,9 +144,19 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
         cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
 
-        self.cvr_api_client = CVRAPIClient(username=cvr_username, password=cvr_password)
+        self.cvr_api_client = CVRAPIClient(
+            username=cvr_username, 
+            password=cvr_password,
+            enable_geocoding=self.config.enable_address_geocoding
+        )
 
+        # Log configuration
         self.log.info("CVR enrichment gold layer initialized")
+        self.log.info(f"📋 Configuration:")
+        self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
+        self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled'}")
+        self.log.info(f"   • Financial documents: {'enabled' if self.config.fetch_financial_documents else 'disabled'}")
+        self.log.info(f"   • Test limit: {self.config.test_limit or 'none'}")
 
     @timed(name="CVR enrichment processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -244,7 +269,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         # Fetch company data for valid, unique CVR numbers only
         company_results = self.cvr_api_client.fetch_multiple_companies(
-            cvr_numbers=valid_cvrs, fetch_all_fields=self.config.fetch_all_fields
+            cvr_numbers=valid_cvrs, 
+            fetch_all_fields=self.config.fetch_all_fields,
+            enrich_with_geometry=self.config.enable_address_geocoding
         )
 
         # Fetch financial documents if configured
@@ -392,6 +419,16 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     json_extract(json_data, '$.status')::VARCHAR as status,
                     json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                     json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                    -- New fields for missing CVR data
+                    json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
+                    json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
+                    json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
+                    json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
+                    json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                    -- Original fields
                     json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                     json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                     json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
@@ -402,7 +439,81 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 FROM unnest($1) as t(json_data)
             """, [json_strings])
             
-            # 2. Leadership table - let DuckDB auto-detect and parse the structure
+            # 2. Addresses table with geometry data
+            addresses_schema = self.conn.execute("""
+                WITH addresses_sample AS (
+                    SELECT json_extract(json_data, '$.addresses') as addresses_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(addresses_json) FROM addresses_sample
+            """, [json_strings]).fetchone()
+            
+            if addresses_schema and addresses_schema[0]:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_addresses AS
+                    WITH addresses_flattened AS (
+                        SELECT
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                    )
+                    SELECT 
+                        cvr_number,
+                        -- Address information
+                        address_parsed.full_address,
+                        address_parsed.street_name,
+                        address_parsed.house_number,
+                        address_parsed.floor,
+                        address_parsed.door,
+                        address_parsed.postal_code,
+                        address_parsed.city,
+                        address_parsed.municipality_code,
+                        address_parsed.municipality_name,
+                        address_parsed.country_code,
+                        address_parsed.adresse_id,
+                        -- Address validity period
+                        address_parsed.period_start,
+                        address_parsed.period_end,
+                        address_parsed.is_current,
+                        -- Geometry data (WGS84 coordinates)
+                        address_parsed.latitude::DOUBLE as latitude,
+                        address_parsed.longitude::DOUBLE as longitude,
+                        address_parsed.coordinate_system,
+                        address_parsed.srid::INTEGER as srid,
+                        address_parsed.geometry_wkt,
+                        address_parsed.geometry_geojson,
+                        address_parsed.coordinate_quality,
+                        address_parsed.coordinate_source,
+                        address_parsed.dawa_enriched::BOOLEAN as dawa_enriched,
+                        address_parsed.dawa_fetch_timestamp
+                    FROM addresses_flattened
+                """, [json_strings, addresses_schema[0]])
+            else:
+                # Fallback: create empty addresses table
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name}_addresses (
+                        cvr_number INTEGER,
+                        full_address VARCHAR,
+                        latitude DOUBLE,
+                        longitude DOUBLE,
+                        coordinate_system VARCHAR,
+                        srid INTEGER,
+                        geometry_wkt VARCHAR,
+                        is_current BOOLEAN,
+                        dawa_enriched BOOLEAN
+                    )
+                """)
+            
+            # Get addresses count
+            addresses_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses").fetchone()[0]
+            geocoded_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses WHERE dawa_enriched = true").fetchone()[0]
+            
+            # 3. Leadership table - let DuckDB auto-detect and parse the structure
             # First get the schema structure for leadership data
             leadership_schema = self.conn.execute("""
                 WITH leadership_sample AS (
@@ -538,38 +649,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             
             financial_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_financial").fetchone()[0]
             
-            # 4. Address history table - let DuckDB auto-detect structure
-            address_schema = self.conn.execute("""
-                WITH address_sample AS (
-                    SELECT json_extract(json_data, '$.addresses') as address_json
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
-                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
-                    LIMIT 1
-                )
-                SELECT json_structure(address_json) FROM address_sample
-            """, [json_strings]).fetchone()
-            
-            if address_schema and address_schema[0]:
-                self.conn.execute(f"""
-                    CREATE TABLE {table_name}_addresses AS
-                    SELECT 
-                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
-                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
-                """, [json_strings, address_schema[0]])
-            else:
-                # Fallback: create empty table
-                self.conn.execute(f"""
-                    CREATE TABLE {table_name}_addresses (
-                        cvr_number INTEGER,
-                        address_data VARCHAR
-                    )
-                """)
-            
-            address_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses").fetchone()[0]
+            # Note: Address table already created above with geometry data
             
             # 5. Industries table - let DuckDB auto-detect structure  
             industry_schema = self.conn.execute("""
@@ -658,7 +738,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"   📋 Companies: {len(companies_data)}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
-            self.log.info(f"   📍 Address entries: {address_count}")
+            self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
             self.log.info(f"   🏭 Industry entries: {industry_count}")
             self.log.info(f"   👷 Employment data:")
             for table_suffix, count in employment_counts.items():

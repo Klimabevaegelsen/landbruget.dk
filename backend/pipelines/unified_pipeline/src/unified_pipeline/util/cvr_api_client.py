@@ -22,6 +22,7 @@ from tqdm import tqdm
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
 )
+from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.log_util import Logger
 
 
@@ -35,13 +36,14 @@ class CVRAPIClient:
     - Handle authentication and rate limiting
     """
 
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None):
+    def __init__(self, username: Optional[str] = None, password: Optional[str] = None, enable_geocoding: bool = True):
         """
         Initialize CVR API client.
 
         Args:
             username: CVR API username (defaults to environment variable)
             password: CVR API password (defaults to environment variable)
+            enable_geocoding: Whether to enable address geocoding via DAWA API
         """
         self.log = Logger.get_logger()
 
@@ -70,6 +72,10 @@ class CVRAPIClient:
         # Rate limiting
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
+
+        # Initialize DAWA client for address geocoding
+        self.enable_geocoding = enable_geocoding
+        self.dawa_client = DAWAAPIClient() if enable_geocoding else None
 
         self.log.info("CVR API client initialized")
 
@@ -128,7 +134,7 @@ class CVRAPIClient:
             raise
 
     def get_company_data(
-        self, cvr_number: str, fetch_all_fields: bool = True
+        self, cvr_number: str, fetch_all_fields: bool = True, enrich_with_geometry: bool = True
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch comprehensive company data for a specific CVR number.
@@ -136,6 +142,7 @@ class CVRAPIClient:
         Args:
             cvr_number: 8-digit CVR number
             fetch_all_fields: Whether to fetch all available fields or just basic ones
+            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
 
         Returns:
             Comprehensive company data dictionary or None if not found
@@ -158,6 +165,7 @@ class CVRAPIClient:
                     "Vrvirksomhed.beliggenhedsadresse",
                     "Vrvirksomhed.hovedbranche",
                     "Vrvirksomhed.attributter",
+                    "Vrvirksomhed.reklamebeskyttet",  # Include advertisement protection
                 ]
 
             raw_data = self._make_request(self.company_endpoint, query)
@@ -172,6 +180,10 @@ class CVRAPIClient:
             if not parsed_data:
                 self.log.error(f"Failed to parse company data for CVR: {cvr_number}")
                 return None
+
+            # Enrich with geometry if requested
+            if enrich_with_geometry:
+                parsed_data = self.enrich_company_with_geometry(parsed_data)
 
             return parsed_data
 
@@ -271,6 +283,7 @@ class CVRAPIClient:
             "founded_date": None,  # Will extract from livsforloeb
             "dissolution_date": None,  # Will extract from livsforloeb
             "last_updated": company.get("sidstOpdateret"),
+            "advertisement_protection": company.get("reklamebeskyttet"),
             "data_source": "CVR Register",
             "fetch_timestamp": datetime.now().isoformat(),
         }
@@ -315,6 +328,7 @@ class CVRAPIClient:
                     "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
                     "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
                     "country_code": address_entry.get("landekode"),
+                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
                     "period_end": address_entry.get("periode", {}).get("gyldigTil"),
                     "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
@@ -625,6 +639,100 @@ class CVRAPIClient:
 
         return parsed_data
 
+    def enrich_company_with_geometry(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich company data with address geometry using DAWA API.
+        
+        Args:
+            company_data: Parsed company data from CVR API
+            
+        Returns:
+            Company data enriched with geometry information
+        """
+        if not self.enable_geocoding or not self.dawa_client:
+            self.log.debug("Address geocoding disabled, skipping geometry enrichment")
+            return company_data
+        
+        try:
+            addresses = company_data.get("addresses", [])
+            if not addresses:
+                self.log.debug("No addresses found for geocoding")
+                return company_data
+            
+            # Find current addresses with adresse_id
+            geocodable_addresses = [
+                addr for addr in addresses 
+                if addr.get("is_current") and addr.get("adresse_id")
+            ]
+            
+            if not geocodable_addresses:
+                self.log.debug("No current addresses with adresse_id found for geocoding")
+                return company_data
+            
+            # Geocode addresses
+            enriched_addresses = []
+            for address in addresses:
+                enriched_address = address.copy()
+                
+                if address.get("is_current") and address.get("adresse_id"):
+                    geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
+                    
+                    if geocoded:
+                        # Add geometry data to address (WGS84 coordinates)
+                        enriched_address.update({
+                            "latitude": geocoded["latitude"],  # WGS84 latitude
+                            "longitude": geocoded["longitude"],  # WGS84 longitude
+                            "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
+                            "srid": geocoded.get("srid", 4326),
+                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "coordinate_quality": geocoded.get("coordinate_quality"),
+                            "coordinate_source": geocoded.get("coordinate_source"),
+                            "dawa_enriched": True,
+                            "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
+                        })
+                        self.log.debug(f"Successfully geocoded address: {address.get('full_address')}")
+                    else:
+                        enriched_address["dawa_enriched"] = False
+                        self.log.warning(f"Failed to geocode address: {address.get('full_address')}")
+                else:
+                    enriched_address["dawa_enriched"] = False
+                
+                enriched_addresses.append(enriched_address)
+            
+            # Update company data with enriched addresses
+            company_data = company_data.copy()
+            company_data["addresses"] = enriched_addresses
+            
+            # Add primary address geometry to top level for easy access
+            current_geocoded = [
+                addr for addr in enriched_addresses 
+                if addr.get("is_current") and addr.get("dawa_enriched")
+            ]
+            
+            if current_geocoded:
+                primary_address = current_geocoded[0]  # Use first current geocoded address
+                company_data["primary_address_geometry"] = {
+                    "latitude": primary_address.get("latitude"),  # WGS84 latitude
+                    "longitude": primary_address.get("longitude"),  # WGS84 longitude
+                    "coordinate_system": primary_address.get("coordinate_system", "WGS84"),
+                    "srid": primary_address.get("srid", 4326),
+                    "geometry_wkt": primary_address.get("geometry_wkt"),
+                    "geometry_geojson": primary_address.get("geometry_geojson"),
+                    "coordinate_quality": primary_address.get("coordinate_quality"),
+                    "coordinate_source": primary_address.get("coordinate_source")
+                }
+            
+            return company_data
+            
+        except Exception as e:
+            self.log.error(f"Error enriching company data with geometry: {e}")
+            return company_data
+
     def _parse_address(self, address_obj: Dict[str, Any]) -> Dict[str, Any]:
         """Parse address object from CVR data."""
         try:
@@ -721,7 +829,7 @@ class CVRAPIClient:
             return None
 
     def fetch_multiple_companies(
-        self, cvr_numbers: List[str], fetch_all_fields: bool = True
+        self, cvr_numbers: List[str], fetch_all_fields: bool = True, enrich_with_geometry: bool = True
     ) -> Dict[str, Any]:
         """
         Fetch company data for multiple CVR numbers efficiently.
@@ -729,11 +837,12 @@ class CVRAPIClient:
         Args:
             cvr_numbers: List of 8-digit CVR numbers
             fetch_all_fields: Whether to fetch all available fields or just basic ones
+            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
 
         Returns:
             Dictionary mapping CVR numbers to company data
         """
-        self.log.info(f"Fetching data for {len(cvr_numbers)} companies")
+        self.log.info(f"Fetching data for {len(cvr_numbers)} companies (geocoding: {'enabled' if enrich_with_geometry else 'disabled'})")
 
         results = {}
         successful = 0
@@ -741,7 +850,7 @@ class CVRAPIClient:
 
         for cvr_number in tqdm(cvr_numbers, desc="Fetching company data", unit="company"):
             try:
-                company_data = self.get_company_data(cvr_number, fetch_all_fields)
+                company_data = self.get_company_data(cvr_number, fetch_all_fields, enrich_with_geometry)
                 if company_data:
                     results[cvr_number] = company_data
                     successful += 1
