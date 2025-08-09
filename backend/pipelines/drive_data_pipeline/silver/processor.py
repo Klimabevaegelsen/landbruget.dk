@@ -1,5 +1,6 @@
 """Silver layer processor for Google Drive data pipeline."""
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -476,10 +477,19 @@ class SilverProcessor:
                     output_filename = f"{Path(original_filename).stem}.parquet"
                     output_path = output_dir / output_filename
 
-                    # Save the DuckDB table directly
+                    # Save the DuckDB table using ParquetManager (handles GCS uploads)
                     try:
-                        # Use the transformer's connection to save the table
-                        transformer.save_table_to_parquet(table_name, output_path)
+                        # Get the data from transformer's connection and register it in ParquetManager
+                        df = transformer.conn.execute(f"SELECT * FROM {table_name}").df()
+                        parquet_table_name = f"temp_parquet_{int(time.time())}"
+                        self.parquet_manager.register_dataframe(df, parquet_table_name)
+                        
+                        # Use the parquet manager to save the table (handles both local and GCS)
+                        self.parquet_manager.save_table_to_parquet(parquet_table_name, output_path)
+                        
+                        # Clean up the temporary table
+                        self.parquet_manager.drop_table(parquet_table_name)
+                        
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
