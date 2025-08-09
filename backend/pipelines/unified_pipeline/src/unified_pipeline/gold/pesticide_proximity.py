@@ -88,6 +88,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log = logger
         
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+        print("🚨 PESTICIDE PROXIMITY RUN METHOD: Starting execution")
+        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """Main execution method for pesticide proximity analysis."""
         
         # Initialize DuckDB spatial extension
