@@ -508,14 +508,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"💾 Saving compliance analysis results to: {base_path}")
         
         # Save summary statistics
-        summary_path = f"{base_path}/compliance_summary.json"
+        summary_path = f"gs://{self.config.bucket}/{base_path}/compliance_summary.json"
         await self.gcs_access.upload_json(summary_stats, summary_path)
         
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
             # Save violations data as parquet
             if year_results.get("violations_data"):
-                violations_path = f"{base_path}/violations_{ag_year}.parquet"
+                violations_path = f"gs://{self.config.bucket}/{base_path}/violations_{ag_year}.parquet"
                 # Create violations dataframe using pandas instead of complex SQL
                 violations_data = year_results["violations_data"][:100]  # Limit for demo
                 if violations_data:
@@ -528,12 +528,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 await self.gcs_access.upload_dataframe(violations_df, violations_path)
             
             # Save year summary
-            year_summary_path = f"{base_path}/summary_{ag_year}.json"
+            year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
             year_summary = {k: v for k, v in year_results.items() if k != "violations_data"}
             await self.gcs_access.upload_json(year_summary, year_summary_path)
         
         # Generate human-readable report
-        report_path = f"{base_path}/compliance_report.md"
+        report_path = f"gs://{self.config.bucket}/{base_path}/compliance_report.md"
         report_content = self._generate_markdown_report(summary_stats, all_results)
         await self.gcs_access.upload_text(report_content, report_path)
         
