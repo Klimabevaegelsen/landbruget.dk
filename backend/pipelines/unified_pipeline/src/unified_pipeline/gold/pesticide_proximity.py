@@ -223,7 +223,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             raise ValueError(f"No disaggregation data found for year {year}")
         
         file_path = datasets['disaggregation'][year]
-        self.log.info(f"📂 Loading disaggregation data for year {year} from {file_path}")
+        self.log.info(f"📂 PROXIMITY INPUT: Loading disaggregation data for year {year}")
+        self.log.info(f"📁 Disaggregation Data Path: {file_path}")
         
         try:
             # Load the parquet file into a table using proper GCS access
@@ -384,7 +385,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             create_folder_structure=True
         )
         
-        self.log.info(f"✅ Year {year} proximity results saved to: {output_path}")
+        self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
+        self.log.info(f"📁 Proximity GCS Path: {output_path}")
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Return schema information for the proximity analysis output."""
