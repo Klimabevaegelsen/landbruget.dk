@@ -367,14 +367,32 @@ class SilverProcessor:
 
             logger.info(f"Processing file from memory to Silver: {original_filename}")
 
-            # Use content type from metadata (same approach as _process_file method)
-            content_type = metadata.content_type
-
-            if not content_type or content_type not in self.transformers:
-                logger.warning(f"Unsupported content type: {content_type} for {original_filename}")
+            # Select transformer based on content type and file specifics (same logic as _process_file)
+            transformer = None
+            file_path = Path(original_filename)  # Create Path object for specialized transformers
+            
+            # First, check if specialized transformers can handle this file
+            for transformer_name, potential_transformer in self.transformers.items():
+                if hasattr(potential_transformer, 'can_handle'):
+                    # Convert metadata to dict for transformer
+                    metadata_dict_for_check = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    if potential_transformer.can_handle(file_path, metadata_dict_for_check):
+                        transformer = potential_transformer
+                        logger.info(f"Using specialized transformer: {transformer_name}")
+                        break
+            
+            # If no specialized transformer found, use content type mapping
+            if not transformer:
+                content_type = metadata.content_type
+                if not content_type or content_type not in self.transformers:
+                    logger.warning(f"Unsupported content type: {content_type} for {original_filename}")
+                    return False
+                transformer = self.transformers[content_type]
+                logger.info(f"Using content type transformer: {content_type}")
+            
+            if not transformer:
+                logger.error("No suitable transformer found")
                 return False
-
-            transformer = self.transformers[content_type]
 
             # Transform the file content directly from memory
             try:
