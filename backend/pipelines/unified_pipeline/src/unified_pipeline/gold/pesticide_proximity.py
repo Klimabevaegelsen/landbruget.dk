@@ -284,76 +284,90 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             self.log.warning("No fields with valid field_uuid found")
             return 0
         
-        # Create proximity analysis results table
+        # Create proximity analysis results table by breaking into steps to avoid DuckDB CTE alias issues
+        
+        # Step 1: Create fields with geometry
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE proximity_results AS
-            WITH fields_with_geometry AS (
-                SELECT DISTINCT
-                    cd.field_uuid,
-                    ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
-                FROM current_disaggregation cd
-                JOIN {field_table} f ON cd.field_uuid = f.field_uuid
-                WHERE f.geometry IS NOT NULL
-            ),
-            residential_proximity AS (
-                SELECT 
-                    fg.field_uuid,
-                    CASE 
-                        WHEN COUNT(b.inspire_address) > 0 THEN
-                            array_to_string(array_agg(
-                                b.inspire_address || ':' || 
-                                ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm' 
-                                ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
-                            ), chr(10))
-                        ELSE ''
-                    END as residential_buildings_formatted
-                FROM fields_with_geometry fg
-                LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
-                    fg.field_geom_utm,
-                    ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
-                    {self.config.building_proximity_distance_m}
-                ) AND b.inspire_category_group = 'residential'
-                WHERE b.inspire_address IS NOT NULL
-                GROUP BY fg.field_uuid
-            ),
-            educational_proximity AS (
-                SELECT 
-                    fg.field_uuid,
-                    CASE 
-                        WHEN COUNT(b.inspire_address) > 0 THEN
-                            array_to_string(array_agg(
-                                b.inspire_address || ':' || 
-                                ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm'
-                                ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
-                            ), chr(10))
-                        ELSE ''
-                    END as educational_facilities_formatted
-                FROM fields_with_geometry fg
-                LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
-                    fg.field_geom_utm,
-                    ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
-                    {self.config.building_proximity_distance_m}
-                ) AND b.inspire_category_group = 'publicServices'
-                WHERE b.inspire_address IS NOT NULL
-                GROUP BY fg.field_uuid
-            ),
-            water_proximity AS (
-                SELECT 
-                    fg.field_uuid,
-                    CASE 
-                        WHEN MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))) IS NOT NULL
-                        THEN ROUND(MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))), 1) || 'm'
-                        ELSE ''
-                    END as water_distance_formatted
-                FROM fields_with_geometry fg
-                LEFT JOIN data_water_typology_silver w ON ST_DWithin(
-                    fg.field_geom_utm,
-                    ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'),
-                    {self.config.water_proximity_distance_m}
-                )
-                WHERE w.geometry_spatial IS NOT NULL
-                GROUP BY fg.field_uuid
+            CREATE OR REPLACE TABLE fields_with_geometry AS
+            SELECT DISTINCT
+                cd.field_uuid,
+                ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
+            FROM current_disaggregation cd
+            JOIN {field_table} f ON cd.field_uuid = f.field_uuid
+            WHERE f.geometry IS NOT NULL
+        """)
+        
+        # Step 2: Create residential proximity
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE residential_proximity AS
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(
+                            b.address || ':' || 
+                            ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm' 
+                            ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
+                        ), chr(10))
+                    ELSE ''
+                END as residential_buildings_formatted
+            FROM fields_with_geometry fg
+            LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
+                fg.field_geom_utm,
+                ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
+                {self.config.building_proximity_distance_m}
+            ) AND b.category_group = 'residential'
+              AND b.address IS NOT NULL
+            GROUP BY fg.field_uuid
+        """)
+        
+        # Step 3: Create educational proximity  
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE educational_proximity AS
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN COUNT(b.address) > 0 THEN
+                        array_to_string(array_agg(
+                            b.address || ':' || 
+                            ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm'
+                            ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
+                        ), chr(10))
+                    ELSE ''
+                END as educational_facilities_formatted
+            FROM fields_with_geometry fg
+            LEFT JOIN data_bbr_buildings_silver b ON ST_DWithin(
+                fg.field_geom_utm,
+                ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
+                {self.config.building_proximity_distance_m}
+            ) AND b.category_group = 'publicServices'
+              AND b.address IS NOT NULL
+            GROUP BY fg.field_uuid
+        """)
+        
+        # Step 4: Create water proximity
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE water_proximity AS
+            SELECT 
+                fg.field_uuid,
+                CASE 
+                    WHEN MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))) IS NOT NULL
+                    THEN ROUND(MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))), 1) || 'm'
+                    ELSE ''
+                END as water_distance_formatted
+            FROM fields_with_geometry fg
+            LEFT JOIN data_water_typology_silver w ON ST_DWithin(
+                fg.field_geom_utm,
+                ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'),
+                {self.config.water_proximity_distance_m}
             )
+            WHERE w.geometry_spatial IS NOT NULL
+            GROUP BY fg.field_uuid
+        """)
+        
+        # Step 5: Create final results table
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE proximity_results AS
             SELECT 
                 cd.*,
                 COALESCE(rp.residential_buildings_formatted, '') as residential_buildings_formatted,
