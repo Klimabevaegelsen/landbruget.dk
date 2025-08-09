@@ -104,6 +104,12 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     # Input dataset names (what files to look for in cloud storage)
     pesticide_applications_dataset: str = "pesticides"
 
+    # Year filtering for matrix jobs (process single year instead of all years)
+    pesticide_year: Optional[int] = Field(
+        default=None,
+        description="Specific pesticide year to process (if None, processes all available years)",
+    )
+
     # Performance tuning for the database operations
     max_memory_gb: float = Field(
         default=12.0,
@@ -115,6 +121,19 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI filtering for matrix job processing.
+        
+        This method sets the pesticide_year from CLI parameters to enable
+        processing of specific years for parallel matrix jobs.
+        
+        Args:
+            cli_config: CLI configuration containing pesticide_year filter
+        """
+        if cli_config.pesticide_year:
+            object.__setattr__(self, "pesticide_year", cli_config.pesticide_year)
 
 
 class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig], GoldJobInterface):
@@ -712,14 +731,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             List of (pesticide_year, field_year) tuples ready for processing
         """
         print("DEBUG: _get_pesticide_field_year_pairs called")
-        self.log.info("🔍 Discovering available pesticide and field years")
-
-        # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
-        # ==========================================
-        # Look through cloud storage for pesticide data files
-        self.log.info("📊 Scanning GCS for pesticide data...")
-        pesticide_years = self._get_available_pesticide_years()
-        self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
+        
+        # Check if we should process only a specific year (for matrix jobs)
+        if self.config.pesticide_year:
+            self.log.info(f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}")
+            pesticide_years = {self.config.pesticide_year}
+        else:
+            self.log.info("🔍 Discovering all available pesticide and field years")
+            # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
+            # ==========================================
+            # Look through cloud storage for pesticide data files
+            self.log.info("📊 Scanning GCS for pesticide data...")
+            pesticide_years = self._get_available_pesticide_years()
+            self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
         # STEP 2: DISCOVER AVAILABLE FIELD YEARS
         # ======================================

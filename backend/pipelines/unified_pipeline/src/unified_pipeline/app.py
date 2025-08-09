@@ -500,6 +500,13 @@ def execute(cli_config: cli.CliConfig) -> int:
     default=10,
     help="Maximum number of financial documents to fetch per company (CVR enrichment only).",
 )
+@click.option(
+    "--pesticide-year",
+    "pesticide_year",
+    type=int,
+    help="Year filter for pesticide matrix jobs (e.g., 2018). If not specified, processes all available years.",
+    required=False,
+)
 def run_cli(
     env: str,
     source: str,
@@ -509,6 +516,7 @@ def run_cli(
     test_limit: int = None,
     parse_financial_xml: bool = True,
     max_financial_documents: int = 10,
+    pesticide_year: int = None,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -537,6 +545,7 @@ def run_cli(
         test_limit=test_limit,
         parse_financial_xml=parse_financial_xml,
         max_financial_documents=max_financial_documents,
+        pesticide_year=pesticide_year,
     )
     print(app_config)
     exit_code = execute(app_config)
