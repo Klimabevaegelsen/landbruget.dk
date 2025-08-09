@@ -295,8 +295,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.logger.warning(f"Could not extract agricultural year from filename: {filename}")
                 continue
             
-            # Extract the end year for application_year (e.g., 2023_2024 -> 2024)
-            end_year = int(agricultural_year.split('_')[1])
+            # Extract the start year for application_year (e.g., 2022_2023 -> 2022)
+            # Agricultural year 2022_2023 = Aug 1 2022 - July 31 2023, so applications are primarily in 2022
+            start_year = int(agricultural_year.split('_')[0])
             
             with self.gcs_access._temp_download(file_path) as temp_file:
                 self.conn.execute(f"""
@@ -310,8 +311,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         dosage_quantity,
                         dosage_unit,
                         crop_code,
-                        -- Use end year from filename
-                        {end_year} as application_year,
+                        -- Use start year from filename (when applications primarily occur)
+                        {start_year} as application_year,
                         -- Use agricultural year from filename
                         '{agricultural_year}' as agricultural_year,
                         -- Store original filename for reference
