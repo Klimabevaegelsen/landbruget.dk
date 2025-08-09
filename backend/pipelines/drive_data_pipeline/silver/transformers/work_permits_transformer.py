@@ -31,6 +31,7 @@ class WorkPermitsTransformer(BaseTransformer):
         """Initialize the work permits transformer."""
         super().__init__()
         self.name = "WorkPermitsTransformer"
+        logger.info("Initialized WorkPermitsTransformer for visa/work permits processing")
         
         # Known Danish country names from the permit documents (EXACT from working script)
         self.country_names = [
@@ -55,8 +56,11 @@ class WorkPermitsTransformer(BaseTransformer):
         Returns:
             True if this transformer can handle the file
         """
+        logger.info(f"WorkPermitsTransformer.can_handle() checking file: {file_path}")
+        
         # Check if it's a PDF file that might contain work permits data
         if not file_path.suffix.lower() == '.pdf':
+            logger.info(f"WorkPermitsTransformer: Not a PDF file, skipping: {file_path.suffix}")
             return False
             
         # Check filename patterns that suggest work permits data
@@ -66,7 +70,12 @@ class WorkPermitsTransformer(BaseTransformer):
             'visa', 'permit', 'statistik'
         ]
         
-        return any(indicator in filename_lower for indicator in work_permit_indicators)
+        matches = [indicator for indicator in work_permit_indicators if indicator in filename_lower]
+        can_handle_result = any(indicator in filename_lower for indicator in work_permit_indicators)
+        
+        logger.info(f"WorkPermitsTransformer: filename='{filename_lower}', matches={matches}, can_handle={can_handle_result}")
+        
+        return can_handle_result
     
     def transform(self, file_path: Path, metadata, output_dir: Path):
         """
