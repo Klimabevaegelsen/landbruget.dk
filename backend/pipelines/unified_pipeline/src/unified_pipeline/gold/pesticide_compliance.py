@@ -364,7 +364,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         year_info = self.agricultural_years[ag_year]
         
-        # Detect clear violations using the proven logic
+        # Detect violations by comparing restriction dates with agricultural year period
+        # A violation occurs when:
+        # 1. CLEAR_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
+        # 2. USE_IN_RESTRICTION_YEAR: Restriction date falls within the agricultural year
+        # 3. USE_OF_WITHDRAWN_PRODUCT: Product status indicates withdrawal
         violations_query = f"""
         SELECT 
             a.company_name,
@@ -380,7 +384,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             b.restriction_date_parsed,
             b.active_substances,
             b.product_status,
-            -- Calculate violation type
+            -- Calculate violation type based on when restriction occurred relative to agricultural year
             CASE 
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'CLEAR_VIOLATION'
                 WHEN b.restriction_date_parsed >= DATE '{year_info["start"]}' 
@@ -392,8 +396,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         FROM pesticide_applications a
         INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
         WHERE a.agricultural_year = '{ag_year}'
-        AND b.restriction_date_parsed IS NOT NULL
-        AND b.restriction_date_parsed < DATE '{year_info["start"]}'  -- Clear violations only
+        AND (
+            -- Include violations where restriction date is before or during agricultural year
+            (b.restriction_date_parsed IS NOT NULL AND b.restriction_date_parsed <= DATE '{year_info["end"]}')
+            OR 
+            -- Include withdrawn/expired products regardless of restriction date
+            (b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet')
+        )
         """
         
         violations_df = self.conn.execute(violations_query).fetchdf()
