@@ -54,6 +54,10 @@ from unified_pipeline.gold.pesticide_proximity import (
     PesticideProximityGold,
     PesticideProximityGoldConfig,
 )
+from unified_pipeline.gold.pesticide_compliance import (
+    PesticideComplianceGold,
+    PesticideComplianceGoldConfig,
+)
 from unified_pipeline.gold.worker_safety import (
     WorkerSafetyGold,
     WorkerSafetyGoldConfig,
@@ -384,6 +388,14 @@ def execute(cli_config: cli.CliConfig) -> int:
                 # Note: This requires gold pesticide_disaggregation and silver datasets:
                 # bbr_buildings, water_typology, fvm_marker
                 (PesticideProximityGold, PesticideProximityGoldConfig),
+            ],
+        },
+        cli.Source.pesticide_compliance: {
+            cli.Stage.gold: [(PesticideComplianceGold, PesticideComplianceGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # bmd, pesticides
+                (PesticideComplianceGold, PesticideComplianceGoldConfig),
             ],
         },
         cli.Source.cvr_enrichment: {
