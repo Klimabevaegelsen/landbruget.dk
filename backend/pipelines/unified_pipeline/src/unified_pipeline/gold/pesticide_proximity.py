@@ -575,10 +575,9 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
         
         # Export results to GCS
-        self.gcs_access.upload_duckdb_table(
+        self.gcs_access.upload_from_duckdb_table(
             "proximity_results",
-            f"{dataset_name}",
-            create_folder_structure=True
+            output_path
         )
         
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
