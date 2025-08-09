@@ -316,15 +316,31 @@ jobs:
           
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
-          python -m unified_pipeline.app --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}
-          echo "✅ Disaggregation completed for year ${{ matrix.year }}"
+          echo "🚨 WORKFLOW: About to execute Python command for disaggregation"
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline.app --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline.app --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}; then
+            echo "✅ Disaggregation completed for year ${{ matrix.year }}"
+          else
+            DISAGG_EXIT_CODE=$?
+            echo "❌ Disaggregation FAILED for year ${{ matrix.year }} with exit code $DISAGG_EXIT_CODE"
+            echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
+            exit 1
+          fi
           
           # Step 2: Run proximity analysis (uses fresh disaggregation data)
           echo "🌍 Step 2: Running proximity analysis for year ${{ matrix.year }}"
           echo "🏠 Analyzing building proximity (100m radius)"
           echo "🌊 Analyzing water feature proximity (100m radius)"
-          python -m unified_pipeline.app --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}
-          echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
+          echo "🚨 WORKFLOW: About to execute Python command for proximity"
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline.app --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline.app --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}; then
+            echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
+          else
+            PROX_EXIT_CODE=$?
+            echo "❌ Proximity analysis FAILED for year ${{ matrix.year }} with exit code $PROX_EXIT_CODE"
+            echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
+            exit 1
+          fi
           
           # Stop monitoring
           kill $MONITOR_PID 2>/dev/null || true
