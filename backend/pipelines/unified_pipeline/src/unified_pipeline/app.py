@@ -118,13 +118,22 @@ async def execute_pipeline_jobs(
 
     for job_cls, config_cls in jobs:
         log.info(f"Running {job_cls.__name__} for stage {stage}")
+        print(f"🚨 APP: About to run {job_cls.__name__} with config {config_cls.__name__}")
 
         # Create config instance and pass CLI config for FVM WFS filtering
         config_instance = config_cls()
+        print(f"🚨 APP: Created config instance: {config_instance}")
+        
         if hasattr(config_instance, "apply_cli_filters"):
+            print(f"🚨 APP: Applying CLI filters to {config_cls.__name__}")
             config_instance.apply_cli_filters(cli_config)
+            print(f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}")
+        else:
+            print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
+        print(f"🚨 APP: Creating instance of {job_cls.__name__}")
         instance = job_cls(config=config_instance)
+        print(f"🚨 APP: Instance created successfully")
         job_successful = False
 
         try:
@@ -191,7 +200,10 @@ async def execute_pipeline_jobs(
 
             elif issubclass(job_cls, GoldJobInterface):
                 # Gold stage - pass collected silver data
+                print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
+                print(f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}")
                 await instance.run(silver_data=silver_data)
+                print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
                 # Gold jobs don't return data, so we consider them successful if they don't raise an exception
                 job_successful = True
                 log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
@@ -212,9 +224,11 @@ async def execute_pipeline_jobs(
 
         except Exception as e:
             log.error(f"Error executing {job_cls.__name__}: {e}")
+            print(f"🚨 APP: EXCEPTION in {job_cls.__name__}: {e}")
             import traceback
 
             log.error(f"Traceback: {traceback.format_exc()}")
+            print(f"🚨 APP: TRACEBACK: {traceback.format_exc()}")
 
     return successful_jobs, total_jobs
 
