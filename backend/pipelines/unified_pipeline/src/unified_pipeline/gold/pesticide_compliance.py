@@ -203,26 +203,27 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         self.logger.info(f"📄 Loading BMD data from: {latest_path} (timestamp: {timestamp})")
         
-        # Load BMD data with violation-relevant fields
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE bmd_data AS
-            SELECT 
-                registrerings_nr as registration_number,
-                produktnavn as product_name,
-                aktivstofnavn_e as active_substances,
-                produktstatus as product_status,
-                godkendelsesdato as approval_date,
-                udløbsdato as expiry_date,
-                frist_for_anvendelse_og_besiddelse as restriction_date,
-                -- Parse restriction date for comparison
-                TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
-                -- Additional fields for analysis
-                formulering as formulation,
-                anvendelse as application_area
-            FROM read_parquet('{latest_path}')
-            WHERE registrerings_nr IS NOT NULL
-            AND registrerings_nr != ''
-        """)
+        # Load BMD data using proper GCS access pattern (like other processors)
+        with self.gcs_access._temp_download(latest_path) as temp_file:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE bmd_data AS
+                SELECT 
+                    registrerings_nr as registration_number,
+                    produktnavn as product_name,
+                    aktivstofnavn_e as active_substances,
+                    produktstatus as product_status,
+                    godkendelsesdato as approval_date,
+                    udløbsdato as expiry_date,
+                    frist_for_anvendelse_og_besiddelse as restriction_date,
+                    -- Parse restriction date for comparison
+                    TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
+                    -- Additional fields for analysis
+                    formulering as formulation,
+                    anvendelse as application_area
+                FROM read_parquet('{temp_file}')
+                WHERE registrerings_nr IS NOT NULL
+                AND registrerings_nr != ''
+            """)
         
         bmd_count = self.conn.execute("SELECT COUNT(*) FROM bmd_data").fetchone()[0]
         restricted_count = self.conn.execute(
@@ -261,37 +262,57 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         if not latest_files:
             raise Exception("No pesticide data files found in latest directory")
         
-        # Create union of all pesticide data files from latest directory
-        file_list = "', '".join(latest_files)
-        
-        self.conn.execute(f"""
+        # Load pesticide data files using proper GCS access pattern
+        # First, create an empty table to union into
+        self.conn.execute("""
             CREATE OR REPLACE TABLE pesticide_applications AS
             SELECT 
-                companyname as company_name,
-                cvr_number,
-                pesticide_name,
-                pesticide_registration_number,
-                area_ha,
-                dosage_quantity,
-                dosage_unit,
-                crop_code,
-                -- Parse application date
-                TRY_CAST(aar AS INTEGER) as application_year,
-                -- Create agricultural year mapping (year-1 to year: e.g. 2024 data = 2023_2024 season)
-                CASE 
-                    WHEN TRY_CAST(aar AS INTEGER) IS NOT NULL THEN
-                        CAST((TRY_CAST(aar AS INTEGER) - 1) AS VARCHAR) || '_' || CAST(TRY_CAST(aar AS INTEGER) AS VARCHAR)
-                    ELSE NULL
-                END as agricultural_year,
-                -- Additional fields
-                aar as original_year_field
-            FROM read_parquet(['{file_list}'])
-            WHERE pesticide_registration_number IS NOT NULL
-            AND pesticide_registration_number != ''
-            AND cvr_number IS NOT NULL
-            AND cvr_number != ''
-            AND area_ha > 0
+                CAST(NULL AS VARCHAR) as company_name,
+                CAST(NULL AS VARCHAR) as cvr_number,
+                CAST(NULL AS VARCHAR) as pesticide_name,
+                CAST(NULL AS VARCHAR) as pesticide_registration_number,
+                CAST(NULL AS DOUBLE) as area_ha,
+                CAST(NULL AS DOUBLE) as dosage_quantity,
+                CAST(NULL AS INTEGER) as dosage_unit,
+                CAST(NULL AS VARCHAR) as crop_code,
+                CAST(NULL AS INTEGER) as application_year,
+                CAST(NULL AS VARCHAR) as agricultural_year,
+                CAST(NULL AS VARCHAR) as original_year_field
+            WHERE FALSE
         """)
+        
+        # Load each file and union into the table
+        for file_path in latest_files:
+            self.logger.info(f"📥 Loading pesticide file: {file_path}")
+            with self.gcs_access._temp_download(file_path) as temp_file:
+                self.conn.execute(f"""
+                    INSERT INTO pesticide_applications
+                    SELECT 
+                        companyname as company_name,
+                        cvr_number,
+                        pesticide_name,
+                        pesticide_registration_number,
+                        area_ha,
+                        dosage_quantity,
+                        dosage_unit,
+                        crop_code,
+                        -- Parse application date
+                        TRY_CAST(aar AS INTEGER) as application_year,
+                        -- Create agricultural year mapping (year-1 to year: e.g. 2024 data = 2023_2024 season)
+                        CASE 
+                            WHEN TRY_CAST(aar AS INTEGER) IS NOT NULL THEN
+                                CAST((TRY_CAST(aar AS INTEGER) - 1) AS VARCHAR) || '_' || CAST(TRY_CAST(aar AS INTEGER) AS VARCHAR)
+                            ELSE NULL
+                        END as agricultural_year,
+                        -- Additional fields
+                        aar as original_year_field
+                    FROM read_parquet('{temp_file}')
+                    WHERE pesticide_registration_number IS NOT NULL
+                    AND pesticide_registration_number != ''
+                    AND cvr_number IS NOT NULL
+                    AND cvr_number != ''
+                    AND area_ha > 0
+                """)
         
         app_count = self.conn.execute("SELECT COUNT(*) FROM pesticide_applications").fetchone()[0]
         years_available = self.conn.execute(
