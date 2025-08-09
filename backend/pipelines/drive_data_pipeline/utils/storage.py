@@ -134,9 +134,20 @@ class DriveStorageManager:
                 file_bytes = data
 
             if self.storage_type.lower() == "gcs":
+                # For GCS, we need to construct the path correctly
+                # Remove any base_dir prefix if it exists in the path
+                gcs_relative_path = str(path)
+                if str(self.base_dir) != "." and gcs_relative_path.startswith(str(self.base_dir)):
+                    # Remove base_dir prefix to get relative path
+                    gcs_relative_path = gcs_relative_path[len(str(self.base_dir)):].lstrip("/\\")
+                
+                # Ensure we have silver/ prefix for drive data pipeline
+                if not gcs_relative_path.startswith("silver/"):
+                    gcs_relative_path = f"silver/{gcs_relative_path}"
+                
                 if self.use_optimized and self.gcs_access:
                     # Use optimized GCS access
-                    gcs_path = f"gs://{self.bucket_name}/{path}"
+                    gcs_path = f"gs://{self.bucket_name}/{gcs_relative_path}"
 
                     # Use streaming upload for better performance
                     with self.gcs_access.fs.open(gcs_path, "wb") as gcs_file:
@@ -147,10 +158,10 @@ class DriveStorageManager:
                     )
                 else:
                     # Use fallback GCS storage
-                    blob = self.gcs_bucket.blob(str(path))
+                    blob = self.gcs_bucket.blob(gcs_relative_path)
                     blob.upload_from_string(file_bytes)
                     logger.info(
-                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage

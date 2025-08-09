@@ -63,8 +63,9 @@ class SilverStorageManager(DuckDBProcessor):
         # Store timestamp for use in create_output_directory
         # The actual directory creation happens in create_output_directory based on subfolder
         if self.storage_manager.storage_type.lower() == "gcs":
-            # GCS storage - use silver as base
-            run_dir = Path("silver")
+            # GCS storage - use empty path as base since base_path already includes the silver structure
+            # This prevents the nested silver/silver/... issue
+            run_dir = Path("")
         else:
             # Local storage - use base_path/silver
             run_dir = self.base_path / "silver"
