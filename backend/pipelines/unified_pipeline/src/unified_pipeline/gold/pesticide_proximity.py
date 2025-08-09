@@ -320,38 +320,53 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
+            # Step 1: Create current batch of fields
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_field_batch AS
+                SELECT * FROM fields_with_geometry 
+                LIMIT {self.config.batch_size} OFFSET {offset}
+            """)
+            
+            # Step 2: Pre-filter buildings to residential only
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE residential_buildings AS
+                SELECT 
+                    address,
+                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+                FROM data_bbr_buildings_silver 
+                WHERE category_group = 'residential' 
+                  AND address IS NOT NULL
+                  AND geometry IS NOT NULL
+            """)
+            
+            # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO residential_proximity
                 SELECT 
-                    fg.field_uuid,
+                    f.field_uuid,
                     CASE 
                         WHEN COUNT(b.address) > 0 THEN
-                            array_to_string(array_agg(
+                            string_agg(
                                 b.address || ':' || 
-                                ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm' 
-                                ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
-                            ), chr(10))
+                                ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
+                                chr(10)
+                                ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
+                            )
                         ELSE ''
                     END as residential_buildings_formatted
-                FROM (
-                    SELECT * FROM fields_with_geometry 
-                    LIMIT {self.config.batch_size} OFFSET {offset}
-                ) fg
-                LEFT JOIN data_bbr_buildings_silver b ON ST_Intersects(
-                    ST_Buffer(fg.field_geom_utm, {self.config.building_proximity_distance_m}),
-                    ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')
-                ) AND b.category_group = 'residential'
-                  AND b.address IS NOT NULL
-                  AND ST_DWithin(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'), {self.config.building_proximity_distance_m})
-                GROUP BY fg.field_uuid
+                FROM current_field_batch f
+                LEFT JOIN residential_buildings b ON ST_Intersects(
+                    ST_Buffer(f.field_geom_utm, {self.config.building_proximity_distance_m}),
+                    b.building_geom_utm
+                )
+                GROUP BY f.field_uuid
             """)
             
             chunk_time = time.time() - chunk_start
             processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"   Batch {offset//self.config.batch_size + 1}: {processed:,}/{total_fields:,} fields processed in {chunk_time:.2f}s")
+            self.log.info(f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
         
-        # Step 3: Create educational proximity using optimized SPATIAL_JOIN pattern
+        # Step 4: Create educational proximity using step-by-step approach
         self.log.info("🏫 Processing educational facility proximity...")
         
         # Initialize results table
@@ -369,38 +384,53 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing educational batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
+            # Step 1: Create current batch of fields (reuse from residential)
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_field_batch AS
+                SELECT * FROM fields_with_geometry 
+                LIMIT {self.config.batch_size} OFFSET {offset}
+            """)
+            
+            # Step 2: Pre-filter buildings to educational only
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE educational_buildings AS
+                SELECT 
+                    address,
+                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+                FROM data_bbr_buildings_silver 
+                WHERE category_group = 'publicServices' 
+                  AND address IS NOT NULL
+                  AND geometry IS NOT NULL
+            """)
+            
+            # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO educational_proximity
                 SELECT 
-                    fg.field_uuid,
+                    f.field_uuid,
                     CASE 
                         WHEN COUNT(b.address) > 0 THEN
-                            array_to_string(array_agg(
+                            string_agg(
                                 b.address || ':' || 
-                                ROUND(ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')), 1) || 'm'
-                                ORDER BY ST_Distance(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'))
-                            ), chr(10))
+                                ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
+                                chr(10)
+                                ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
+                            )
                         ELSE ''
                     END as educational_facilities_formatted
-                FROM (
-                    SELECT * FROM fields_with_geometry 
-                    LIMIT {self.config.batch_size} OFFSET {offset}
-                ) fg
-                LEFT JOIN data_bbr_buildings_silver b ON ST_Intersects(
-                    ST_Buffer(fg.field_geom_utm, {self.config.building_proximity_distance_m}),
-                    ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832')
-                ) AND b.category_group = 'publicServices'
-                  AND b.address IS NOT NULL
-                  AND ST_DWithin(fg.field_geom_utm, ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'), {self.config.building_proximity_distance_m})
-                GROUP BY fg.field_uuid
+                FROM current_field_batch f
+                LEFT JOIN educational_buildings b ON ST_Intersects(
+                    ST_Buffer(f.field_geom_utm, {self.config.building_proximity_distance_m}),
+                    b.building_geom_utm
+                )
+                GROUP BY f.field_uuid
             """)
             
             chunk_time = time.time() - chunk_start
             processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"   Batch {offset//self.config.batch_size + 1}: {processed:,}/{total_fields:,} fields processed in {chunk_time:.2f}s")
+            self.log.info(f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
         
-        # Step 4: Create water proximity using optimized SPATIAL_JOIN pattern
+        # Step 5: Create water proximity using step-by-step approach  
         self.log.info("💧 Processing water feature proximity...")
         
         # Initialize results table
@@ -418,31 +448,43 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing water batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Use ST_Intersects + ST_Buffer pattern for SPATIAL_JOIN optimization
+            # Step 1: Create current batch of fields (reuse)
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE current_field_batch AS
+                SELECT * FROM fields_with_geometry 
+                LIMIT {self.config.batch_size} OFFSET {offset}
+            """)
+            
+            # Step 2: Pre-filter water features
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE water_features AS
+                SELECT 
+                    ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
+                FROM data_water_typology_silver 
+                WHERE geometry_spatial IS NOT NULL
+            """)
+            
+            # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO water_proximity
                 SELECT 
-                    fg.field_uuid,
+                    f.field_uuid,
                     CASE 
-                        WHEN MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))) IS NOT NULL
-                        THEN ROUND(MIN(ST_Distance(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'))), 1) || 'm'
+                        WHEN MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)) IS NOT NULL
+                        THEN ROUND(MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)), 1) || 'm'
                         ELSE ''
                     END as water_distance_formatted
-                FROM (
-                    SELECT * FROM fields_with_geometry 
-                    LIMIT {self.config.batch_size} OFFSET {offset}
-                ) fg
-                LEFT JOIN data_water_typology_silver w ON ST_Intersects(
-                    ST_Buffer(fg.field_geom_utm, {self.config.water_proximity_distance_m}),
-                    ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832')
-                ) AND w.geometry_spatial IS NOT NULL
-                  AND ST_DWithin(fg.field_geom_utm, ST_Transform(w.geometry_spatial, 'EPSG:4326', 'EPSG:25832'), {self.config.water_proximity_distance_m})
-                GROUP BY fg.field_uuid
+                FROM current_field_batch f
+                LEFT JOIN water_features w ON ST_Intersects(
+                    ST_Buffer(f.field_geom_utm, {self.config.water_proximity_distance_m}),
+                    w.water_geom_utm
+                )
+                GROUP BY f.field_uuid
             """)
             
             chunk_time = time.time() - chunk_start
             processed += min(self.config.batch_size, total_fields - offset)
-            self.log.info(f"   Batch {offset//self.config.batch_size + 1}: {processed:,}/{total_fields:,} fields processed in {chunk_time:.2f}s")
+            self.log.info(f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Total: {processed:,}/{total_fields:,} fields")
         
         # Step 5: Create final results table
         self.conn.execute("""
