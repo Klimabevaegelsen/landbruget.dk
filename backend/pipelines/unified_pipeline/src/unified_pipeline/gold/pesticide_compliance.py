@@ -156,7 +156,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             years_to_analyze = self._get_years_to_analyze()
             
             all_results = {}
-            total_violations = 0
+            total_issues = 0
             total_companies = set()
             
             # Analyze each agricultural year
@@ -164,20 +164,20 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.logger.info(f"📅 Analyzing agricultural year: {ag_year}")
                 year_results = await self._analyze_agricultural_year(ag_year)
                 all_results[ag_year] = year_results
-                total_violations += year_results.get("clear_violations", 0)
-                total_companies.update(year_results.get("companies_with_violations", []))
+                total_issues += year_results.get("potential_violations", 0) + year_results.get("withdrawn_product_uses", 0)
+                total_companies.update([issue["cvr_number"] for issue in year_results.get("issues_data", [])])
             
             # Generate comprehensive report
-            summary_stats = self._generate_summary_statistics(all_results, total_violations, len(total_companies))
+            summary_stats = self._generate_summary_statistics(all_results, total_issues, len(total_companies))
             
             # Save results to GCS
             await self._save_results(all_results, summary_stats)
             
-            self.logger.info(f"✅ Compliance analysis completed: {total_violations} violations across {len(total_companies)} companies")
+            self.logger.info(f"✅ Compliance analysis completed: {total_issues} issues across {len(total_companies)} companies")
             
             return {
-                "total_clear_violations": total_violations,
-                "companies_with_violations": len(total_companies),
+                "total_issues": total_issues,
+                "companies_with_issues": len(total_companies),
                 "agricultural_years_analyzed": len(years_to_analyze),
                 "analysis_date": datetime.now().isoformat()
             }
@@ -360,15 +360,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         Returns:
             Dict with analysis results for this year
         """
-        self.logger.info(f"🔍 Analyzing violations for {ag_year}")
+        self.logger.info(f"🔍 Analyzing compliance issues for {ag_year}")
         
         year_info = self.agricultural_years[ag_year]
         
-        # Detect violations by comparing restriction dates with agricultural year period
-        # A violation occurs when:
-        # 1. CLEAR_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
-        # 2. USE_IN_RESTRICTION_YEAR: Restriction date falls within the agricultural year
-        # 3. USE_OF_WITHDRAWN_PRODUCT: Product status indicates withdrawal
+        # Detect potential compliance issues by comparing restriction dates with agricultural year period
+        # Issues occur when:
+        # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
+        # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
         violations_query = f"""
         SELECT 
             a.company_name,
@@ -384,14 +383,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             b.restriction_date_parsed,
             b.active_substances,
             b.product_status,
-            -- Calculate violation type based on when restriction occurred relative to agricultural year
+            -- Categorize potential compliance issues with more neutral language
             CASE 
-                WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'CLEAR_VIOLATION'
-                WHEN b.restriction_date_parsed >= DATE '{year_info["start"]}' 
-                     AND b.restriction_date_parsed <= DATE '{year_info["end"]}' THEN 'USE_IN_RESTRICTION_YEAR'
-                WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'USE_OF_WITHDRAWN_PRODUCT'
+                WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'POTENTIAL_VIOLATION'
+                WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
                 ELSE 'COMPLIANT'
-            END as violation_type,
+            END as issue_type,
             '{ag_year}' as agricultural_year
         FROM pesticide_applications a
         INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
@@ -408,9 +405,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         violations_df = self.conn.execute(violations_query).fetchdf()
         
         # Calculate statistics
-        clear_violations = len(violations_df[violations_df['violation_type'] == 'CLEAR_VIOLATION'])
-        companies_with_violations = violations_df['cvr_number'].nunique()
-        restricted_products = violations_df['pesticide_registration_number'].nunique()
+        potential_violations = len(violations_df[violations_df['issue_type'] == 'POTENTIAL_VIOLATION'])
+        withdrawn_uses = len(violations_df[violations_df['issue_type'] == 'WITHDRAWN_PRODUCT_USE'])
+        companies_with_issues = violations_df['cvr_number'].nunique()
+        products_with_issues = violations_df['pesticide_registration_number'].nunique()
         total_area_affected = violations_df['area_ha'].sum()
         
         # Get top violating companies
@@ -427,21 +425,22 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         results = {
             "agricultural_year": ag_year,
-            "clear_violations": clear_violations,
-            "companies_with_violations": companies_with_violations,
-            "restricted_products_used": restricted_products,
+            "potential_violations": potential_violations,
+            "withdrawn_product_uses": withdrawn_uses,
+            "companies_with_issues": companies_with_issues,
+            "products_with_issues": products_with_issues,
             "total_area_affected_hectares": float(total_area_affected),
-            "violations_data": violations_df.to_dict('records'),
-            "top_violating_companies": top_companies.to_dict('records'),
-            "most_violated_products": top_products.to_dict('records'),
+            "issues_data": violations_df.to_dict('records'),
+            "top_companies_with_issues": top_companies.to_dict('records'),
+            "most_problematic_products": top_products.to_dict('records'),
             "analysis_date": datetime.now().isoformat()
         }
         
-        self.logger.info(f"📊 {ag_year}: {clear_violations} violations, {companies_with_violations} companies, {total_area_affected:.1f} ha affected")
+        self.logger.info(f"📊 {ag_year}: {potential_violations} potential violations, {withdrawn_uses} withdrawn product uses, {companies_with_issues} companies, {total_area_affected:.1f} ha affected")
         
         return results
 
-    def _generate_summary_statistics(self, all_results: Dict, total_violations: int, total_companies: int) -> Dict[str, Any]:
+    def _generate_summary_statistics(self, all_results: Dict, total_issues: int, total_companies: int) -> Dict[str, Any]:
         """Generate comprehensive summary statistics."""
         
         # Calculate totals across all years
@@ -451,53 +450,53 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
         
         total_products = len(set(
-            violation["pesticide_registration_number"]
+            issue["pesticide_registration_number"]
             for year_data in all_results.values()
-            for violation in year_data.get("violations_data", [])
+            for issue in year_data.get("issues_data", [])
         ))
         
-        # Get overall top violators
+        # Get overall companies with issues
         all_companies = {}
         for year_data in all_results.values():
-            for violation in year_data.get("violations_data", []):
-                cvr = violation["cvr_number"]
+            for issue in year_data.get("issues_data", []):
+                cvr = issue["cvr_number"]
                 if cvr not in all_companies:
                     all_companies[cvr] = {
-                        "company_name": violation["company_name"],
+                        "company_name": issue["company_name"],
                         "cvr_number": cvr,
-                        "total_violations": 0,
+                        "total_issues": 0,
                         "total_area_ha": 0,
                         "products_used": set()
                     }
-                all_companies[cvr]["total_violations"] += 1
-                all_companies[cvr]["total_area_ha"] += violation["area_ha"]
-                all_companies[cvr]["products_used"].add(violation["pesticide_registration_number"])
+                all_companies[cvr]["total_issues"] += 1
+                all_companies[cvr]["total_area_ha"] += issue["area_ha"]
+                all_companies[cvr]["products_used"].add(issue["pesticide_registration_number"])
         
         # Convert to list and sort
-        top_violators = sorted(
+        top_companies_with_issues = sorted(
             [
                 {**company, "products_used": len(company["products_used"])}
                 for company in all_companies.values()
             ],
-            key=lambda x: x["total_violations"],
+            key=lambda x: x["total_issues"],
             reverse=True
         )[:10]
         
         return {
             "analysis_type": "pesticide_regulatory_compliance",
             "agricultural_year_definition": "August 1 to July 31",
-            "total_clear_violations": total_violations,
-            "companies_with_violations": total_companies,
-            "restricted_products_used": total_products,
+            "total_potential_violations": total_issues,
+            "companies_with_issues": total_companies,
+            "products_with_issues": total_products,
             "total_area_affected_hectares": total_area_affected,
             "agricultural_years_analyzed": list(all_results.keys()),
-            "top_violating_companies": top_violators,
+            "top_companies_with_issues": top_companies_with_issues,
             "analysis_date": datetime.now().isoformat(),
             "methodology": {
-                "violation_detection": "Applications after BMD restriction date (frist_for_anvendelse_og_besiddelse)",
+                "issue_detection": "Applications of products with restriction dates before agricultural year",
                 "data_sources": ["BMD pesticide database", "Agricultural pesticide applications"],
                 "temporal_alignment": "Agricultural years (August-July)",
-                "violation_types": ["CLEAR_VIOLATION", "USE_IN_RESTRICTION_YEAR", "USE_OF_WITHDRAWN_PRODUCT"]
+                "issue_types": ["POTENTIAL_VIOLATION", "WITHDRAWN_PRODUCT_USE"]
             }
         }
 
