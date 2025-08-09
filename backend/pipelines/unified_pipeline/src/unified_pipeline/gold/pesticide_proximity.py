@@ -329,10 +329,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Step 1: Create current batch of fields
+            # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry 
+                ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
             
@@ -412,10 +413,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing educational batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Step 1: Create current batch of fields (reuse from residential)
+            # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry 
+                ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
             
@@ -495,10 +497,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             chunk_start = time.time()
             self.log.info(f"🔄 Processing water batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})")
             
-            # Step 1: Create current batch of fields (reuse)
+            # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry 
+                ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
             
@@ -544,10 +547,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         
         water_pbar.close()
         
-        # Step 5: Create final results table
+        # Step 5: Create final results table with PROPER DEDUPLICATION
+        # CRITICAL FIX: Join on field_uuid but ensure no duplication by using DISTINCT
+        # Each DisaggregatedID should appear exactly once in the output
         self.conn.execute("""
             CREATE OR REPLACE TABLE proximity_results AS
-            SELECT 
+            SELECT DISTINCT
                 cd.*,
                 COALESCE(rp.residential_buildings_formatted, '') as residential_buildings_formatted,
                 COALESCE(ep.educational_facilities_formatted, '') as educational_facilities_formatted,
@@ -558,10 +563,18 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             LEFT JOIN water_proximity wp ON cd.field_uuid = wp.field_uuid
         """)
         
-        # Get result count
+        # Get result count and validate deduplication
         result_count = self.conn.execute("SELECT COUNT(*) FROM proximity_results").fetchone()[0]
+        unique_disaggregated_ids = self.conn.execute("SELECT COUNT(DISTINCT DisaggregatedID) FROM proximity_results").fetchone()[0]
         
-        self.log.info(f"✅ Proximity analysis complete: {result_count:,} records with proximity data")
+        # CRITICAL VALIDATION: Ensure no duplication occurred
+        if result_count != unique_disaggregated_ids:
+            self.log.error(f"❌ DUPLICATION DETECTED: {result_count:,} records but only {unique_disaggregated_ids:,} unique DisaggregatedIDs")
+            self.log.error(f"❌ Duplication ratio: {result_count / unique_disaggregated_ids:.1f}x")
+            raise ValueError(f"Data duplication detected in proximity results: {result_count:,} records vs {unique_disaggregated_ids:,} unique IDs")
+        
+        self.log.info(f"✅ Proximity analysis complete: {result_count:,} records with proximity data (no duplication)")
+        self.log.info(f"✅ Data quality check passed: {result_count:,} records = {unique_disaggregated_ids:,} unique DisaggregatedIDs")
         return result_count
 
     async def _save_year_results(self, year: int, record_count: int) -> None:
