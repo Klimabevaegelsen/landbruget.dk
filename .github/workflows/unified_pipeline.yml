@@ -316,14 +316,14 @@ jobs:
           
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
-          python -m unified_pipeline.app gold pesticide_disaggregation
+          python -m unified_pipeline.app --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}
           echo "✅ Disaggregation completed for year ${{ matrix.year }}"
           
           # Step 2: Run proximity analysis (uses fresh disaggregation data)
           echo "🌍 Step 2: Running proximity analysis for year ${{ matrix.year }}"
           echo "🏠 Analyzing building proximity (100m radius)"
           echo "🌊 Analyzing water feature proximity (100m radius)"
-          python -m unified_pipeline.app gold pesticide_proximity
+          python -m unified_pipeline.app --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}
           echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
           
           # Stop monitoring

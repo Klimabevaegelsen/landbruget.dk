@@ -150,6 +150,7 @@ class CliConfig(BaseModel):
     stage: Stage
     fvm_layer_type: Optional[FVMLayerType] = None
     fvm_year: Optional[int] = None
+    pesticide_year: Optional[int] = None
     # CVR enrichment specific parameters
     test_limit: Optional[int] = None
     parse_financial_xml: bool = True
