@@ -61,6 +61,7 @@ from unified_pipeline.util.timing import timed
 print("DEBUG: pesticide_disaggregation.py module loaded!")
 logger = logging.getLogger(__name__)
 print(f"DEBUG: Logger created: {logger}")
+print("🚨 PESTICIDE DISAGGREGATION MODULE: Fully imported and ready")
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
@@ -378,6 +379,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+        print("🚨 PESTICIDE DISAGGREGATION RUN METHOD: Starting execution")
+        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """
         THE MAIN ENTRY POINT - This is where the entire pesticide disaggregation process starts!
 
@@ -427,8 +430,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info(
             f"✅ Found {len(pesticide_field_pairs)} pesticide-field year pairs to process"
         )
+        print(f"🚨 FOUND {len(pesticide_field_pairs)} YEAR PAIRS: {pesticide_field_pairs}")
         for pest_year, field_year in pesticide_field_pairs:
             self.log.info(f"   📅 Will process: pesticide {pest_year} → field {field_year}")
+            print(f"🚨 WILL PROCESS: pesticide {pest_year} → field {field_year}")
 
         # STEP 2: INITIALIZE TRACKING VARIABLES
         # ====================================
