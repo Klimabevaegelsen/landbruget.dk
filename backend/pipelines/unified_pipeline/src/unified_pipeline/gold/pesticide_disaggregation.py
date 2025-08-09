@@ -678,7 +678,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-            self.log.info(f"✅ Saved table {table_name} to gs://{self.config.bucket}/{gcs_path}")
+            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            self.log.info(f"📁 GCS Path: {full_gcs_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
@@ -833,9 +835,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pesticide_path = self._read_pesticide_data_for_year(pesticide_year)
             if pesticide_path is not None:
                 datasets["pesticides"] = pesticide_path
-                self.log.info(
-                    f"✅ Successfully located pesticide data for {pesticide_year}: {pesticide_path}"
-                )
+                self.log.info(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                self.log.info(f"📁 Pesticide Data Path: {pesticide_path}")
             else:
                 self.log.error(f"❌ No pesticide data found for year {pesticide_year}")
                 datasets["pesticides"] = None
@@ -851,9 +852,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             fields_path = self._read_fields_data_for_year(field_year)
             if fields_path is not None:
                 datasets["agricultural_fields"] = fields_path
-                self.log.info(
-                    f"✅ Successfully located agricultural fields data for {field_year}: {fields_path}"
-                )
+                self.log.info(f"✅ FIELDS INPUT: Located data for {field_year}")
+                self.log.info(f"📁 Fields Data Path: {fields_path}")
             else:
                 self.log.error(f"❌ No agricultural fields data found for year {field_year}")
                 datasets["agricultural_fields"] = None
