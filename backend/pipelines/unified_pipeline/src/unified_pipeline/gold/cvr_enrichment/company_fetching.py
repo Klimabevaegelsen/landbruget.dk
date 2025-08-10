@@ -195,15 +195,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Loading collection data from: {collection_path}")
         
         try:
-            # Download and load the collection data
-            local_path = self.gcs_access.download_file(collection_path, "/tmp/collection.parquet")
-            
-            # Load CVR numbers from the collection
-            result = self.conn.execute("""
+            # Load CVR numbers directly from GCS using DuckDB
+            result = self.conn.execute(f"""
                 SELECT cvr_number, collection_metadata
-                FROM read_parquet(?)
+                FROM read_parquet('{collection_path}')
                 ORDER BY cvr_number
-            """, [local_path]).fetchall()
+            """).fetchall()
             
             all_cvrs = [row[0] for row in result]
             

@@ -16,6 +16,16 @@ on:
         description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
         required: false
         type: string
+      log_level:
+        description: 'Logging level'
+        type: choice
+        required: true
+        options:
+          - INFO
+          - DEBUG
+          - WARNING
+          - ERROR
+        default: 'INFO'
   schedule:
     # Run monthly on the 1st at 02:00 UTC
     - cron: '0 2 1 * *'
@@ -58,6 +68,8 @@ jobs:
       
       - name: Run CVR Collection
         id: collection
+        env:
+          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
         run: |
           cd backend/pipelines/unified_pipeline
           
@@ -68,6 +80,7 @@ jobs:
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
           
+          echo "Running with Log Level: $LOG_LEVEL"
           echo "Running: $CMD"
           $CMD
           
@@ -108,6 +121,7 @@ jobs:
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
           CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
         run: |
           cd backend/pipelines/unified_pipeline
           
@@ -117,6 +131,7 @@ jobs:
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
           
+          echo "Running with Log Level: $LOG_LEVEL"
           echo "Running: $CMD"
           $CMD
 
