@@ -62,7 +62,6 @@ from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
 logger = logging.getLogger(__name__)
-print(f"DEBUG: pesticide_compliance.py module loaded - Logger: {logger}")
 
 
 class PesticideComplianceGoldConfig(BaseJobConfig):
