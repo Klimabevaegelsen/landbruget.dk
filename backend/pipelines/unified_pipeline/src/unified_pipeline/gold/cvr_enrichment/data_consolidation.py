@@ -529,40 +529,223 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         Returns:
             List of table names created
         """
-        self.log.info("Creating normalized CVR enrichment tables")
+        self.log.info("Creating sophisticated normalized CVR enrichment tables (ported from original)")
         
         companies = consolidated_data["companies"]
-        table_names = []
         
         if not companies:
             self.log.warning("No companies to create tables from")
             return []
         
-        # Main companies table
-        main_table = self._create_main_companies_table(companies)
-        table_names.append(main_table)
+        # Convert companies dict to list for processing
+        companies_list = list(companies.values())
         
-        # Additional normalized tables
-        if self.config.create_normalized_tables:
-            addresses_table = self._create_addresses_table(companies)
-            table_names.append(addresses_table)
+        # Create main table name
+        table_name = "cvr_enriched_companies"
+        
+        self.log.info(f"🔍 Creating normalized tables for {len(companies_list)} companies using chunked processing")
+        
+        # Process companies in chunks to avoid memory issues (copied from original)
+        chunk_size = 50  # Process 50 companies at a time
+        total_companies = len(companies_list)
+        num_chunks = (total_companies + chunk_size - 1) // chunk_size
+        
+        self.log.info(f"📦 Processing {total_companies} companies in {num_chunks} chunks of {chunk_size}")
+        
+        # Initialize all tables as empty with correct schema (original sophisticated schema)
+        self._initialize_empty_tables(table_name)
+        
+        # Process each chunk
+        for chunk_idx in range(num_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min(start_idx + chunk_size, total_companies)
+            chunk_companies = companies_list[start_idx:end_idx]
             
-            pnumbers_table = self._create_pnumbers_table(companies)
-            table_names.append(pnumbers_table)
+            self.log.info(f"📦 Processing chunk {chunk_idx + 1}/{num_chunks}: companies {start_idx}-{end_idx-1}")
             
-            financial_table = self._create_financial_table(companies)
-            table_names.append(financial_table)
+            try:
+                self._process_companies_chunk(chunk_companies, table_name, chunk_idx)
+                
+                # Memory cleanup after each chunk
+                self._cleanup_memory_after_chunk()
+                
+            except Exception as e:
+                self.log.error(f"Error processing chunk {chunk_idx + 1}: {e}")
+                if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                    self.log.warning("⚠️ Memory exhaustion detected - stopping processing")
+                    break
+                raise
+        
+        # Log final table sizes
+        self._log_final_table_sizes(table_name)
+        
+        # List of all tables created (9 tables total like the original)
+        table_names = [
+            table_name,
+            f"{table_name}_addresses",
+            f"{table_name}_leadership", 
+            f"{table_name}_financial",
+            f"{table_name}_industries",
+            f"{table_name}_employment_annual",
+            f"{table_name}_employment_quarterly",
+            f"{table_name}_employment_monthly",
+            f"{table_name}_employment_replacement_monthly"
+        ]
         
         # Save all tables to GCS
-        for table_name in table_names:
-            self._save_data(
-                data=table_name,
-                dataset=self.config.dataset,
-                bucket=self.config.bucket,
-                stage="gold"
-            )
+        for table in table_names:
+            try:
+                count = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                if count > 0:
+                    self.log.info(f"💾 Saving table {table} ({count} rows)")
+                    self._save_data(
+                        data=table, 
+                        dataset=f"{self.config.dataset}_{table.split('_')[-1]}" if '_' in table else self.config.dataset, 
+                        bucket=self.config.bucket, 
+                        stage="gold"
+                    )
+                else:
+                    self.log.info(f"⚠️ Skipping empty table {table}")
+            except Exception as e:
+                self.log.warning(f"⚠️ Could not save table {table}: {e}")
         
         return table_names
+    
+    def _initialize_empty_tables(self, table_name: str) -> None:
+        """Initialize all normalized tables as empty with correct schema (ported from original)."""
+        # Main companies table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                company_name VARCHAR,
+                company_type_description VARCHAR,
+                status VARCHAR,
+                founded_date VARCHAR,
+                dissolution_date VARCHAR,
+                advertisement_protection BOOLEAN,
+                address_latitude DOUBLE,
+                address_longitude DOUBLE,
+                address_coordinate_system VARCHAR,
+                address_srid INTEGER,
+                address_geom_wkt VARCHAR,
+                address_coordinate_quality VARCHAR,
+                address_coordinate_source VARCHAR,
+                data_source VARCHAR,
+                fetch_timestamp VARCHAR,
+                source_pipelines VARCHAR[],
+                source_pipeline_count INTEGER,
+                financial_document_count INTEGER,
+                processing_timestamp VARCHAR,
+                pipeline_run_id VARCHAR
+            )
+        """)
+        
+        # Addresses table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_addresses (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                full_address VARCHAR,
+                street_name VARCHAR,
+                house_number VARCHAR,
+                floor VARCHAR,
+                door VARCHAR,
+                postal_code VARCHAR,
+                city VARCHAR,
+                municipality_code VARCHAR,
+                municipality_name VARCHAR,
+                country_code VARCHAR,
+                adresse_id VARCHAR,
+                period_start VARCHAR,
+                period_end VARCHAR,
+                is_current BOOLEAN,
+                latitude DOUBLE,
+                longitude DOUBLE,
+                coordinate_system VARCHAR,
+                srid INTEGER,
+                geometry_wkt VARCHAR,
+                geometry_geojson VARCHAR,
+                coordinate_quality VARCHAR,
+                coordinate_source VARCHAR,
+                dawa_enriched BOOLEAN,
+                dawa_fetch_timestamp VARCHAR
+            )
+        """)
+        
+        # Leadership table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_leadership (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                leadership_data JSON
+            )
+        """)
+        
+        # Financial table (with all 30+ sophisticated financial metrics)
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_financial (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                publication_type VARCHAR,
+                publication_time VARCHAR,
+                case_number VARCHAR,
+                reporting_period_start VARCHAR,
+                reporting_period_end VARCHAR,
+                document_count INTEGER,
+                xml_size_bytes INTEGER,
+                download_success BOOLEAN,
+                duration_context VARCHAR,
+                instant_context VARCHAR,
+                income_statement_start_date VARCHAR,
+                income_statement_end_date VARCHAR,
+                balance_sheet_date VARCHAR,
+                net_profit_loss DOUBLE,
+                gross_profit_loss DOUBLE,
+                operating_profit_loss DOUBLE,
+                profit_loss_before_tax DOUBLE,
+                employee_benefits_expense DOUBLE,
+                average_number_of_employees DOUBLE,
+                depreciation_expense DOUBLE,
+                other_finance_income DOUBLE,
+                other_finance_expenses DOUBLE,
+                tax_expense DOUBLE,
+                total_assets DOUBLE,
+                total_equity DOUBLE,
+                noncurrent_assets DOUBLE,
+                current_assets DOUBLE,
+                cash_and_cash_equivalents DOUBLE,
+                liabilities_other_than_provisions DOUBLE,
+                shortterm_liabilities_other_than_provisions DOUBLE,
+                longterm_liabilities_other_than_provisions DOUBLE,
+                provisions DOUBLE,
+                property_plant_equipment DOUBLE,
+                contributed_capital DOUBLE,
+                equity_ratio DOUBLE,
+                profit_per_employee DOUBLE,
+                return_on_assets DOUBLE
+            )
+        """)
+        
+        # Industries table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_industries (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                industry_data JSON
+            )
+        """)
+        
+        # Employment tables (4 different time periods)
+        employment_types = ['annual', 'quarterly', 'monthly', 'replacement_monthly']
+        for table_suffix in employment_types:
+            self.conn.execute(f"""
+                CREATE TABLE {table_name}_employment_{table_suffix} (
+                    company_uuid VARCHAR,
+                    cvr_number INTEGER,
+                    employment_data JSON
+                )
+            """)
     
     def _create_main_companies_table(self, companies: Dict[str, Any]) -> str:
         """Create the main companies table."""
@@ -863,3 +1046,384 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         
         self.log.info(f"Saved final pipeline summary to {summary_path}")
         return summary_stats
+    
+    # ========== SOPHISTICATED PROCESSING METHODS (PORTED FROM ORIGINAL) ==========
+    
+    def _process_companies_chunk(self, chunk_companies: list, table_name: str, chunk_idx: int) -> None:
+        """Process a chunk of companies and append to existing tables (ported from original)."""
+        import json
+        
+        json_strings = [json.dumps(company) for company in chunk_companies]
+        
+        # Insert into main companies table
+        self.conn.execute(f"""
+            INSERT INTO {table_name}
+            SELECT 
+                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                json_extract(json_data, '$.status')::VARCHAR as status,
+                json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
+                json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                json_extract(json_data, '$.data_source')::VARCHAR as data_source,
+                json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
+                json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
+                json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
+            FROM unnest($1) as t(json_data)
+        """, [json_strings])
+        
+        # Process addresses for this chunk
+        self._process_addresses_chunk(json_strings, table_name)
+        
+        # Process leadership for this chunk
+        self._process_leadership_chunk(json_strings, table_name)
+        
+        # Process financial documents for this chunk
+        self._process_financial_chunk(json_strings, table_name)
+        
+        # Process industries for this chunk
+        self._process_industries_chunk(json_strings, table_name)
+        
+        # Process employment data for this chunk
+        self._process_employment_chunk(json_strings, table_name)
+    
+    def _cleanup_memory_after_chunk(self) -> None:
+        """Aggressive memory cleanup after processing a chunk (ported from original)."""
+        try:
+            # DuckDB-specific cleanup
+            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            self.conn.execute("PRAGMA optimize")  # Optimize database structure
+            
+            # Force Python garbage collection
+            import gc
+            collected = gc.collect()
+            
+            # Additional DuckDB memory management
+            try:
+                # Clear any cached query plans
+                self.conn.execute("PRAGMA cache_size = 0")
+                self.conn.execute("PRAGMA cache_size = -2000")  # Reset to reasonable cache
+                
+                # Force temporary directory cleanup
+                self.conn.execute("PRAGMA temp_store = memory")
+                
+            except Exception as pragma_e:
+                self.log.debug(f"Pragma cleanup warning: {pragma_e}")
+                
+            self.log.debug(f"Memory cleanup: collected {collected} objects, checkpoint completed")
+            
+        except Exception as e:
+            self.log.debug(f"Memory cleanup warning: {e}")
+    
+    def _log_final_table_sizes(self, table_name: str) -> None:
+        """Log final table sizes after all chunks are processed (ported from original)."""
+        try:
+            # Get counts for all tables
+            main_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            addresses_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses").fetchone()[0]
+            leadership_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_leadership").fetchone()[0]
+            financial_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_financial").fetchone()[0]
+            industries_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_industries").fetchone()[0]
+            
+            # Employment counts
+            employment_types = ['annual', 'quarterly', 'monthly', 'replacement_monthly']
+            employment_counts = {}
+            for table_suffix in employment_types:
+                employment_counts[table_suffix] = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_employment_{table_suffix}").fetchone()[0]
+            
+            # Geocoded addresses count
+            geocoded_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_addresses WHERE dawa_enriched = true").fetchone()[0]
+            
+            # Sample results
+            sample_results = self.conn.execute(f"""
+                SELECT cvr_number, company_name, company_type_description, founded_date, 
+                       source_pipelines, financial_document_count
+                FROM {table_name} 
+                LIMIT 5
+            """).fetchall()
+            
+            self.log.info(f"🎉 Successfully created sophisticated normalized CVR tables using chunked processing!")
+            self.log.info(f"   📋 Companies: {main_count}")
+            self.log.info(f"   👥 Leadership entries: {leadership_count}")
+            self.log.info(f"   💰 Financial documents: {financial_count}")
+            self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
+            self.log.info(f"   🏭 Industry entries: {industries_count}")
+            self.log.info(f"   👷 Employment data:")
+            for table_suffix, count in employment_counts.items():
+                self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
+            
+            for row in sample_results:
+                self.log.info(f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}")
+                
+        except Exception as e:
+            self.log.warning(f"Could not log final table sizes: {e}")
+    
+    def _process_addresses_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process addresses for a chunk of companies (ported from original)."""
+        # Check if any companies have addresses
+        addresses_check = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+        """, [json_strings]).fetchone()[0]
+        
+        if addresses_check > 0:
+            # Get schema for addresses
+            addresses_schema = self.conn.execute("""
+                WITH addresses_sample AS (
+                    SELECT json_extract(json_data, '$.addresses') as addresses_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(addresses_json) FROM addresses_sample
+            """, [json_strings]).fetchone()
+            
+            if addresses_schema and addresses_schema[0]:
+                self.conn.execute(f"""
+                    INSERT INTO {table_name}_addresses
+                    WITH addresses_flattened AS (
+                        SELECT
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                    )
+                    SELECT 
+                        company_uuid(cvr_number) as company_uuid,
+                        cvr_number,
+                        TRY(address_parsed.full_address) as full_address,
+                        TRY(address_parsed.street_name) as street_name,
+                        TRY(address_parsed.house_number) as house_number,
+                        TRY(address_parsed.floor) as floor,
+                        TRY(address_parsed.door) as door,
+                        TRY(address_parsed.postal_code) as postal_code,
+                        TRY(address_parsed.city) as city,
+                        TRY(address_parsed.municipality_code) as municipality_code,
+                        TRY(address_parsed.municipality_name) as municipality_name,
+                        TRY(address_parsed.country_code) as country_code,
+                        TRY(address_parsed.adresse_id) as adresse_id,
+                        TRY(address_parsed.period_start) as period_start,
+                        TRY(address_parsed.period_end) as period_end,
+                        TRY(address_parsed.is_current) as is_current,
+                        TRY(address_parsed.latitude::DOUBLE) as latitude,
+                        TRY(address_parsed.longitude::DOUBLE) as longitude,
+                        TRY(address_parsed.coordinate_system) as coordinate_system,
+                        TRY(address_parsed.srid::INTEGER) as srid,
+                        TRY(address_parsed.geometry_wkt) as geometry_wkt,
+                        TRY(address_parsed.geometry_geojson) as geometry_geojson,
+                        TRY(address_parsed.coordinate_quality) as coordinate_quality,
+                        TRY(address_parsed.coordinate_source) as coordinate_source,
+                        TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
+                        TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
+                    FROM addresses_flattened
+                """, [json_strings, addresses_schema[0]])
+    
+    def _process_leadership_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process leadership data for a chunk of companies (ported from original)."""
+        leadership_check = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+        """, [json_strings]).fetchone()[0]
+        
+        if leadership_check > 0:
+            leadership_schema = self.conn.execute("""
+                WITH leadership_sample AS (
+                    SELECT json_extract(json_data, '$.leadership') as leadership_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(leadership_json) FROM leadership_sample
+            """, [json_strings]).fetchone()
+            
+            if leadership_schema and leadership_schema[0]:
+                self.conn.execute(f"""
+                    INSERT INTO {table_name}_leadership
+                    SELECT 
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_data
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+                """, [json_strings, leadership_schema[0]])
+    
+    def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
+        financial_check = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+        """, [json_strings]).fetchone()[0]
+        
+        if financial_check > 0:
+            financial_schema = self.conn.execute("""
+                WITH financial_sample AS (
+                    SELECT json_extract(json_data, '$.financial_documents') as financial_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(financial_json) FROM financial_sample
+            """, [json_strings]).fetchone()
+            
+            if financial_schema and financial_schema[0]:
+                self.conn.execute(f"""
+                    INSERT INTO {table_name}_financial
+                    WITH financial_flattened AS (
+                        SELECT
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.financial_documents'), $2)) as financial_parsed
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                    )
+                    SELECT 
+                        company_uuid(cvr_number) as company_uuid,
+                        cvr_number,
+                        financial_parsed.publication_type,
+                        financial_parsed.publication_time,
+                        financial_parsed.case_number,
+                        TRY(financial_parsed.reporting_period.start_date) as reporting_period_start,
+                        TRY(financial_parsed.reporting_period.end_date) as reporting_period_end,
+                        financial_parsed.document_count,
+                        financial_parsed.xml_size_bytes,
+                        financial_parsed.download_success,
+                        TRY(financial_parsed.financial_metrics.duration_context) as duration_context,
+                        TRY(financial_parsed.financial_metrics.instant_context) as instant_context,
+                        TRY(financial_parsed.financial_metrics.income_statement_start_date) as income_statement_start_date,
+                        TRY(financial_parsed.financial_metrics.income_statement_end_date) as income_statement_end_date,
+                        TRY(financial_parsed.financial_metrics.balance_sheet_date) as balance_sheet_date,
+                        TRY(financial_parsed.financial_metrics.net_profit_loss) as net_profit_loss,
+                        TRY(financial_parsed.financial_metrics.gross_profit_loss) as gross_profit_loss,
+                        TRY(financial_parsed.financial_metrics.operating_profit_loss) as operating_profit_loss,
+                        TRY(financial_parsed.financial_metrics.profit_loss_before_tax) as profit_loss_before_tax,
+                        TRY(financial_parsed.financial_metrics.employee_benefits_expense) as employee_benefits_expense,
+                        TRY(financial_parsed.financial_metrics.average_number_of_employees) as average_number_of_employees,
+                        TRY(financial_parsed.financial_metrics.depreciation_expense) as depreciation_expense,
+                        TRY(financial_parsed.financial_metrics.other_finance_income) as other_finance_income,
+                        TRY(financial_parsed.financial_metrics.other_finance_expenses) as other_finance_expenses,
+                        TRY(financial_parsed.financial_metrics.tax_expense) as tax_expense,
+                        TRY(financial_parsed.financial_metrics.total_assets) as total_assets,
+                        TRY(financial_parsed.financial_metrics.total_equity) as total_equity,
+                        TRY(financial_parsed.financial_metrics.noncurrent_assets) as noncurrent_assets,
+                        TRY(financial_parsed.financial_metrics.current_assets) as current_assets,
+                        TRY(financial_parsed.financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
+                        TRY(financial_parsed.financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.financial_metrics.provisions) as provisions,
+                        TRY(financial_parsed.financial_metrics.property_plant_equipment) as property_plant_equipment,
+                        TRY(financial_parsed.financial_metrics.contributed_capital) as contributed_capital,
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            ELSE NULL 
+                        END as equity_ratio,
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
+                            ELSE NULL 
+                        END as profit_per_employee,
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            ELSE NULL 
+                        END as return_on_assets
+                    FROM financial_flattened
+                """, [json_strings, financial_schema[0]])
+    
+    def _process_industries_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process industries for a chunk of companies (ported from original)."""
+        industry_check = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.industries') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.industries')) > 0
+        """, [json_strings]).fetchone()[0]
+        
+        if industry_check > 0:
+            industry_schema = self.conn.execute("""
+                WITH industry_sample AS (
+                    SELECT json_extract(json_data, '$.industries') as industry_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.industries')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(industry_json) FROM industry_sample
+            """, [json_strings]).fetchone()
+            
+            if industry_schema and industry_schema[0]:
+                self.conn.execute(f"""
+                    INSERT INTO {table_name}_industries
+                    SELECT 
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.industries'), $2)) as industry_data
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.industries')) > 0
+                """, [json_strings, industry_schema[0]])
+    
+    def _process_employment_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process employment data for a chunk of companies (ported from original)."""
+        employment_types = [
+            ('annual_employment', 'annual'),
+            ('quarterly_employment', 'quarterly'), 
+            ('monthly_employment', 'monthly'),
+            ('replacement_monthly_employment', 'replacement_monthly')
+        ]
+        
+        for employment_field, table_suffix in employment_types:
+            employment_check = self.conn.execute("""
+                SELECT COUNT(*)
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+            """, [json_strings, employment_field]).fetchone()[0]
+            
+            if employment_check > 0:
+                employment_schema = self.conn.execute("""
+                    WITH employment_sample AS (
+                        SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                        LIMIT 1
+                    )
+                    SELECT json_structure(employment_json) FROM employment_sample
+                """, [json_strings, employment_field]).fetchone()
+                
+                if employment_schema and employment_schema[0]:
+                    self.conn.execute(f"""
+                        INSERT INTO {table_name}_employment_{table_suffix}
+                        SELECT
+                            company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                    """, [json_strings, employment_schema[0]])
