@@ -540,6 +540,15 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             stage="gold"
         )
         
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self.log.info("GitHub Actions detected - saving financial data locally for artifact sharing")
+            batch_suffix = f"_batch_{self.config.batch_number:03d}" if self.config.batch_number else ""
+            local_path = f"/tmp/cvr_financial_data{batch_suffix}.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved financial data locally to {local_path}")
+        
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
         
