@@ -142,13 +142,29 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         """
         self.log.info("Extracting addresses from company and P-number data")
         
-        # Get input paths for both company and P-number data
-        input_paths = get_step_input_paths(
-            CVREnrichmentStep.ADDRESS_GEOCODING,
-            self.date_pattern,
-            total_batches=self.config.total_batches,
-            bucket=self.config.bucket
-        )
+        # Get input paths for company and P-number data
+        # For batched processing, only process company addresses from the corresponding batch
+        # P-number addresses are only processed by batch 1 to avoid duplication
+        if self.config.batch_number and self.config.total_batches:
+            base_path = f"gs://{self.config.bucket}/gold/cvr_enrichment/{self.date_pattern}"
+            input_paths = [
+                f"{base_path}/company_fetching_batch_{self.config.batch_number:03d}.parquet"
+            ]
+            
+            # Only batch 1 processes P-number addresses to avoid duplication
+            if self.config.batch_number == 1:
+                input_paths.append(f"{base_path}/pnumber_fetching.parquet")
+                self.log.info(f"Batch {self.config.batch_number}: Loading company batch {self.config.batch_number} + P-number data (batch 1 only)")
+            else:
+                self.log.info(f"Batch {self.config.batch_number}: Loading only company batch {self.config.batch_number} (P-numbers handled by batch 1)")
+        else:
+            # For non-batched processing, load all data
+            input_paths = get_step_input_paths(
+                CVREnrichmentStep.ADDRESS_GEOCODING,
+                self.date_pattern,
+                total_batches=self.config.total_batches,
+                bucket=self.config.bucket
+            )
         
         if not input_paths:
             self.log.warning("No input paths found for address geocoding step")
@@ -252,28 +268,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.error(f"Failed to process addresses from {input_path}: {e}")
                 continue
         
-        # Filter addresses for this batch if batching is enabled
+        # No need to filter addresses - each batch already loads only its corresponding data
+        batch_addresses = all_addresses
         if self.config.batch_number and self.config.total_batches:
-            batch_size = min(
-                len(all_addresses) // self.config.total_batches,
-                self.config.max_addresses_per_batch
-            )
-            start_idx = (self.config.batch_number - 1) * batch_size
-            
-            if self.config.batch_number == self.config.total_batches:
-                # Last batch gets remaining items
-                end_idx = len(all_addresses)
-            else:
-                end_idx = start_idx + batch_size
-            
-            batch_addresses = all_addresses[start_idx:end_idx]
-            
             self.log.info(
                 f"Batch {self.config.batch_number}/{self.config.total_batches}: "
-                f"{len(batch_addresses)} addresses (from {len(all_addresses)} total)"
+                f"{len(batch_addresses)} addresses from corresponding batch data"
             )
         else:
-            batch_addresses = all_addresses
             self.log.info(f"Extracted {len(batch_addresses)} addresses (no batching)")
         
         extraction_result = {
