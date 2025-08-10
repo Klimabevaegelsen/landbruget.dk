@@ -275,6 +275,26 @@ jobs:
           
           echo "Running: $CMD"
           $CMD
+      
+      - name: Create Financial Data Artifact
+        run: |
+          # Get the latest financial data from GCS and save as artifact
+          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/ | tail -1)
+          if [ ! -z "$LATEST_DIR" ]; then
+            FINANCIAL_PATH="${LATEST_DIR}data.parquet"
+            gsutil cp "$FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
+            echo "Created financial artifact from: $FINANCIAL_PATH"
+          else
+            echo "No financial data found, creating empty artifact"
+            touch /tmp/cvr_financial_data.parquet
+          fi
+      
+      - name: Upload Financial Data Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-financial-data
+          path: /tmp/cvr_financial_data.parquet
+          retention-days: 1
 
 
 
@@ -331,6 +351,26 @@ jobs:
           
           echo "Running: $CMD"
           $CMD
+      
+      - name: Create Address Data Artifact
+        run: |
+          # Get the latest address data from GCS and save as artifact
+          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/ | tail -1)
+          if [ ! -z "$LATEST_DIR" ]; then
+            ADDRESS_PATH="${LATEST_DIR}address_geocoding.parquet"
+            gsutil cp "$ADDRESS_PATH" /tmp/cvr_address_data.parquet
+            echo "Created address artifact from: $ADDRESS_PATH"
+          else
+            echo "No address data found, creating empty artifact"
+            touch /tmp/cvr_address_data.parquet
+          fi
+      
+      - name: Upload Address Data Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-address-data
+          path: /tmp/cvr_address_data.parquet
+          retention-days: 1
 
 
 
@@ -375,6 +415,19 @@ jobs:
           name: cvr-pnumber-data
           path: /tmp/
       
+      - name: Download Financial Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-financial-data
+          path: /tmp/
+        continue-on-error: true  # Don't fail if financial data not available
+      
+      - name: Download Address Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-address-data
+          path: /tmp/
+        continue-on-error: true  # Don't fail if address data not available
 
       
       - name: Run Data Consolidation
