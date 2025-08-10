@@ -351,14 +351,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         doc_copy["xml_size_bytes"] = len(xml_content)
                         doc_copy["download_success"] = True
                         
-                        # Parse financial metrics from XML using CVR API client method
+                        # Parse financial metrics from XML using proper XBRL parsing
                         try:
-                            financial_values = self.cvr_api_client.parse_financial_xml(xml_content)
+                            financial_metrics = self._parse_xbrl_financial_data(xml_content)
+                            
                             doc_copy["financial_metrics"] = {
-                                "parsed_values": financial_values,
-                                "total_values": len(financial_values),
-                                "largest_value": financial_values[0]["value"] if financial_values else 0,
-                                "parse_success": True
+                                "parse_success": True,
+                                **financial_metrics  # Add all extracted XBRL metrics
                             }
                         except Exception as parse_e:
                             self.log.warning(f"Failed to parse XBRL data for CVR {cvr_number}: {parse_e}")
@@ -389,6 +388,164 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 enriched_docs.append(doc_copy)
         
         return enriched_docs
+    
+    def _parse_xbrl_financial_data(self, xml_content: str) -> dict:
+        """
+        Parse XBRL financial data from XML content using proper context analysis.
+        
+        Args:
+            xml_content: Raw XML content from financial document
+            
+        Returns:
+            Dictionary with parsed financial metrics for current period
+        """
+        import xml.etree.ElementTree as ET
+        
+        try:
+            root = ET.fromstring(xml_content)
+            
+            # Parse context definitions to understand periods and types
+            contexts = {}
+            for elem in root.iter():
+                if 'context' in elem.tag.lower() and elem.get('id'):
+                    context_id = elem.get('id')
+                    contexts[context_id] = {
+                        'type': None,  # 'duration' or 'instant'
+                        'start_date': None,
+                        'end_date': None,
+                        'instant_date': None,
+                        'entity_id': None
+                    }
+                    
+                    # Parse context details
+                    for child in elem:
+                        if 'entity' in child.tag.lower():
+                            for gc in child:
+                                if 'identifier' in gc.tag.lower():
+                                    contexts[context_id]['entity_id'] = gc.text
+                        elif 'period' in child.tag.lower():
+                            for gc in child:
+                                gc_tag = gc.tag.split('}')[-1] if '}' in gc.tag else gc.tag
+                                if gc_tag == 'startDate':
+                                    contexts[context_id]['start_date'] = gc.text
+                                    contexts[context_id]['type'] = 'duration'
+                                elif gc_tag == 'endDate':
+                                    contexts[context_id]['end_date'] = gc.text
+                                elif gc_tag == 'instant':
+                                    contexts[context_id]['instant_date'] = gc.text
+                                    contexts[context_id]['type'] = 'instant'
+            
+            # Find current duration context (for income statement items)
+            current_duration_context = None
+            current_instant_context = None
+            
+            # Look for the most recent duration context
+            duration_contexts = {k: v for k, v in contexts.items() if v['type'] == 'duration'}
+            if duration_contexts:
+                sorted_duration = sorted(duration_contexts.items(), 
+                                       key=lambda x: x[1].get('end_date', ''), reverse=True)
+                current_duration_context = sorted_duration[0][0]
+            
+            # Look for the most recent instant context  
+            instant_contexts = {k: v for k, v in contexts.items() if v['type'] == 'instant'}
+            if instant_contexts:
+                sorted_instant = sorted(instant_contexts.items(),
+                                      key=lambda x: x[1].get('instant_date', ''), reverse=True)
+                current_instant_context = sorted_instant[0][0]
+            
+            # Fallbacks
+            if not current_duration_context:
+                current_duration_context = 'c1'
+            if not current_instant_context:
+                current_instant_context = 'c4' if 'c4' in contexts else current_duration_context
+            
+            # Key financial elements to extract (Danish XBRL taxonomy)
+            duration_elements = {
+                # Income Statement items (use duration context)
+                'net_profit_loss': 'ProfitLoss',
+                'gross_profit_loss': 'GrossProfitLoss', 
+                'operating_profit_loss': 'ProfitLossFromOrdinaryOperatingActivities',
+                'profit_loss_before_tax': 'ProfitLossFromOrdinaryActivitiesBeforeTax',
+                'employee_benefits_expense': 'EmployeeBenefitsExpense',
+                'average_number_of_employees': 'AverageNumberOfEmployees',
+                'depreciation_expense': 'DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss',
+                'other_finance_income': 'OtherFinanceIncome',
+                'other_finance_expenses': 'OtherFinanceExpenses', 
+                'tax_expense': 'TaxExpense',
+            }
+            
+            instant_elements = {
+                # Balance sheet items (use instant context)
+                'total_assets': 'Assets',
+                'total_equity': 'Equity',
+                'noncurrent_assets': 'NoncurrentAssets',
+                'current_assets': 'CurrentAssets', 
+                'contributed_capital': 'ContributedCapital',
+                'cash_and_cash_equivalents': 'CashAndCashEquivalents',
+                'liabilities_other_than_provisions': 'LiabilitiesOtherThanProvisions',
+                'shortterm_liabilities_other_than_provisions': 'ShorttermLiabilitiesOtherThanProvisions',
+                'longterm_liabilities_other_than_provisions': 'LongtermLiabilitiesOtherThanProvisions',
+                'provisions': 'Provisions',
+                'property_plant_equipment': 'PropertyPlantAndEquipment',
+            }
+            
+            # Extract period information for the data
+            duration_period = contexts.get(current_duration_context, {})
+            instant_period = contexts.get(current_instant_context, {})
+            
+            # Extract financial metrics for current period
+            financial_metrics = {
+                # Context information
+                'duration_context': current_duration_context,
+                'instant_context': current_instant_context,
+                
+                # Period dates (for income statement)
+                'income_statement_start_date': duration_period.get('start_date'),
+                'income_statement_end_date': duration_period.get('end_date'),
+                
+                # Balance sheet date
+                'balance_sheet_date': instant_period.get('instant_date'),
+            }
+            
+            # Extract duration elements (income statement) using duration context
+            for metric_name, element_name in duration_elements.items():
+                for elem in root.iter():
+                    tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                    
+                    if (tag_name == element_name and 
+                        elem.get('contextRef') == current_duration_context and 
+                        elem.text and elem.text.strip()):
+                        
+                        try:
+                            # Parse as number
+                            financial_metrics[metric_name] = float(elem.text.strip())
+                        except ValueError:
+                            # Keep as string if not numeric
+                            financial_metrics[metric_name] = elem.text.strip()
+                        break
+            
+            # Extract instant elements (balance sheet) using instant context
+            for metric_name, element_name in instant_elements.items():
+                for elem in root.iter():
+                    tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                    
+                    if (tag_name == element_name and 
+                        elem.get('contextRef') == current_instant_context and 
+                        elem.text and elem.text.strip()):
+                        
+                        try:
+                            # Parse as number  
+                            financial_metrics[metric_name] = float(elem.text.strip())
+                        except ValueError:
+                            # Keep as string if not numeric
+                            financial_metrics[metric_name] = elem.text.strip()
+                        break
+            
+            return financial_metrics
+            
+        except Exception as e:
+            self.log.warning(f"Failed to parse XBRL data: {e}")
+            return {'parse_error': str(e)}
     
     @timed(name="Processing financial data")
     def _process_financial_data(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
