@@ -220,6 +220,13 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
+      - name: Upload P-Number Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-pnumber-data
+          path: /tmp/cvr_pnumber_data.parquet
+          retention-days: 1
+
   # Step 4: Financial Documents (Parallel - individual API calls required)
   financial_documents:
     name: "Financial Documents (Batch ${{ matrix.batch }})"
