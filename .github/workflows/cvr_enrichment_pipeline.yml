@@ -1,120 +1,364 @@
-# CVR Enrichment Pipeline
-# Runs monthly on the 1st of each month to enrich CVR data using existing CVR collections from previous pipeline runs
-# This pipeline does NOT rerun other pipelines - it uses existing CVR collections in GCS
-
 name: CVR Enrichment Pipeline
 
 on:
-  schedule:
-    - cron: '0 2 1 * *'  # Monthly on the 1st at 2 AM UTC (uses existing CVR collections from weekend runs)
   workflow_dispatch:
-    # Allow manual triggering
     inputs:
       test_limit:
-        description: 'Limit number of CVR numbers to process (for testing)'
+        description: 'Test limit (number of CVR numbers to process, empty for no limit)'
         required: false
-        type: number
-      parse_financial_xml:
-        description: 'Whether to download and parse XML financial documents'
+        type: string
+      batch_count:
+        description: 'Number of batches for parallel processing'
         required: false
-        type: boolean
-        default: true
-      max_financial_documents:
-        description: 'Maximum number of financial documents to fetch per company'
+        default: '5'
+        type: string
+      skip_steps:
+        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
         required: false
-        type: number
-        default: 10
+        type: string
+  schedule:
+    # Run monthly on the 1st at 02:00 UTC
+    - cron: '0 2 1 * *'
+
+env:
+  BUCKET_NAME: landbrugsdata-raw-data
+  PYTHON_VERSION: '3.11'
 
 jobs:
-  cvr-enrichment:
-    name: CVR Enrichment
+  # Step 1: CVR Collection (Sequential - must run first)
+  cvr_collection:
+    name: "CVR Collection"
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-    env:
-      ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      SAVE_LOCAL: false
-
+    if: ${{ !contains(github.event.inputs.skip_steps, 'collection') }}
+    outputs:
+      batch_count: ${{ steps.collection.outputs.batch_count }}
+      collection_success: ${{ steps.collection.outputs.success }}
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "backend/pipelines/unified_pipeline/uv.lock"
-
+          python-version: ${{ env.PYTHON_VERSION }}
+      
       - name: Install dependencies
         run: |
           cd backend/pipelines/unified_pipeline
-          uv sync --frozen
-
+          pip install -e .
+      
       - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v2'
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
+      
       - name: Set up Google Cloud SDK
-        uses: 'google-github-actions/setup-gcloud@v2'
-
-      - name: Configure CVR API credentials
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run CVR Collection
+        id: collection
         run: |
-          echo "CVR_USERNAME=${{ secrets.CVR_USERNAME }}" >> $GITHUB_ENV
-          echo "CVR_PASSWORD=${{ secrets.CVR_PASSWORD }}" >> $GITHUB_ENV
-
-      - name: Run CVR Enrichment Pipeline
-        run: |
-          # Set test parameters if provided
-          TEST_LIMIT_ARG=""
-          if [ "${{ github.event.inputs.test_limit }}" != "" ] && [ "${{ github.event.inputs.test_limit }}" != "null" ]; then
-            TEST_LIMIT_ARG="--test-limit ${{ github.event.inputs.test_limit }}"
-          fi
-          
-          PARSE_XML_ARG="--parse-financial-xml"
-          if [ "${{ github.event.inputs.parse_financial_xml }}" == "false" ]; then
-            PARSE_XML_ARG="--no-parse-financial-xml"
-          fi
-          
-          MAX_DOCS_ARG="--max-financial-documents ${{ github.event.inputs.max_financial_documents || 10 }}"
-          
-          # Run the CVR enrichment pipeline
           cd backend/pipelines/unified_pipeline
-          uv run python -m unified_pipeline \
-            --env prod \
-            --source cvr_enrichment \
-            --stage gold \
-            $TEST_LIMIT_ARG \
-            $PARSE_XML_ARG \
-            $MAX_DOCS_ARG
+          
+          # Build command with optional parameters
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage collection"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+          
+          # Set outputs
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "batch_count=${{ github.event.inputs.batch_count || '5' }}" >> $GITHUB_OUTPUT
 
-      - name: Upload pipeline logs
-        if: always()
-        uses: actions/upload-artifact@v4
+  # Step 2: Company Fetching (Parallel batches)
+  company_fetching:
+    name: "Company Fetching (Batch ${{ matrix.batch }})"
+    runs-on: ubuntu-latest
+    needs: cvr_collection
+    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching') }}
+    
+    strategy:
+      matrix:
+        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+      fail-fast: false
+      max-parallel: 3  # Limit concurrent API calls
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          name: cvr-enrichment-logs
-          path: |
-            *.log
-            logs/
-          retention-days: 7
-
-      - name: Notify on failure
-        if: failure()
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
         run: |
-          echo "❌ CVR Enrichment Pipeline failed!"
-          echo "Check the logs for details."
-          exit 1
-
-      - name: Notify on success
-        if: success()
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run Company Fetching
+        env:
+          CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
+          CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
         run: |
-          echo "✅ CVR Enrichment Pipeline completed successfully!"
-          echo "🎯 Danish business intelligence data has been enriched using existing CVR collections."
-          echo "📊 Financial documents, leadership data, and employment history have been processed and saved to GCS."
+          cd backend/pipelines/unified_pipeline
+          
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+
+  # Step 3: P-Number Fetching (Parallel batches)
+  pnumber_fetching:
+    name: "P-Number Fetching (Batch ${{ matrix.batch }})"
+    runs-on: ubuntu-latest
+    needs: [cvr_collection, company_fetching]
+    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching') }}
+    
+    strategy:
+      matrix:
+        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+      fail-fast: false
+      max-parallel: 3  # Limit concurrent API calls
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run P-Number Fetching
+        env:
+          CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
+          CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+
+  # Step 4: Financial Documents (Parallel batches)
+  financial_documents:
+    name: "Financial Documents (Batch ${{ matrix.batch }})"
+    runs-on: ubuntu-latest
+    needs: [cvr_collection, company_fetching]
+    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'financial_documents') }}
+    
+    strategy:
+      matrix:
+        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+      fail-fast: false
+      max-parallel: 2  # Lower limit for financial document processing
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run Financial Documents
+        env:
+          CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
+          CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+
+  # Step 5: Address Geocoding (Parallel batches)
+  address_geocoding:
+    name: "Address Geocoding (Batch ${{ matrix.batch }})"
+    runs-on: ubuntu-latest
+    needs: [cvr_collection, company_fetching, pnumber_fetching]
+    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'address_geocoding') }}
+    
+    strategy:
+      matrix:
+        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+      fail-fast: false
+      max-parallel: 4  # Higher limit for geocoding (less API intensive)
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run Address Geocoding
+        run: |
+          cd backend/pipelines/unified_pipeline
+          
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+
+  # Step 6: Data Consolidation (Sequential - must run last)
+  data_consolidation:
+    name: "Data Consolidation"
+    runs-on: ubuntu-latest
+    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding]
+    if: ${{ always() && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'data_consolidation') }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Run Data Consolidation
+        run: |
+          cd backend/pipelines/unified_pipeline
+          
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage data_consolidation --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+      
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "🎉 CVR Enrichment Pipeline completed!"
+          echo "📊 Pipeline Configuration:"
+          echo "   • Test limit: ${{ github.event.inputs.test_limit || 'None (full dataset)' }}"
+          echo "   • Batch count: ${{ needs.cvr_collection.outputs.batch_count }}"
+          echo "   • Skipped steps: ${{ github.event.inputs.skip_steps || 'None' }}"
+          echo ""
+          echo "📋 Steps Status:"
+          echo "   • CVR Collection: ${{ needs.cvr_collection.result }}"
+          echo "   • Company Fetching: ${{ needs.company_fetching.result }}"
+          echo "   • P-Number Fetching: ${{ needs.pnumber_fetching.result }}"
+          echo "   • Financial Documents: ${{ needs.financial_documents.result }}"
+          echo "   • Address Geocoding: ${{ needs.address_geocoding.result }}"
+          echo "   • Data Consolidation: ${{ job.status }}"
+
+  # Notification job (runs regardless of success/failure)
+  notify:
+    name: "Pipeline Notification"
+    runs-on: ubuntu-latest
+    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, data_consolidation]
+    if: always()
+    
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [[ "${{ needs.data_consolidation.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=CVR Enrichment Pipeline completed successfully! 🎉" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.cvr_collection.result }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=CVR Enrichment Pipeline failed at collection step ❌" >> $GITHUB_OUTPUT
+          else
+            echo "status=partial" >> $GITHUB_OUTPUT
+            echo "message=CVR Enrichment Pipeline completed with some failures ⚠️" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Log final status
+        run: |
+          echo "${{ steps.status.outputs.message }}"
+          echo ""
+          echo "🔗 View detailed logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -69,6 +69,7 @@ class CVRAPIClient:
         # API endpoints
         self.base_url = "http://distribution.virk.dk"
         self.company_endpoint = f"{self.base_url}/cvr-permanent/virksomhed/_search"
+        self.pnumber_endpoint = f"{self.base_url}/cvr-permanent/produktionsenhed/_search"
         self.documents_endpoint = f"{self.base_url}/offentliggoerelser/_search"
 
         # Request configuration
@@ -1120,3 +1121,497 @@ class CVRAPIClient:
             return False
 
         return True
+
+    def get_pnumber_data(
+        self, pnumber: str, fetch_all_fields: bool = True, enrich_with_geometry: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch comprehensive P-number (production unit) data from CVR register.
+
+        Args:
+            pnumber: P-number (production unit number)
+            fetch_all_fields: Whether to fetch all available fields or just basic ones
+            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+
+        Returns:
+            Comprehensive P-number data dictionary or None if not found
+        """
+        if not self._validate_pnumber_format(pnumber):
+            self.log.error(f"Invalid P-number format: {pnumber}")
+            return None
+
+        try:
+            # Build query for P-number endpoint
+            query = {"query": {"term": {"VrproduktionsEnhed.pNummer": int(pnumber)}}, "size": 1}
+
+            # Add source filtering for performance if not fetching all fields
+            if not fetch_all_fields:
+                query["_source"] = [
+                    "VrproduktionsEnhed.pNummer",
+                    "VrproduktionsEnhed.navne",
+                    "VrproduktionsEnhed.beliggenhedsadresse",
+                    "VrproduktionsEnhed.postadresse",
+                    "VrproduktionsEnhed.hovedbranche",
+                    "VrproduktionsEnhed.virksomhedsrelation",
+                    "VrproduktionsEnhed.attributter",
+                ]
+
+            raw_data = self._make_request(self.pnumber_endpoint, query)
+
+            if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
+                self.log.debug(f"No data found for P-number: {pnumber}")
+                return None
+
+            # Parse P-number data
+            parsed_data = self._parse_pnumber_data(raw_data)
+
+            if not parsed_data:
+                self.log.error(f"Failed to parse P-number data for: {pnumber}")
+                return None
+
+            # Enrich with geometry if requested
+            if enrich_with_geometry:
+                parsed_data = self.enrich_pnumber_with_geometry(parsed_data)
+
+            return parsed_data
+
+        except Exception as e:
+            self.log.error(f"Error fetching P-number data for {pnumber}: {e}")
+            return None
+
+    def fetch_multiple_pnumbers(
+        self, 
+        pnumbers: List[str], 
+        fetch_all_fields: bool = True, 
+        enrich_with_geometry: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Fetch P-number data for multiple P-numbers efficiently.
+
+        Args:
+            pnumbers: List of P-numbers
+            fetch_all_fields: Whether to fetch all available fields or just basic ones
+            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+
+        Returns:
+            Dictionary mapping P-numbers to P-number data
+        """
+        self.log.info(
+            f"Fetching data for {len(pnumbers)} P-numbers "
+            f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
+        )
+
+        results = {}
+        successful = 0
+        failed = 0
+
+        for pnumber in tqdm(pnumbers, desc="Fetching P-number data", unit="pnumber"):
+            try:
+                pnumber_data = self.get_pnumber_data(
+                    pnumber, fetch_all_fields, enrich_with_geometry
+                )
+                if pnumber_data:
+                    results[pnumber] = pnumber_data
+                    successful += 1
+                else:
+                    failed += 1
+                    self.log.debug(f"No data found for P-number: {pnumber}")
+
+            except Exception as e:
+                failed += 1
+                self.log.error(f"Error fetching P-number {pnumber}: {e}")
+
+        self.log.info(
+            f"P-number batch fetch completed: {successful} successful, {failed} failed"
+        )
+
+        return {
+            "results": results,
+            "summary": {"total": len(pnumbers), "successful": successful, "failed": failed},
+            "fetch_timestamp": datetime.now().isoformat(),
+        }
+
+    def get_company_pnumbers(self, company_data: Dict[str, Any]) -> List[str]:
+        """
+        Extract P-numbers from company data.
+
+        Args:
+            company_data: Parsed company data from CVR API
+
+        Returns:
+            List of P-numbers associated with the company
+        """
+        pnumbers = []
+        
+        # Extract P-numbers from subsidiaries field
+        for subsidiary in company_data.get("subsidiaries", []):
+            pnumber = subsidiary.get("p_number")
+            if pnumber and self._validate_pnumber_format(str(pnumber)):
+                pnumbers.append(str(pnumber))
+        
+        return list(set(pnumbers))  # Remove duplicates
+
+    def _validate_pnumber_format(self, pnumber: str) -> bool:
+        """
+        Validate P-number format.
+
+        Args:
+            pnumber: P-number to validate
+
+        Returns:
+            True if valid, False otherwise
+        """
+        if not pnumber:
+            return False
+
+        # P-numbers should be 10 digits
+        if len(pnumber) != 10 or not pnumber.isdigit():
+            return False
+
+        # Should not start with 0
+        if pnumber.startswith("0"):
+            return False
+
+        return True
+
+    def _parse_pnumber_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Parse raw P-number data from CVR API response.
+
+        Args:
+            raw_data: Raw response from CVR API
+
+        Returns:
+            Parsed and structured P-number data
+        """
+        if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
+            return {}
+
+        # Extract the nested VrproduktionsEnhed structure
+        hit_source = raw_data["hits"]["hits"][0]["_source"]
+        if "VrproduktionsEnhed" not in hit_source:
+            self.log.error("No VrproduktionsEnhed structure found in response")
+            return {}
+
+        pnumber_unit = hit_source["VrproduktionsEnhed"]
+
+        # Initialize parsed data structure
+        parsed_data = {
+            "p_number": pnumber_unit.get("pNummer"),
+            "unit_name": pnumber_unit.get("navne", [{}])[0].get("navn")
+            if pnumber_unit.get("navne")
+            else None,
+            "last_updated": pnumber_unit.get("sidstOpdateret"),
+            "data_source": "CVR Register P-Number",
+            "fetch_timestamp": datetime.now().isoformat(),
+        }
+
+        # Extract parent company relationship
+        company_relations = []
+        for relation in pnumber_unit.get("virksomhedsrelation", []):
+            if relation.get("periode", {}).get("gyldigTil") is None:  # Current relations only
+                company_relations.append({
+                    "cvr_number": relation.get("virksomhed", {}).get("cvrNummer"),
+                    "relation_type": relation.get("virksomhedsrelation"),
+                    "period_start": relation.get("periode", {}).get("gyldigFra"),
+                    "period_end": relation.get("periode", {}).get("gyldigTil"),
+                    "is_current": relation.get("periode", {}).get("gyldigTil") is None,
+                })
+        parsed_data["company_relations"] = company_relations
+
+        # Extract P-number names (current and historical)
+        names = []
+        for name_entry in pnumber_unit.get("navne", []):
+            names.append({
+                "name": name_entry.get("navn"),
+                "period_start": name_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": name_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
+            })
+        parsed_data["all_names"] = names
+
+        # Extract comprehensive address information (beliggenhedsadresse) - CURRENT ONLY
+        addresses = []
+        for address_entry in pnumber_unit.get("beliggenhedsadresse", []):
+            # Skip historical addresses - only include current addresses
+            is_current = address_entry.get("periode", {}).get("gyldigTil") is None
+            if not is_current:
+                continue
+                
+            address_parts = []
+
+            # Build address string safely
+            if address_entry.get("vejnavn"):
+                address_parts.append(str(address_entry["vejnavn"]))
+            if address_entry.get("husnummerFra"):
+                address_parts.append(str(address_entry["husnummerFra"]))
+            if address_entry.get("etage"):
+                address_parts.append(f"{address_entry['etage']}.")
+            if address_entry.get("sidedoer"):
+                address_parts.append(address_entry["sidedoer"])
+
+            addresses.append({
+                "address_type": "beliggenhedsadresse",
+                "full_address": " ".join(address_parts) if address_parts else None,
+                "street_name": address_entry.get("vejnavn"),
+                "house_number": address_entry.get("husnummerFra"),
+                "floor": address_entry.get("etage"),
+                "door": address_entry.get("sidedoer"),
+                "postal_code": address_entry.get("postnummer"),
+                "city": address_entry.get("postdistrikt"),
+                "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                "country_code": address_entry.get("landekode"),
+                "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                "period_start": address_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": address_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": True,  # All addresses here are current
+            })
+
+        # Extract postal addresses (postadresse) if different from location addresses - CURRENT ONLY
+        for address_entry in pnumber_unit.get("postadresse", []):
+            # Skip historical addresses - only include current addresses
+            is_current = address_entry.get("periode", {}).get("gyldigTil") is None
+            if not is_current:
+                continue
+                
+            address_parts = []
+
+            # Build address string safely
+            if address_entry.get("vejnavn"):
+                address_parts.append(str(address_entry["vejnavn"]))
+            if address_entry.get("husnummerFra"):
+                address_parts.append(str(address_entry["husnummerFra"]))
+            if address_entry.get("etage"):
+                address_parts.append(f"{address_entry['etage']}.")
+            if address_entry.get("sidedoer"):
+                address_parts.append(address_entry["sidedoer"])
+
+            addresses.append({
+                "address_type": "postadresse",
+                "full_address": " ".join(address_parts) if address_parts else None,
+                "street_name": address_entry.get("vejnavn"),
+                "house_number": address_entry.get("husnummerFra"),
+                "floor": address_entry.get("etage"),
+                "door": address_entry.get("sidedoer"),
+                "postal_code": address_entry.get("postnummer"),
+                "city": address_entry.get("postdistrikt"),
+                "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                "country_code": address_entry.get("landekode"),
+                "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                "period_start": address_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": address_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": True,  # All addresses here are current
+            })
+
+        parsed_data["addresses"] = addresses
+
+        # Extract contact information
+        contact_info = {}
+        for contact_entry in pnumber_unit.get("elektroniskPost", []):
+            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current email
+                contact_info["email"] = contact_entry.get("kontaktoplysning")
+                break
+
+        for contact_entry in pnumber_unit.get("telefonNummer", []):
+            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current phone
+                contact_info["phone"] = contact_entry.get("kontaktoplysning")
+                break
+
+        parsed_data["contact_info"] = contact_info
+
+        # Extract industry information (hovedbranche)
+        industries = []
+        for industry_entry in pnumber_unit.get("hovedbranche", []):
+            industries.append({
+                "industry_code": industry_entry.get("branchekode"),
+                "industry_description": industry_entry.get("branchetekst"),
+                "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
+                "is_main": True,
+            })
+        parsed_data["industries"] = industries
+
+        # Extract P-number attributes
+        attributes = {}
+        for attr_entry in pnumber_unit.get("attributter", []):
+            attr_type = attr_entry.get("type")
+            if attr_type == "FORMAAL":
+                attributes["unit_purpose"] = attr_entry.get("vaerdier", [{}])[0].get("vaerdi")
+        parsed_data["unit_attributes"] = attributes
+
+        # Extract employment data
+        employment_data = {
+            "annual_employment": [],
+            "quarterly_employment": [],
+            "monthly_employment": [],
+        }
+        
+        # Annual employment (aarsbeskaeftigelse)
+        for entry in pnumber_unit.get("aarsbeskaeftigelse", []):
+            employment_data["annual_employment"].append({
+                "year": entry.get("aar"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "employees_including_owners": entry.get("antalInklusivEjere"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+        
+        # Quarterly employment (kvartalsbeskaeftigelse)  
+        for entry in pnumber_unit.get("kvartalsbeskaeftigelse", []):
+            employment_data["quarterly_employment"].append({
+                "year": entry.get("aar"),
+                "quarter": entry.get("kvartal"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+            
+        # Monthly employment (maanedsbeskaeftigelse)
+        for entry in pnumber_unit.get("maanedsbeskaeftigelse", []):
+            employment_data["monthly_employment"].append({
+                "year": entry.get("aar"),
+                "month": entry.get("maaned"),
+                "full_time_equivalent": entry.get("antalAarsvaerk"),
+                "total_employees": entry.get("antalAnsatte"),
+                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                "last_updated": entry.get("sidstOpdateret")
+            })
+        
+        parsed_data["employment_data"] = employment_data
+
+        # Extract metadata
+        metadata = {
+            "has_current_address": len(addresses) > 0,  # All addresses are current now
+            "has_current_industry": any(ind.get("is_current") for ind in industries),
+            "has_contact_info": bool(contact_info),
+            "has_unit_attributes": bool(attributes),
+            "has_company_relations": len(company_relations) > 0,
+            "total_addresses": len(addresses),
+            "current_addresses_only": True,  # Flag to indicate filtering applied
+            "total_company_relations": len(company_relations),
+            "vrproduktionsenhed_fields": list(pnumber_unit.keys())[:10],  # Sample fields
+            "total_vrproduktionsenhed_fields": len(pnumber_unit.keys()),
+        }
+        parsed_data["metadata"] = metadata
+
+        return parsed_data
+
+    def enrich_pnumber_with_geometry(self, pnumber_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich P-number data with address geometry using DAWA API.
+        
+        Args:
+            pnumber_data: Parsed P-number data from CVR API
+            
+        Returns:
+            P-number data enriched with geometry information
+        """
+        if not self.enable_geocoding or not self.dawa_client:
+            self.log.debug("Address geocoding disabled, skipping P-number geometry enrichment")
+            return pnumber_data
+        
+        try:
+            addresses = pnumber_data.get("addresses", [])
+            if not addresses:
+                self.log.debug("No addresses found for P-number geocoding")
+                return pnumber_data
+            
+            # Geocode addresses (same logic as company addresses)
+            enriched_addresses = []
+            for address in addresses:
+                enriched_address = address.copy()
+                geocoded = None
+                
+                # Determine if we should geocode this address based on configuration
+                should_geocode = not self.geocode_current_only or address.get("is_current")
+                
+                # Try DAWA geocoding first if address has adresse_id
+                if should_geocode and address.get("adresse_id"):
+                    geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
+                    if geocoded:
+                        self.log.debug(f"DAWA geocoded P-number address: {address.get('full_address')}")
+                
+                # Fallback to Datavask API if DAWA failed and we have address text
+                if not geocoded and should_geocode and address.get("full_address"):
+                    # Reconstruct complete address with postal code and city for better geocoding
+                    complete_address = address["full_address"]
+                    if address.get("postal_code") and address.get("city"):
+                        complete_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                    
+                    self.log.debug(f"Trying Datavask with complete P-number address: {complete_address}")
+                    geocoded = self.dawa_client.geocode_with_datavask(complete_address)
+                    if geocoded:
+                        self.log.debug(f"Datavask geocoded P-number address: {complete_address}")
+                
+                # Add geometry data if geocoding succeeded
+                if geocoded:
+                    enriched_address.update({
+                        "latitude": geocoded["latitude"],  # WGS84 latitude
+                        "longitude": geocoded["longitude"],  # WGS84 longitude
+                        "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
+                        "srid": geocoded.get("srid", 4326),
+                        "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                            geocoded["latitude"], geocoded["longitude"]
+                        ),
+                        "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                            geocoded["latitude"], geocoded["longitude"]
+                        ),
+                        "coordinate_quality": geocoded.get("coordinate_quality"),
+                        "coordinate_source": geocoded.get("coordinate_source"),
+                        "dawa_enriched": geocoded.get("dawa_enriched", True),
+                        "datavask_enriched": geocoded.get("datavask_enriched", False),
+                        "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
+                    })
+                    # Update BFE fields if available from Datavask
+                    if geocoded.get("floor") is not None:
+                        enriched_address["floor"] = geocoded["floor"]
+                    if geocoded.get("door") is not None:
+                        enriched_address["door"] = geocoded["door"]
+                else:
+                    enriched_address["dawa_enriched"] = False
+                    enriched_address["datavask_enriched"] = False
+                    if should_geocode:
+                        failed_address = address.get('full_address', '')
+                        if address.get("postal_code") and address.get("city"):
+                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                        self.log.warning(f"Failed to geocode P-number address: {failed_address}")
+                
+                enriched_addresses.append(enriched_address)
+            
+            # Update P-number data with enriched addresses
+            pnumber_data = pnumber_data.copy()
+            pnumber_data["addresses"] = enriched_addresses
+            
+            # Add primary address geometry to top level for easy access
+            current_geocoded = [
+                addr for addr in enriched_addresses 
+                if addr.get("is_current") and addr.get("dawa_enriched")
+            ]
+            
+            if current_geocoded:
+                primary_address = current_geocoded[0]  # Use first current geocoded address
+                pnumber_data["primary_address_geometry"] = {
+                    "latitude": primary_address.get("latitude"),  # WGS84 latitude
+                    "longitude": primary_address.get("longitude"),  # WGS84 longitude
+                    "coordinate_system": primary_address.get("coordinate_system", "WGS84"),
+                    "srid": primary_address.get("srid", 4326),
+                    "geometry_wkt": primary_address.get("geometry_wkt"),
+                    "geometry_geojson": primary_address.get("geometry_geojson"),
+                    "coordinate_quality": primary_address.get("coordinate_quality"),
+                    "coordinate_source": primary_address.get("coordinate_source")
+                }
+            
+            return pnumber_data
+            
+        except Exception as e:
+            self.log.error(f"Error enriching P-number data with geometry: {e}")
+            return pnumber_data

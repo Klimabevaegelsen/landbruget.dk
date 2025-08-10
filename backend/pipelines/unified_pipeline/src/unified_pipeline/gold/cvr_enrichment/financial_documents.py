@@ -1,0 +1,550 @@
+"""
+Financial Documents Step - Step 4 of CVR Enrichment Pipeline
+
+This step fetches and processes financial documents and XML data from the CVR register
+for the companies, processing them in batches for parallel execution.
+"""
+
+import json
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import Field
+
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.util.cvr_api_client import CVRAPIClient
+from unified_pipeline.util.timing import timed
+from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
+
+
+class FinancialDocumentsConfig(BaseJobConfig):
+    """Configuration for financial documents step."""
+    
+    name: str = "Financial Documents Fetching"
+    dataset: str = "cvr_enrichment_financial"
+    type: str = "cvr_api"
+    description: str = "Fetch and parse financial documents from CVR register"
+    frequency: str = "monthly"
+    bucket: str = "landbrugsdata-raw-data"
+    
+    # Shared configuration
+    shared_config: CVREnrichmentSharedConfig = Field(
+        default_factory=CVREnrichmentSharedConfig,
+        description="Shared configuration for CVR enrichment pipeline"
+    )
+    
+    # Financial documents specific configuration
+    batch_number: Optional[int] = Field(
+        default=None,
+        description="Batch number for parallel processing (1-based)"
+    )
+    
+    total_batches: Optional[int] = Field(
+        default=None,
+        description="Total number of batches in this step"
+    )
+    
+    max_financial_documents: int = Field(
+        default=10,
+        description="Maximum number of financial documents to fetch per company"
+    )
+    
+    parse_financial_xml: bool = Field(
+        default=True,
+        description="Whether to download and parse XML financial documents"
+    )
+    
+    xml_only: bool = Field(
+        default=True,
+        description="Whether to fetch only XML documents (not other formats)"
+    )
+    
+    model_config = {"frozen": True}
+    
+    def apply_cli_filters(self, cli_config):
+        """Apply CLI configuration filters to this config."""
+        if cli_config.batch_number is not None:
+            object.__setattr__(self, 'batch_number', cli_config.batch_number)
+        if cli_config.total_batches is not None:
+            object.__setattr__(self, 'total_batches', cli_config.total_batches)
+        if cli_config.test_limit is not None:
+            object.__setattr__(self, 'shared_config', 
+                self.shared_config.model_copy(update={'test_limit': cli_config.test_limit}))
+        if cli_config.max_financial_documents is not None:
+            object.__setattr__(self, 'max_financial_documents', cli_config.max_financial_documents)
+        if cli_config.parse_financial_xml is not None:
+            object.__setattr__(self, 'parse_financial_xml', cli_config.parse_financial_xml)
+
+
+class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface):
+    """
+    Financial documents step implementation.
+    
+    This step:
+    1. Loads company data from company fetching step
+    2. Fetches financial documents for each company
+    3. Downloads and parses XML documents if configured
+    4. Extracts financial metrics from XBRL data
+    5. Saves financial data for subsequent steps
+    """
+    
+    def __init__(self, config: FinancialDocumentsConfig):
+        """
+        Initialize financial documents step.
+        
+        Args:
+            config: Configuration for financial documents fetching
+        """
+        super().__init__(config)
+        
+        # Initialize CVR API client
+        cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
+        cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
+        
+        self.cvr_api_client = CVRAPIClient(
+            username=cvr_username,
+            password=cvr_password,
+            enable_geocoding=False,  # Not needed for financial documents
+            geocode_current_only=True
+        )
+        
+        self.log.info("Financial documents step initialized")
+        self.log.info(f"📋 Configuration:")
+        self.log.info(f"   • Batch: {self.config.batch_number}/{self.config.total_batches}")
+        self.log.info(f"   • Max documents per company: {self.config.max_financial_documents}")
+        self.log.info(f"   • Parse XML: {self.config.parse_financial_xml}")
+        self.log.info(f"   • XML only: {self.config.xml_only}")
+    
+    @timed(name="Financial documents processing")
+    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Run the financial documents fetching process.
+        
+        Args:
+            silver_data: Optional silver data (not used in this step)
+            
+        Returns:
+            Table name containing financial documents data
+        """
+        self.log.info("Starting financial documents step")
+        
+        try:
+            # Step 1: Load company data from company fetching step
+            company_batch = self._load_company_batch()
+            
+            # Step 2: Fetch financial documents for companies
+            financial_data = await self._fetch_financial_documents(company_batch)
+            
+            # Step 3: Process and parse financial data
+            processed_data = self._process_financial_data(financial_data)
+            
+            # Step 4: Save financial data
+            table_name = self._save_financial_data(processed_data)
+            
+            self.log.info(f"Financial documents step completed successfully. Data saved to: {table_name}")
+            return table_name
+            
+        except Exception as e:
+            self.log.error(f"Financial documents step failed: {e}")
+            raise
+    
+    @timed(name="Loading company batch")
+    def _load_company_batch(self) -> List[Dict[str, Any]]:
+        """
+        Load company data for this batch from company fetching step output.
+        
+        Returns:
+            List of company data to process in this batch
+        """
+        self.log.info("Loading company data from company fetching step")
+        
+        # Get input paths from company fetching step
+        input_paths = get_step_input_paths(
+            CVREnrichmentStep.FINANCIAL_DOCUMENTS,
+            self.date_pattern,
+            total_batches=self.config.total_batches,
+            bucket=self.config.bucket
+        )
+        
+        if not input_paths:
+            raise ValueError("No input paths found for financial documents step")
+        
+        all_companies = []
+        
+        # Process each company batch file
+        for input_path in input_paths:
+            self.log.info(f"Loading company data from: {input_path}")
+            
+            try:
+                # Download and load company data
+                local_path = self.gcs_access.download_file(
+                    input_path, 
+                    f"/tmp/company_batch_{len(all_companies)}.parquet"
+                )
+                
+                # Load company data
+                result = self.conn.execute("""
+                    SELECT cvr_number, company_name, company_data_json
+                    FROM read_parquet(?)
+                    WHERE company_data_json IS NOT NULL
+                """, [local_path]).fetchall()
+                
+                # Parse company JSON data
+                for cvr_number, company_name, company_json in result:
+                    try:
+                        company_data = json.loads(company_json)
+                        company_data["cvr_number"] = cvr_number
+                        company_data["company_name"] = company_name
+                        all_companies.append(company_data)
+                    except json.JSONDecodeError as e:
+                        self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                        continue
+            
+            except Exception as e:
+                self.log.error(f"Failed to load company data from {input_path}: {e}")
+                continue
+        
+        # Filter companies for this batch if batching is enabled
+        if self.config.batch_number and self.config.total_batches:
+            batch_size = len(all_companies) // self.config.total_batches
+            start_idx = (self.config.batch_number - 1) * batch_size
+            
+            if self.config.batch_number == self.config.total_batches:
+                # Last batch gets remaining items
+                end_idx = len(all_companies)
+            else:
+                end_idx = start_idx + batch_size
+            
+            company_batch = all_companies[start_idx:end_idx]
+            
+            self.log.info(
+                f"Batch {self.config.batch_number}/{self.config.total_batches}: "
+                f"{len(company_batch)} companies (from {len(all_companies)} total)"
+            )
+        else:
+            company_batch = all_companies
+            self.log.info(f"Loaded {len(company_batch)} companies (no batching)")
+        
+        return company_batch
+    
+    @timed(name="Fetching financial documents")
+    async def _fetch_financial_documents(self, company_batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Fetch financial documents for companies.
+        
+        Args:
+            company_batch: List of company data to process
+            
+        Returns:
+            Dictionary containing financial documents data
+        """
+        self.log.info(f"Fetching financial documents for {len(company_batch)} companies")
+        
+        if not company_batch:
+            self.log.warning("No companies to process for financial documents")
+            return {
+                "results": {},
+                "summary": {"total": 0, "successful": 0, "failed": 0},
+                "fetch_timestamp": datetime.now().isoformat()
+            }
+        
+        financial_results = {}
+        successful = 0
+        failed = 0
+        
+        from tqdm import tqdm
+        
+        for company_data in tqdm(company_batch, desc="Fetching financial documents", unit="company"):
+            cvr_number = str(company_data["cvr_number"])
+            
+            try:
+                # Fetch financial documents using CVR API client
+                docs = self.cvr_api_client.get_financial_documents(
+                    cvr_number=cvr_number,
+                    max_results=self.config.max_financial_documents,
+                    xml_only=self.config.xml_only
+                )
+                
+                # Download XML content if configured
+                if self.config.parse_financial_xml and docs:
+                    docs = self._download_and_parse_xml_documents(docs, cvr_number)
+                
+                if docs:
+                    financial_results[cvr_number] = {
+                        "cvr_number": cvr_number,
+                        "company_name": company_data.get("company_name"),
+                        "documents": docs,
+                        "document_count": len(docs),
+                        "fetch_timestamp": datetime.now().isoformat()
+                    }
+                    successful += 1
+                else:
+                    failed += 1
+                    self.log.debug(f"No financial documents found for CVR: {cvr_number}")
+                
+            except Exception as e:
+                failed += 1
+                self.log.error(f"Error fetching financial documents for CVR {cvr_number}: {e}")
+        
+        summary = {
+            "total": len(company_batch),
+            "successful": successful,
+            "failed": failed,
+            "success_rate": successful / len(company_batch) if company_batch else 0
+        }
+        
+        self.log.info(
+            f"Financial documents fetch completed: "
+            f"{successful} successful, {failed} failed "
+            f"({summary['success_rate']:.1%} success rate)"
+        )
+        
+        return {
+            "results": financial_results,
+            "summary": summary,
+            "fetch_timestamp": datetime.now().isoformat()
+        }
+    
+    def _download_and_parse_xml_documents(self, docs: List[Dict[str, Any]], cvr_number: str) -> List[Dict[str, Any]]:
+        """
+        Download and parse XML financial documents.
+        
+        Args:
+            docs: List of financial document metadata
+            cvr_number: CVR number for logging
+            
+        Returns:
+            List of documents with XML content and parsed financial metrics
+        """
+        enriched_docs = []
+        
+        for doc in docs:
+            try:
+                # Get the first document URL if available
+                if doc.get("documents") and len(doc["documents"]) > 0:
+                    document_url = doc["documents"][0].get("document_url")
+                    
+                    if document_url and document_url.endswith('.xml'):
+                        self.log.debug(f"Downloading XML from: {document_url}")
+                        
+                        # Download XML content
+                        xml_content = self.cvr_api_client.download_financial_document(document_url)
+                        
+                        # Add XML content to document
+                        doc_copy = doc.copy()
+                        doc_copy["xml_content"] = xml_content
+                        doc_copy["xml_size_bytes"] = len(xml_content)
+                        doc_copy["download_success"] = True
+                        
+                        # Parse financial metrics from XML using CVR API client method
+                        try:
+                            financial_values = self.cvr_api_client.parse_financial_xml(xml_content)
+                            doc_copy["financial_metrics"] = {
+                                "parsed_values": financial_values,
+                                "total_values": len(financial_values),
+                                "largest_value": financial_values[0]["value"] if financial_values else 0,
+                                "parse_success": True
+                            }
+                        except Exception as parse_e:
+                            self.log.warning(f"Failed to parse XBRL data for CVR {cvr_number}: {parse_e}")
+                            doc_copy["financial_metrics"] = {
+                                "parse_success": False,
+                                "parse_error": str(parse_e)
+                            }
+                        
+                        enriched_docs.append(doc_copy)
+                    else:
+                        # Non-XML or no URL - keep original
+                        doc_copy = doc.copy()
+                        doc_copy["download_success"] = False
+                        doc_copy["download_reason"] = "No XML URL found"
+                        enriched_docs.append(doc_copy)
+                else:
+                    # No documents array
+                    doc_copy = doc.copy()
+                    doc_copy["download_success"] = False
+                    doc_copy["download_reason"] = "No documents array"
+                    enriched_docs.append(doc_copy)
+                    
+            except Exception as e:
+                self.log.warning(f"Failed to download XML document for CVR {cvr_number}: {e}")
+                doc_copy = doc.copy()
+                doc_copy["download_success"] = False
+                doc_copy["download_error"] = str(e)
+                enriched_docs.append(doc_copy)
+        
+        return enriched_docs
+    
+    @timed(name="Processing financial data")
+    def _process_financial_data(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process and structure financial documents data.
+        
+        Args:
+            financial_data: Raw financial documents data
+            
+        Returns:
+            Processed financial data
+        """
+        self.log.info("Processing financial documents data")
+        
+        financial_results = financial_data["results"]
+        
+        # Process each company's financial data
+        processed_financial = []
+        
+        for cvr_number, company_financial in financial_results.items():
+            # Add processing metadata
+            company_financial["processing_timestamp"] = datetime.now().isoformat()
+            company_financial["pipeline_run_id"] = self.date_pattern
+            company_financial["processing_step"] = CVREnrichmentStep.FINANCIAL_DOCUMENTS.value
+            company_financial["batch_number"] = self.config.batch_number
+            
+            # Calculate summary statistics
+            documents = company_financial.get("documents", [])
+            xml_documents = [d for d in documents if d.get("download_success")]
+            
+            company_financial["xml_document_count"] = len(xml_documents)
+            company_financial["total_xml_size_bytes"] = sum(
+                d.get("xml_size_bytes", 0) for d in xml_documents
+            )
+            
+            # Extract latest financial metrics if available
+            latest_metrics = None
+            latest_date = None
+            
+            for doc in xml_documents:
+                if doc.get("financial_metrics") and doc["financial_metrics"].get("parse_success"):
+                    doc_date = doc.get("reporting_period", {}).get("end_date")
+                    if doc_date and (not latest_date or doc_date > latest_date):
+                        latest_date = doc_date
+                        latest_metrics = doc["financial_metrics"]
+            
+            company_financial["latest_financial_metrics"] = latest_metrics
+            company_financial["latest_reporting_date"] = latest_date
+            
+            processed_financial.append(company_financial)
+        
+        # Create summary
+        summary = {
+            "total_companies": len(financial_results),
+            "companies_with_documents": len(processed_financial),
+            "total_documents": sum(c.get("document_count", 0) for c in processed_financial),
+            "total_xml_documents": sum(c.get("xml_document_count", 0) for c in processed_financial),
+            "companies_with_financial_metrics": len([
+                c for c in processed_financial 
+                if c.get("latest_financial_metrics")
+            ]),
+            "batch_number": self.config.batch_number,
+            "total_batches": self.config.total_batches,
+            "processing_timestamp": datetime.now().isoformat(),
+            "api_summary": financial_data["summary"]
+        }
+        
+        processed_data = {
+            "financial_documents": processed_financial,
+            "summary": summary,
+        }
+        
+        self.log.info(
+            f"Processed {summary['companies_with_documents']} companies with financial documents "
+            f"({summary['total_xml_documents']} XML documents, "
+            f"{summary['companies_with_financial_metrics']} with parsed metrics)"
+        )
+        
+        return processed_data
+    
+    @timed(name="Saving financial data")
+    def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
+        """
+        Save processed financial documents data to GCS.
+        
+        Args:
+            processed_data: Processed financial data
+            
+        Returns:
+            Table name where data was saved
+        """
+        self.log.info("Saving financial documents data")
+        
+        # Create table name with batch suffix if applicable
+        if self.config.batch_number:
+            table_name = f"cvr_financial_batch_{self.config.batch_number:03d}"
+        else:
+            table_name = "cvr_financial"
+        
+        financial_data = processed_data["financial_documents"]
+        
+        # Create DuckDB table
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        
+        if financial_data:
+            # Convert to JSON strings for DuckDB
+            json_strings = [json.dumps(financial) for financial in financial_data]
+            
+            self.conn.execute(f"""
+                CREATE TABLE {table_name} AS
+                SELECT 
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                    json_extract(json_data, '$.document_count')::INTEGER as document_count,
+                    json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
+                    json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
+                    json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
+                    CASE 
+                        WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL 
+                        THEN true 
+                        ELSE false 
+                    END as has_financial_metrics,
+                    json_data as financial_data_json,
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                    json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                FROM unnest($1) as t(json_data)
+            """, [json_strings])
+            
+            self.log.info(f"Created table {table_name} with {len(financial_data)} companies")
+        else:
+            # Create empty table with schema
+            self.conn.execute(f"""
+                CREATE TABLE {table_name} (
+                    cvr_number INTEGER,
+                    company_name VARCHAR,
+                    document_count INTEGER,
+                    xml_document_count INTEGER,
+                    total_xml_size_bytes INTEGER,
+                    latest_reporting_date VARCHAR,
+                    has_financial_metrics BOOLEAN,
+                    financial_data_json VARCHAR,
+                    processing_timestamp VARCHAR,
+                    batch_number INTEGER
+                )
+            """)
+            self.log.info(f"Created empty table {table_name}")
+        
+        # Save to GCS
+        self._save_data(
+            data=table_name,
+            dataset=self.config.dataset,
+            bucket=self.config.bucket,
+            stage="gold"
+        )
+        
+        # Save summary data separately
+        self._save_summary_data(processed_data["summary"])
+        
+        return table_name
+    
+    def _save_summary_data(self, summary: Dict[str, Any]) -> None:
+        """Save processing summary data."""
+        if self.config.batch_number:
+            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary_batch_{self.config.batch_number:03d}.json"
+        else:
+            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary.json"
+        
+        self.gcs_access.upload_json(
+            data=summary,
+            gcs_path=f"gs://{self.config.bucket}/{summary_path}"
+        )
+        
+        self.log.info(f"Saved processing summary to {summary_path}")
