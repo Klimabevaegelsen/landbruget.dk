@@ -570,7 +570,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             addr["processing_timestamp"] = datetime.now().isoformat()
             addr["pipeline_run_id"] = self.date_pattern
             addr["processing_step"] = CVREnrichmentStep.ADDRESS_GEOCODING.value
-            addr["batch_number"] = self.config.batch_number
+            # addr["batch_number"] = self.config.batch_number  # No batching
         
         # Create summary
         summary = {
@@ -579,8 +579,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             "pnumber_addresses_extracted": address_extraction["pnumber_addresses"],
             "batch_addresses_processed": address_extraction["batch_addresses"],
             "geocoding_summary": geocoding_results["summary"],
-            "batch_number": self.config.batch_number,
-            "total_batches": self.config.total_batches,
+            # "batch_number": self.config.batch_number,  # No batching
+            # "total_batches": self.config.total_batches,  # No batching
             "processing_timestamp": datetime.now().isoformat()
         }
         
@@ -694,10 +694,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
     
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
-        if self.config.batch_number:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary_batch_{self.config.batch_number:03d}.json"
-        else:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary.json"
+        # No batching - single summary file
+        summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/address_summary.json"
         
         self.gcs_access.upload_json(
             data=summary,

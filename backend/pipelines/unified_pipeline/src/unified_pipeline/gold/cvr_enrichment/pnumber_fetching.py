@@ -352,7 +352,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                 pnumber_info["processing_timestamp"] = datetime.now().isoformat()
                 pnumber_info["pipeline_run_id"] = self.date_pattern
                 pnumber_info["processing_step"] = CVREnrichmentStep.PNUMBER_FETCHING.value
-                pnumber_info["batch_number"] = self.config.batch_number
+                # pnumber_info["batch_number"] = self.config.batch_number  # No batching
                 
                 processed_pnumbers.append(pnumber_info)
         
@@ -368,8 +368,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             "total_addresses_found": sum(
                 len(p.get("addresses", [])) for p in processed_pnumbers
             ),
-            "batch_number": self.config.batch_number,
-            "total_batches": self.config.total_batches,
+            # "batch_number": self.config.batch_number,  # No batching
+            # "total_batches": self.config.total_batches,  # No batching
             "processing_timestamp": datetime.now().isoformat(),
             "api_summary": pnumber_data["summary"],
             "extraction_summary": {
