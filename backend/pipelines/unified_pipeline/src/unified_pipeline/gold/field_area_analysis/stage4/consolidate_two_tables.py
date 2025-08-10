@@ -167,7 +167,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT 
                 field_uuid,
                 SUM(ST_Area_Spheroid(field_bnbo_water_geometry)) 
-                    as field_bnbo_water_covered_m2
+                    as field_bnbo_water_covered_m2,
+                SUM(CASE WHEN status_category = 'Action Required' 
+                    THEN ST_Area_Spheroid(field_bnbo_water_geometry) ELSE 0 END) / 10000.0 
+                    as bnbo_action_required_water_covered_hectares,
+                SUM(CASE WHEN status_category = 'Completed' 
+                    THEN ST_Area_Spheroid(field_bnbo_water_geometry) ELSE 0 END) / 10000.0 
+                    as bnbo_completed_water_covered_hectares
             FROM field_bnbo_water_intersections
             GROUP BY field_uuid
         """)
@@ -275,6 +281,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 ba.bnbo_status_categories,
                 COALESCE(ba.bnbo_action_required_hectares, 0) as bnbo_action_required_hectares,
                 COALESCE(ba.bnbo_completed_hectares, 0) as bnbo_completed_hectares,
+                COALESCE(bwa.bnbo_action_required_water_covered_hectares, 0) as bnbo_action_required_water_covered_hectares,
+                COALESCE(bwa.bnbo_completed_water_covered_hectares, 0) as bnbo_completed_water_covered_hectares,
                 
                 -- Wetland Analysis (using pre-aggregated data)
                 COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
@@ -372,7 +380,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 field_uuid,
                 bfe_number,
                 SUM(ST_Area_Spheroid(property_bnbo_water_geometry)) 
-                    as property_bnbo_water_covered_m2
+                    as property_bnbo_water_covered_m2,
+                SUM(CASE WHEN status_category = 'Action Required' 
+                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0 
+                    as property_bnbo_action_required_water_covered_hectares,
+                SUM(CASE WHEN status_category = 'Completed' 
+                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0 
+                    as property_bnbo_completed_water_covered_hectares
             FROM property_bnbo_water_intersections
             GROUP BY field_uuid, bfe_number
         """)
@@ -428,7 +442,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(pba.property_bnbo_action_required_hectares, 0) 
                     as property_bnbo_action_required_hectares,
                 COALESCE(pba.property_bnbo_completed_hectares, 0) 
-                    as property_bnbo_completed_hectares
+                    as property_bnbo_completed_hectares,
+                COALESCE(pbwa.property_bnbo_action_required_water_covered_hectares, 0) 
+                    as property_bnbo_action_required_water_covered_hectares,
+                COALESCE(pbwa.property_bnbo_completed_water_covered_hectares, 0) 
+                    as property_bnbo_completed_water_covered_hectares
                 
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_aggregates pba 
@@ -738,6 +756,22 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         
         if inconsistent_bnbo == 0 and inconsistent_wetland == 0:
             self.log.info("✅ All environmental area and coverage calculations are consistent")
+        
+        # Validate that water-covered BNBO areas don't exceed total BNBO areas
+        invalid_water_coverage = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM field_environmental_analysis_fields
+            WHERE bnbo_action_required_water_covered_hectares > bnbo_action_required_hectares + 0.01
+               OR bnbo_completed_water_covered_hectares > bnbo_completed_hectares + 0.01
+        """).fetchone()[0]
+        
+        if invalid_water_coverage > 0:
+            self.log.warning(
+                f"⚠️ Found {invalid_water_coverage:,} fields where water-covered BNBO area "
+                f"exceeds total BNBO area (tolerance: 0.01 hectares)"
+            )
+        else:
+            self.log.info("✅ All water-covered BNBO areas are within bounds of total BNBO areas")
 
     def _get_main_output_table(self) -> str:
         """Get the main output table for area validation."""
