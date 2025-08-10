@@ -50,6 +50,11 @@ class CVREnrichmentSharedConfig(BaseModel):
         description="Maximum number of concurrent API requests"
     )
     
+    api_batch_size: int = Field(
+        default=100,
+        description="Number of CVR numbers or P-numbers to fetch per API call using 'terms' query (optimized for maximum efficiency)"
+    )
+    
     # Address geocoding configuration
     enable_address_geocoding: bool = Field(
         default=True, 
