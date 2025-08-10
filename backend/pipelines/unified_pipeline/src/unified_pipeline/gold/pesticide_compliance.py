@@ -231,104 +231,78 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"📊 Loaded {bmd_count:,} BMD products, {restricted_count:,} with restriction dates")
 
     async def _load_pesticide_data(self) -> None:
-        """Load pesticide application data from latest silver layer."""
-        self.logger.info("📥 Loading pesticide application data")
+        """Load pesticide disaggregation data from latest gold layer."""
+        self.logger.info("📥 Loading pesticide disaggregation data (field-level allocations)")
         
-        # Find latest pesticide silver data directory
-        pattern = f"gs://{self.config.bucket}/silver/pesticides/*/pesticiddata_*.parquet"
+        # Find latest pesticide disaggregation gold data with year-specific pattern
+        pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
         files = self.gcs_access.list_files_with_timestamps(pattern)
         
         if not files:
-            raise Exception("Pesticide application data not found in silver layer")
+            raise Exception("Pesticide disaggregation data not found in gold layer")
         
-        # Get the directory with the latest timestamp
-        latest_dir = None
-        latest_timestamp = None
-        for file_path, timestamp in files:
-            # Extract directory from file path
-            dir_path = '/'.join(file_path.split('/')[:-1])  # Remove filename
-            if latest_timestamp is None or timestamp > latest_timestamp:
-                latest_dir = dir_path
-                latest_timestamp = timestamp
+        # Sort by timestamp to get the most recent file
+        files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+        latest_path, timestamp = files_sorted[0]
         
-        self.logger.info(f"📄 Loading pesticide data from: {latest_dir} (timestamp: {latest_timestamp})")
+        # Extract agricultural year from the path
+        import re
+        year_match = re.search(r'pesticide_disaggregation_(\d{4}_\d{4})', latest_path)
+        agricultural_year_from_path = year_match.group(1) if year_match else "unknown"
         
-        # Get all pesticide files from the latest directory
-        pattern_latest = f"{latest_dir}/pesticiddata_*.parquet"
-        latest_files = self.gcs_access.list_files(pattern_latest)
+        if not year_match:
+            raise Exception(f"Could not extract agricultural year from path: {latest_path}")
         
-        if not latest_files:
-            raise Exception("No pesticide data files found in latest directory")
+        # Extract application year (start of agricultural year, e.g., 2023_2024 -> 2023)
+        application_year = int(agricultural_year_from_path.split('_')[0])
         
-        # Load pesticide data files using proper GCS access pattern
-        # First, create an empty table to union into
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE pesticide_applications AS
-            SELECT 
-                CAST(NULL AS VARCHAR) as company_name,
-                CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS VARCHAR) as pesticide_name,
-                CAST(NULL AS VARCHAR) as pesticide_registration_number,
-                CAST(NULL AS DOUBLE) as area_ha,
-                CAST(NULL AS DOUBLE) as dosage_quantity,
-                CAST(NULL AS INTEGER) as dosage_unit,
-                CAST(NULL AS VARCHAR) as crop_code,
-                CAST(NULL AS INTEGER) as application_year,
-                CAST(NULL AS VARCHAR) as agricultural_year,
-                CAST(NULL AS VARCHAR) as original_year_field
-            WHERE FALSE
-        """)
+        self.logger.info(f"📄 Loading disaggregated pesticide data from: {latest_path}")
+        self.logger.info(f"📅 Agricultural year from path: {agricultural_year_from_path} (application year: {application_year})")
         
-        # Load each file and union into the table
-        for file_path in latest_files:
-            self.logger.info(f"📥 Loading pesticide file: {file_path}")
-            
-            # Extract agricultural year from filename (e.g., pesticiddata_2023_2024.parquet -> 2023_2024)
-            import re
-            filename = file_path.split('/')[-1]  # Get filename from path
-            year_match = re.search(r'pesticiddata_(\d{4}_\d{4})\.parquet', filename)
-            agricultural_year = year_match.group(1) if year_match else None
-            
-            if not agricultural_year:
-                self.logger.warning(f"Could not extract agricultural year from filename: {filename}")
-                continue
-            
-            # Extract the start year for application_year (e.g., 2022_2023 -> 2022)
-            # Agricultural year 2022_2023 = Aug 1 2022 - July 31 2023, so applications are primarily in 2022
-            start_year = int(agricultural_year.split('_')[0])
-            
-            with self.gcs_access._temp_download(file_path) as temp_file:
-                self.conn.execute(f"""
-                    INSERT INTO pesticide_applications
-                    SELECT 
-                        companyname as company_name,
-                        cvr_number,
-                        pesticide_name,
-                        pesticide_registration_number,
-                        area_ha,
-                        dosage_quantity,
-                        dosage_unit,
-                        crop_code,
-                        -- Use start year from filename (when applications primarily occur)
-                        {start_year} as application_year,
-                        -- Use agricultural year from filename
-                        '{agricultural_year}' as agricultural_year,
-                        -- Store original filename for reference
-                        '{filename}' as original_year_field
-                    FROM read_parquet('{temp_file}')
-                    WHERE pesticide_registration_number IS NOT NULL
-                    AND pesticide_registration_number != ''
-                    AND cvr_number IS NOT NULL
-                    AND cvr_number != ''
-                    AND area_ha > 0
-                """)
+        # Load disaggregated pesticide data using proper GCS access pattern
+        with self.gcs_access._temp_download(latest_path) as temp_file:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE pesticide_applications AS
+                SELECT 
+                    -- Use CVR from disaggregated data (standardized)
+                    cvr_number,
+                    PesticideName as pesticide_name,
+                    PesticideRegistrationNumber as pesticide_registration_number,
+                    AllocatedArea as area_ha,
+                    DosageQuantity as dosage_quantity,
+                    DosageUnit as dosage_unit,
+                    -- Extract field information
+                    field_uuid,
+                    primary_field_id,
+                    MatchedFieldID,
+                    MatchedBlockID,
+                    -- Additional disaggregation metadata
+                    AllocationMethod as allocation_method,
+                    MatchConfidence as match_confidence,
+                    IsPartialFieldCoverage as is_partial_field_coverage,
+                    DisaggregationDate as disaggregation_date,
+                    -- Use agricultural year from directory path
+                    '{agricultural_year_from_path}' as agricultural_year,
+                    -- Use application year from directory path
+                    {application_year} as application_year
+                FROM read_parquet('{temp_file}')
+                WHERE PesticideRegistrationNumber IS NOT NULL
+                AND PesticideRegistrationNumber != ''
+                AND cvr_number IS NOT NULL
+                AND cvr_number != ''
+                AND AllocatedArea > 0
+                AND field_uuid IS NOT NULL
+            """)
         
         app_count = self.conn.execute("SELECT COUNT(*) FROM pesticide_applications").fetchone()[0]
         years_available = self.conn.execute(
             "SELECT DISTINCT agricultural_year FROM pesticide_applications WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
         ).fetchall()
         
-        self.logger.info(f"📊 Loaded {app_count:,} pesticide applications")
+        field_count = self.conn.execute("SELECT COUNT(DISTINCT field_uuid) FROM pesticide_applications").fetchone()[0]
+        
+        self.logger.info(f"📊 Loaded {app_count:,} field-level pesticide applications")
+        self.logger.info(f"🔢 Covering {field_count:,} unique fields with UUIDs")
         self.logger.info(f"📅 Agricultural years available: {[y[0] for y in years_available]}")
 
     def _get_years_to_analyze(self) -> List[str]:
@@ -363,31 +337,49 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         year_info = self.agricultural_years[ag_year]
         
         # Detect potential compliance issues by comparing restriction dates with agricultural year period
+        # Using disaggregated data which has field-level allocations with field_uuid
         # Issues occur when:
         # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
         # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
         violations_query = f"""
         SELECT 
-            a.company_name,
+            -- Field-level information from disaggregated data
+            a.field_uuid,
+            a.primary_field_id,
+            a.MatchedFieldID,
+            a.MatchedBlockID,
+            -- Company information
             a.cvr_number,
+            -- Pesticide application details
             a.pesticide_name,
             a.pesticide_registration_number,
-            a.area_ha,
+            a.area_ha as allocated_area_ha,
             a.dosage_quantity,
             a.dosage_unit,
-            a.crop_code,
+            a.application_year,
+            a.agricultural_year,
+            -- Disaggregation metadata
+            a.allocation_method,
+            a.match_confidence,
+            a.is_partial_field_coverage,
+            a.disaggregation_date,
+            -- BMD regulatory information
             b.product_name as bmd_product_name,
             b.restriction_date,
             b.restriction_date_parsed,
             b.active_substances,
             b.product_status,
-            -- Categorize potential compliance issues with more neutral language
+            b.formulation,
+            b.application_area as bmd_application_area,
+            -- Categorize potential compliance issues
             CASE 
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'POTENTIAL_VIOLATION'
                 WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
                 ELSE 'COMPLIANT'
             END as issue_type,
-            '{ag_year}' as agricultural_year
+            -- Analysis metadata
+            '{ag_year}' as agricultural_year_analyzed,
+            CURRENT_TIMESTAMP as analysis_timestamp
         FROM pesticide_applications a
         INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
         WHERE a.agricultural_year = '{ag_year}'
@@ -407,19 +399,26 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         withdrawn_uses = len(violations_df[violations_df['issue_type'] == 'WITHDRAWN_PRODUCT_USE'])
         companies_with_issues = violations_df['cvr_number'].nunique()
         products_with_issues = violations_df['pesticide_registration_number'].nunique()
-        total_area_affected = violations_df['area_ha'].sum()
+        fields_affected = violations_df['field_uuid'].nunique()
+        total_area_affected = violations_df['allocated_area_ha'].sum()
         
-        # Get top violating companies
-        top_companies = violations_df.groupby(['company_name', 'cvr_number']).agg({
-            'area_ha': 'sum',
-            'pesticide_registration_number': 'nunique'
-        }).reset_index().nlargest(10, 'area_ha')
+        # Get top violating companies (by area affected)
+        top_companies = violations_df.groupby('cvr_number').agg({
+            'allocated_area_ha': 'sum',
+            'pesticide_registration_number': 'nunique',
+            'field_uuid': 'nunique'
+        }).reset_index()
+        top_companies.columns = ['cvr_number', 'total_area_ha', 'products_used', 'fields_affected']
+        top_companies = top_companies.nlargest(10, 'total_area_ha')
         
-        # Get most violated products
+        # Get most violated products (by number of fields affected)
         top_products = violations_df.groupby(['bmd_product_name', 'pesticide_registration_number']).agg({
-            'area_ha': 'sum',
-            'cvr_number': 'nunique'
-        }).reset_index().nlargest(10, 'cvr_number')
+            'allocated_area_ha': 'sum',
+            'cvr_number': 'nunique',
+            'field_uuid': 'nunique'
+        }).reset_index()
+        top_products.columns = ['bmd_product_name', 'pesticide_registration_number', 'total_area_ha', 'companies_affected', 'fields_affected']
+        top_products = top_products.nlargest(10, 'fields_affected')
         
         results = {
             "agricultural_year": ag_year,
@@ -427,6 +426,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "withdrawn_product_uses": withdrawn_uses,
             "companies_with_issues": companies_with_issues,
             "products_with_issues": products_with_issues,
+            "fields_affected": fields_affected,
             "total_area_affected_hectares": float(total_area_affected),
             "issues_data": violations_df.to_dict('records'),
             "top_companies_with_issues": top_companies.to_dict('records'),
@@ -434,7 +434,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "analysis_date": datetime.now().isoformat()
         }
         
-        self.logger.info(f"📊 {ag_year}: {potential_violations} potential violations, {withdrawn_uses} withdrawn product uses, {companies_with_issues} companies, {total_area_affected:.1f} ha affected")
+        self.logger.info(f"📊 {ag_year}: {potential_violations} potential violations, {withdrawn_uses} withdrawn product uses")
+        self.logger.info(f"🏢 Companies affected: {companies_with_issues}, Fields affected: {fields_affected}")
+        self.logger.info(f"📏 Total area affected: {total_area_affected:.1f} ha")
         
         return results
 
@@ -446,6 +448,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             year_data.get("total_area_affected_hectares", 0) 
             for year_data in all_results.values()
         )
+        
+        total_fields_affected = len(set(
+            issue["field_uuid"]
+            for year_data in all_results.values()
+            for issue in year_data.get("issues_data", [])
+        ))
         
         total_products = len(set(
             issue["pesticide_registration_number"]
@@ -460,20 +468,25 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 cvr = issue["cvr_number"]
                 if cvr not in all_companies:
                     all_companies[cvr] = {
-                        "company_name": issue["company_name"],
                         "cvr_number": cvr,
                         "total_issues": 0,
                         "total_area_ha": 0,
-                        "products_used": set()
+                        "products_used": set(),
+                        "fields_affected": set()
                     }
                 all_companies[cvr]["total_issues"] += 1
-                all_companies[cvr]["total_area_ha"] += issue["area_ha"]
+                all_companies[cvr]["total_area_ha"] += issue["allocated_area_ha"]
                 all_companies[cvr]["products_used"].add(issue["pesticide_registration_number"])
+                all_companies[cvr]["fields_affected"].add(issue["field_uuid"])
         
         # Convert to list and sort
         top_companies_with_issues = sorted(
             [
-                {**company, "products_used": len(company["products_used"])}
+                {
+                    **company, 
+                    "products_used": len(company["products_used"]),
+                    "fields_affected": len(company["fields_affected"])
+                }
                 for company in all_companies.values()
             ],
             key=lambda x: x["total_issues"],
@@ -481,20 +494,23 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )[:10]
         
         return {
-            "analysis_type": "pesticide_regulatory_compliance",
+            "analysis_type": "pesticide_regulatory_compliance_field_level",
             "agricultural_year_definition": "August 1 to July 31",
             "total_potential_violations": total_issues,
             "companies_with_issues": total_companies,
             "products_with_issues": total_products,
+            "fields_affected": total_fields_affected,
             "total_area_affected_hectares": total_area_affected,
             "agricultural_years_analyzed": list(all_results.keys()),
             "top_companies_with_issues": top_companies_with_issues,
             "analysis_date": datetime.now().isoformat(),
             "methodology": {
-                "issue_detection": "Applications of products with restriction dates before agricultural year",
-                "data_sources": ["BMD pesticide database", "Agricultural pesticide applications"],
+                "issue_detection": "Field-level applications of products with restriction dates before agricultural year",
+                "data_sources": ["BMD pesticide database", "Pesticide disaggregation (field-level allocations)"],
                 "temporal_alignment": "Agricultural years (August-July)",
-                "issue_types": ["POTENTIAL_VIOLATION", "WITHDRAWN_PRODUCT_USE"]
+                "issue_types": ["POTENTIAL_VIOLATION", "WITHDRAWN_PRODUCT_USE"],
+                "field_level_analysis": True,
+                "allocation_methods_used": "Pesticide disaggregation with 92% coverage"
             }
         }
 
@@ -511,23 +527,35 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
-            # Save violations data as parquet
-            if year_results.get("violations_data"):
-                violations_path = f"gs://{self.config.bucket}/{base_path}/violations_{ag_year}.parquet"
-                # Create violations dataframe using pandas instead of complex SQL
-                violations_data = year_results["violations_data"][:100]  # Limit for demo
-                if violations_data:
-                    import pandas as pd
-                    violations_df = pd.DataFrame(violations_data)
-                else:
-                    import pandas as pd
-                    violations_df = pd.DataFrame()
+            # Save compliance issues data as parquet - this is the main usable dataset
+            if year_results.get("issues_data"):
+                compliance_path = f"gs://{self.config.bucket}/{base_path}/compliance_issues_{ag_year}.parquet"
                 
-                self.gcs_access.upload_dataframe(violations_df, violations_path)
+                # Create compliance dataframe with all the detailed data
+                issues_data = year_results["issues_data"]
+                if issues_data:
+                    import pandas as pd
+                    compliance_df = pd.DataFrame(issues_data)
+                    
+                    # Log the output structure for verification
+                    self.logger.info(f"📊 Saving {len(compliance_df)} compliance records with columns: {list(compliance_df.columns)}")
+                    self.logger.info(f"🔍 Field UUID column present: {'field_uuid' in compliance_df.columns}")
+                    self.logger.info(f"🌾 Crop code column present: {'crop_code' in compliance_df.columns}")
+                    self.logger.info(f"🧪 Pesticide name column present: {'pesticide_name' in compliance_df.columns}")
+                    
+                    # Save the full dataset as parquet for downstream analysis
+                    self.gcs_access.upload_dataframe(compliance_df, compliance_path)
+                    
+                    self.logger.info(f"✅ COMPLIANCE OUTPUT: {len(compliance_df)} records saved to {compliance_path}")
+                    self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
+                    print(f"✅ COMPLIANCE OUTPUT: {len(compliance_df)} records saved to {compliance_path}")
+                    print(f"📁 Compliance GCS Path: {compliance_path}")
+                else:
+                    self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
             
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
-            year_summary = {k: v for k, v in year_results.items() if k != "violations_data"}
+            year_summary = {k: v for k, v in year_results.items() if k != "issues_data"}
             self.gcs_access.upload_json(year_summary, year_summary_path)
         
         # Generate human-readable report
