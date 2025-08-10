@@ -86,13 +86,8 @@ jobs:
           echo "Running: $CMD"
           echo "🚀 Command starting now..."
           
-          # Force output visibility and error handling
-          $CMD 2>&1 | tee collection_output.log || {
-            echo "❌ Command failed with exit code: $?"
-            echo "📋 Last 50 lines of output:"
-            tail -50 collection_output.log 2>/dev/null || echo "No output captured"
-            exit 1
-          }
+          # Run command directly like other pipelines - no tee redirection
+          $CMD
           
           echo "✅ CVR Collection completed successfully"
           
@@ -149,13 +144,8 @@ jobs:
           echo "Running: $CMD"
           echo "🚀 Command starting now..."
           
-          # Force output visibility and error handling
-          $CMD 2>&1 | tee company_fetching_output.log || {
-            echo "❌ Command failed with exit code: $?"
-            echo "📋 Last 50 lines of output:"
-            tail -50 company_fetching_output.log 2>/dev/null || echo "No output captured"
-            exit 1
-          }
+          # Run command directly like other pipelines - no tee redirection
+          $CMD
           
           echo "✅ Company Fetching completed successfully"
 
