@@ -696,9 +696,14 @@ class CVRAPIClient:
                 
                 # Fallback to Datavask API if DAWA failed and we have address text
                 if not geocoded and should_geocode and address.get("full_address"):
-                    geocoded = self.dawa_client.geocode_with_datavask(address["full_address"])
+                    # Reconstruct complete address with postal code and city for better geocoding
+                    complete_address = address["full_address"]
+                    if address.get("postal_code") and address.get("city"):
+                        complete_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                    
+                    geocoded = self.dawa_client.geocode_with_datavask(complete_address)
                     if geocoded:
-                        self.log.debug(f"Datavask geocoded address: {address.get('full_address')}")
+                        self.log.debug(f"Datavask geocoded address: {complete_address}")
                 
                 # Add geometry data if geocoding succeeded
                 if geocoded:
