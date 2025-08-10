@@ -671,7 +671,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 coordinate_quality VARCHAR,
                 coordinate_source VARCHAR,
                 dawa_enriched BOOLEAN,
-                dawa_fetch_timestamp VARCHAR
+                geocoding_timestamp VARCHAR
             )
         """)
         
@@ -1238,7 +1238,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                             TRY(address_parsed.coordinate_quality) as coordinate_quality,
                             TRY(address_parsed.coordinate_source) as coordinate_source,
                             TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
-                            TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
+                            TRY(address_parsed.geocoding_timestamp) as geocoding_timestamp
                         FROM addresses_flattened
                     """, [json_strings, addresses_schema[0]])
                 else:
@@ -1279,7 +1279,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                             NULL::VARCHAR as coordinate_quality,
                             NULL::VARCHAR as coordinate_source,
                             NULL::BOOLEAN as dawa_enriched,
-                            NULL::VARCHAR as dawa_fetch_timestamp
+                            NULL::VARCHAR as geocoding_timestamp
                         FROM addresses_flattened
                     """, [json_strings, addresses_schema[0]])
     
