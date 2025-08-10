@@ -874,53 +874,162 @@ class CVRAPIClient:
         self, 
         cvr_numbers: List[str], 
         fetch_all_fields: bool = True, 
-        enrich_with_geometry: bool = True
+        enrich_with_geometry: bool = True,
+        batch_size: int = 50
     ) -> Dict[str, Any]:
         """
-        Fetch company data for multiple CVR numbers efficiently.
+        Fetch company data for multiple CVR numbers efficiently using batch API calls.
+        
+        Uses Elasticsearch 'terms' query to fetch multiple companies in single requests,
+        dramatically reducing API calls and improving performance.
 
         Args:
             cvr_numbers: List of 8-digit CVR numbers
             fetch_all_fields: Whether to fetch all available fields or just basic ones
             enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            batch_size: Number of CVRs to fetch per API call (default: 50)
 
         Returns:
             Dictionary mapping CVR numbers to company data
         """
+        if not cvr_numbers:
+            return {"results": {}, "summary": {"total": 0, "successful": 0, "failed": 0}}
+        
+        # Validate CVR numbers
+        valid_cvrs = [cvr for cvr in cvr_numbers if self._validate_cvr_number(cvr)]
+        invalid_count = len(cvr_numbers) - len(valid_cvrs)
+        
+        if invalid_count > 0:
+            self.log.warning(f"Skipping {invalid_count} invalid CVR numbers")
+        
         self.log.info(
-            f"Fetching data for {len(cvr_numbers)} companies "
+            f"Fetching data for {len(valid_cvrs)} companies in batches of {batch_size} "
             f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
         )
 
         results = {}
         successful = 0
         failed = 0
+        api_calls = 0
 
-        for cvr_number in tqdm(cvr_numbers, desc="Fetching company data", unit="company"):
+        # Process in batches
+        for i in tqdm(range(0, len(valid_cvrs), batch_size), desc="Batch fetching companies", unit="batch"):
+            batch_cvrs = valid_cvrs[i:i + batch_size]
+            api_calls += 1
+            
             try:
-                company_data = self.get_company_data(
-                    cvr_number, fetch_all_fields, enrich_with_geometry
-                )
-                if company_data:
-                    results[cvr_number] = company_data
-                    successful += 1
-                else:
-                    failed += 1
-                    self.log.debug(f"No data found for CVR: {cvr_number}")
-
+                batch_results = self._fetch_companies_batch(batch_cvrs, fetch_all_fields)
+                
+                # Process each company in the batch
+                for cvr in batch_cvrs:
+                    if cvr in batch_results:
+                        company_data = batch_results[cvr]
+                        
+                        # Enrich with geometry if requested
+                        if enrich_with_geometry and company_data:
+                            try:
+                                company_data = self.enrich_company_with_geometry(company_data)
+                            except Exception as e:
+                                self.log.warning(f"Failed to geocode addresses for CVR {cvr}: {e}")
+                        
+                        results[cvr] = company_data
+                        successful += 1
+                    else:
+                        failed += 1
+                        self.log.debug(f"No data found for CVR: {cvr}")
+                        
             except Exception as e:
-                failed += 1
-                self.log.error(f"Error fetching CVR {cvr_number}: {e}")
+                failed += len(batch_cvrs)
+                self.log.error(f"Error fetching batch {i//batch_size + 1}: {e}")
 
         self.log.info(
-            f"Batch fetch completed: {successful} successful, {failed} failed"
+            f"Batch fetch completed: {successful} successful, {failed} failed "
+            f"({api_calls} API calls vs {len(valid_cvrs)} individual calls - "
+            f"{len(valid_cvrs)/api_calls:.1f}x more efficient)"
         )
 
         return {
             "results": results,
-            "summary": {"total": len(cvr_numbers), "successful": successful, "failed": failed},
+            "summary": {
+                "total": len(cvr_numbers), 
+                "successful": successful, 
+                "failed": failed,
+                "invalid_cvrs": invalid_count,
+                "api_calls": api_calls,
+                "efficiency_gain": f"{len(valid_cvrs)/api_calls:.1f}x"
+            },
             "fetch_timestamp": datetime.now().isoformat(),
         }
+    
+    def _fetch_companies_batch(self, cvr_numbers: List[str], fetch_all_fields: bool = True) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch multiple companies in a single API call using terms query.
+        
+        Args:
+            cvr_numbers: List of CVR numbers to fetch
+            fetch_all_fields: Whether to fetch all fields or basic subset
+            
+        Returns:
+            Dictionary mapping CVR numbers to parsed company data
+        """
+        try:
+            # Build batch query using 'terms' for multiple values
+            query = {
+                "query": {
+                    "terms": {
+                        "Vrvirksomhed.cvrNummer": cvr_numbers
+                    }
+                },
+                "size": len(cvr_numbers)
+            }
+            
+            # Add source filtering for performance if not fetching all fields
+            if not fetch_all_fields:
+                query["_source"] = [
+                    "Vrvirksomhed.cvrNummer",
+                    "Vrvirksomhed.navne",
+                    "Vrvirksomhed.virksomhedsform", 
+                    "Vrvirksomhed.virksomhedsstatus",
+                    "Vrvirksomhed.beliggenhedsadresse",
+                    "Vrvirksomhed.postadresse",
+                    "Vrvirksomhed.hovedbranche",
+                    "Vrvirksomhed.bibranche1",
+                    "Vrvirksomhed.bibranche2", 
+                    "Vrvirksomhed.bibranche3",
+                    "Vrvirksomhed.attributter",
+                    "Vrvirksomhed.reklamebeskyttet",
+                    "Vrvirksomhed.subsidiaries"  # For P-number extraction
+                ]
+            
+            raw_data = self._make_request(self.company_endpoint, query)
+            
+            if not raw_data or "hits" not in raw_data:
+                self.log.warning("Batch query returned no results")
+                return {}
+            
+            # Parse results and map by CVR number
+            results = {}
+            hits = raw_data["hits"]["hits"]
+            
+            for hit in hits:
+                try:
+                    # Parse each company's data using the same format as individual calls
+                    fake_response = {"hits": {"hits": [hit]}}
+                    parsed_data = self._parse_company_data(fake_response)
+                    if parsed_data:
+                        cvr = parsed_data.get("cvr_number")
+                        if cvr:
+                            # Ensure CVR key is always a string for consistent lookup
+                            results[str(cvr)] = parsed_data
+                except Exception as e:
+                    self.log.error(f"Error parsing company data from batch: {e}")
+                    continue
+            
+            return results
+            
+        except Exception as e:
+            self.log.error(f"Error in batch company fetch: {e}")
+            return {}
 
     def download_financial_document(self, document_url: str) -> str:
         """
@@ -1183,53 +1292,162 @@ class CVRAPIClient:
         self, 
         pnumbers: List[str], 
         fetch_all_fields: bool = True, 
-        enrich_with_geometry: bool = True
+        enrich_with_geometry: bool = True,
+        batch_size: int = 50
     ) -> Dict[str, Any]:
         """
-        Fetch P-number data for multiple P-numbers efficiently.
+        Fetch P-number data for multiple P-numbers efficiently using batch API calls.
+        
+        Uses Elasticsearch 'terms' query to fetch multiple P-numbers in single requests,
+        dramatically reducing API calls and improving performance.
 
         Args:
             pnumbers: List of P-numbers
             fetch_all_fields: Whether to fetch all available fields or just basic ones
             enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            batch_size: Number of P-numbers to fetch per API call (default: 50)
 
         Returns:
             Dictionary mapping P-numbers to P-number data
         """
+        if not pnumbers:
+            return {"results": {}, "summary": {"total": 0, "successful": 0, "failed": 0}}
+        
+        # Validate P-numbers
+        valid_pnumbers = [p for p in pnumbers if self._validate_pnumber_format(p)]
+        invalid_count = len(pnumbers) - len(valid_pnumbers)
+        
+        if invalid_count > 0:
+            self.log.warning(f"Skipping {invalid_count} invalid P-numbers")
+        
         self.log.info(
-            f"Fetching data for {len(pnumbers)} P-numbers "
+            f"Fetching data for {len(valid_pnumbers)} P-numbers in batches of {batch_size} "
             f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
         )
 
         results = {}
         successful = 0
         failed = 0
+        api_calls = 0
 
-        for pnumber in tqdm(pnumbers, desc="Fetching P-number data", unit="pnumber"):
+        # Process in batches
+        for i in tqdm(range(0, len(valid_pnumbers), batch_size), desc="Batch fetching P-numbers", unit="batch"):
+            batch_pnumbers = valid_pnumbers[i:i + batch_size]
+            api_calls += 1
+            
             try:
-                pnumber_data = self.get_pnumber_data(
-                    pnumber, fetch_all_fields, enrich_with_geometry
-                )
-                if pnumber_data:
-                    results[pnumber] = pnumber_data
-                    successful += 1
-                else:
-                    failed += 1
-                    self.log.debug(f"No data found for P-number: {pnumber}")
-
+                batch_results = self._fetch_pnumbers_batch(batch_pnumbers, fetch_all_fields)
+                
+                # Process each P-number in the batch
+                for pnumber in batch_pnumbers:
+                    if pnumber in batch_results:
+                        pnumber_data = batch_results[pnumber]
+                        
+                        # Enrich with geometry if requested
+                        if enrich_with_geometry and pnumber_data:
+                            try:
+                                pnumber_data = self.enrich_pnumber_with_geometry(pnumber_data)
+                            except Exception as e:
+                                self.log.warning(f"Failed to geocode addresses for P-number {pnumber}: {e}")
+                        
+                        results[pnumber] = pnumber_data
+                        successful += 1
+                    else:
+                        failed += 1
+                        self.log.debug(f"No data found for P-number: {pnumber}")
+                        
             except Exception as e:
-                failed += 1
-                self.log.error(f"Error fetching P-number {pnumber}: {e}")
+                failed += len(batch_pnumbers)
+                self.log.error(f"Error fetching P-number batch {i//batch_size + 1}: {e}")
 
         self.log.info(
-            f"P-number batch fetch completed: {successful} successful, {failed} failed"
+            f"P-number batch fetch completed: {successful} successful, {failed} failed "
+            f"({api_calls} API calls vs {len(valid_pnumbers)} individual calls - "
+            f"{len(valid_pnumbers)/api_calls:.1f}x more efficient)"
         )
 
         return {
             "results": results,
-            "summary": {"total": len(pnumbers), "successful": successful, "failed": failed},
+            "summary": {
+                "total": len(pnumbers), 
+                "successful": successful, 
+                "failed": failed,
+                "invalid_pnumbers": invalid_count,
+                "api_calls": api_calls,
+                "efficiency_gain": f"{len(valid_pnumbers)/api_calls:.1f}x"
+            },
             "fetch_timestamp": datetime.now().isoformat(),
         }
+    
+    def _fetch_pnumbers_batch(self, pnumbers: List[str], fetch_all_fields: bool = True) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch multiple P-numbers in a single API call using terms query.
+        
+        Args:
+            pnumbers: List of P-numbers to fetch
+            fetch_all_fields: Whether to fetch all fields or basic subset
+            
+        Returns:
+            Dictionary mapping P-numbers to parsed P-number data
+        """
+        try:
+            # Build batch query using 'terms' for multiple values
+            # P-numbers need to be integers for the API
+            pnumber_ints = [int(p) for p in pnumbers]
+            
+            query = {
+                "query": {
+                    "terms": {
+                        "VrproduktionsEnhed.pNummer": pnumber_ints
+                    }
+                },
+                "size": len(pnumbers)
+            }
+            
+            # Add source filtering for performance if not fetching all fields
+            if not fetch_all_fields:
+                query["_source"] = [
+                    "VrproduktionsEnhed.pNummer",
+                    "VrproduktionsEnhed.navne",
+                    "VrproduktionsEnhed.beliggenhedsadresse",
+                    "VrproduktionsEnhed.postadresse", 
+                    "VrproduktionsEnhed.hovedbranche",
+                    "VrproduktionsEnhed.bibranche1",
+                    "VrproduktionsEnhed.bibranche2",
+                    "VrproduktionsEnhed.bibranche3",
+                    "VrproduktionsEnhed.attributter",
+                    "VrproduktionsEnhed.elektroniskPost",
+                    "VrproduktionsEnhed.telefonnummer",
+                    "VrproduktionsEnhed.aarsbeskaeftigelse"
+                ]
+            
+            raw_data = self._make_request(self.pnumber_endpoint, query)
+            
+            if not raw_data or "hits" not in raw_data:
+                self.log.warning("P-number batch query returned no results")
+                return {}
+            
+            # Parse results and map by P-number
+            results = {}
+            hits = raw_data["hits"]["hits"]
+            
+            for hit in hits:
+                try:
+                    # Parse each P-number's data
+                    parsed_data = self._parse_pnumber_data(hit.get("_source", {}))
+                    if parsed_data:
+                        pnumber = str(parsed_data.get("pnumber"))
+                        if pnumber:
+                            results[pnumber] = parsed_data
+                except Exception as e:
+                    self.log.error(f"Error parsing P-number data from batch: {e}")
+                    continue
+            
+            return results
+            
+        except Exception as e:
+            self.log.error(f"Error in batch P-number fetch: {e}")
+            return {}
 
     def get_company_pnumbers(self, company_data: Dict[str, Any]) -> List[str]:
         """

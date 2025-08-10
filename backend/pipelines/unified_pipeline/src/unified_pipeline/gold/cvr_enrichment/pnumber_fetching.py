@@ -282,11 +282,12 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         # Convert to list for API client
         pnumber_list = list(pnumbers)
         
-        # Fetch P-number data using CVR API client
+        # Fetch P-number data using CVR API client with batch optimization
         pnumber_results = self.cvr_api_client.fetch_multiple_pnumbers(
             pnumbers=pnumber_list,
             fetch_all_fields=self.config.fetch_all_fields,
-            enrich_with_geometry=self.config.enable_address_geocoding
+            enrich_with_geometry=self.config.enable_address_geocoding,
+            batch_size=self.config.shared_config.api_batch_size
         )
         
         self.log.info(
