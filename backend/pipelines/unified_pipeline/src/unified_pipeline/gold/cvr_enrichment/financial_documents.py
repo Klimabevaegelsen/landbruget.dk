@@ -160,12 +160,21 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info("Loading company data from company fetching step")
         
         # Get input paths from company fetching step
-        input_paths = get_step_input_paths(
-            CVREnrichmentStep.FINANCIAL_DOCUMENTS,
-            self.date_pattern,
-            total_batches=self.config.total_batches,
-            bucket=self.config.bucket
-        )
+        # For batched processing, only load data from the corresponding batch
+        if self.config.batch_number and self.config.total_batches:
+            base_path = f"gs://{self.config.bucket}/gold/cvr_enrichment/{self.date_pattern}"
+            input_paths = [
+                f"{base_path}/company_fetching_batch_{self.config.batch_number:03d}.parquet"
+            ]
+            self.log.info(f"Batch {self.config.batch_number}: Loading only company batch {self.config.batch_number}")
+        else:
+            # For non-batched processing, load all data
+            input_paths = get_step_input_paths(
+                CVREnrichmentStep.FINANCIAL_DOCUMENTS,
+                self.date_pattern,
+                total_batches=self.config.total_batches,
+                bucket=self.config.bucket
+            )
         
         if not input_paths:
             raise ValueError("No input paths found for financial documents step")
@@ -215,25 +224,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 self.log.error(f"Failed to load company data from {input_path}: {e}")
                 continue
         
-        # Filter companies for this batch if batching is enabled
+        # No need to filter companies - each batch already loads only its corresponding data
+        company_batch = all_companies
         if self.config.batch_number and self.config.total_batches:
-            batch_size = len(all_companies) // self.config.total_batches
-            start_idx = (self.config.batch_number - 1) * batch_size
-            
-            if self.config.batch_number == self.config.total_batches:
-                # Last batch gets remaining items
-                end_idx = len(all_companies)
-            else:
-                end_idx = start_idx + batch_size
-            
-            company_batch = all_companies[start_idx:end_idx]
-            
             self.log.info(
                 f"Batch {self.config.batch_number}/{self.config.total_batches}: "
-                f"{len(company_batch)} companies (from {len(all_companies)} total)"
+                f"{len(company_batch)} companies from corresponding batch data"
             )
         else:
-            company_batch = all_companies
             self.log.info(f"Loaded {len(company_batch)} companies (no batching)")
         
         return company_batch
