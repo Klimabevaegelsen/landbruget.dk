@@ -330,6 +330,7 @@ class CVRAPIClient:
 
             addresses.append(
                 {
+                    "address_type": "beliggenhedsadresse",
                     "full_address": " ".join(address_parts) if address_parts else None,
                     "street_name": address_entry.get("vejnavn"),
                     "house_number": address_entry.get("husnummerFra"),
@@ -346,6 +347,41 @@ class CVRAPIClient:
                     "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
                 }
             )
+
+        # Extract postal addresses (postadresse) if different from location addresses
+        for address_entry in company.get("postadresse", []):
+            address_parts = []
+
+            # Build address string safely
+            if address_entry.get("vejnavn"):
+                address_parts.append(str(address_entry["vejnavn"]))
+            if address_entry.get("husnummerFra"):
+                address_parts.append(str(address_entry["husnummerFra"]))
+            if address_entry.get("etage"):
+                address_parts.append(f"{address_entry['etage']}.")
+            if address_entry.get("sidedoer"):
+                address_parts.append(address_entry["sidedoer"])
+
+            addresses.append(
+                {
+                    "address_type": "postadresse",
+                    "full_address": " ".join(address_parts) if address_parts else None,
+                    "street_name": address_entry.get("vejnavn"),
+                    "house_number": address_entry.get("husnummerFra"),
+                    "floor": address_entry.get("etage"),
+                    "door": address_entry.get("sidedoer"),
+                    "postal_code": address_entry.get("postnummer"),
+                    "city": address_entry.get("postdistrikt"),
+                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "country_code": address_entry.get("landekode"),
+                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
+                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
+                    "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
+                }
+            )
+
         parsed_data["addresses"] = addresses
 
         # Extract contact information
