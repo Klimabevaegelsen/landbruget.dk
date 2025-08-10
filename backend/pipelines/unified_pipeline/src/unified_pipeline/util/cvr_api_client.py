@@ -8,6 +8,7 @@ https://datacvr.virk.dk/artikel/system-til-system-adgang-til-cvr-data
 The API uses Elasticsearch-style queries with HTTP Basic Authentication.
 """
 
+import json
 import os
 import time
 import xml.etree.ElementTree as ET
@@ -1421,7 +1422,32 @@ class CVRAPIClient:
                     "VrproduktionsEnhed.aarsbeskaeftigelse"
                 ]
             
+            # DEBUG: Log the query being sent
+            self.log.debug(f"P-number batch query: {json.dumps(query, indent=2)}")
+            self.log.debug(f"P-number endpoint: {self.pnumber_endpoint}")
+            self.log.debug(f"P-numbers being fetched: {pnumbers[:5]}{'...' if len(pnumbers) > 5 else ''}")
+            
             raw_data = self._make_request(self.pnumber_endpoint, query)
+            
+            # DEBUG: Log raw response structure
+            if raw_data:
+                self.log.debug(f"P-number API response structure: {list(raw_data.keys())}")
+                if "hits" in raw_data:
+                    hits_info = raw_data["hits"]
+                    self.log.debug(f"Hits info: total={hits_info.get('total', 'unknown')}, max_score={hits_info.get('max_score', 'unknown')}")
+                    self.log.debug(f"Number of hits returned: {len(hits_info.get('hits', []))}")
+                    
+                    # Log sample hit structure if any
+                    if hits_info.get('hits'):
+                        sample_hit = hits_info['hits'][0]
+                        self.log.debug(f"Sample hit structure: {list(sample_hit.keys())}")
+                        if '_source' in sample_hit:
+                            source_keys = list(sample_hit['_source'].keys())
+                            self.log.debug(f"Sample _source keys: {source_keys}")
+                else:
+                    self.log.warning("No 'hits' key in P-number API response")
+            else:
+                self.log.error("P-number API returned empty response")
             
             if not raw_data or "hits" not in raw_data:
                 self.log.warning("P-number batch query returned no results")
@@ -1433,20 +1459,31 @@ class CVRAPIClient:
             
             for hit in hits:
                 try:
-                    # Parse each P-number's data
-                    parsed_data = self._parse_pnumber_data(hit.get("_source", {}))
+                    # FIX: Pass the full response structure that _parse_pnumber_data expects
+                    # Create a fake response structure with the single hit
+                    fake_response = {"hits": {"hits": [hit]}}
+                    parsed_data = self._parse_pnumber_data(fake_response)
                     if parsed_data:
-                        pnumber = str(parsed_data.get("pnumber"))
+                        pnumber = str(parsed_data.get("p_number"))
                         if pnumber:
                             results[pnumber] = parsed_data
+                            self.log.debug(f"Successfully parsed P-number: {pnumber}")
+                        else:
+                            self.log.warning(f"Parsed P-number data has no p_number field: {list(parsed_data.keys())}")
+                    else:
+                        self.log.warning(f"Failed to parse P-number data from hit: {hit.get('_id', 'unknown')}")
                 except Exception as e:
                     self.log.error(f"Error parsing P-number data from batch: {e}")
+                    self.log.debug(f"Problematic hit structure: {hit}")
                     continue
             
+            self.log.debug(f"P-number batch parsing completed: {len(results)} successful out of {len(hits)} hits")
             return results
             
         except Exception as e:
             self.log.error(f"Error in batch P-number fetch: {e}")
+            import traceback
+            self.log.error(f"P-number batch fetch traceback: {traceback.format_exc()}")
             return {}
 
     def get_company_pnumbers(self, company_data: Dict[str, Any]) -> List[str]:

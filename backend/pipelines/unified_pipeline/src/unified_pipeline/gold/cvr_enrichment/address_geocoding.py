@@ -36,15 +36,16 @@ class AddressGeocodingConfig(BaseJobConfig):
     )
     
     # Address geocoding specific configuration
-    batch_number: Optional[int] = Field(
-        default=None,
-        description="Batch number for parallel processing (1-based)"
-    )
-    
-    total_batches: Optional[int] = Field(
-        default=None,
-        description="Total number of batches in this step"
-    )
+    # Batch processing removed - now processes all addresses in single job
+    # batch_number: Optional[int] = Field(
+    #     default=None,
+    #     description="Batch number for parallel processing (1-based)"
+    # )
+    # 
+    # total_batches: Optional[int] = Field(
+    #     default=None,
+    #     description="Total number of batches in this step"
+    # )
     
     geocode_current_only: bool = Field(
         default=True,
@@ -95,7 +96,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         
         self.log.info("Address geocoding step initialized")
         self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Batch: {self.config.batch_number}/{self.config.total_batches}")
+        self.log.info(f"   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Geocode current only: {self.config.geocode_current_only}")
         self.log.info(f"   • Max addresses per batch: {self.config.max_addresses_per_batch}")
     
@@ -142,11 +143,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         """
         self.log.info("Extracting addresses from company and P-number data")
         
-        # Get input paths for company and P-number data
+        # Get input paths for company and P-number data (no batching)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
             self.date_pattern,
-            total_batches=5,  # Company fetching creates 5 batch files
+            total_batches=None,  # No batching
             bucket=self.config.bucket
         )
         

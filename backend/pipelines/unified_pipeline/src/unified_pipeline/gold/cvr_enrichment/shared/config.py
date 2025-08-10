@@ -180,61 +180,28 @@ def get_step_input_paths(
         return [f"{base_path}/collection.parquet"]
     
     elif step == CVREnrichmentStep.PNUMBER_FETCHING:
-        # P-number fetching depends on company fetching batches
-        if total_batches:
-            return [
-                f"{base_path}/company_fetching_batch_{i:03d}.parquet" 
-                for i in range(1, total_batches + 1)
-            ]
-        else:
-            return [f"{base_path}/company_fetching.parquet"]
+        # P-number fetching depends on company fetching (no batching)
+        return [f"{base_path}/company_fetching.parquet"]
     
     elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
-        # Financial documents depend on company fetching batches
-        if total_batches:
-            return [
-                f"{base_path}/company_fetching_batch_{i:03d}.parquet" 
-                for i in range(1, total_batches + 1)
-            ]
-        else:
-            return [f"{base_path}/company_fetching.parquet"]
+        # Financial documents depend on company fetching (no batching)
+        return [f"{base_path}/company_fetching.parquet"]
     
     elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
-        # Address geocoding depends on both company and P-number data
-        inputs = []
-        if total_batches:
-            inputs.extend([
-                f"{base_path}/company_fetching_batch_{i:03d}.parquet"
-                for i in range(1, total_batches + 1)
-            ])
-            inputs.extend([
-                f"{base_path}/pnumber_fetching_batch_{i:03d}.parquet"
-                for i in range(1, total_batches + 1)
-            ])
-        else:
-            inputs = [
-                f"{base_path}/company_fetching.parquet",
-                f"{base_path}/pnumber_fetching.parquet"
-            ]
-        return inputs
+        # Address geocoding depends on both company and P-number data (no batching)
+        return [
+            f"{base_path}/company_fetching.parquet",
+            f"{base_path}/pnumber_fetching.parquet"
+        ]
     
     elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
-        # Data consolidation depends on all previous steps
-        inputs = []
-        if total_batches:
-            for step_name in ["company_fetching", "pnumber_fetching", "financial_documents", "address_geocoding"]:
-                inputs.extend([
-                    f"{base_path}/{step_name}_batch_{i:03d}.parquet" 
-                    for i in range(1, total_batches + 1)
-                ])
-        else:
-            inputs = [
-                f"{base_path}/company_fetching.parquet",
-                f"{base_path}/pnumber_fetching.parquet", 
-                f"{base_path}/financial_documents.parquet",
-                f"{base_path}/address_geocoding.parquet"
-            ]
-        return inputs
+        # Data consolidation depends on all previous steps (no batching)
+        return [
+            f"{base_path}/company_fetching.parquet",
+            f"{base_path}/pnumber_fetching.parquet", 
+            f"{base_path}/financial_documents.parquet",
+            f"{base_path}/address_geocoding.parquet"
+        ]
     
     else:
         return []
