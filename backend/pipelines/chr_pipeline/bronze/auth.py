@@ -32,7 +32,7 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.auth")
 ENDPOINTS = {
     "chr_dyr": "https://ws.fvst.dk/service/CHR_dyrWS?wsdl",
     "stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?wsdl",
-    "diko": "https://ws.fvst.dk/service/CHR_dikoWS?wsdl",
+    "diko": "https://ws.fvst.dk/service/DIKOWS?wsdl",
     "ejendom": "https://ws.fvst.dk/service/CHR_ejendomWS?wsdl",
     "besaetning": "https://ws.fvst.dk/service/CHR_besaetningWS?wsdl",
 }
