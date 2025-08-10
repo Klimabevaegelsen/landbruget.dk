@@ -160,21 +160,12 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info("Loading company data from company fetching step")
         
         # Get input paths from company fetching step
-        # For batched processing, only load data from the corresponding batch
-        if self.config.batch_number and self.config.total_batches:
-            base_path = f"gs://{self.config.bucket}/gold/cvr_enrichment/{self.date_pattern}"
-            input_paths = [
-                f"{base_path}/company_fetching_batch_{self.config.batch_number:03d}.parquet"
-            ]
-            self.log.info(f"Batch {self.config.batch_number}: Loading only company batch {self.config.batch_number}")
-        else:
-            # For non-batched processing, load all data
-            input_paths = get_step_input_paths(
-                CVREnrichmentStep.FINANCIAL_DOCUMENTS,
-                self.date_pattern,
-                total_batches=self.config.total_batches,
-                bucket=self.config.bucket
-            )
+        input_paths = get_step_input_paths(
+            CVREnrichmentStep.FINANCIAL_DOCUMENTS,
+            self.date_pattern,
+            total_batches=5,  # Company fetching creates 5 batch files
+            bucket=self.config.bucket
+        )
         
         if not input_paths:
             raise ValueError("No input paths found for financial documents step")
@@ -186,21 +177,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(f"Loading company data from: {input_path}")
             
             try:
-                # Check if running in GitHub Actions and use artifact data
-                import os
-                local_path = None
-                
-                if os.getenv("GITHUB_ACTIONS") == "true":
-                    # Use company data from artifact in GitHub Actions
-                    artifact_path = "/tmp/cvr_company_data.parquet"
-                    if os.path.exists(artifact_path):
-                        local_path = artifact_path
-                        self.log.info("Using company data from artifact")
-                
-                if not local_path:
-                    # Fallback: try to read directly from GCS using DuckDB (for local development)
-                    self.log.info(f"Reading directly from GCS: {input_path}")
-                    local_path = input_path  # Use GCS path directly with DuckDB
+                # Read directly from GCS path with DuckDB
+                local_path = input_path
+                self.log.info(f"Reading from: {input_path}")
                 
                 # Load company data
                 result = self.conn.execute("""
@@ -224,15 +203,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 self.log.error(f"Failed to load company data from {input_path}: {e}")
                 continue
         
-        # No need to filter companies - each batch already loads only its corresponding data
+        # Process all companies (no batching)
         company_batch = all_companies
-        if self.config.batch_number and self.config.total_batches:
-            self.log.info(
-                f"Batch {self.config.batch_number}/{self.config.total_batches}: "
-                f"{len(company_batch)} companies from corresponding batch data"
-            )
-        else:
-            self.log.info(f"Loaded {len(company_batch)} companies (no batching)")
+        self.log.info(f"Loaded {len(company_batch)} companies from all batches")
         
         return company_batch
     
@@ -476,11 +449,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         """
         self.log.info("Saving financial documents data")
         
-        # Create table name with batch suffix if applicable
-        if self.config.batch_number:
-            table_name = f"cvr_financial_batch_{self.config.batch_number:03d}"
-        else:
-            table_name = "cvr_financial"
+        # Create table name
+        table_name = "cvr_financial"
         
         financial_data = processed_data["financial_documents"]
         
@@ -538,14 +508,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             stage="gold"
         )
         
-        # Also save locally for GitHub Actions artifact sharing
-        import os
-        if os.getenv("GITHUB_ACTIONS") == "true":
-            self.log.info("GitHub Actions detected - saving financial data locally for artifact sharing")
-            batch_suffix = f"_batch_{self.config.batch_number:03d}" if self.config.batch_number else ""
-            local_path = f"/tmp/cvr_financial_data{batch_suffix}.parquet"
-            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
-            self.log.info(f"Saved financial data locally to {local_path}")
+
         
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
