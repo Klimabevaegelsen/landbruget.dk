@@ -735,11 +735,13 @@ class CVRAPIClient:
                 else:
                     enriched_address["dawa_enriched"] = False
                     enriched_address["datavask_enriched"] = False
-                    # Show the complete address that was attempted for geocoding
-                    failed_address = address.get('full_address', '')
-                    if address.get("postal_code") and address.get("city"):
-                        failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                    self.log.warning(f"Failed to geocode address: {failed_address}")
+                    # Only warn if we actually tried to geocode this address
+                    if should_geocode:
+                        # Show the complete address that was attempted for geocoding
+                        failed_address = address.get('full_address', '')
+                        if address.get("postal_code") and address.get("city"):
+                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                        self.log.warning(f"Failed to geocode address: {failed_address}")
                 
                 enriched_addresses.append(enriched_address)
             
