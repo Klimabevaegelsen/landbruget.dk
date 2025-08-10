@@ -84,7 +84,7 @@ jobs:
     
     strategy:
       matrix:
-        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
       fail-fast: false
       max-parallel: 3  # Limit concurrent API calls
     
@@ -117,7 +117,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -135,7 +135,7 @@ jobs:
     
     strategy:
       matrix:
-        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
       fail-fast: false
       max-parallel: 3  # Limit concurrent API calls
     
@@ -168,7 +168,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -186,7 +186,7 @@ jobs:
     
     strategy:
       matrix:
-        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
       fail-fast: false
       max-parallel: 2  # Lower limit for financial document processing
     
@@ -219,7 +219,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -237,7 +237,7 @@ jobs:
     
     strategy:
       matrix:
-        batch: ${{ fromJson(format('[{0}]', join(range(1, fromJson(needs.cvr_collection.outputs.batch_count) + 1), ','))) }}
+        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
       fail-fast: false
       max-parallel: 4  # Higher limit for geocoding (less API intensive)
     
@@ -267,7 +267,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -309,7 +309,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage data_consolidation --total-batches ${{ needs.cvr_collection.outputs.batch_count }}"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage data_consolidation --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -324,7 +324,7 @@ jobs:
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
           echo "   • Test limit: ${{ github.event.inputs.test_limit || 'None (full dataset)' }}"
-          echo "   • Batch count: ${{ needs.cvr_collection.outputs.batch_count }}"
+          echo "   • Batch count: 5"
           echo "   • Skipped steps: ${{ github.event.inputs.skip_steps || 'None' }}"
           echo ""
           echo "📋 Steps Status:"
