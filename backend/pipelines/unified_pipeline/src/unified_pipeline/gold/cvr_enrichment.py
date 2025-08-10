@@ -1178,6 +1178,93 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """, [json_strings]).fetchone()
             
             if financial_schema and financial_schema[0]:
+                # Get the actual schema structure to check what fields exist
+                schema_str = financial_schema[0]
+                self.log.debug(f"Financial schema structure: {schema_str}")
+                
+                # Build dynamic field list based on what exists in the schema
+                financial_metrics_fields = []
+                
+                # Define all possible financial metrics fields and their fallback values
+                possible_fields = {
+                    'duration_context': 'NULL',
+                    'instant_context': 'NULL', 
+                    'income_statement_start_date': 'NULL',
+                    'income_statement_end_date': 'NULL',
+                    'balance_sheet_date': 'NULL',
+                    'net_profit_loss': 'NULL',
+                    'gross_profit_loss': 'NULL',
+                    'operating_profit_loss': 'NULL',
+                    'profit_loss_before_tax': 'NULL',
+                    'employee_benefits_expense': 'NULL',
+                    'average_number_of_employees': 'NULL',
+                    'depreciation_expense': 'NULL',
+                    'other_finance_income': 'NULL',
+                    'other_finance_expenses': 'NULL',
+                    'tax_expense': 'NULL',
+                    'total_assets': 'NULL',
+                    'total_equity': 'NULL',
+                    'noncurrent_assets': 'NULL',
+                    'current_assets': 'NULL',
+                    'cash_and_cash_equivalents': 'NULL',
+                    'liabilities_other_than_provisions': 'NULL',
+                    'shortterm_liabilities_other_than_provisions': 'NULL',
+                    'longterm_liabilities_other_than_provisions': 'NULL',
+                    'provisions': 'NULL',
+                    'property_plant_equipment': 'NULL',
+                    'contributed_capital': 'NULL'
+                }
+                
+                # Check which fields exist in the schema
+                available_fields = set()
+                for field, fallback in possible_fields.items():
+                    if f'financial_metrics.{field}' in schema_str or f'"{field}"' in schema_str:
+                        financial_metrics_fields.append(f"TRY(financial_parsed.financial_metrics.{field}) as {field}")
+                        available_fields.add(field)
+                    else:
+                        financial_metrics_fields.append(f"{fallback} as {field}")
+                        self.log.debug(f"Field 'financial_metrics.{field}' not found in schema, using {fallback}")
+                
+                # Build calculated fields based on available fields
+                calculated_fields = []
+                
+                # Equity ratio calculation
+                if 'total_assets' in available_fields and 'total_equity' in available_fields:
+                    calculated_fields.append("""
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            ELSE NULL 
+                        END as equity_ratio""")
+                else:
+                    calculated_fields.append("NULL as equity_ratio")
+                
+                # Profit per employee calculation
+                if 'average_number_of_employees' in available_fields and 'net_profit_loss' in available_fields:
+                    calculated_fields.append("""
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
+                            ELSE NULL 
+                        END as profit_per_employee""")
+                else:
+                    calculated_fields.append("NULL as profit_per_employee")
+                
+                # Return on assets calculation
+                if 'total_assets' in available_fields and 'net_profit_loss' in available_fields:
+                    calculated_fields.append("""
+                        CASE 
+                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            ELSE NULL 
+                        END as return_on_assets""")
+                else:
+                    calculated_fields.append("NULL as return_on_assets")
+                
+                # Join all field expressions
+                fields_sql = ',\n                        '.join(financial_metrics_fields)
+                calculated_fields_sql = ',\n                        '.join(calculated_fields)
+                
                 self.conn.execute(f"""
                     INSERT INTO {table_name}_financial
                     WITH financial_flattened AS (
@@ -1199,47 +1286,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         financial_parsed.document_count,
                         financial_parsed.xml_size_bytes,
                         financial_parsed.download_success,
-                        TRY(financial_parsed.financial_metrics.duration_context) as duration_context,
-                        TRY(financial_parsed.financial_metrics.instant_context) as instant_context,
-                        TRY(financial_parsed.financial_metrics.income_statement_start_date) as income_statement_start_date,
-                        TRY(financial_parsed.financial_metrics.income_statement_end_date) as income_statement_end_date,
-                        TRY(financial_parsed.financial_metrics.balance_sheet_date) as balance_sheet_date,
-                        TRY(financial_parsed.financial_metrics.net_profit_loss) as net_profit_loss,
-                        TRY(financial_parsed.financial_metrics.gross_profit_loss) as gross_profit_loss,
-                        TRY(financial_parsed.financial_metrics.operating_profit_loss) as operating_profit_loss,
-                        TRY(financial_parsed.financial_metrics.profit_loss_before_tax) as profit_loss_before_tax,
-                        TRY(financial_parsed.financial_metrics.employee_benefits_expense) as employee_benefits_expense,
-                        TRY(financial_parsed.financial_metrics.average_number_of_employees) as average_number_of_employees,
-                        TRY(financial_parsed.financial_metrics.depreciation_expense) as depreciation_expense,
-                        TRY(financial_parsed.financial_metrics.other_finance_income) as other_finance_income,
-                        TRY(financial_parsed.financial_metrics.other_finance_expenses) as other_finance_expenses,
-                        TRY(financial_parsed.financial_metrics.tax_expense) as tax_expense,
-                        TRY(financial_parsed.financial_metrics.total_assets) as total_assets,
-                        TRY(financial_parsed.financial_metrics.total_equity) as total_equity,
-                        TRY(financial_parsed.financial_metrics.noncurrent_assets) as noncurrent_assets,
-                        TRY(financial_parsed.financial_metrics.current_assets) as current_assets,
-                        TRY(financial_parsed.financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
-                        TRY(financial_parsed.financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.provisions) as provisions,
-                        TRY(financial_parsed.financial_metrics.property_plant_equipment) as property_plant_equipment,
-                        TRY(financial_parsed.financial_metrics.contributed_capital) as contributed_capital,
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
-                            ELSE NULL 
-                        END as equity_ratio,
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
-                            ELSE NULL 
-                        END as profit_per_employee,
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
-                            ELSE NULL 
-                        END as return_on_assets
+                        {fields_sql},
+                        {calculated_fields_sql}
                     FROM financial_flattened
                 """, [json_strings, financial_schema[0]])
 
