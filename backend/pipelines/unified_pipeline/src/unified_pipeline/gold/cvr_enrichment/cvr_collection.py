@@ -102,6 +102,11 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         Returns:
             Table name containing collected CVR data
         """
+        print("🚨 DEBUG: CVR collection run() method called!")
+        print(f"🚨 DEBUG: Logger level: {self.log._core.min_level}")
+        import sys
+        sys.stdout.flush()
+        
         self.log.info("Starting CVR collection step")
         
         try:
