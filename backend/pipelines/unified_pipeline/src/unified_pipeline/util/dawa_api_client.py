@@ -245,3 +245,62 @@ class DAWAAPIClient:
             "type": "Point",
             "coordinates": [longitude, latitude]
         }
+
+    def geocode_with_datavask(self, address_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Geocode an address using the Datavask API as fallback.
+        
+        Datavask API can handle unstructured address text and correct spelling errors.
+        It returns structured addresses with coordinates.
+        
+        Args:
+            address_text: Unstructured address text
+            
+        Returns:
+            Geocoded address data or None if not found
+        """
+        try:
+            # Use Datavask API to clean and structure the address
+            url = f"{self.base_url}/datavask/adresser"
+            params = {
+                "betegnelse": address_text,
+                "format": "json"
+            }
+            
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data.get("resultater") or len(data["resultater"]) == 0:
+                self.log.debug(f"No Datavask results for address: {address_text}")
+                return None
+            
+            # Get the best result (first one)
+            result = data["resultater"][0]
+            adresse = result.get("adresse", {})
+            
+            if not adresse:
+                return None
+            
+            # Datavask returns structured address info, but we need to get coordinates
+            # by calling the regular DAWA API with the address ID
+            address_id = adresse.get("id")
+            if address_id:
+                # Get full address details including coordinates
+                geocoded = self.geocode_address_by_id(address_id)
+                if geocoded:
+                    # Merge Datavask structure with DAWA coordinates
+                    geocoded.update({
+                        "floor": adresse.get("etage"),  # BFE: Floor from Datavask
+                        "door": adresse.get("dør"),     # BFE: Door from Datavask  
+                        "datavask_enriched": True,
+                        "dawa_enriched": True  # Both APIs were used
+                    })
+                    return geocoded
+            
+            return None
+            
+        except Exception as e:
+            self.log.error(f"Error geocoding address with Datavask '{address_text}': {e}")
+            return None
