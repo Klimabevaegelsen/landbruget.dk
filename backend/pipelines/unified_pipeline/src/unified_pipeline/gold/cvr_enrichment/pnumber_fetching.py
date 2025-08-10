@@ -23,7 +23,7 @@ class PNumberFetchingConfig(BaseJobConfig):
     """Configuration for P-number fetching step."""
     
     name: str = "P-Number Data Fetching"
-    dataset: str = "cvr_enrichment_pnumbers"
+    dataset: str = "cvr_enrichment"
     type: str = "cvr_api"
     description: str = "Fetch P-number (production unit) data from CVR register"
     frequency: str = "monthly"
@@ -36,15 +36,16 @@ class PNumberFetchingConfig(BaseJobConfig):
     )
     
     # P-number fetching specific configuration
-    batch_number: Optional[int] = Field(
-        default=None,
-        description="Batch number for parallel processing (1-based)"
-    )
-    
-    total_batches: Optional[int] = Field(
-        default=None,
-        description="Total number of batches in this step"
-    )
+    # Batch processing removed - now processes all P-numbers in single job
+    # batch_number: Optional[int] = Field(
+    #     default=None,
+    #     description="Batch number for parallel processing (1-based)"
+    # )
+    # 
+    # total_batches: Optional[int] = Field(
+    #     default=None,
+    #     description="Total number of batches in this step"
+    # )
     
     fetch_all_fields: bool = Field(
         default=True,
@@ -61,10 +62,11 @@ class PNumberFetchingConfig(BaseJobConfig):
     
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
-        if cli_config.batch_number is not None:
-            object.__setattr__(self, 'batch_number', cli_config.batch_number)
-        if cli_config.total_batches is not None:
-            object.__setattr__(self, 'total_batches', cli_config.total_batches)
+        # Batch processing removed
+        # if cli_config.batch_number is not None:
+        #     object.__setattr__(self, 'batch_number', cli_config.batch_number)
+        # if cli_config.total_batches is not None:
+        #     object.__setattr__(self, 'total_batches', cli_config.total_batches)
         if cli_config.test_limit is not None:
             object.__setattr__(self, 'shared_config', 
                 self.shared_config.model_copy(update={'test_limit': cli_config.test_limit}))
@@ -104,7 +106,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         
         self.log.info("P-number fetching step initialized")
         self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Batch: {self.config.batch_number}/{self.config.total_batches}")
+        self.log.info(f"   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}")
     
@@ -151,11 +153,11 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         """
         self.log.info("Extracting P-numbers from company data")
         
-        # Get input paths from company fetching step
+        # Get input paths from company fetching step (no batching)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.PNUMBER_FETCHING,
             self.date_pattern,
-            total_batches=self.config.total_batches,
+            total_batches=None,  # No batching
             bucket=self.config.bucket
         )
         
@@ -253,33 +255,9 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                 self.log.error(f"Failed to process company data from {input_path}: {e}")
                 continue
         
-        # Filter P-numbers for this batch if batching is enabled
-        if self.config.batch_number and self.config.total_batches:
-            pnumber_list = sorted(list(all_pnumbers))
-            batch_size = len(pnumber_list) // self.config.total_batches
-            start_idx = (self.config.batch_number - 1) * batch_size
-            
-            if self.config.batch_number == self.config.total_batches:
-                # Last batch gets remaining items
-                end_idx = len(pnumber_list)
-            else:
-                end_idx = start_idx + batch_size
-            
-            batch_pnumbers = set(pnumber_list[start_idx:end_idx])
-            
-            # Filter mappings to only include batch P-numbers
-            filtered_pnumber_to_cvr = {
-                pnum: cvr for pnum, cvr in pnumber_to_cvr.items() 
-                if pnum in batch_pnumbers
-            }
-            
-            self.log.info(
-                f"Batch {self.config.batch_number}/{self.config.total_batches}: "
-                f"{len(batch_pnumbers)} P-numbers (from {len(all_pnumbers)} total)"
-            )
-        else:
-            batch_pnumbers = all_pnumbers
-            filtered_pnumber_to_cvr = pnumber_to_cvr
+        # Process all P-numbers in single job (no batching)
+        batch_pnumbers = all_pnumbers
+        filtered_pnumber_to_cvr = pnumber_to_cvr
         
         extraction_result = {
             "pnumbers": batch_pnumbers,
@@ -426,11 +404,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         """
         self.log.info("Saving P-number data")
         
-        # Create table name with batch suffix if applicable
-        if self.config.batch_number:
-            table_name = f"cvr_pnumbers_batch_{self.config.batch_number:03d}"
-        else:
-            table_name = "cvr_pnumbers"
+        # Create table name (no batching)
+        table_name = "cvr_pnumbers"
         
         pnumbers_data = processed_data["pnumbers"]
         
@@ -450,7 +425,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
                     json_data as pnumber_data_json,
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                    json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                    NULL::INTEGER as batch_number  -- No batching
                 FROM unnest($1) as t(json_data)
             """, [json_strings])
             
@@ -493,10 +468,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
     
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
-        if self.config.batch_number:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary_batch_{self.config.batch_number:03d}.json"
-        else:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary.json"
+        # No batching - single summary file
+        summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/pnumber_summary.json"
         
         self.gcs_access.upload_json(
             data=summary,
