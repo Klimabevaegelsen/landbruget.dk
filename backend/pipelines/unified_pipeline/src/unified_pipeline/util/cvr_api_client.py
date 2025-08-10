@@ -673,34 +673,48 @@ class CVRAPIClient:
             enriched_addresses = []
             for address in addresses:
                 enriched_address = address.copy()
+                geocoded = None
                 
+                # Try DAWA geocoding first if address has adresse_id
                 if address.get("is_current") and address.get("adresse_id"):
                     geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
-                    
                     if geocoded:
-                        # Add geometry data to address (WGS84 coordinates)
-                        enriched_address.update({
-                            "latitude": geocoded["latitude"],  # WGS84 latitude
-                            "longitude": geocoded["longitude"],  # WGS84 longitude
-                            "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
-                            "srid": geocoded.get("srid", 4326),
-                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
-                                geocoded["latitude"], geocoded["longitude"]
-                            ),
-                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
-                                geocoded["latitude"], geocoded["longitude"]
-                            ),
-                            "coordinate_quality": geocoded.get("coordinate_quality"),
-                            "coordinate_source": geocoded.get("coordinate_source"),
-                            "dawa_enriched": True,
-                            "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
-                        })
-                        self.log.debug(f"Successfully geocoded address: {address.get('full_address')}")
-                    else:
-                        enriched_address["dawa_enriched"] = False
-                        self.log.warning(f"Failed to geocode address: {address.get('full_address')}")
+                        self.log.debug(f"DAWA geocoded address: {address.get('full_address')}")
+                
+                # Fallback to Datavask API if DAWA failed and we have address text
+                if not geocoded and address.get("full_address"):
+                    geocoded = self.dawa_client.geocode_with_datavask(address["full_address"])
+                    if geocoded:
+                        self.log.debug(f"Datavask geocoded address: {address.get('full_address')}")
+                
+                # Add geometry data if geocoding succeeded
+                if geocoded:
+                    enriched_address.update({
+                        "latitude": geocoded["latitude"],  # WGS84 latitude
+                        "longitude": geocoded["longitude"],  # WGS84 longitude
+                        "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
+                        "srid": geocoded.get("srid", 4326),
+                        "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                            geocoded["latitude"], geocoded["longitude"]
+                        ),
+                        "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                            geocoded["latitude"], geocoded["longitude"]
+                        ),
+                        "coordinate_quality": geocoded.get("coordinate_quality"),
+                        "coordinate_source": geocoded.get("coordinate_source"),
+                        "dawa_enriched": geocoded.get("dawa_enriched", True),
+                        "datavask_enriched": geocoded.get("datavask_enriched", False),
+                        "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
+                    })
+                    # Update BFE fields if available from Datavask
+                    if geocoded.get("floor") is not None:
+                        enriched_address["floor"] = geocoded["floor"]
+                    if geocoded.get("door") is not None:
+                        enriched_address["door"] = geocoded["door"]
                 else:
                     enriched_address["dawa_enriched"] = False
+                    enriched_address["datavask_enriched"] = False
+                    self.log.warning(f"Failed to geocode address: {address.get('full_address')}")
                 
                 enriched_addresses.append(enriched_address)
             
