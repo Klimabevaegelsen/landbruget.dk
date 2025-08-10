@@ -242,7 +242,19 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_company_data(self, input_path: str, companies_data: Dict[str, Any]) -> None:
         """Load company data from a batch file."""
-        local_path = self.gcs_access.download_file(input_path, f"/tmp/company_{len(companies_data)}.parquet")
+        # Check if running in GitHub Actions and use artifact data
+        import os
+        local_path = None
+        
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            artifact_path = "/tmp/cvr_company_data.parquet"
+            if os.path.exists(artifact_path):
+                local_path = artifact_path
+                self.log.info("Using company data from artifact")
+        
+        if not local_path:
+            # Fallback: use GCS path directly for local development
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT cvr_number, company_name, company_data_json
@@ -259,7 +271,19 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_pnumber_data(self, input_path: str, pnumbers_data: Dict[str, Any]) -> None:
         """Load P-number data from a batch file."""
-        local_path = self.gcs_access.download_file(input_path, f"/tmp/pnumber_{len(pnumbers_data)}.parquet")
+        # Check if running in GitHub Actions and use artifact data
+        import os
+        local_path = None
+        
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            artifact_path = "/tmp/cvr_pnumber_data.parquet"
+            if os.path.exists(artifact_path):
+                local_path = artifact_path
+                self.log.info("Using P-number data from artifact")
+        
+        if not local_path:
+            # Fallback: use GCS path directly for local development
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT p_number, parent_cvr_number, pnumber_data_json
@@ -277,7 +301,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_financial_data(self, input_path: str, financial_data: Dict[str, Any]) -> None:
         """Load financial data from a batch file."""
-        local_path = self.gcs_access.download_file(input_path, f"/tmp/financial_{len(financial_data)}.parquet")
+        # Use GCS path directly with DuckDB (no artifact needed for financial data)
+        local_path = input_path
         
         result = self.conn.execute("""
             SELECT cvr_number, financial_data_json
@@ -294,7 +319,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_address_data(self, input_path: str, addresses_data: Dict[str, Any]) -> None:
         """Load address data from a batch file."""
-        local_path = self.gcs_access.download_file(input_path, f"/tmp/address_{len(addresses_data)}.parquet")
+        # Use GCS path directly with DuckDB (no artifact needed for address data)
+        local_path = input_path
         
         result = self.conn.execute("""
             SELECT source_type, cvr_number, p_number, address_data_json

@@ -177,11 +177,21 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(f"Loading company data from: {input_path}")
             
             try:
-                # Download and load company data
-                local_path = self.gcs_access.download_file(
-                    input_path, 
-                    f"/tmp/company_batch_{len(all_companies)}.parquet"
-                )
+                # Check if running in GitHub Actions and use artifact data
+                import os
+                local_path = None
+                
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    # Use company data from artifact in GitHub Actions
+                    artifact_path = "/tmp/cvr_company_data.parquet"
+                    if os.path.exists(artifact_path):
+                        local_path = artifact_path
+                        self.log.info("Using company data from artifact")
+                
+                if not local_path:
+                    # Fallback: try to read directly from GCS using DuckDB (for local development)
+                    self.log.info(f"Reading directly from GCS: {input_path}")
+                    local_path = input_path  # Use GCS path directly with DuckDB
                 
                 # Load company data
                 result = self.conn.execute("""
