@@ -1194,65 +1194,92 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             """, [json_strings]).fetchone()
             
             if addresses_schema and addresses_schema[0]:
-                self.conn.execute(f"""
-                    INSERT INTO {table_name}_addresses
-                    WITH addresses_flattened AS (
-                        SELECT
-                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
-                        FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.addresses') IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.addresses')) > 0
-                    )
-                    SELECT 
-                        company_uuid(cvr_number) as company_uuid,
-                        cvr_number,
-                        TRY(address_parsed.full_address) as full_address,
-                        TRY(address_parsed.street_name) as street_name,
-                        TRY(address_parsed.house_number) as house_number,
-                        TRY(address_parsed.floor) as floor,
-                        TRY(address_parsed.door) as door,
-                        TRY(address_parsed.postal_code) as postal_code,
-                        TRY(address_parsed.city) as city,
-                        TRY(address_parsed.municipality_code) as municipality_code,
-                        TRY(address_parsed.municipality_name) as municipality_name,
-                        TRY(address_parsed.country_code) as country_code,
-                        TRY(address_parsed.adresse_id) as adresse_id,
-                        TRY(address_parsed.period_start) as period_start,
-                        TRY(address_parsed.period_end) as period_end,
-                        TRY(address_parsed.is_current) as is_current,
-                        CASE WHEN json_extract(address_parsed, '$.latitude') IS NOT NULL 
-                             THEN TRY(address_parsed.latitude::DOUBLE) 
-                             ELSE NULL END as latitude,
-                        CASE WHEN json_extract(address_parsed, '$.longitude') IS NOT NULL 
-                             THEN TRY(address_parsed.longitude::DOUBLE) 
-                             ELSE NULL END as longitude,
-                        CASE WHEN json_extract(address_parsed, '$.coordinate_system') IS NOT NULL 
-                             THEN TRY(address_parsed.coordinate_system) 
-                             ELSE NULL END as coordinate_system,
-                        CASE WHEN json_extract(address_parsed, '$.srid') IS NOT NULL 
-                             THEN TRY(address_parsed.srid::INTEGER) 
-                             ELSE NULL END as srid,
-                        CASE WHEN json_extract(address_parsed, '$.geometry_wkt') IS NOT NULL 
-                             THEN TRY(address_parsed.geometry_wkt) 
-                             ELSE NULL END as geometry_wkt,
-                        CASE WHEN json_extract(address_parsed, '$.geometry_geojson') IS NOT NULL 
-                             THEN TRY(address_parsed.geometry_geojson) 
-                             ELSE NULL END as geometry_geojson,
-                        CASE WHEN json_extract(address_parsed, '$.coordinate_quality') IS NOT NULL 
-                             THEN TRY(address_parsed.coordinate_quality) 
-                             ELSE NULL END as coordinate_quality,
-                        CASE WHEN json_extract(address_parsed, '$.coordinate_source') IS NOT NULL 
-                             THEN TRY(address_parsed.coordinate_source) 
-                             ELSE NULL END as coordinate_source,
-                        CASE WHEN json_extract(address_parsed, '$.dawa_enriched') IS NOT NULL 
-                             THEN TRY(address_parsed.dawa_enriched::BOOLEAN) 
-                             ELSE NULL END as dawa_enriched,
-                        CASE WHEN json_extract(address_parsed, '$.dawa_fetch_timestamp') IS NOT NULL 
-                             THEN TRY(address_parsed.dawa_fetch_timestamp) 
-                             ELSE NULL END as dawa_fetch_timestamp
-                    FROM addresses_flattened
-                """, [json_strings, addresses_schema[0]])
+                # Check if geocoding fields are present in the schema
+                schema_str = str(addresses_schema[0])
+                has_geocoding_fields = 'latitude' in schema_str or 'longitude' in schema_str
+                
+                if has_geocoding_fields:
+                    # Full query with geocoding fields
+                    self.conn.execute(f"""
+                        INSERT INTO {table_name}_addresses
+                        WITH addresses_flattened AS (
+                            SELECT
+                                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                                unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                            FROM unnest($1) as t(json_data)
+                            WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                            AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                        )
+                        SELECT 
+                            company_uuid(cvr_number) as company_uuid,
+                            cvr_number,
+                            TRY(address_parsed.full_address) as full_address,
+                            TRY(address_parsed.street_name) as street_name,
+                            TRY(address_parsed.house_number) as house_number,
+                            TRY(address_parsed.floor) as floor,
+                            TRY(address_parsed.door) as door,
+                            TRY(address_parsed.postal_code) as postal_code,
+                            TRY(address_parsed.city) as city,
+                            TRY(address_parsed.municipality_code) as municipality_code,
+                            TRY(address_parsed.municipality_name) as municipality_name,
+                            TRY(address_parsed.country_code) as country_code,
+                            TRY(address_parsed.adresse_id) as adresse_id,
+                            TRY(address_parsed.period_start) as period_start,
+                            TRY(address_parsed.period_end) as period_end,
+                            TRY(address_parsed.is_current) as is_current,
+                            TRY(address_parsed.latitude::DOUBLE) as latitude,
+                            TRY(address_parsed.longitude::DOUBLE) as longitude,
+                            TRY(address_parsed.coordinate_system) as coordinate_system,
+                            TRY(address_parsed.srid::INTEGER) as srid,
+                            TRY(address_parsed.geometry_wkt) as geometry_wkt,
+                            TRY(address_parsed.geometry_geojson) as geometry_geojson,
+                            TRY(address_parsed.coordinate_quality) as coordinate_quality,
+                            TRY(address_parsed.coordinate_source) as coordinate_source,
+                            TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
+                            TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
+                        FROM addresses_flattened
+                    """, [json_strings, addresses_schema[0]])
+                else:
+                    # Query without geocoding fields (addresses from CVR API only)
+                    self.conn.execute(f"""
+                        INSERT INTO {table_name}_addresses
+                        WITH addresses_flattened AS (
+                            SELECT
+                                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                                unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                            FROM unnest($1) as t(json_data)
+                            WHERE json_extract(json_data, '$.addresses') IS NOT NULL
+                            AND json_array_length(json_extract(json_data, '$.addresses')) > 0
+                        )
+                        SELECT 
+                            company_uuid(cvr_number) as company_uuid,
+                            cvr_number,
+                            TRY(address_parsed.full_address) as full_address,
+                            TRY(address_parsed.street_name) as street_name,
+                            TRY(address_parsed.house_number) as house_number,
+                            TRY(address_parsed.floor) as floor,
+                            TRY(address_parsed.door) as door,
+                            TRY(address_parsed.postal_code) as postal_code,
+                            TRY(address_parsed.city) as city,
+                            TRY(address_parsed.municipality_code) as municipality_code,
+                            TRY(address_parsed.municipality_name) as municipality_name,
+                            TRY(address_parsed.country_code) as country_code,
+                            TRY(address_parsed.adresse_id) as adresse_id,
+                            TRY(address_parsed.period_start) as period_start,
+                            TRY(address_parsed.period_end) as period_end,
+                            TRY(address_parsed.is_current) as is_current,
+                            NULL::DOUBLE as latitude,
+                            NULL::DOUBLE as longitude,
+                            NULL::VARCHAR as coordinate_system,
+                            NULL::INTEGER as srid,
+                            NULL::VARCHAR as geometry_wkt,
+                            NULL::VARCHAR as geometry_geojson,
+                            NULL::VARCHAR as coordinate_quality,
+                            NULL::VARCHAR as coordinate_source,
+                            NULL::BOOLEAN as dawa_enriched,
+                            NULL::VARCHAR as dawa_fetch_timestamp
+                        FROM addresses_flattened
+                    """, [json_strings, addresses_schema[0]])
     
     def _process_leadership_chunk(self, json_strings: list, table_name: str) -> None:
         """Process leadership data for a chunk of companies (ported from original)."""
