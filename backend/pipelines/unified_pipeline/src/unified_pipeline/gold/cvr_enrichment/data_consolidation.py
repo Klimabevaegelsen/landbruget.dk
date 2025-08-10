@@ -303,20 +303,21 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """Load financial data from a batch file."""
         # Check if running in GitHub Actions and use artifact data
         import os
-        import glob
         local_path = None
         
         if os.getenv("GITHUB_ACTIONS") == "true":
-            # Look for financial data artifacts from all batches
-            artifact_files = glob.glob("/tmp/cvr_financial_data_batch_*.parquet")
-            if artifact_files:
-                self.log.info(f"Using financial data from {len(artifact_files)} artifact files")
-                # For now, process the first file found - could be enhanced to process all
-                local_path = artifact_files[0]
+            # Use single financial data artifact (no batching)
+            artifact_path = "/tmp/cvr_financial_data.parquet"
+            if os.path.exists(artifact_path):
+                self.log.info("Using financial data from artifact")
+                local_path = artifact_path
+            else:
+                self.log.warning(f"Financial artifact not found: {artifact_path}")
         
         if not local_path:
-            # Fallback: use GCS path directly for local development
-            local_path = input_path
+            # Fallback: use GCS path directly for local development or when artifact not available
+            self.log.info("Financial data artifact not available, skipping financial data loading")
+            return
         
         result = self.conn.execute("""
             SELECT cvr_number, financial_data_json
@@ -335,20 +336,21 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """Load address data from a batch file."""
         # Check if running in GitHub Actions and use artifact data
         import os
-        import glob
         local_path = None
         
         if os.getenv("GITHUB_ACTIONS") == "true":
-            # Look for address data artifacts from all batches
-            artifact_files = glob.glob("/tmp/cvr_address_data_batch_*.parquet")
-            if artifact_files:
-                self.log.info(f"Using address data from {len(artifact_files)} artifact files")
-                # For now, process the first file found - could be enhanced to process all
-                local_path = artifact_files[0]
+            # Use single address data artifact (no batching)
+            artifact_path = "/tmp/cvr_address_data.parquet"
+            if os.path.exists(artifact_path):
+                self.log.info("Using address data from artifact")
+                local_path = artifact_path
+            else:
+                self.log.warning(f"Address artifact not found: {artifact_path}")
         
         if not local_path:
-            # Fallback: use GCS path directly for local development
-            local_path = input_path
+            # Fallback: use GCS path directly for local development or when artifact not available
+            self.log.info("Address data artifact not available, skipping address data loading")
+            return
         
         result = self.conn.execute("""
             SELECT source_type, cvr_number, p_number, address_data_json
