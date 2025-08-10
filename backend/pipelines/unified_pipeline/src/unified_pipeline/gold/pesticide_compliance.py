@@ -547,9 +547,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
 ## Executive Summary
 
-- **Total Clear Violations**: {summary['total_clear_violations']:,}
-- **Companies with Violations**: {summary['companies_with_violations']:,}
-- **Restricted Products Used**: {summary['restricted_products_used']:,}
+- **Total Potential Violations**: {summary['total_potential_violations']:,}
+- **Companies with Issues**: {summary['companies_with_issues']:,}
+- **Products with Issues**: {summary['products_with_issues']:,}
 - **Total Area Affected**: {summary['total_area_affected_hectares']:,.1f} hectares
 - **Analysis Date**: {summary['analysis_date'][:10]}
 
@@ -557,13 +557,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
 {', '.join(summary['agricultural_years_analyzed'])}
 
-## Top Violating Companies
+## Top Companies with Issues
 
 """
         
-        for i, company in enumerate(summary['top_violating_companies'][:10], 1):
+        for i, company in enumerate(summary['top_companies_with_issues'][:10], 1):
             report += f"{i}. **{company['company_name']}** (CVR: {company['cvr_number']})\n"
-            report += f"   - Violations: {company['total_violations']:,}\n"
+            report += f"   - Issues: {company['total_issues']:,}\n"
             report += f"   - Area affected: {company['total_area_ha']:,.1f} ha\n"
             report += f"   - Products used: {company['products_used']:,}\n\n"
         
