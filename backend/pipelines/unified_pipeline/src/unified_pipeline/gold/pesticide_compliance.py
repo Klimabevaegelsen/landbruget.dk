@@ -48,7 +48,6 @@ CRITICAL: This implementation uses the exact logic from the proven analysis
 that detected 668 clear violations, ensuring regulatory accuracy.
 """
 
-import json
 import logging
 import os
 from datetime import datetime
@@ -509,7 +508,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         # Save summary statistics
         summary_path = f"gs://{self.config.bucket}/{base_path}/compliance_summary.json"
-        await self.gcs_access.upload_json(summary_stats, summary_path)
+        self.gcs_access.upload_json(summary_stats, summary_path)
         
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
@@ -525,17 +524,19 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     import pandas as pd
                     violations_df = pd.DataFrame()
                 
-                await self.gcs_access.upload_dataframe(violations_df, violations_path)
+                self.gcs_access.upload_dataframe(violations_df, violations_path)
             
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
             year_summary = {k: v for k, v in year_results.items() if k != "violations_data"}
-            await self.gcs_access.upload_json(year_summary, year_summary_path)
+            self.gcs_access.upload_json(year_summary, year_summary_path)
         
         # Generate human-readable report
         report_path = f"gs://{self.config.bucket}/{base_path}/compliance_report.md"
         report_content = self._generate_markdown_report(summary_stats, all_results)
-        await self.gcs_access.upload_text(report_content, report_path)
+        # Upload text content using gcsfs filesystem
+        with self.gcs_access.fs.open(report_path, "w", encoding="utf-8") as f:
+            f.write(report_content)
         
         self.logger.info(f"✅ Results saved to GCS: {base_path}")
 
