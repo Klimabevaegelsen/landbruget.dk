@@ -23,7 +23,7 @@ class AddressGeocodingConfig(BaseJobConfig):
     """Configuration for address geocoding step."""
     
     name: str = "Address Geocoding"
-    dataset: str = "cvr_enrichment_geocoded"
+    dataset: str = "cvr_enrichment"
     type: str = "address_geocoding"
     description: str = "Enrich addresses with geometry via DAWA API"
     frequency: str = "monthly"
@@ -673,13 +673,16 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             """)
             self.log.info(f"Created empty table {table_name}")
         
-        # Save to GCS
-        self._save_data(
-            data=table_name,
-            dataset=self.config.dataset,
-            bucket=self.config.bucket,
-            stage="gold"
+        # Save to GCS with specific filename for data consolidation step
+        from .shared.config import get_step_output_path
+        output_path = get_step_output_path(
+            CVREnrichmentStep.ADDRESS_GEOCODING,
+            self.date_pattern,
+            bucket=self.config.bucket
         )
+        
+        # Upload directly to the expected path
+        self.gcs_access.upload_from_duckdb_table(table_name, output_path)
         
 
         
