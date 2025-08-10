@@ -544,7 +544,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         
         self.log.info(
             f"Processed {len(geocoded_addresses)} geocoded addresses "
-            f"({summary['success_rate']:.1%} geocoding success rate)"
+            f"({summary['geocoding_summary']['success_rate']:.1%} geocoding success rate)"
         )
         
         return processed_data
