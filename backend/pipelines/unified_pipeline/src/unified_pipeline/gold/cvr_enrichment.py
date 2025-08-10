@@ -1073,61 +1073,75 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """, [json_strings]).fetchone()[0]
         
         if addresses_check > 0:
-            # Get schema for addresses to handle them properly
-            addresses_schema = self.conn.execute("""
-                WITH addresses_sample AS (
-                    SELECT json_extract(json_data, '$.addresses') as addresses_json
+            # Use from_json to handle addresses - this works reliably with missing fields
+            self.conn.execute(f"""
+                INSERT INTO {table_name}_addresses
+                SELECT 
+                    company_uuid(cvr_number) as company_uuid,
+                    cvr_number,
+                    address_struct.full_address,
+                    address_struct.street_name,
+                    address_struct.house_number,
+                    address_struct.floor,
+                    address_struct.door,
+                    address_struct.postal_code,
+                    address_struct.city,
+                    address_struct.municipality_code,
+                    address_struct.municipality_name,
+                    address_struct.country_code,
+                    address_struct.adresse_id,
+                    address_struct.period_start,
+                    address_struct.period_end,
+                    address_struct.is_current,
+                    address_struct.latitude,
+                    address_struct.longitude,
+                    address_struct.coordinate_system,
+                    address_struct.srid,
+                    address_struct.geometry_wkt,
+                    address_struct.geometry_geojson,
+                    address_struct.coordinate_quality,
+                    address_struct.coordinate_source,
+                    address_struct.dawa_enriched,
+                    address_struct.datavask_enriched,
+                    address_struct.dawa_fetch_timestamp
+                FROM (
+                    SELECT 
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(from_json(
+                            json_extract(json_data, '$.addresses'), 
+                            '[{{
+                                "full_address": "VARCHAR",
+                                "street_name": "VARCHAR", 
+                                "house_number": "VARCHAR",
+                                "floor": "VARCHAR",
+                                "door": "VARCHAR",
+                                "postal_code": "VARCHAR",
+                                "city": "VARCHAR",
+                                "municipality_code": "VARCHAR",
+                                "municipality_name": "VARCHAR",
+                                "country_code": "VARCHAR",
+                                "adresse_id": "VARCHAR",
+                                "period_start": "VARCHAR",
+                                "period_end": "VARCHAR",
+                                "is_current": "BOOLEAN",
+                                "latitude": "DOUBLE",
+                                "longitude": "DOUBLE",
+                                "coordinate_system": "VARCHAR",
+                                "srid": "INTEGER",
+                                "geometry_wkt": "VARCHAR",
+                                "geometry_geojson": "VARCHAR",
+                                "coordinate_quality": "VARCHAR",
+                                "coordinate_source": "VARCHAR",
+                                "dawa_enriched": "BOOLEAN",
+                                "datavask_enriched": "BOOLEAN",
+                                "dawa_fetch_timestamp": "VARCHAR"
+                            }}]'
+                        )) as address_struct
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.addresses')) > 0
-                    LIMIT 1
                 )
-                SELECT json_structure(addresses_json) FROM addresses_sample
-            """, [json_strings]).fetchone()
-            
-            if addresses_schema and addresses_schema[0]:
-                self.conn.execute(f"""
-                    INSERT INTO {table_name}_addresses
-                    WITH addresses_flattened AS (
-                        SELECT
-                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.addresses')::JSON, $2)) as address_parsed
-                        FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.addresses') IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.addresses')) > 0
-                    )
-                    SELECT 
-                        company_uuid(cvr_number) as company_uuid,
-                        cvr_number,
-                        TRY(address_parsed.full_address) as full_address,
-                        TRY(address_parsed.street_name) as street_name,
-                        TRY(address_parsed.house_number) as house_number,
-                        TRY(address_parsed.floor) as floor,
-                        TRY(address_parsed.door) as door,
-                        TRY(address_parsed.postal_code) as postal_code,
-                        TRY(address_parsed.city) as city,
-                        TRY(address_parsed.municipality_code) as municipality_code,
-                        TRY(address_parsed.municipality_name) as municipality_name,
-                        TRY(address_parsed.country_code) as country_code,
-                        TRY(address_parsed.adresse_id) as adresse_id,
-                        TRY(address_parsed.period_start) as period_start,
-                        TRY(address_parsed.period_end) as period_end,
-                        TRY(address_parsed.is_current) as is_current,
-                        TRY(address_parsed.latitude::DOUBLE) as latitude,
-                        TRY(address_parsed.longitude::DOUBLE) as longitude,
-                        TRY(address_parsed.coordinate_system) as coordinate_system,
-                        TRY(address_parsed.srid::INTEGER) as srid,
-                        TRY(address_parsed.geometry_wkt) as geometry_wkt,
-                        TRY(address_parsed.geometry_geojson) as geometry_geojson,
-                        TRY(address_parsed.coordinate_quality) as coordinate_quality,
-                        TRY(address_parsed.coordinate_source) as coordinate_source,
-                        TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
-                        TRY(address_parsed.datavask_enriched::BOOLEAN) as datavask_enriched,
-                        TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
-                    FROM addresses_flattened
-                """, [json_strings, addresses_schema[0]])
-            
-            self.log.info(f"Processed addresses for chunk")
+            """, [json_strings])
 
     def _process_leadership_chunk(self, json_strings: list, table_name: str) -> None:
         """Process leadership data for a chunk of companies."""
