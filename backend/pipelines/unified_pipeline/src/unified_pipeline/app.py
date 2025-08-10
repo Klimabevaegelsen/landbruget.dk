@@ -279,13 +279,16 @@ def execute(cli_config: cli.CliConfig) -> int:
     """
     # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
     import os
+    import sys
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     print(f"🚨 APP EXECUTE: Initializing logger with level: {log_level}")
+    sys.stdout.flush()  # Force flush for GitHub Actions
     
     # Force reset the singleton logger to ensure LOG_LEVEL is respected
     Logger.LOG = None  # Reset singleton to force recreation with correct level
     log = Logger.get_logger(log_level)
     log.info("Starting Unified Pipeline.")
+    sys.stdout.flush()  # Force flush after logger creation
 
     # Define pipeline mapping for sources and stages
     pipeline_map = {
