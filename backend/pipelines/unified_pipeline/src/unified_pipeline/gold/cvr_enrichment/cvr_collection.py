@@ -102,11 +102,6 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         Returns:
             Table name containing collected CVR data
         """
-        print("🚨 DEBUG: CVR collection run() method called!")
-        print(f"🚨 DEBUG: Logger level: {self.log._core.min_level}")
-        import sys
-        sys.stdout.flush()
-        
         self.log.info("Starting CVR collection step")
         
         try:
@@ -336,6 +331,14 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             bucket=self.config.bucket,
             stage="gold"
         )
+        
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self.log.info("GitHub Actions detected - saving collection data locally for artifact sharing")
+            local_path = "/tmp/cvr_collection_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved collection data locally to {local_path}")
         
         # Save detailed batch information separately
         self._save_batch_details(batch_data)
