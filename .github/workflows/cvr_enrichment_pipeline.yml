@@ -95,6 +95,13 @@ jobs:
           echo "success=true" >> $GITHUB_OUTPUT
           echo "batch_count=${{ github.event.inputs.batch_count || '5' }}" >> $GITHUB_OUTPUT
 
+      - name: Upload CVR Collection Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-collection-data
+          path: /tmp/cvr_collection_data.parquet
+          retention-days: 1
+
   # Step 2: Company Fetching (Sequential with API-level batching)
   company_fetching:
     name: "Company Fetching"
@@ -124,6 +131,12 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
       
+      - name: Download CVR Collection Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-collection-data
+          path: /tmp/
+      
       - name: Run Company Fetching
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
@@ -148,6 +161,13 @@ jobs:
           $CMD
           
           echo "✅ Company Fetching completed successfully"
+
+      - name: Upload Company Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-company-data
+          path: /tmp/cvr_company_data.parquet
+          retention-days: 1
 
   # Step 3: P-Number Fetching (Sequential with API-level batching)
   pnumber_fetching:
@@ -178,6 +198,12 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
       
+      - name: Download Company Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-company-data
+          path: /tmp/
+      
       - name: Run P-Number Fetching
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
@@ -185,7 +211,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage pnumber_fetching"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -236,7 +262,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -284,7 +310,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -326,7 +352,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage data_consolidation --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage data_consolidation --total-batches 5"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"

@@ -436,6 +436,14 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             stage="gold"
         )
         
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self.log.info("GitHub Actions detected - saving P-number data locally for artifact sharing")
+            local_path = "/tmp/cvr_pnumber_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved P-number data locally to {local_path}")
+        
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
         

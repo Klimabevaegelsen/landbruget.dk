@@ -195,12 +195,24 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Loading collection data from: {collection_path}")
         
         try:
-            # Load CVR numbers directly from GCS using DuckDB
-            result = self.conn.execute(f"""
-                SELECT cvr_number, collection_metadata
-                FROM read_parquet('{collection_path}')
-                ORDER BY cvr_number
-            """).fetchall()
+            # Check if running in GitHub Actions and local artifact file exists
+            import os
+            local_artifact_path = "/tmp/cvr_collection_data.parquet"
+            
+            if os.getenv("GITHUB_ACTIONS") == "true" and os.path.exists(local_artifact_path):
+                self.log.info("GitHub Actions detected - using local artifact data")
+                result = self.conn.execute(f"""
+                    SELECT cvr_number, collection_metadata
+                    FROM read_parquet('{local_artifact_path}')
+                    ORDER BY cvr_number
+                """).fetchall()
+            else:
+                # Load CVR numbers directly from GCS using DuckDB (fallback)
+                result = self.conn.execute(f"""
+                    SELECT cvr_number, collection_metadata
+                    FROM read_parquet('{collection_path}')
+                    ORDER BY cvr_number
+                """).fetchall()
             
             all_cvrs = [row[0] for row in result]
             
@@ -402,6 +414,14 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             bucket=self.config.bucket,
             stage="gold"
         )
+        
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self.log.info("GitHub Actions detected - saving company data locally for artifact sharing")
+            local_path = "/tmp/cvr_company_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved company data locally to {local_path}")
         
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
