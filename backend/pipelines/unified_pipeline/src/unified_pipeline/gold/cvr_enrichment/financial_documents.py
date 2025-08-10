@@ -111,7 +111,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         
         self.log.info("Financial documents step initialized")
         self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Batch: {self.config.batch_number}/{self.config.total_batches}")
+        self.log.info(f"   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Max documents per company: {self.config.max_financial_documents}")
         self.log.info(f"   • Parse XML: {self.config.parse_financial_xml}")
         self.log.info(f"   • XML only: {self.config.xml_only}")
@@ -413,7 +413,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             company_financial["processing_timestamp"] = datetime.now().isoformat()
             company_financial["pipeline_run_id"] = self.date_pattern
             company_financial["processing_step"] = CVREnrichmentStep.FINANCIAL_DOCUMENTS.value
-            company_financial["batch_number"] = self.config.batch_number
+            # company_financial["batch_number"] = self.config.batch_number  # No batching
             
             # Calculate summary statistics
             documents = company_financial.get("documents", [])
@@ -450,8 +450,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 c for c in processed_financial 
                 if c.get("latest_financial_metrics")
             ]),
-            "batch_number": self.config.batch_number,
-            "total_batches": self.config.total_batches,
+            # "batch_number": self.config.batch_number,  # No batching
+            # "total_batches": self.config.total_batches,  # No batching
             "processing_timestamp": datetime.now().isoformat(),
             "api_summary": financial_data["summary"]
         }
@@ -550,10 +550,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
-        if self.config.batch_number:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary_batch_{self.config.batch_number:03d}.json"
-        else:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary.json"
+        # No batching - single summary file
+        summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/financial_summary.json"
         
         self.gcs_access.upload_json(
             data=summary,
