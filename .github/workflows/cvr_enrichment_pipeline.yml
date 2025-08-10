@@ -75,7 +75,7 @@ jobs:
           cd backend/pipelines/unified_pipeline
           
           # Build command with optional parameters - force unbuffered output
-          CMD="python -u -m unified_pipeline.app --source cvr_enrichment --stage collection"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage collection"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -133,7 +133,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -u -m unified_pipeline.app --source cvr_enrichment --stage company_fetching"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage company_fetching"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
