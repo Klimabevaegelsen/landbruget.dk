@@ -277,6 +277,13 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
+      - name: Upload Financial Documents Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-financial-data-batch-${{ matrix.batch }}
+          path: /tmp/cvr_financial_data_batch_*.parquet
+          retention-days: 1
+
   # Step 5: Address Geocoding (Parallel - individual DAWA API calls required)
   address_geocoding:
     name: "Address Geocoding (Batch ${{ matrix.batch }})"
@@ -337,6 +344,13 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
+      - name: Upload Address Geocoding Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-address-data-batch-${{ matrix.batch }}
+          path: /tmp/cvr_address_data_batch_*.parquet
+          retention-days: 1
+
   # Step 6: Data Consolidation (Sequential - must run last)
   data_consolidation:
     name: "Data Consolidation"
@@ -377,6 +391,20 @@ jobs:
         with:
           name: cvr-pnumber-data
           path: /tmp/
+      
+      - name: Download Financial Documents Data (All Batches)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cvr-financial-data-batch-*
+          path: /tmp/
+          merge-multiple: true
+      
+      - name: Download Address Geocoding Data (All Batches)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cvr-address-data-batch-*
+          path: /tmp/
+          merge-multiple: true
       
       - name: Run Data Consolidation
         run: |

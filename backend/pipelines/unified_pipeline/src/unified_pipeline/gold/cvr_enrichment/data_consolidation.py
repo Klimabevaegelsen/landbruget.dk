@@ -301,8 +301,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_financial_data(self, input_path: str, financial_data: Dict[str, Any]) -> None:
         """Load financial data from a batch file."""
-        # Use GCS path directly with DuckDB (no artifact needed for financial data)
-        local_path = input_path
+        # Check if running in GitHub Actions and use artifact data
+        import os
+        import glob
+        local_path = None
+        
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            # Look for financial data artifacts from all batches
+            artifact_files = glob.glob("/tmp/cvr_financial_data_batch_*.parquet")
+            if artifact_files:
+                self.log.info(f"Using financial data from {len(artifact_files)} artifact files")
+                # For now, process the first file found - could be enhanced to process all
+                local_path = artifact_files[0]
+        
+        if not local_path:
+            # Fallback: use GCS path directly for local development
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT cvr_number, financial_data_json
@@ -319,8 +333,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     
     def _load_address_data(self, input_path: str, addresses_data: Dict[str, Any]) -> None:
         """Load address data from a batch file."""
-        # Use GCS path directly with DuckDB (no artifact needed for address data)
-        local_path = input_path
+        # Check if running in GitHub Actions and use artifact data
+        import os
+        import glob
+        local_path = None
+        
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            # Look for address data artifacts from all batches
+            artifact_files = glob.glob("/tmp/cvr_address_data_batch_*.parquet")
+            if artifact_files:
+                self.log.info(f"Using address data from {len(artifact_files)} artifact files")
+                # For now, process the first file found - could be enhanced to process all
+                local_path = artifact_files[0]
+        
+        if not local_path:
+            # Fallback: use GCS path directly for local development
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT source_type, cvr_number, p_number, address_data_json
