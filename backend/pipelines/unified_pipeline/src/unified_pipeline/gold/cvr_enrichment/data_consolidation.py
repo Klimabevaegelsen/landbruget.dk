@@ -697,8 +697,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 document_count INTEGER,
                 xml_size_bytes INTEGER,
                 download_success BOOLEAN,
-                total_values INTEGER,
-                largest_value DOUBLE,
+                duration_context VARCHAR,
+                instant_context VARCHAR,
                 parse_success BOOLEAN,
                 gross_profit_loss DOUBLE,
                 operating_profit_loss DOUBLE,
@@ -1356,42 +1356,42 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         financial_parsed.document_count,
                         financial_parsed.xml_size_bytes,
                         financial_parsed.download_success,
-                        TRY(financial_parsed.latest_financial_metrics.total_values) as total_values,
-                        TRY(financial_parsed.latest_financial_metrics.largest_value) as largest_value,
+                        TRY(financial_parsed.latest_financial_metrics.duration_context) as duration_context,
+                        TRY(financial_parsed.latest_financial_metrics.instant_context) as instant_context,
                         TRY(financial_parsed.latest_financial_metrics.parse_success) as parse_success,
-                        NULL as gross_profit_loss,
-                        NULL as operating_profit_loss,
-                        NULL as profit_loss_before_tax,
-                        NULL as employee_benefits_expense,
-                        NULL as average_number_of_employees,
-                        TRY(financial_parsed.financial_metrics.depreciation_expense) as depreciation_expense,
-                        TRY(financial_parsed.financial_metrics.other_finance_income) as other_finance_income,
-                        TRY(financial_parsed.financial_metrics.other_finance_expenses) as other_finance_expenses,
-                        TRY(financial_parsed.financial_metrics.tax_expense) as tax_expense,
-                        TRY(financial_parsed.financial_metrics.total_assets) as total_assets,
-                        TRY(financial_parsed.financial_metrics.total_equity) as total_equity,
-                        TRY(financial_parsed.financial_metrics.noncurrent_assets) as noncurrent_assets,
-                        TRY(financial_parsed.financial_metrics.current_assets) as current_assets,
-                        TRY(financial_parsed.financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
-                        TRY(financial_parsed.financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.provisions) as provisions,
-                        TRY(financial_parsed.financial_metrics.property_plant_equipment) as property_plant_equipment,
-                        TRY(financial_parsed.financial_metrics.contributed_capital) as contributed_capital,
+                        TRY(financial_parsed.latest_financial_metrics.gross_profit_loss) as gross_profit_loss,
+                        TRY(financial_parsed.latest_financial_metrics.operating_profit_loss) as operating_profit_loss,
+                        TRY(financial_parsed.latest_financial_metrics.profit_loss_before_tax) as profit_loss_before_tax,
+                        TRY(financial_parsed.latest_financial_metrics.employee_benefits_expense) as employee_benefits_expense,
+                        TRY(financial_parsed.latest_financial_metrics.average_number_of_employees) as average_number_of_employees,
+                        TRY(financial_parsed.latest_financial_metrics.depreciation_expense) as depreciation_expense,
+                        TRY(financial_parsed.latest_financial_metrics.other_finance_income) as other_finance_income,
+                        TRY(financial_parsed.latest_financial_metrics.other_finance_expenses) as other_finance_expenses,
+                        TRY(financial_parsed.latest_financial_metrics.tax_expense) as tax_expense,
+                        TRY(financial_parsed.latest_financial_metrics.total_assets) as total_assets,
+                        TRY(financial_parsed.latest_financial_metrics.total_equity) as total_equity,
+                        TRY(financial_parsed.latest_financial_metrics.noncurrent_assets) as noncurrent_assets,
+                        TRY(financial_parsed.latest_financial_metrics.current_assets) as current_assets,
+                        TRY(financial_parsed.latest_financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
+                        TRY(financial_parsed.latest_financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
+                        TRY(financial_parsed.latest_financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.latest_financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
+                        TRY(financial_parsed.latest_financial_metrics.provisions) as provisions,
+                        TRY(financial_parsed.latest_financial_metrics.property_plant_equipment) as property_plant_equipment,
+                        TRY(financial_parsed.latest_financial_metrics.contributed_capital) as contributed_capital,
                         CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            WHEN TRY(financial_parsed.latest_financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.latest_financial_metrics.total_equity) / TRY(financial_parsed.latest_financial_metrics.total_assets) 
                             ELSE NULL 
                         END as equity_ratio,
                         CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
+                            WHEN TRY(financial_parsed.latest_financial_metrics.average_number_of_employees) > 0 
+                            THEN TRY(financial_parsed.latest_financial_metrics.net_profit_loss) / TRY(financial_parsed.latest_financial_metrics.average_number_of_employees) 
                             ELSE NULL 
                         END as profit_per_employee,
                         CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            WHEN TRY(financial_parsed.latest_financial_metrics.total_assets) > 0 
+                            THEN TRY(financial_parsed.latest_financial_metrics.net_profit_loss) / TRY(financial_parsed.latest_financial_metrics.total_assets) 
                             ELSE NULL 
                         END as return_on_assets
                     FROM financial_flattened
