@@ -23,6 +23,7 @@ from bronze.auth import (
     create_ejendom_client,
     create_stamdata_client,
     get_fvm_credentials,
+    get_legacy_fvm_credentials,
 )
 from bronze.load_besaetning import load_herd_details, load_herd_list
 from bronze.load_diko import load_diko_flytninger
@@ -871,7 +872,12 @@ def main():
 
             if needs_fvm_credentials:
                 # Initialize context with imported data and FVM credentials
-                username, password, certificate, private_key = get_fvm_credentials()
+                try:
+                    username, password, certificate, private_key = get_fvm_credentials()
+                except Exception as e:
+                    logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
+                    username, password = get_legacy_fvm_credentials()
+                    
                 context = {
                     "args": args,
                     "username": username,
@@ -906,7 +912,12 @@ def main():
         else:
             if needs_fvm_credentials:
                 # Initialize fresh context with FVM credentials
-                username, password, certificate, private_key = get_fvm_credentials()
+                try:
+                    username, password, certificate, private_key = get_fvm_credentials()
+                except Exception as e:
+                    logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
+                    username, password = get_legacy_fvm_credentials()
+                    
                 context = {
                     "args": args,
                     "username": username,
