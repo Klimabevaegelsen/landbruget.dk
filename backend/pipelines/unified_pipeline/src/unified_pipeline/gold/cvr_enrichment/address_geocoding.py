@@ -176,11 +176,27 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     self.log.warning(f"Cannot determine data type for path: {input_path}")
                     continue
                 
-                # Download and load data
-                local_path = self.gcs_access.download_file(
-                    input_path, 
-                    f"/tmp/address_source_{len(all_addresses)}.parquet"
-                )
+                # Check if running in GitHub Actions and use artifact data
+                import os
+                local_path = None
+                
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    # Use artifact data in GitHub Actions
+                    if is_company_data:
+                        artifact_path = "/tmp/cvr_company_data.parquet"
+                        if os.path.exists(artifact_path):
+                            local_path = artifact_path
+                            self.log.info("Using company data from artifact")
+                    elif is_pnumber_data:
+                        artifact_path = "/tmp/cvr_pnumber_data.parquet"
+                        if os.path.exists(artifact_path):
+                            local_path = artifact_path
+                            self.log.info("Using P-number data from artifact")
+                
+                if not local_path:
+                    # Fallback: try to read directly from GCS using DuckDB (for local development)
+                    self.log.info(f"Reading directly from GCS: {input_path}")
+                    local_path = input_path  # Use GCS path directly with DuckDB
                 
                 if is_company_data:
                     # Load company data
@@ -528,7 +544,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         
         self.log.info(
             f"Processed {len(geocoded_addresses)} geocoded addresses "
-            f"({summary['geocoding_summary']['success_rate']:.1%} geocoding success rate)"
+            f"({summary['success_rate']:.1%} geocoding success rate)"
         )
         
         return processed_data
