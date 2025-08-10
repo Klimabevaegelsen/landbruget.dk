@@ -92,6 +92,14 @@ class Stage(Enum):
         gold: Business-ready combined datasets stage
         enrichment: Enrichment-only stage for post-processing existing silver data
         all: Process bronze, silver, and gold stages sequentially
+        
+        # CVR Enrichment Pipeline Steps
+        collection: CVR collection step (collect and batch CVR numbers)
+        company_fetching: Company data fetching step
+        pnumber_fetching: P-number data fetching step
+        financial_documents: Financial documents fetching step
+        address_geocoding: Address geocoding step
+        data_consolidation: Data consolidation step
     """
 
     bronze = "bronze"
@@ -99,6 +107,14 @@ class Stage(Enum):
     gold = "gold"
     enrichment = "enrichment"
     all = "all"
+    
+    # CVR Enrichment Pipeline Steps
+    collection = "collection"
+    company_fetching = "company_fetching"
+    pnumber_fetching = "pnumber_fetching"
+    financial_documents = "financial_documents"
+    address_geocoding = "address_geocoding"
+    data_consolidation = "data_consolidation"
 
 
 class FVMLayerType(Enum):
@@ -157,3 +173,7 @@ class CliConfig(BaseModel):
     test_limit: Optional[int] = None
     parse_financial_xml: bool = True
     max_financial_documents: int = 10
+    
+    # Batch processing parameters
+    batch_number: Optional[int] = None
+    total_batches: Optional[int] = None
