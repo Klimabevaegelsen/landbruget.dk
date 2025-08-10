@@ -227,18 +227,12 @@ jobs:
           path: /tmp/cvr_pnumber_data.parquet
           retention-days: 1
 
-  # Step 4: Financial Documents (Parallel - individual API calls required)
+  # Step 4: Financial Documents (Sequential - process all companies)
   financial_documents:
-    name: "Financial Documents (Batch ${{ matrix.batch }})"
+    name: "Financial Documents"
     runs-on: ubuntu-latest
     needs: company_fetching
     if: ${{ !contains(github.event.inputs.skip_steps, 'financial_documents') }}
-    
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5]  # Parallel batches for individual API calls
-      fail-fast: false
-      max-parallel: 2  # Lower limit for financial document processing
     
     steps:
       - name: Checkout code
@@ -275,7 +269,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage financial_documents --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage financial_documents"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -284,25 +278,14 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-      - name: Upload Financial Documents Data
-        uses: actions/upload-artifact@v4
-        with:
-          name: cvr-financial-data-batch-${{ matrix.batch }}
-          path: /tmp/cvr_financial_data_batch_*.parquet
-          retention-days: 1
 
-  # Step 5: Address Geocoding (Parallel - individual DAWA API calls required)
+
+  # Step 5: Address Geocoding (Sequential - process all addresses)
   address_geocoding:
-    name: "Address Geocoding (Batch ${{ matrix.batch }})"
+    name: "Address Geocoding"
     runs-on: ubuntu-latest
     needs: [company_fetching, pnumber_fetching]
     if: ${{ !contains(github.event.inputs.skip_steps, 'address_geocoding') }}
-    
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5]  # Parallel batches for individual DAWA calls
-      fail-fast: false
-      max-parallel: 4  # Higher limit for geocoding (less API intensive)
     
     steps:
       - name: Checkout code
@@ -342,7 +325,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage address_geocoding --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage address_geocoding"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -351,12 +334,7 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-      - name: Upload Address Geocoding Data
-        uses: actions/upload-artifact@v4
-        with:
-          name: cvr-address-data-batch-${{ matrix.batch }}
-          path: /tmp/cvr_address_data_batch_*.parquet
-          retention-days: 1
+
 
   # Step 6: Data Consolidation (Sequential - must run last)
   data_consolidation:
@@ -399,25 +377,13 @@ jobs:
           name: cvr-pnumber-data
           path: /tmp/
       
-      - name: Download Financial Documents Data (All Batches)
-        uses: actions/download-artifact@v4
-        with:
-          pattern: cvr-financial-data-batch-*
-          path: /tmp/
-          merge-multiple: true
-      
-      - name: Download Address Geocoding Data (All Batches)
-        uses: actions/download-artifact@v4
-        with:
-          pattern: cvr-address-data-batch-*
-          path: /tmp/
-          merge-multiple: true
+
       
       - name: Run Data Consolidation
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage data_consolidation --total-batches 5"
+          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage data_consolidation"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"

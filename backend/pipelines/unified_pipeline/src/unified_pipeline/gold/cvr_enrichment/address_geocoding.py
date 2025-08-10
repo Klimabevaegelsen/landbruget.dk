@@ -143,28 +143,12 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         self.log.info("Extracting addresses from company and P-number data")
         
         # Get input paths for company and P-number data
-        # For batched processing, only process company addresses from the corresponding batch
-        # P-number addresses are only processed by batch 1 to avoid duplication
-        if self.config.batch_number and self.config.total_batches:
-            base_path = f"gs://{self.config.bucket}/gold/cvr_enrichment/{self.date_pattern}"
-            input_paths = [
-                f"{base_path}/company_fetching_batch_{self.config.batch_number:03d}.parquet"
-            ]
-            
-            # Only batch 1 processes P-number addresses to avoid duplication
-            if self.config.batch_number == 1:
-                input_paths.append(f"{base_path}/pnumber_fetching.parquet")
-                self.log.info(f"Batch {self.config.batch_number}: Loading company batch {self.config.batch_number} + P-number data (batch 1 only)")
-            else:
-                self.log.info(f"Batch {self.config.batch_number}: Loading only company batch {self.config.batch_number} (P-numbers handled by batch 1)")
-        else:
-            # For non-batched processing, load all data
-            input_paths = get_step_input_paths(
-                CVREnrichmentStep.ADDRESS_GEOCODING,
-                self.date_pattern,
-                total_batches=self.config.total_batches,
-                bucket=self.config.bucket
-            )
+        input_paths = get_step_input_paths(
+            CVREnrichmentStep.ADDRESS_GEOCODING,
+            self.date_pattern,
+            total_batches=5,  # Company fetching creates 5 batch files
+            bucket=self.config.bucket
+        )
         
         if not input_paths:
             self.log.warning("No input paths found for address geocoding step")
@@ -192,27 +176,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     self.log.warning(f"Cannot determine data type for path: {input_path}")
                     continue
                 
-                # Check if running in GitHub Actions and use artifact data
-                import os
-                local_path = None
-                
-                if os.getenv("GITHUB_ACTIONS") == "true":
-                    # Use artifact data in GitHub Actions
-                    if is_company_data:
-                        artifact_path = "/tmp/cvr_company_data.parquet"
-                        if os.path.exists(artifact_path):
-                            local_path = artifact_path
-                            self.log.info("Using company data from artifact")
-                    elif is_pnumber_data:
-                        artifact_path = "/tmp/cvr_pnumber_data.parquet"
-                        if os.path.exists(artifact_path):
-                            local_path = artifact_path
-                            self.log.info("Using P-number data from artifact")
-                
-                if not local_path:
-                    # Fallback: try to read directly from GCS using DuckDB (for local development)
-                    self.log.info(f"Reading directly from GCS: {input_path}")
-                    local_path = input_path  # Use GCS path directly with DuckDB
+                # Read directly from GCS path with DuckDB
+                local_path = input_path
+                self.log.info(f"Reading from: {input_path}")
                 
                 if is_company_data:
                     # Load company data
@@ -268,15 +234,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.error(f"Failed to process addresses from {input_path}: {e}")
                 continue
         
-        # No need to filter addresses - each batch already loads only its corresponding data
+        # Process all addresses (no batching)
         batch_addresses = all_addresses
-        if self.config.batch_number and self.config.total_batches:
-            self.log.info(
-                f"Batch {self.config.batch_number}/{self.config.total_batches}: "
-                f"{len(batch_addresses)} addresses from corresponding batch data"
-            )
-        else:
-            self.log.info(f"Extracted {len(batch_addresses)} addresses (no batching)")
+        self.log.info(f"Extracted {len(batch_addresses)} addresses from all sources")
         
         extraction_result = {
             "addresses": batch_addresses,
@@ -564,11 +524,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         """
         self.log.info("Saving geocoded addresses data")
         
-        # Create table name with batch suffix if applicable
-        if self.config.batch_number:
-            table_name = f"cvr_addresses_batch_{self.config.batch_number:03d}"
-        else:
-            table_name = "cvr_addresses"
+        # Create table name
+        table_name = "cvr_addresses"
         
         addresses_data = processed_data["geocoded_addresses"]
         
@@ -640,14 +597,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             stage="gold"
         )
         
-        # Also save locally for GitHub Actions artifact sharing
-        import os
-        if os.getenv("GITHUB_ACTIONS") == "true":
-            self.log.info("GitHub Actions detected - saving address data locally for artifact sharing")
-            batch_suffix = f"_batch_{self.config.batch_number:03d}" if self.config.batch_number else ""
-            local_path = f"/tmp/cvr_address_data{batch_suffix}.parquet"
-            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
-            self.log.info(f"Saved address data locally to {local_path}")
+
         
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
