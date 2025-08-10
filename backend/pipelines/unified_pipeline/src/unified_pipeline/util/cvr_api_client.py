@@ -36,7 +36,13 @@ class CVRAPIClient:
     - Handle authentication and rate limiting
     """
 
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None, enable_geocoding: bool = True):
+    def __init__(
+        self, 
+        username: Optional[str] = None, 
+        password: Optional[str] = None, 
+        enable_geocoding: bool = True, 
+        geocode_current_only: bool = True
+    ):
         """
         Initialize CVR API client.
 
@@ -44,6 +50,8 @@ class CVRAPIClient:
             username: CVR API username (defaults to environment variable)
             password: CVR API password (defaults to environment variable)
             enable_geocoding: Whether to enable address geocoding via DAWA API
+            geocode_current_only: Whether to geocode only current addresses (not 
+                historical)
         """
         self.log = Logger.get_logger()
 
@@ -53,7 +61,8 @@ class CVRAPIClient:
 
         if not self.username or not self.password:
             raise ValueError(
-                "CVR credentials not found. Set CVR_USERNAME and CVR_PASSWORD environment variables "
+                "CVR credentials not found. Set CVR_USERNAME and CVR_PASSWORD environment "
+                "variables "
                 "or provide them as constructor arguments."
             )
 
@@ -75,6 +84,7 @@ class CVRAPIClient:
 
         # Initialize DAWA client for address geocoding
         self.enable_geocoding = enable_geocoding
+        self.geocode_current_only = geocode_current_only
         self.dawa_client = DAWAAPIClient() if enable_geocoding else None
 
         self.log.info("CVR API client initialized")
@@ -675,14 +685,17 @@ class CVRAPIClient:
                 enriched_address = address.copy()
                 geocoded = None
                 
+                # Determine if we should geocode this address based on configuration
+                should_geocode = not self.geocode_current_only or address.get("is_current")
+                
                 # Try DAWA geocoding first if address has adresse_id
-                if address.get("is_current") and address.get("adresse_id"):
+                if should_geocode and address.get("adresse_id"):
                     geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
                     if geocoded:
                         self.log.debug(f"DAWA geocoded address: {address.get('full_address')}")
                 
                 # Fallback to Datavask API if DAWA failed and we have address text
-                if not geocoded and address.get("full_address"):
+                if not geocoded and should_geocode and address.get("full_address"):
                     geocoded = self.dawa_client.geocode_with_datavask(address["full_address"])
                     if geocoded:
                         self.log.debug(f"Datavask geocoded address: {address.get('full_address')}")
@@ -843,7 +856,10 @@ class CVRAPIClient:
             return None
 
     def fetch_multiple_companies(
-        self, cvr_numbers: List[str], fetch_all_fields: bool = True, enrich_with_geometry: bool = True
+        self, 
+        cvr_numbers: List[str], 
+        fetch_all_fields: bool = True, 
+        enrich_with_geometry: bool = True
     ) -> Dict[str, Any]:
         """
         Fetch company data for multiple CVR numbers efficiently.
@@ -856,7 +872,10 @@ class CVRAPIClient:
         Returns:
             Dictionary mapping CVR numbers to company data
         """
-        self.log.info(f"Fetching data for {len(cvr_numbers)} companies (geocoding: {'enabled' if enrich_with_geometry else 'disabled'})")
+        self.log.info(
+            f"Fetching data for {len(cvr_numbers)} companies "
+            f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
+        )
 
         results = {}
         successful = 0
@@ -864,7 +883,9 @@ class CVRAPIClient:
 
         for cvr_number in tqdm(cvr_numbers, desc="Fetching company data", unit="company"):
             try:
-                company_data = self.get_company_data(cvr_number, fetch_all_fields, enrich_with_geometry)
+                company_data = self.get_company_data(
+                    cvr_number, fetch_all_fields, enrich_with_geometry
+                )
                 if company_data:
                     results[cvr_number] = company_data
                     successful += 1
@@ -876,7 +897,9 @@ class CVRAPIClient:
                 failed += 1
                 self.log.error(f"Error fetching CVR {cvr_number}: {e}")
 
-        self.log.info(f"Batch fetch completed: {successful} successful, {failed} failed")
+        self.log.info(
+            f"Batch fetch completed: {successful} successful, {failed} failed"
+        )
 
         return {
             "results": results,
@@ -1044,7 +1067,8 @@ class CVRAPIClient:
 
                                 except Exception as e:
                                     self.log.warning(
-                                        f"Failed to parse financial document for CVR {cvr_number}: {e}"
+                                        f"Failed to parse financial document for CVR "
+                                        f"{cvr_number}: {e}"
                                     )
                                     enriched_doc["financial_summary"] = {
                                         "parsed_successfully": False,
