@@ -1091,7 +1091,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     WITH addresses_flattened AS (
                         SELECT
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                            unnest(json_transform(json_extract(json_data, '$.addresses')::JSON, $2)) as address_parsed
                         FROM unnest($1) as t(json_data)
                         WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                         AND json_array_length(json_extract(json_data, '$.addresses')) > 0
