@@ -2,61 +2,22 @@
 
 import json
 import logging
-import os
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-import certifi
-from requests import Session
 from zeep import Client
 from zeep.exceptions import Fault
 from zeep.helpers import serialize_object
-from zeep.transports import Transport
-from zeep.wsse.username import UsernameToken
 
-# Import the exporter function
+# Import the exporter and auth
+from .auth import create_besaetning_client, get_fvm_credentials
 from .export import save_raw_data
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_besaetning")
 
-# --- Constants ---
-
-# API Endpoints (WSDL URLs)
-ENDPOINTS = {"besaetning": "https://ws.fvst.dk/service/CHR_besaetningWS?wsdl"}
-
 # Default Client ID for SOAP requests
 DEFAULT_CLIENT_ID = "LandbrugsData"
-
-# --- Credential Handling ---
-
-
-def get_fvm_credentials() -> tuple[str, str]:
-    """Get FVM credentials from environment variables."""
-    username = os.getenv("FVM_USERNAME")
-    password = os.getenv("FVM_PASSWORD")
-
-    if not username or not password:
-        raise ValueError("FVM_USERNAME/PASSWORD must be set in environment variables")
-
-    return username, password
-
-
-# --- SOAP Client Creation ---
-def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication."""
-    # Note: Consider moving this to a shared utility module later
-    session = Session()
-    session.verify = certifi.where()  # Ensure CA certificates are used
-    transport = Transport(session=session)
-    try:
-        client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
-        return client
-    except Exception as e:
-        logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
-        raise
-
 
 # --- Base Request Structure ---
 
@@ -294,8 +255,8 @@ if __name__ == "__main__":
     TEST_HERD_NUMBER = 5392  # Replace with a real, stable herd number known to exist for the species/usage
 
     try:
-        username, password = get_fvm_credentials()
-        besaetning_client = create_soap_client(ENDPOINTS["besaetning"], username, password)
+        username, password, certificate, private_key = get_fvm_credentials()
+        besaetning_client = create_besaetning_client()
 
         # --- Test hentStamoplysninger ONLY ---
         logger.info(

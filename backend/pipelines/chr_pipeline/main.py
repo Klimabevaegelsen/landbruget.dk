@@ -17,17 +17,16 @@ from bronze.export import (
     import_context_data,
     save_raw_data,
 )
-from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
-from bronze.load_besaetning import create_soap_client as create_bes_client
-from bronze.load_besaetning import get_fvm_credentials, load_herd_details, load_herd_list
-from bronze.load_diko import ENDPOINTS as DIKO_ENDPOINTS
-from bronze.load_diko import create_soap_client as create_diko_client
+from bronze.auth import (
+    create_besaetning_client,
+    create_diko_client,
+    create_ejendom_client,
+    create_stamdata_client,
+    get_fvm_credentials,
+)
+from bronze.load_besaetning import load_herd_details, load_herd_list
 from bronze.load_diko import load_diko_flytninger
-from bronze.load_ejendom import ENDPOINTS as EJD_ENDPOINTS
-from bronze.load_ejendom import create_soap_client as create_ejd_client
 from bronze.load_ejendom import load_ejendom_oplysninger, load_ejendom_vet_events
-from bronze.load_stamdata import ENDPOINTS as STAMDATA_ENDPOINTS
-from bronze.load_stamdata import create_soap_client as create_stamdata_client
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
 from silver import config
@@ -569,15 +568,12 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         # Import the smart aggregation function
         from bronze.animal_movements import load_cattle_movement_summaries
-        from bronze.auth import create_soap_client as create_chr_dyr_client
 
         # Create CHR_dyr client for smart aggregation
         if "chr_dyr" not in context["clients"]:
-            # Get credentials
-            username, password = get_fvm_credentials()
-            context["clients"]["chr_dyr"] = create_chr_dyr_client(
-                "https://ws.fvst.dk/service/CHR_dyrWS?wsdl", username, password
-            )
+            from bronze.auth import create_chr_dyr_client
+            
+            context["clients"]["chr_dyr"] = create_chr_dyr_client()
 
         # Create smart aggregation tasks for cattle herds
         cattle_movement_tasks = [
@@ -875,15 +871,15 @@ def main():
 
             if needs_fvm_credentials:
                 # Initialize context with imported data and FVM credentials
-                username, password = get_fvm_credentials()
+                username, password, certificate, private_key = get_fvm_credentials()
                 context = {
                     "args": args,
                     "username": username,
                     "clients": {
-                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                        "stamdata": create_stamdata_client(),
+                        "besaetning": create_besaetning_client(),
+                        "ejendom": create_ejendom_client(),
+                        "diko": create_diko_client(),
                     },
                     # Merge imported context
                     **imported_context,
@@ -910,15 +906,15 @@ def main():
         else:
             if needs_fvm_credentials:
                 # Initialize fresh context with FVM credentials
-                username, password = get_fvm_credentials()
+                username, password, certificate, private_key = get_fvm_credentials()
                 context = {
                     "args": args,
                     "username": username,
                     "clients": {
-                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
+                        "stamdata": create_stamdata_client(),
+                        "besaetning": create_besaetning_client(),
+                        "ejendom": create_ejendom_client(),
+                        "diko": create_diko_client(),
                     },
                 }
             else:
