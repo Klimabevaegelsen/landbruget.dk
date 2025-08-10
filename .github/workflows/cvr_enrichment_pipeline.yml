@@ -7,11 +7,11 @@ on:
         description: 'Test limit (number of CVR numbers to process, empty for no limit)'
         required: false
         type: string
-      batch_count:
-        description: 'Number of batches for parallel processing'
-        required: false
-        default: '5'
-        type: string
+      # batch_count:
+        # description: 'Number of batches for parallel processing'
+        # required: false
+        # default: '5'
+        # type: string
       skip_steps:
         description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
         required: false
@@ -41,7 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.inputs.skip_steps, 'collection') }}
     outputs:
-      batch_count: ${{ steps.collection.outputs.batch_count }}
       collection_success: ${{ steps.collection.outputs.success }}
     
     steps:
@@ -93,7 +92,6 @@ jobs:
           
           # Set outputs
           echo "success=true" >> $GITHUB_OUTPUT
-          echo "batch_count=${{ github.event.inputs.batch_count || '5' }}" >> $GITHUB_OUTPUT
 
       - name: Upload CVR Collection Data
         uses: actions/upload-artifact@v4
@@ -102,7 +100,7 @@ jobs:
           path: /tmp/cvr_collection_data.parquet
           retention-days: 1
 
-  # Step 2: Company Fetching (Sequential with API-level batching)
+  # Step 2: Company Fetching (Sequential - single job with API-level batching)
   company_fetching:
     name: "Company Fetching"
     runs-on: ubuntu-latest
@@ -169,7 +167,7 @@ jobs:
           path: /tmp/cvr_company_data.parquet
           retention-days: 1
 
-  # Step 3: P-Number Fetching (Sequential with API-level batching)
+  # Step 3: P-Number Fetching (Sequential - single job with API-level batching)
   pnumber_fetching:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
@@ -398,7 +396,7 @@ jobs:
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
           echo "   • Test limit: ${{ github.event.inputs.test_limit || 'None (full dataset)' }}"
-          echo "   • Batch count: 5"
+          echo "   • Processing mode: Single job (no batching)"
           echo "   • Skipped steps: ${{ github.event.inputs.skip_steps || 'None' }}"
           echo ""
           echo "📋 Steps Status:"

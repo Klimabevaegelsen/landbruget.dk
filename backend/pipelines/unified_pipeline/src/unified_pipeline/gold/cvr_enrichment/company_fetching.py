@@ -22,7 +22,7 @@ class CompanyFetchingConfig(BaseJobConfig):
     """Configuration for company fetching step."""
     
     name: str = "Company Data Fetching"
-    dataset: str = "cvr_enrichment_companies"
+    dataset: str = "cvr_enrichment"
     type: str = "cvr_api"
     description: str = "Fetch comprehensive company data from CVR register"
     frequency: str = "monthly"
@@ -34,16 +34,7 @@ class CompanyFetchingConfig(BaseJobConfig):
         description="Shared configuration for CVR enrichment pipeline"
     )
     
-    # Company fetching specific configuration
-    batch_number: Optional[int] = Field(
-        default=None,
-        description="Batch number for parallel processing (1-based)"
-    )
-    
-    total_batches: Optional[int] = Field(
-        default=None,
-        description="Total number of batches in this step"
-    )
+    # Company fetching specific configuration (no batching)
     
     fetch_all_fields: bool = Field(
         default=True,
@@ -60,10 +51,6 @@ class CompanyFetchingConfig(BaseJobConfig):
     
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
-        if cli_config.batch_number is not None:
-            object.__setattr__(self, 'batch_number', cli_config.batch_number)
-        if cli_config.total_batches is not None:
-            object.__setattr__(self, 'total_batches', cli_config.total_batches)
         if cli_config.test_limit is not None:
             object.__setattr__(self, 'shared_config', 
                 self.shared_config.model_copy(update={'test_limit': cli_config.test_limit}))
