@@ -70,19 +70,31 @@ jobs:
         id: collection
         env:
           LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          PYTHONUNBUFFERED: 1
         run: |
           cd backend/pipelines/unified_pipeline
           
-          # Build command with optional parameters
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage collection"
+          # Build command with optional parameters - force unbuffered output
+          CMD="python -u -m unified_pipeline.app --source cvr_enrichment --stage collection"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
           
+          echo "🚀 Starting CVR Collection Step"
           echo "Running with Log Level: $LOG_LEVEL"
           echo "Running: $CMD"
-          $CMD
+          echo "🚀 Command starting now..."
+          
+          # Force output visibility and error handling
+          $CMD 2>&1 | tee collection_output.log || {
+            echo "❌ Command failed with exit code: $?"
+            echo "📋 Last 50 lines of output:"
+            tail -50 collection_output.log 2>/dev/null || echo "No output captured"
+            exit 1
+          }
+          
+          echo "✅ CVR Collection completed successfully"
           
           # Set outputs
           echo "success=true" >> $GITHUB_OUTPUT
@@ -122,18 +134,30 @@ jobs:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
           CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
           LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          PYTHONUNBUFFERED: 1
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching"
+          CMD="python -u -m unified_pipeline.app --source cvr_enrichment --stage company_fetching"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
           
+          echo "🚀 Starting Company Fetching Step"
           echo "Running with Log Level: $LOG_LEVEL"
           echo "Running: $CMD"
-          $CMD
+          echo "🚀 Command starting now..."
+          
+          # Force output visibility and error handling
+          $CMD 2>&1 | tee company_fetching_output.log || {
+            echo "❌ Command failed with exit code: $?"
+            echo "📋 Last 50 lines of output:"
+            tail -50 company_fetching_output.log 2>/dev/null || echo "No output captured"
+            exit 1
+          }
+          
+          echo "✅ Company Fetching completed successfully"
 
   # Step 3: P-Number Fetching (Sequential with API-level batching)
   pnumber_fetching:
