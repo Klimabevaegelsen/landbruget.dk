@@ -58,10 +58,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInter
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-print("DEBUG: pesticide_disaggregation.py module loaded!")
 logger = logging.getLogger(__name__)
-print(f"DEBUG: Logger created: {logger}")
-print("🚨 PESTICIDE DISAGGREGATION MODULE: Fully imported and ready")
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
