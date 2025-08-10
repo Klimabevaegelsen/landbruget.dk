@@ -121,22 +121,52 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         
         try:
             # Step 1: Load CVR numbers from collection step
+            self.log.info("📋 Step 1/4: Loading CVR batch for processing")
             cvr_batch = self._load_cvr_batch()
             
             # Step 2: Fetch company data from CVR register
+            self.log.info("🌐 Step 2/4: Fetching company data from CVR register API")
             company_data = await self._fetch_company_data(cvr_batch)
             
             # Step 3: Process and structure company data
+            self.log.info("⚙️ Step 3/4: Processing and structuring company data")
             processed_data = self._process_company_data(company_data)
             
             # Step 4: Save company data
+            self.log.info("💾 Step 4/4: Saving company data")
             table_name = self._save_company_data(processed_data)
             
-            self.log.info(f"Company fetching completed successfully. Data saved to: {table_name}")
+            # Success summary
+            total_requested = len(cvr_batch)
+            total_successful = company_data.get('summary', {}).get('successful', 0)
+            total_failed = company_data.get('summary', {}).get('failed', 0)
+            api_calls = company_data.get('summary', {}).get('api_calls', 0)
+            efficiency_gain = company_data.get('summary', {}).get('efficiency_gain', 'N/A')
+            
+            self.log.info("=" * 60)
+            self.log.info("✅ COMPANY FETCHING COMPLETED SUCCESSFULLY")
+            self.log.info("=" * 60)
+            self.log.info(f"📊 BATCH {self.config.batch_number}/{self.config.total_batches} SUMMARY:")
+            self.log.info(f"   • CVR numbers requested: {total_requested:,}")
+            self.log.info(f"   • Companies found: {total_successful:,}")
+            self.log.info(f"   • Companies not found: {total_failed:,}")
+            self.log.info(f"   • Success rate: {(total_successful/total_requested*100):.1f}%" if total_requested > 0 else "   • Success rate: N/A")
+            self.log.info(f"   • API calls made: {api_calls}")
+            self.log.info(f"   • Efficiency gain: {efficiency_gain}")
+            self.log.info(f"   • Output table: {table_name}")
+            self.log.info(f"   • Ready for next step: P-Number Fetching")
+            self.log.info("=" * 60)
+            
             return table_name
             
         except Exception as e:
-            self.log.error(f"Company fetching failed: {e}")
+            self.log.error("=" * 60)
+            self.log.error("❌ COMPANY FETCHING FAILED")
+            self.log.error("=" * 60)
+            self.log.error(f"💥 Error: {e}")
+            self.log.error(f"🔍 Check the logs above for detailed error information")
+            self.log.error(f"📋 Batch: {self.config.batch_number}/{self.config.total_batches}")
+            self.log.error("=" * 60)
             raise
     
     @timed(name="Loading CVR batch")
@@ -235,11 +265,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 "fetch_timestamp": datetime.now().isoformat()
             }
         
-        # Fetch company data using CVR API client
+        # Fetch company data using CVR API client with batch optimization
         company_results = self.cvr_api_client.fetch_multiple_companies(
             cvr_numbers=cvr_batch,
             fetch_all_fields=self.config.fetch_all_fields,
-            enrich_with_geometry=self.config.enable_address_geocoding
+            enrich_with_geometry=self.config.enable_address_geocoding,
+            batch_size=self.config.shared_config.api_batch_size
         )
         
         self.log.info(

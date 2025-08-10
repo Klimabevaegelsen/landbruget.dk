@@ -75,18 +75,12 @@ jobs:
           echo "success=true" >> $GITHUB_OUTPUT
           echo "batch_count=${{ github.event.inputs.batch_count || '5' }}" >> $GITHUB_OUTPUT
 
-  # Step 2: Company Fetching (Parallel batches)
+  # Step 2: Company Fetching (Sequential with API-level batching)
   company_fetching:
-    name: "Company Fetching (Batch ${{ matrix.batch }})"
+    name: "Company Fetching"
     runs-on: ubuntu-latest
     needs: cvr_collection
     if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching') }}
-    
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
-      fail-fast: false
-      max-parallel: 3  # Limit concurrent API calls
     
     steps:
       - name: Checkout code
@@ -117,7 +111,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage company_fetching"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -126,18 +120,12 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-  # Step 3: P-Number Fetching (Parallel batches)
+  # Step 3: P-Number Fetching (Sequential with API-level batching)
   pnumber_fetching:
-    name: "P-Number Fetching (Batch ${{ matrix.batch }})"
+    name: "P-Number Fetching"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching]
-    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching') }}
-    
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
-      fail-fast: false
-      max-parallel: 3  # Limit concurrent API calls
+    needs: company_fetching
+    if: ${{ !contains(github.event.inputs.skip_steps, 'pnumber_fetching') }}
     
     steps:
       - name: Checkout code
@@ -168,7 +156,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           
-          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching --batch-number ${{ matrix.batch }} --total-batches 5"
+          CMD="python -m unified_pipeline.app --source cvr_enrichment --stage pnumber_fetching"
           
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
@@ -177,16 +165,16 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-  # Step 4: Financial Documents (Parallel batches)
+  # Step 4: Financial Documents (Parallel - individual API calls required)
   financial_documents:
     name: "Financial Documents (Batch ${{ matrix.batch }})"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching]
-    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'financial_documents') }}
+    needs: company_fetching
+    if: ${{ !contains(github.event.inputs.skip_steps, 'financial_documents') }}
     
     strategy:
       matrix:
-        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
+        batch: [1, 2, 3, 4, 5]  # Parallel batches for individual API calls
       fail-fast: false
       max-parallel: 2  # Lower limit for financial document processing
     
@@ -228,16 +216,16 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-  # Step 5: Address Geocoding (Parallel batches)
+  # Step 5: Address Geocoding (Parallel - individual DAWA API calls required)
   address_geocoding:
     name: "Address Geocoding (Batch ${{ matrix.batch }})"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching]
-    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'address_geocoding') }}
+    needs: [company_fetching, pnumber_fetching]
+    if: ${{ !contains(github.event.inputs.skip_steps, 'address_geocoding') }}
     
     strategy:
       matrix:
-        batch: [1, 2, 3, 4, 5]  # Fixed 5 batches for simplicity
+        batch: [1, 2, 3, 4, 5]  # Parallel batches for individual DAWA calls
       fail-fast: false
       max-parallel: 4  # Higher limit for geocoding (less API intensive)
     

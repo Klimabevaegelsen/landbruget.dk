@@ -106,22 +106,44 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         
         try:
             # Step 1: Collect all CVR numbers from pipeline collections
+            self.log.info("📋 Step 1/4: Collecting CVR numbers from pipeline sources")
             collection_data = self._collect_cvr_numbers()
             
             # Step 2: Validate and filter CVR numbers
+            self.log.info("✅ Step 2/4: Validating and filtering CVR numbers")
             validated_data = self._validate_cvr_numbers(collection_data)
             
             # Step 3: Create batches for parallel processing
+            self.log.info("📦 Step 3/4: Creating processing batches")
             batch_data = self._create_processing_batches(validated_data)
             
             # Step 4: Save collection results
+            self.log.info("💾 Step 4/4: Saving collection data")
             table_name = self._save_collection_data(batch_data)
             
-            self.log.info(f"CVR collection completed successfully. Data saved to: {table_name}")
+            # Success summary
+            total_cvrs = len(validated_data.get("valid_cvr_numbers", []))
+            batches_created = len(batch_data.get("batches", []))
+            
+            self.log.info("=" * 60)
+            self.log.info("✅ CVR COLLECTION COMPLETED SUCCESSFULLY")
+            self.log.info("=" * 60)
+            self.log.info(f"📊 SUMMARY:")
+            self.log.info(f"   • Total CVR numbers collected: {total_cvrs:,}")
+            self.log.info(f"   • Processing batches created: {batches_created}")
+            self.log.info(f"   • Output table: {table_name}")
+            self.log.info(f"   • Ready for next step: Company Fetching")
+            self.log.info("=" * 60)
+            
             return table_name
             
         except Exception as e:
-            self.log.error(f"CVR collection failed: {e}")
+            self.log.error("=" * 60)
+            self.log.error("❌ CVR COLLECTION FAILED")
+            self.log.error("=" * 60)
+            self.log.error(f"💥 Error: {e}")
+            self.log.error("🔍 Check the logs above for detailed error information")
+            self.log.error("=" * 60)
             raise
     
     @timed(name="Collecting CVR numbers")

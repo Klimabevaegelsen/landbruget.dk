@@ -123,23 +123,60 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         
         try:
             # Step 1: Load all data from previous steps
+            self.log.info("📋 Step 1/4: Loading and merging data from all previous steps")
             consolidated_data = self._load_and_merge_all_data()
             
             # Step 2: Create normalized table structure
             if self.config.create_normalized_tables:
+                self.log.info("🏗️ Step 2/4: Creating normalized table structure")
                 table_names = self._create_normalized_tables(consolidated_data)
             else:
                 table_names = [self._create_simple_consolidated_table(consolidated_data)]
             
             # Step 3: Generate and save comprehensive summary
-            self._generate_final_summary(consolidated_data, table_names)
+            self.log.info("📊 Step 3/4: Generating comprehensive data summary")
+            summary_stats = self._generate_final_summary(consolidated_data, table_names)
             
+            # Step 4: Final validation and output
+            self.log.info("✅ Step 4/4: Final validation and output preparation")
             main_table = table_names[0] if table_names else "cvr_enriched_companies"
-            self.log.info(f"Data consolidation completed successfully. Main table: {main_table}")
+            
+            # Extract summary statistics
+            total_companies = summary_stats.get('total_companies', 0)
+            total_pnumbers = summary_stats.get('total_pnumbers', 0) 
+            total_addresses = summary_stats.get('total_addresses', 0)
+            geocoded_addresses = summary_stats.get('geocoded_addresses', 0)
+            financial_docs = summary_stats.get('financial_documents', 0)
+            tables_created = len(table_names)
+            
+            # Success summary
+            self.log.info("=" * 60)
+            self.log.info("🎉 CVR ENRICHMENT PIPELINE COMPLETED SUCCESSFULLY")
+            self.log.info("=" * 60)
+            self.log.info(f"📊 FINAL SUMMARY:")
+            self.log.info(f"   • Total companies processed: {total_companies:,}")
+            self.log.info(f"   • Total P-numbers processed: {total_pnumbers:,}")
+            self.log.info(f"   • Total addresses found: {total_addresses:,}")
+            self.log.info(f"   • Addresses geocoded: {geocoded_addresses:,}")
+            self.log.info(f"   • Financial documents: {financial_docs:,}")
+            self.log.info(f"   • Database tables created: {tables_created}")
+            self.log.info(f"   • Main output table: {main_table}")
+            self.log.info(f"")
+            self.log.info(f"🚀 PIPELINE SUCCESS!")
+            self.log.info(f"   The CVR enrichment pipeline has completed successfully.")
+            self.log.info(f"   All data is now available in the gold layer tables.")
+            self.log.info("=" * 60)
+            
             return main_table
             
         except Exception as e:
-            self.log.error(f"Data consolidation failed: {e}")
+            self.log.error("=" * 60)
+            self.log.error("❌ DATA CONSOLIDATION FAILED")
+            self.log.error("=" * 60)
+            self.log.error(f"💥 Error: {e}")
+            self.log.error(f"🔍 Check the logs above for detailed error information")
+            self.log.error(f"⚠️  This is the final step - previous steps may have succeeded")
+            self.log.error("=" * 60)
             raise
     
     @timed(name="Loading and merging all data")
@@ -720,10 +757,40 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self.log.info(f"Created simple consolidated table {table_name}")
         return table_name
     
-    def _generate_final_summary(self, consolidated_data: Dict[str, Any], table_names: List[str]) -> None:
+    def _generate_final_summary(self, consolidated_data: Dict[str, Any], table_names: List[str]) -> Dict[str, Any]:
         """Generate and save comprehensive final summary."""
+        
+        # Calculate summary statistics
+        companies_data = consolidated_data.get("companies", {})
+        pnumbers_data = consolidated_data.get("pnumbers", {})
+        
+        # Count addresses and geocoded addresses
+        total_addresses = 0
+        geocoded_addresses = 0
+        for company in companies_data.values():
+            addresses = company.get("addresses", [])
+            total_addresses += len(addresses)
+            geocoded_addresses += sum(1 for addr in addresses if addr.get("geometry"))
+        
+        # Count financial documents
+        financial_docs = sum(
+            len(company.get("financial_documents", [])) 
+            for company in companies_data.values()
+        )
+        
+        # Create comprehensive summary statistics
+        summary_stats = {
+            "total_companies": len(companies_data),
+            "total_pnumbers": len(pnumbers_data),
+            "total_addresses": total_addresses,
+            "geocoded_addresses": geocoded_addresses,
+            "financial_documents": financial_docs,
+            "tables_created": len(table_names)
+        }
+        
         summary_data = {
             "pipeline_summary": consolidated_data["summary"],
+            "statistics": summary_stats,
             "tables_created": table_names,
             "pipeline_run_id": self.date_pattern,
             "completion_timestamp": datetime.now().isoformat(),
@@ -741,16 +808,4 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         )
         
         self.log.info(f"Saved final pipeline summary to {summary_path}")
-        self.log.info("🎉 CVR Enrichment Pipeline completed successfully!")
-        
-        # Log final statistics
-        summary = consolidated_data["summary"]
-        self.log.info("📊 Final Pipeline Statistics:")
-        self.log.info(f"   • Total companies: {summary['total_companies']}")
-        self.log.info(f"   • Companies with P-numbers: {summary['companies_with_pnumbers']}")
-        self.log.info(f"   • Companies with financial data: {summary['companies_with_financial_data']}")
-        self.log.info(f"   • Companies with geocoded addresses: {summary['companies_with_geocoded_addresses']}")
-        self.log.info(f"   • Total P-numbers: {summary['total_pnumbers']}")
-        self.log.info(f"   • Total addresses: {summary['total_addresses']}")
-        self.log.info(f"   • Geocoded addresses: {summary['geocoded_addresses']}")
-        self.log.info(f"   • Tables created: {len(table_names)}")
+        return summary_stats
