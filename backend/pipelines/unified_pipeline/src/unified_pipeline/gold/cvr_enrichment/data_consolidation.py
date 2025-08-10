@@ -1221,16 +1221,36 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         TRY(address_parsed.period_start) as period_start,
                         TRY(address_parsed.period_end) as period_end,
                         TRY(address_parsed.is_current) as is_current,
-                        TRY(address_parsed.latitude::DOUBLE) as latitude,
-                        TRY(address_parsed.longitude::DOUBLE) as longitude,
-                        TRY(address_parsed.coordinate_system) as coordinate_system,
-                        TRY(address_parsed.srid::INTEGER) as srid,
-                        TRY(address_parsed.geometry_wkt) as geometry_wkt,
-                        TRY(address_parsed.geometry_geojson) as geometry_geojson,
-                        TRY(address_parsed.coordinate_quality) as coordinate_quality,
-                        TRY(address_parsed.coordinate_source) as coordinate_source,
-                        TRY(address_parsed.dawa_enriched::BOOLEAN) as dawa_enriched,
-                        TRY(address_parsed.dawa_fetch_timestamp) as dawa_fetch_timestamp
+                        CASE WHEN json_extract(address_parsed, '$.latitude') IS NOT NULL 
+                             THEN TRY(address_parsed.latitude::DOUBLE) 
+                             ELSE NULL END as latitude,
+                        CASE WHEN json_extract(address_parsed, '$.longitude') IS NOT NULL 
+                             THEN TRY(address_parsed.longitude::DOUBLE) 
+                             ELSE NULL END as longitude,
+                        CASE WHEN json_extract(address_parsed, '$.coordinate_system') IS NOT NULL 
+                             THEN TRY(address_parsed.coordinate_system) 
+                             ELSE NULL END as coordinate_system,
+                        CASE WHEN json_extract(address_parsed, '$.srid') IS NOT NULL 
+                             THEN TRY(address_parsed.srid::INTEGER) 
+                             ELSE NULL END as srid,
+                        CASE WHEN json_extract(address_parsed, '$.geometry_wkt') IS NOT NULL 
+                             THEN TRY(address_parsed.geometry_wkt) 
+                             ELSE NULL END as geometry_wkt,
+                        CASE WHEN json_extract(address_parsed, '$.geometry_geojson') IS NOT NULL 
+                             THEN TRY(address_parsed.geometry_geojson) 
+                             ELSE NULL END as geometry_geojson,
+                        CASE WHEN json_extract(address_parsed, '$.coordinate_quality') IS NOT NULL 
+                             THEN TRY(address_parsed.coordinate_quality) 
+                             ELSE NULL END as coordinate_quality,
+                        CASE WHEN json_extract(address_parsed, '$.coordinate_source') IS NOT NULL 
+                             THEN TRY(address_parsed.coordinate_source) 
+                             ELSE NULL END as coordinate_source,
+                        CASE WHEN json_extract(address_parsed, '$.dawa_enriched') IS NOT NULL 
+                             THEN TRY(address_parsed.dawa_enriched::BOOLEAN) 
+                             ELSE NULL END as dawa_enriched,
+                        CASE WHEN json_extract(address_parsed, '$.dawa_fetch_timestamp') IS NOT NULL 
+                             THEN TRY(address_parsed.dawa_fetch_timestamp) 
+                             ELSE NULL END as dawa_fetch_timestamp
                     FROM addresses_flattened
                 """, [json_strings, addresses_schema[0]])
     

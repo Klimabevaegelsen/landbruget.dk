@@ -176,10 +176,88 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     self.log.warning(f"Cannot determine data type for path: {input_path}")
                     continue
                 
-                # Read directly from GCS path with DuckDB
-                local_path = input_path
-                self.log.info(f"Reading from: {input_path}")
+                # Check if running in GitHub Actions and use artifact data
+                import os
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    # Use artifact data in GitHub Actions
+                    if is_company_data:
+                        artifact_path = "/tmp/cvr_company_data.parquet"
+                        if os.path.exists(artifact_path):
+                            self.log.info("Using company data from artifact")
+                            local_path = artifact_path
+                        else:
+                            self.log.warning(f"Company artifact not found: {artifact_path}")
+                            continue
+                    elif is_pnumber_data:
+                        artifact_path = "/tmp/cvr_pnumber_data.parquet"
+                        if os.path.exists(artifact_path):
+                            self.log.info("Using P-number data from artifact")
+                            local_path = artifact_path
+                        else:
+                            self.log.warning(f"P-number artifact not found: {artifact_path}")
+                            continue
+                else:
+                    # Use GCS temp download for local development
+                    self.log.info(f"Local development - downloading from GCS: {input_path}")
+                    with self.gcs_access._temp_download(input_path) as temp_file:
+                        local_path = temp_file
+                        
+                        if is_company_data:
+                            # Load company data from temp file
+                            result = self.conn.execute("""
+                                SELECT cvr_number, company_name, company_data_json
+                                FROM read_parquet(?)
+                                WHERE company_data_json IS NOT NULL
+                            """, [local_path]).fetchall()
+                        elif is_pnumber_data:
+                            # Load P-number data from temp file
+                            result = self.conn.execute("""
+                                SELECT p_number, parent_cvr_number, unit_name, pnumber_data_json
+                                FROM read_parquet(?)
+                                WHERE pnumber_data_json IS NOT NULL
+                            """, [local_path]).fetchall()
+                        
+                        # Process the results inside the context manager
+                        if is_company_data:
+                            for cvr_number, company_name, company_json in result:
+                                try:
+                                    company_data = json.loads(company_json)
+                                    addresses = company_data.get("addresses", [])
+                                    
+                                    for addr in addresses:
+                                        if self._should_geocode_address(addr):
+                                            addr_record = self._create_address_record(
+                                                addr, "company", cvr_number, company_name
+                                            )
+                                            all_addresses.append(addr_record)
+                                            company_addresses += 1
+                                
+                                except json.JSONDecodeError as e:
+                                    self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                                    continue
+                        
+                        elif is_pnumber_data:
+                            for p_number, parent_cvr, unit_name, pnumber_json in result:
+                                try:
+                                    pnumber_data = json.loads(pnumber_json)
+                                    addresses = pnumber_data.get("addresses", [])
+                                    
+                                    for addr in addresses:
+                                        if self._should_geocode_address(addr):
+                                            addr_record = self._create_address_record(
+                                                addr, "pnumber", parent_cvr, unit_name, p_number
+                                            )
+                                            all_addresses.append(addr_record)
+                                            pnumber_addresses += 1
+                                
+                                except json.JSONDecodeError as e:
+                                    self.log.warning(f"Failed to parse P-number data for P-number {p_number}: {e}")
+                                    continue
+                    
+                    # Continue to next file after processing this one
+                    continue
                 
+                # GitHub Actions path - process artifact data
                 if is_company_data:
                     # Load company data
                     result = self.conn.execute("""
@@ -354,7 +432,13 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         if not addresses:
             return {
                 "geocoded_addresses": [],
-                "summary": {"total": 0, "dawa_success": 0, "datavask_success": 0, "failed": 0}
+                "summary": {
+                    "total": 0, 
+                    "dawa_success": 0, 
+                    "datavask_success": 0, 
+                    "failed": 0,
+                    "success_rate": 0.0
+                }
             }
         
         geocoded_addresses = []
