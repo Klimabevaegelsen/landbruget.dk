@@ -178,34 +178,76 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.log.info(f"Processing company data from: {input_path}")
             
             try:
-                # Download and load company data
-                local_path = self.gcs_access.download_file(input_path, f"/tmp/company_batch_{len(all_pnumbers)}.parquet")
-                
-                # Load company data
-                result = self.conn.execute("""
-                    SELECT cvr_number, company_data_json
-                    FROM read_parquet(?)
-                    WHERE company_data_json IS NOT NULL
-                """, [local_path]).fetchall()
-                
-                # Extract P-numbers from each company
-                for cvr_number, company_json in result:
-                    total_companies += 1
-                    
-                    try:
-                        company_data = json.loads(company_json)
-                        extracted_pnumbers = company_data.get("extracted_pnumbers", [])
-                        
-                        if extracted_pnumbers:
-                            cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
-                            
-                            for pnumber in extracted_pnumbers:
-                                all_pnumbers.add(pnumber)
-                                pnumber_to_cvr[pnumber] = str(cvr_number)
-                    
-                    except json.JSONDecodeError as e:
-                        self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                # Check if running in GitHub Actions and use artifact data
+                import os
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    # Use artifact data in GitHub Actions - look for consolidated company data
+                    artifact_path = "/tmp/cvr_company_data.parquet"
+                    if os.path.exists(artifact_path):
+                        self.log.info("Using company data from artifact")
+                        local_path = artifact_path
+                    else:
+                        self.log.warning(f"Company artifact not found: {artifact_path}")
                         continue
+                        
+                    # Load company data from artifact
+                    result = self.conn.execute("""
+                        SELECT cvr_number, company_data_json
+                        FROM read_parquet(?)
+                        WHERE company_data_json IS NOT NULL
+                    """, [local_path]).fetchall()
+                    
+                    # Extract P-numbers from each company
+                    for cvr_number, company_json in result:
+                        total_companies += 1
+                        
+                        try:
+                            company_data = json.loads(company_json)
+                            extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+                            
+                            if extracted_pnumbers:
+                                cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
+                                
+                                for pnumber in extracted_pnumbers:
+                                    all_pnumbers.add(pnumber)
+                                    pnumber_to_cvr[pnumber] = str(cvr_number)
+                        
+                        except json.JSONDecodeError as e:
+                            self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                            continue
+                            
+                    # In GitHub Actions, we only need to process the artifact once
+                    break
+                    
+                else:
+                    # Use GCS temp download for local development
+                    self.log.info(f"Local development - downloading from GCS: {input_path}")
+                    with self.gcs_access._temp_download(input_path) as temp_file:
+                        # Load company data from temp file
+                        result = self.conn.execute("""
+                            SELECT cvr_number, company_data_json
+                            FROM read_parquet(?)
+                            WHERE company_data_json IS NOT NULL
+                        """, [temp_file]).fetchall()
+                        
+                        # Extract P-numbers from each company inside the context manager
+                        for cvr_number, company_json in result:
+                            total_companies += 1
+                            
+                            try:
+                                company_data = json.loads(company_json)
+                                extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+                                
+                                if extracted_pnumbers:
+                                    cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
+                                    
+                                    for pnumber in extracted_pnumbers:
+                                        all_pnumbers.add(pnumber)
+                                        pnumber_to_cvr[pnumber] = str(cvr_number)
+                            
+                            except json.JSONDecodeError as e:
+                                self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                                continue
             
             except Exception as e:
                 self.log.error(f"Failed to process company data from {input_path}: {e}")
