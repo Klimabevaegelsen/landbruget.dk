@@ -255,6 +255,12 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
       
+      - name: Download Company Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-company-data
+          path: /tmp/
+      
       - name: Run Financial Documents
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
@@ -359,6 +365,18 @@ jobs:
       
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Download Company Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-company-data
+          path: /tmp/
+      
+      - name: Download P-Number Data
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-pnumber-data
+          path: /tmp/
       
       - name: Run Data Consolidation
         run: |
