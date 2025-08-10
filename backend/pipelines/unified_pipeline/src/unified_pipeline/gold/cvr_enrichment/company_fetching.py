@@ -89,7 +89,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         
         self.log.info("Company fetching step initialized")
         self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Batch: {self.config.batch_number}/{self.config.total_batches}")
+        self.log.info(f"   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}")
     
@@ -133,7 +133,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.info("=" * 60)
             self.log.info("✅ COMPANY FETCHING COMPLETED SUCCESSFULLY")
             self.log.info("=" * 60)
-            self.log.info(f"📊 BATCH {self.config.batch_number}/{self.config.total_batches} SUMMARY:")
+            self.log.info(f"📊 PROCESSING SUMMARY:")
             self.log.info(f"   • CVR numbers requested: {total_requested:,}")
             self.log.info(f"   • Companies found: {total_successful:,}")
             self.log.info(f"   • Companies not found: {total_failed:,}")
@@ -152,7 +152,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.error("=" * 60)
             self.log.error(f"💥 Error: {e}")
             self.log.error(f"🔍 Check the logs above for detailed error information")
-            self.log.error(f"📋 Batch: {self.config.batch_number}/{self.config.total_batches}")
+            self.log.error(f"📋 Processing mode: Single job (no batching)")
             self.log.error("=" * 60)
             raise
     
@@ -203,25 +203,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             
             all_cvrs = [row[0] for row in result]
             
-            # Get batch details if this is a batch job
-            if self.config.batch_number and self.config.total_batches:
-                batch_details = self._load_batch_details()
-                
-                if self.config.batch_number <= len(batch_details["processing_batches"]):
-                    cvr_batch = batch_details["processing_batches"][self.config.batch_number - 1]
-                    self.log.info(
-                        f"Loaded batch {self.config.batch_number}/{self.config.total_batches}: "
-                        f"{len(cvr_batch)} CVR numbers"
-                    )
-                else:
-                    raise ValueError(
-                        f"Batch number {self.config.batch_number} exceeds available batches "
-                        f"({len(batch_details['processing_batches'])})"
-                    )
-            else:
-                # Process all CVRs if not batched
-                cvr_batch = all_cvrs
-                self.log.info(f"Loaded {len(cvr_batch)} CVR numbers (no batching)")
+            # Process all CVRs (no batching)
+            cvr_batch = all_cvrs
+            self.log.info(f"Loaded {len(cvr_batch)} CVR numbers (no batching)")
             
             return cvr_batch
             
@@ -301,7 +285,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 company_info["processing_timestamp"] = datetime.now().isoformat()
                 company_info["pipeline_run_id"] = self.date_pattern
                 company_info["processing_step"] = CVREnrichmentStep.COMPANY_FETCHING.value
-                company_info["batch_number"] = self.config.batch_number
+                # company_info["batch_number"] = self.config.batch_number  # No batching
                 
                 # Extract P-numbers for subsequent P-number fetching step
                 pnumbers = self.cvr_api_client.get_company_pnumbers(company_info)
@@ -317,8 +301,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             "failed_companies": len([c for c in company_results.values() if c is None]),
             "total_pnumbers_found": sum(c.get("pnumber_count", 0) for c in processed_companies),
             "companies_with_pnumbers": len([c for c in processed_companies if c.get("pnumber_count", 0) > 0]),
-            "batch_number": self.config.batch_number,
-            "total_batches": self.config.total_batches,
+            # "batch_number": self.config.batch_number,  # No batching
+            # "total_batches": self.config.total_batches,  # No batching
             "processing_timestamp": datetime.now().isoformat(),
             "api_summary": company_data["summary"]
         }
@@ -348,11 +332,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """
         self.log.info("Saving company data")
         
-        # Create table name with batch suffix if applicable
-        if self.config.batch_number:
-            table_name = f"cvr_companies_batch_{self.config.batch_number:03d}"
-        else:
-            table_name = "cvr_companies"
+        # Create table name (no batching)
+        table_name = "cvr_companies"
         
         companies_data = processed_data["companies"]
         
@@ -373,7 +354,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
                     json_data as company_data_json,
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                    json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                    NULL::INTEGER as batch_number  -- No batching
                 FROM unnest($1) as t(json_data)
             """, [json_strings])
             
@@ -417,10 +398,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
     
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
-        if self.config.batch_number:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary_batch_{self.config.batch_number:03d}.json"
-        else:
-            summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/summary.json"
+        # No batching - single summary file
+        summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/company_summary.json"
         
         self.gcs_access.upload_json(
             data=summary,
