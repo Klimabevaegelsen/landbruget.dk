@@ -177,27 +177,60 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(f"Loading company data from: {input_path}")
             
             try:
-                # Read directly from GCS path with DuckDB
-                local_path = input_path
-                self.log.info(f"Reading from: {input_path}")
-                
-                # Load company data
-                result = self.conn.execute("""
-                    SELECT cvr_number, company_name, company_data_json
-                    FROM read_parquet(?)
-                    WHERE company_data_json IS NOT NULL
-                """, [local_path]).fetchall()
-                
-                # Parse company JSON data
-                for cvr_number, company_name, company_json in result:
-                    try:
-                        company_data = json.loads(company_json)
-                        company_data["cvr_number"] = cvr_number
-                        company_data["company_name"] = company_name
-                        all_companies.append(company_data)
-                    except json.JSONDecodeError as e:
-                        self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                # Check if running in GitHub Actions and use artifact data
+                import os
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    # Use artifact data in GitHub Actions - look for consolidated company data
+                    artifact_path = "/tmp/cvr_company_data.parquet"
+                    if os.path.exists(artifact_path):
+                        self.log.info("Using company data from artifact")
+                        local_path = artifact_path
+                    else:
+                        self.log.warning(f"Company artifact not found: {artifact_path}")
                         continue
+                        
+                    # Load company data from artifact
+                    result = self.conn.execute("""
+                        SELECT cvr_number, company_name, company_data_json
+                        FROM read_parquet(?)
+                        WHERE company_data_json IS NOT NULL
+                    """, [local_path]).fetchall()
+                    
+                    # Parse company JSON data
+                    for cvr_number, company_name, company_json in result:
+                        try:
+                            company_data = json.loads(company_json)
+                            company_data["cvr_number"] = cvr_number
+                            company_data["company_name"] = company_name
+                            all_companies.append(company_data)
+                        except json.JSONDecodeError as e:
+                            self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                            continue
+                            
+                    # In GitHub Actions, we only need to process the artifact once
+                    break
+                    
+                else:
+                    # Use GCS temp download for local development
+                    self.log.info(f"Local development - downloading from GCS: {input_path}")
+                    with self.gcs_access._temp_download(input_path) as temp_file:
+                        # Load company data from temp file
+                        result = self.conn.execute("""
+                            SELECT cvr_number, company_name, company_data_json
+                            FROM read_parquet(?)
+                            WHERE company_data_json IS NOT NULL
+                        """, [temp_file]).fetchall()
+                        
+                        # Parse company JSON data inside the context manager
+                        for cvr_number, company_name, company_json in result:
+                            try:
+                                company_data = json.loads(company_json)
+                                company_data["cvr_number"] = cvr_number
+                                company_data["company_name"] = company_name
+                                all_companies.append(company_data)
+                            except json.JSONDecodeError as e:
+                                self.log.warning(f"Failed to parse company data for CVR {cvr_number}: {e}")
+                                continue
             
             except Exception as e:
                 self.log.error(f"Failed to load company data from {input_path}: {e}")
