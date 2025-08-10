@@ -792,12 +792,12 @@ class CVRAPIClient:
                 "city": address_obj.get("postdistrikt", None),
                 "district": address_obj.get("bynavn", None),
                 "country_code": address_obj.get("landekode", None),
-                "formatted_address": full_address,
+                "full_address": full_address,
             }
 
         except Exception as e:
             self.log.error(f"Error parsing address: {e}")
-            return {"formatted_address": None, "error": str(e)}
+            return {"full_address": None, "error": str(e)}
 
     def _parse_financial_document(
         self, doc_source: Dict[str, Any], cvr_number: str, xml_only: bool = True
