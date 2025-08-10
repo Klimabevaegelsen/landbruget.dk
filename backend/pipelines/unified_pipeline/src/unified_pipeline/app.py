@@ -34,10 +34,28 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
-from unified_pipeline.gold.cvr_enrichment import (
-    CVREnrichmentGold,
-    CVREnrichmentGoldConfig,
-)
+# Import legacy monolithic CVR enrichment from the specific .py file
+# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
+import sys
+import importlib.util
+import os
+
+# Get the path to the specific cvr_enrichment.py file
+cvr_enrichment_file = os.path.join(os.path.dirname(__file__), 'gold', 'cvr_enrichment.py')
+spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
+cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cvr_enrichment_legacy)
+
+CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
+CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
+
+# Import new modular CVR enrichment steps from the package directory
+from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
+from unified_pipeline.gold.cvr_enrichment.company_fetching import CompanyFetching, CompanyFetchingConfig
+from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import PNumberFetching, PNumberFetchingConfig
+from unified_pipeline.gold.cvr_enrichment.financial_documents import FinancialDocuments, FinancialDocumentsConfig
+from unified_pipeline.gold.cvr_enrichment.address_geocoding import AddressGeocoding, AddressGeocodingConfig
+from unified_pipeline.gold.cvr_enrichment.data_consolidation import DataConsolidation, DataConsolidationConfig
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -399,12 +417,21 @@ def execute(cli_config: cli.CliConfig) -> int:
             ],
         },
         cli.Source.cvr_enrichment: {
+            # Legacy monolithic approach
             cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
             cli.Stage.all: [
                 # Note: This collects CVR numbers from all pipeline CVR collections
                 # and fetches CVR register data for enrichment
                 (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
+            
+            # New modular pipeline steps
+            cli.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
+            cli.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
+            cli.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
+            cli.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
+            cli.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
+            cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
         },
         cli.Source.dst: {
             cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
@@ -543,6 +570,20 @@ def execute(cli_config: cli.CliConfig) -> int:
     help="Year filter for pesticide matrix jobs (e.g., 2018). If not specified, processes all available years.",
     required=False,
 )
+@click.option(
+    "--batch-number",
+    "batch_number",
+    type=int,
+    help="Batch number for parallel processing (1-based). Used with CVR enrichment pipeline steps.",
+    required=False,
+)
+@click.option(
+    "--total-batches",
+    "total_batches",
+    type=int,
+    help="Total number of batches for parallel processing. Used with CVR enrichment pipeline steps.",
+    required=False,
+)
 def run_cli(
     env: str,
     source: str,
@@ -553,6 +594,8 @@ def run_cli(
     parse_financial_xml: bool = True,
     max_financial_documents: int = 10,
     pesticide_year: int = None,
+    batch_number: int = None,
+    total_batches: int = None,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -582,6 +625,8 @@ def run_cli(
         parse_financial_xml=parse_financial_xml,
         max_financial_documents=max_financial_documents,
         pesticide_year=pesticide_year,
+        batch_number=batch_number,
+        total_batches=total_batches,
     )
     print(app_config)
     exit_code = execute(app_config)
