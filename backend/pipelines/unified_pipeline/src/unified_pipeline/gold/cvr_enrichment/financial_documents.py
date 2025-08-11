@@ -463,7 +463,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             duration_elements = {
                 # Income Statement items (use duration context)
                 'net_profit_loss': 'ProfitLoss',
-                'gross_profit_loss': 'GrossProfitLoss', 
                 'operating_profit_loss': 'ProfitLossFromOrdinaryOperatingActivities',
                 'profit_loss_before_tax': 'ProfitLossFromOrdinaryActivitiesBeforeTax',
                 'employee_benefits_expense': 'EmployeeBenefitsExpense',

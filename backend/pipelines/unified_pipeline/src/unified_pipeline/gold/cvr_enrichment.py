@@ -777,7 +777,6 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             duration_elements = {
                 # Income Statement items (use duration context)
                 'net_profit_loss': 'ProfitLoss',
-                'gross_profit_loss': 'GrossProfitLoss', 
                 'operating_profit_loss': 'ProfitLossFromOrdinaryOperatingActivities',
                 'profit_loss_before_tax': 'ProfitLossFromOrdinaryActivitiesBeforeTax',
                 'revenue': 'Revenue',
@@ -966,7 +965,6 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 income_statement_end_date VARCHAR,
                 balance_sheet_date VARCHAR,
                 net_profit_loss DOUBLE,
-                gross_profit_loss DOUBLE,
                 operating_profit_loss DOUBLE,
                 profit_loss_before_tax DOUBLE,
                 employee_benefits_expense DOUBLE,
@@ -1213,7 +1211,6 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     'income_statement_end_date': 'NULL',
                     'balance_sheet_date': 'NULL',
                     'net_profit_loss': 'NULL',
-                    'gross_profit_loss': 'NULL',
                     'operating_profit_loss': 'NULL',
                     'profit_loss_before_tax': 'NULL',
                     'employee_benefits_expense': 'NULL',
