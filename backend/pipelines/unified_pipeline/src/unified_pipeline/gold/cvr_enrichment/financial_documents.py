@@ -628,7 +628,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS.
+        Save processed financial documents data to GCS using batch processing to avoid memory issues.
         
         Args:
             processed_data: Processed financial data
@@ -647,30 +647,79 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         
         if financial_data:
-            # Convert to JSON strings for DuckDB
-            json_strings = [json.dumps(financial) for financial in financial_data]
+            self.log.info(f"🔄 Processing {len(financial_data)} companies in batches to avoid memory issues")
             
+            # Process in batches to avoid memory issues (similar to data_consolidation.py)
+            batch_size = 50  # Process 50 companies at a time
+            total_companies = len(financial_data)
+            num_batches = (total_companies + batch_size - 1) // batch_size
+            
+            self.log.info(f"📦 Processing {total_companies} companies in {num_batches} batches of {batch_size}")
+            
+            # Create empty table with correct schema first
             self.conn.execute(f"""
-                CREATE TABLE {table_name} AS
-                SELECT 
-                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                    json_extract(json_data, '$.document_count')::INTEGER as document_count,
-                    json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
-                    json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
-                    json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
-                    CASE 
-                        WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL 
-                        THEN true 
-                        ELSE false 
-                    END as has_financial_metrics,
-                    json_data as financial_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                    json_extract(json_data, '$.batch_number')::INTEGER as batch_number
-                FROM unnest($1) as t(json_data)
-            """, [json_strings])
+                CREATE TABLE {table_name} (
+                    cvr_number INTEGER,
+                    company_name VARCHAR,
+                    document_count INTEGER,
+                    xml_document_count INTEGER,
+                    total_xml_size_bytes INTEGER,
+                    latest_reporting_date VARCHAR,
+                    has_financial_metrics BOOLEAN,
+                    financial_data_json VARCHAR,
+                    processing_timestamp VARCHAR,
+                    batch_number INTEGER
+                )
+            """)
             
-            self.log.info(f"Created table {table_name} with {len(financial_data)} companies")
+            # Process each batch
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, total_companies)
+                batch_data = financial_data[start_idx:end_idx]
+                
+                self.log.info(f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx-1}")
+                
+                try:
+                    # Convert batch to JSON strings for DuckDB
+                    json_strings = [json.dumps(financial) for financial in batch_data]
+                    
+                    # Insert batch data into table
+                    self.conn.execute(f"""
+                        INSERT INTO {table_name}
+                        SELECT 
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                            json_extract(json_data, '$.document_count')::INTEGER as document_count,
+                            json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
+                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
+                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
+                            CASE 
+                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL 
+                                THEN true 
+                                ELSE false 
+                            END as has_financial_metrics,
+                            json_data as financial_data_json,
+                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                            json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                        FROM unnest($1) as t(json_data)
+                    """, [json_strings])
+                    
+                    # Clear batch data from memory
+                    json_strings = None
+                    batch_data = None
+                    
+                    # Memory cleanup after each batch
+                    self._cleanup_memory_after_batch()
+                    
+                except Exception as e:
+                    self.log.error(f"Error processing batch {batch_idx + 1}: {e}")
+                    if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                        self.log.warning("⚠️ Memory exhaustion detected - stopping processing")
+                        break
+                    raise
+            
+            self.log.info(f"✅ Created table {table_name} with {len(financial_data)} companies using batch processing")
         else:
             # Create empty table with schema
             self.conn.execute(f"""
@@ -697,7 +746,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             stage="gold"
         )
         
-
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self.log.info("GitHub Actions detected - saving financial data locally for artifact sharing")
+            local_path = "/tmp/cvr_financial_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved financial data locally to {local_path}")
         
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
@@ -715,3 +770,31 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         )
         
         self.log.info(f"Saved processing summary to {summary_path}")
+    
+    def _cleanup_memory_after_batch(self) -> None:
+        """Aggressive memory cleanup after processing a batch (copied from data_consolidation.py)."""
+        try:
+            # DuckDB-specific cleanup
+            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            self.conn.execute("PRAGMA optimize")  # Optimize database structure
+            
+            # Force Python garbage collection
+            import gc
+            collected = gc.collect()
+            
+            # Additional DuckDB memory management
+            try:
+                # Clear any cached query plans
+                self.conn.execute("PRAGMA cache_size = 0")
+                self.conn.execute("PRAGMA cache_size = -2000")  # Reset to reasonable cache
+                
+                # Force temporary directory cleanup
+                self.conn.execute("PRAGMA temp_store = memory")
+                
+            except Exception as pragma_e:
+                self.log.debug(f"Pragma cleanup warning: {pragma_e}")
+                
+            self.log.debug(f"Memory cleanup: collected {collected} objects, checkpoint completed")
+            
+        except Exception as e:
+            self.log.debug(f"Memory cleanup warning: {e}")
