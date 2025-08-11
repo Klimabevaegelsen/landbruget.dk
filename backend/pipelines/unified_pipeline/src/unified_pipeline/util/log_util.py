@@ -131,14 +131,14 @@ class Logger(metaclass=Singleton):
             cls.LOG.remove()
             cls.LOG.add(
                 sys.stderr,
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
             cls.LOG.add(
                 log_dir + "/log_{time}.log",
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
         return cls.LOG
