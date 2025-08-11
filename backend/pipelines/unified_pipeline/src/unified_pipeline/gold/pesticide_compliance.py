@@ -392,7 +392,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
         """
         
-        violations_df = self.conn.execute(violations_query).fetchdf()
+        # Create a DuckDB table with the violations data for later export
+        violations_table_name = f"violations_{ag_year.replace('_', '')}"
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {violations_table_name} AS ({violations_query})
+        """)
+        
+        # Get the DataFrame for statistics calculations
+        violations_df = self.conn.execute(f"SELECT * FROM {violations_table_name}").fetchdf()
         
         # Calculate statistics
         potential_violations = len(violations_df[violations_df['issue_type'] == 'POTENTIAL_VIOLATION'])
@@ -429,6 +436,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "fields_affected": fields_affected,
             "total_area_affected_hectares": float(total_area_affected),
             "issues_data": violations_df.to_dict('records'),
+            "violations_table_name": violations_table_name,  # Store table name for upload
             "top_companies_with_issues": top_companies.to_dict('records'),
             "most_problematic_products": top_products.to_dict('records'),
             "analysis_date": datetime.now().isoformat()
@@ -528,30 +536,34 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
             # Save compliance issues data as parquet - this is the main usable dataset
-            if year_results.get("issues_data"):
+            if year_results.get("violations_table_name"):
                 compliance_path = f"gs://{self.config.bucket}/{base_path}/compliance_issues_{ag_year}.parquet"
+                violations_table_name = year_results["violations_table_name"]
                 
-                # Create compliance dataframe with all the detailed data
-                issues_data = year_results["issues_data"]
-                if issues_data:
-                    import pandas as pd
-                    compliance_df = pd.DataFrame(issues_data)
+                # Get record count and column info for logging
+                record_count = self.conn.execute(f"SELECT COUNT(*) FROM {violations_table_name}").fetchone()[0]
+                columns = self.conn.execute(f"PRAGMA table_info({violations_table_name})").fetchall()
+                column_names = [col[1] for col in columns]
+                
+                # Log the output structure for verification
+                self.logger.info(f"📊 Saving {record_count} compliance records with columns: {column_names}")
+                self.logger.info(f"🔍 Field UUID column present: {'field_uuid' in column_names}")
+                self.logger.info(f"🌾 Crop code column present: {'crop_code' in column_names}")
+                self.logger.info(f"🧪 Pesticide name column present: {'pesticide_name' in column_names}")
+                
+                if record_count > 0:
+                    # Save using the proper DuckDB table upload method
+                    self.gcs_access.upload_from_duckdb_table(violations_table_name, compliance_path)
                     
-                    # Log the output structure for verification
-                    self.logger.info(f"📊 Saving {len(compliance_df)} compliance records with columns: {list(compliance_df.columns)}")
-                    self.logger.info(f"🔍 Field UUID column present: {'field_uuid' in compliance_df.columns}")
-                    self.logger.info(f"🌾 Crop code column present: {'crop_code' in compliance_df.columns}")
-                    self.logger.info(f"🧪 Pesticide name column present: {'pesticide_name' in compliance_df.columns}")
-                    
-                    # Save the full dataset as parquet for downstream analysis
-                    self.gcs_access.upload_dataframe(compliance_df, compliance_path)
-                    
-                    self.logger.info(f"✅ COMPLIANCE OUTPUT: {len(compliance_df)} records saved to {compliance_path}")
+                    self.logger.info(f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}")
                     self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
-                    print(f"✅ COMPLIANCE OUTPUT: {len(compliance_df)} records saved to {compliance_path}")
+                    print(f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}")
                     print(f"📁 Compliance GCS Path: {compliance_path}")
                 else:
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
+                
+                # Clean up temporary table
+                self.conn.execute(f"DROP TABLE IF EXISTS {violations_table_name}")
             
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
