@@ -54,7 +54,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import duckdb
+import requests
+from google.cloud import secretmanager
 from pydantic import ConfigDict, Field
+from requests.auth import HTTPBasicAuth
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -62,6 +65,65 @@ from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
 logger = logging.getLogger(__name__)
+
+
+class PlanteITAPI:
+    """Client for Plante IT Pesticide Service API for dosage compliance checking."""
+    
+    def __init__(self, username: str = None, password: str = None):
+        self.base_url = "https://pesticideservice.dlbr.dk/api"
+        self.project_id = "landbrugsdata-1"
+        
+        # Get credentials from environment variables or Google Secrets Manager
+        self.username = username or self._get_credential("PLANTE_IT_USERNAME", "plante-it-username")
+        self.password = password or self._get_credential("PLANTE_IT_PASSWORD", "plante-it-password")
+        
+        if not self.username or not self.password:
+            raise ValueError(
+                "Plante IT API credentials not found. In production, these are automatically "
+                "provided via GitHub Actions secrets. For local development, please set "
+                "PLANTE_IT_USERNAME and PLANTE_IT_PASSWORD environment variables."
+            )
+        
+        self.session = requests.Session()
+        self.session.auth = HTTPBasicAuth(self.username, self.password)
+    
+    def _get_credential(self, env_var: str, secret_name: str) -> Optional[str]:
+        """Get credential from environment variable or Google Secrets Manager."""
+        # Try environment variable first
+        credential = os.getenv(env_var)
+        if credential:
+            return credential
+        
+        # Fall back to Google Secrets Manager
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+            name = f"projects/{self.project_id}/secrets/{secret_name}/versions/latest"
+            response = client.access_secret_version(name=name)
+            return response.payload.data.decode("UTF-8").strip()
+        except Exception as e:
+            logger.warning(f"Could not retrieve {secret_name} from Secrets Manager: {e}")
+            return None
+
+    def get_products_for_crop(self, crop_id: int) -> List[Dict]:
+        """Get all pesticide products approved for a specific crop."""
+        try:
+            response = self.session.get(f"{self.base_url}/Products?CropId={crop_id}", timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching products for crop {crop_id}: {e}")
+            return []
+
+    def get_product_detail(self, product_id: int, crop_id: int) -> Optional[Dict]:
+        """Get detailed information for a specific product on a specific crop."""
+        try:
+            response = self.session.get(f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching product {product_id} for crop {crop_id}: {e}")
+            return None
 
 
 class PesticideComplianceGoldConfig(BaseJobConfig):
@@ -74,26 +136,39 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
     name: str = "Pesticide Compliance Analysis Gold"
     dataset: str = "pesticide_compliance"
     type: str = "gold"
-    description: str = "Identifies regulatory violations in pesticide applications using BMD restrictions"
+    description: str = (
+        "Identifies regulatory violations in pesticide applications using BMD restrictions"
+    )
     frequency: str = "yearly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Agricultural year to analyze (e.g., 2023 = Aug 2023 - Jul 2024 season)
     pesticide_year: Optional[int] = Field(
         default=None,
-        description="Agricultural year to analyze (e.g., 2023). If None, analyzes all available years."
+        description=(
+            "Agricultural year to analyze (e.g., 2023). If None, analyzes all available years."
+        )
     )
 
     # Focus on clear violations only (proven approach)
     include_withdrawn_products: bool = Field(
         default=False,
-        description="Include withdrawn products in analysis (increases complexity, set to False for clear violations only)"
+        description=(
+            "Include withdrawn products in analysis (increases complexity, "
+            "set to False for clear violations only)"
+        )
     )
 
     # Memory management for large datasets
     batch_size: int = Field(
         default=1000,
         description="Batch size for processing large datasets"
+    )
+
+    # Dosage compliance checking
+    enable_dosage_compliance: bool = Field(
+        default=True,
+        description="Enable dosage compliance checking against API limits"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -123,6 +198,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.conn = duckdb.connect()
         self.gcs_access = GCSDataAccess()
         
+        # Initialize API client for dosage compliance checking
+        self.api_client = PlanteITAPI() if config.enable_dosage_compliance else None
+        self.dosage_cache = {}  # Cache API dosage data to avoid repeated requests
+        
         # Agricultural year mappings (August 1 - July 31)
         self.agricultural_years = {
             "2020_2021": {"start": "2020-08-01", "end": "2021-07-31", "year": 2020},
@@ -130,6 +209,41 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "2022_2023": {"start": "2022-08-01", "end": "2023-07-31", "year": 2022},
             "2023_2024": {"start": "2023-08-01", "end": "2024-07-31", "year": 2023},
             "2024_2025": {"start": "2024-08-01", "end": "2025-07-31", "year": 2024},
+        }
+        
+        # Crop mapping from internal codes to API IDs
+        self.crop_mappings = {
+            "11": {"api_id": 44, "api_name": "Vinterhvede"},
+            "1": {"api_id": 80, "api_name": "Vårbyg"},
+            "10": {"api_id": 42, "api_name": "Vinterbyg"},
+            "3": {"api_id": 62, "api_name": "Havre"},
+            "2": {"api_id": 61, "api_name": "Vårhvede"},
+            "14": {"api_id": 40, "api_name": "Vinterrug"},
+            "16": {"api_id": 33, "api_name": "Triticale"},
+            "22": {"api_id": 119, "api_name": "Vinterraps"},
+            "21": {"api_id": 222, "api_name": "Vårraps"},
+            "160": {"api_id": 483, "api_name": "Sukkerroer"},
+            "151": {"api_id": 1, "api_name": "Kartofler"},
+            "5": {"api_id": 15, "api_name": "Majs"},
+            "216": {"api_id": 15, "api_name": "Majs"},
+            "218": {"api_id": 15, "api_name": "Majs"},
+            "31": {"api_id": 143, "api_name": "Hestebønner"},
+            "30": {"api_id": 4, "api_name": "Markærter"},
+            "260": {"api_id": 37, "api_name": "Kløvergræs"},
+            "263": {"api_id": 34, "api_name": "Græs"},
+            "252": {"api_id": 34, "api_name": "Græs"},
+            "254": {"api_id": 34, "api_name": "Græs"},
+            "276": {"api_id": 37, "api_name": "Kløvergræs"},
+            "101": {"api_id": 651, "api_name": "Alm. rajgræs til frøavl"},
+            "108": {"api_id": 298, "api_name": "Rødsvingel til frøavl"},
+            "124": {"api_id": 244, "api_name": "Spinat til frøavl"},
+            "120": {"api_id": 454, "api_name": "Hvidkløver til frøavl"},
+            "407": {"api_id": 6, "api_name": "Gulerødder"},
+            "411": {"api_id": 53, "api_name": "Løg"},
+            "528": {"api_id": 19, "api_name": "Æbler"},
+            "513": {"api_id": 23, "api_name": "Jordbær"},
+            "514": {"api_id": 120, "api_name": "Solbær"},
+            "583": {"api_id": 110, "api_name": "Juletræer"},
         }
 
     @timed
@@ -149,6 +263,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             # Load required datasets
             await self._load_bmd_data()
             await self._load_pesticide_data()
+            await self._load_agricultural_fields_data()
+            await self._load_dosage_limits()
             
             # Determine years to analyze
             years_to_analyze = self._get_years_to_analyze()
@@ -162,8 +278,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.logger.info(f"📅 Analyzing agricultural year: {ag_year}")
                 year_results = await self._analyze_agricultural_year(ag_year)
                 all_results[ag_year] = year_results
-                total_issues += year_results.get("potential_violations", 0) + year_results.get("withdrawn_product_uses", 0)
-                total_companies.update([issue["cvr_number"] for issue in year_results.get("issues_data", [])])
+                total_issues += year_results.get("timing_violations", 0) + year_results.get("withdrawn_product_uses", 0) + year_results.get("dosage_violations", 0)
+                total_companies.update([record["cvr_number"] for record in year_results.get("compliance_data", []) if record.get("compliance_status") != "COMPLIANT"])
             
             # Generate comprehensive report
             summary_stats = self._generate_summary_statistics(all_results, total_issues, len(total_companies))
@@ -305,6 +421,157 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"🔢 Covering {field_count:,} unique fields with UUIDs")
         self.logger.info(f"📅 Agricultural years available: {[y[0] for y in years_available]}")
 
+    async def _load_agricultural_fields_data(self) -> None:
+        """Load agricultural fields data to get crop information for mapping."""
+        self.logger.info("📥 Loading agricultural fields data for crop mapping")
+        
+        # Find latest agricultural fields data
+        pattern = f"gs://{self.config.bucket}/gold/agricultural_fields_*/*/agricultural_fields_*.parquet"
+        files = self.gcs_access.list_files_with_timestamps(pattern)
+        
+        if not files:
+            self.logger.warning("⚠️ Agricultural fields data not found - crop mapping will be limited")
+            return
+        
+        # Sort by timestamp to get the most recent file
+        files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+        latest_path, timestamp = files_sorted[0]
+        
+        self.logger.info(f"📄 Loading agricultural fields data from: {latest_path}")
+        
+        # Load agricultural fields data using proper GCS access pattern
+        with self.gcs_access._temp_download(latest_path) as temp_file:
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE agricultural_fields AS
+                SELECT 
+                    field_uuid,
+                    field_id,
+                    CAST(crop_code AS VARCHAR) as crop_code,
+                    crop_name,
+                    cvr_number,
+                    area_ha,
+                    block_id,
+                    year
+                FROM read_parquet('{temp_file}')
+                WHERE crop_code IS NOT NULL
+                AND field_uuid IS NOT NULL
+                AND cvr_number IS NOT NULL
+            """)
+        
+        field_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+        crop_count = self.conn.execute("SELECT COUNT(DISTINCT crop_code) FROM agricultural_fields").fetchone()[0]
+        
+        self.logger.info(f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes")
+
+    async def _load_dosage_limits(self) -> None:
+        """Load dosage limits from API for compliance checking."""
+        if not self.config.enable_dosage_compliance or not self.api_client:
+            self.logger.info("🚫 Dosage compliance checking disabled")
+            return
+        
+        self.logger.info("📥 Loading dosage limits from Plante IT API")
+        
+        # First, get API crop names for our mapped crops
+        api_crop_names = {}
+        if self.api_client:
+            try:
+                # Get crops from API to get official names
+                crops_response = self.api_client.session.get(f"{self.api_client.base_url}/Crops", timeout=30)
+                if crops_response.status_code == 200:
+                    api_crops = crops_response.json()
+                    for crop in api_crops:
+                        api_crop_names[crop.get('Id')] = crop.get('Name', '')
+                    self.logger.info(f"📋 Loaded {len(api_crop_names)} API crop names")
+            except Exception as e:
+                self.logger.warning(f"Could not load API crop names: {e}")
+
+        # Get unique crop-pesticide combinations that need dosage limits
+        combinations = self.conn.execute("""
+            SELECT DISTINCT 
+                COALESCE(f.crop_code, 'UNKNOWN') as crop_code,
+                a.pesticide_registration_number
+            FROM pesticide_applications a
+            LEFT JOIN agricultural_fields f ON a.field_uuid = f.field_uuid
+            WHERE a.pesticide_registration_number IS NOT NULL
+            AND a.pesticide_registration_number != ''
+        """).fetchall()
+        
+        self.logger.info(f"🔍 Found {len(combinations)} unique crop-pesticide combinations to check")
+        
+        dosage_data = []
+        processed = 0
+        
+        for crop_code, reg_number in combinations:
+            processed += 1
+            if processed % 100 == 0:
+                self.logger.info(f"📊 Processed {processed}/{len(combinations)} combinations")
+            
+            # Get API crop ID for this crop code
+            crop_mapping = self.crop_mappings.get(str(crop_code))
+            if not crop_mapping:
+                continue
+                
+            api_crop_id = crop_mapping["api_id"]
+            cache_key = (api_crop_id, str(reg_number).strip())
+            
+            # Check cache first
+            if cache_key in self.dosage_cache:
+                continue
+                
+            # Fetch from API
+            products = self.api_client.get_products_for_crop(api_crop_id)
+            
+            for product in products:
+                if str(product.get('RegNumber', '')).strip() == str(reg_number).strip():
+                    # Get detailed product info
+                    detail = self.api_client.get_product_detail(product['Id'], api_crop_id)
+                    if detail:
+                        dosage_info = {
+                            'crop_code': crop_code,
+                            'api_crop_id': api_crop_id,
+                            'api_crop_name': api_crop_names.get(api_crop_id, ''),
+                            'registration_number': reg_number,
+                            'product_name': detail.get('Name', ''),
+                            'max_dosage_app': detail.get('MaxDosageApp'),
+                            'product_unit': detail.get('ProductUnit', ''),
+                            'max_applications': detail.get('MaxApplications'),
+                        }
+                        dosage_data.append(dosage_info)
+                        self.dosage_cache[cache_key] = dosage_info
+                    break
+        
+        # Store dosage limits in DuckDB table
+        if dosage_data:
+            self.conn.execute("CREATE OR REPLACE TABLE dosage_limits AS SELECT * FROM ?", [dosage_data])
+            limit_count = len(dosage_data)
+            self.logger.info(f"📊 Loaded {limit_count} dosage limits from API")
+        else:
+            self.conn.execute("CREATE OR REPLACE TABLE dosage_limits (crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, registration_number VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, product_unit VARCHAR, max_applications INTEGER)")
+            self.logger.warning("⚠️ No dosage limits found from API")
+
+    def _assess_dosage_compliance(self, our_dosage: float, our_unit: str, 
+                                 api_max: Optional[float], api_unit: str) -> str:
+        """Assess dosage compliance status."""
+        if api_max is None:
+            return 'NO_API_LIMIT'
+        
+        if our_unit.lower() != api_unit.lower():
+            return 'UNIT_MISMATCH'
+        
+        if our_dosage <= api_max:
+            return 'COMPLIANT'
+        elif our_dosage <= api_max * 2.0:  # Up to 2x
+            return 'MODERATE_EXCESS'
+        else:
+            return 'MAJOR_EXCESS'
+
+    def _calculate_dosage_ratio(self, our_dosage: float, our_unit: str, 
+                               api_max: Optional[float], api_unit: str) -> Optional[float]:
+        """Calculate ratio of our dosage to API maximum."""
+        if api_max is None or our_unit.lower() != api_unit.lower():
+            return None
+        return our_dosage / api_max if api_max > 0 else None
+
     def _get_years_to_analyze(self) -> List[str]:
         """Determine which agricultural years to analyze."""
         if self.config.pesticide_year is not None:
@@ -341,110 +608,133 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Issues occur when:
         # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
         # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
-        violations_query = f"""
+        compliance_query = f"""
         SELECT 
-            -- Field-level information from disaggregated data
+            -- Essential field and pesticide information only
             a.field_uuid,
-            a.primary_field_id,
-            a.MatchedFieldID,
-            a.MatchedBlockID,
-            -- Company information
+            a.agricultural_year,
+            a.application_year,
             a.cvr_number,
-            -- Pesticide application details
             a.pesticide_name,
             a.pesticide_registration_number,
-            a.area_ha as allocated_area_ha,
-            a.dosage_quantity,
-            a.dosage_unit,
-            a.application_year,
-            a.agricultural_year,
-            -- Disaggregation metadata
-            a.allocation_method,
-            a.match_confidence,
-            a.is_partial_field_coverage,
-            a.disaggregation_date,
+            -- Crop information
+            COALESCE(f.crop_code, 'UNKNOWN') as crop_code,
+            COALESCE(f.crop_name, 'Unknown crop') as crop_name,
+            COALESCE(d.api_crop_name, NULL) as api_crop_name_from_plante_it,
             -- BMD regulatory information
-            b.product_name as bmd_product_name,
-            b.restriction_date,
             b.restriction_date_parsed,
-            b.active_substances,
             b.product_status,
-            b.formulation,
-            b.application_area as bmd_application_area,
-            -- Categorize potential compliance issues
+            -- Dosage compliance information
+            COALESCE(d.max_dosage_app, NULL) as api_max_dosage_per_ha,
+            COALESCE(d.product_unit, NULL) as api_dosage_unit,
+            -- Calculate dosage per hectare for comparison
             CASE 
-                WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'POTENTIAL_VIOLATION'
+                WHEN a.allocated_area_ha > 0 THEN a.dosage_quantity / a.allocated_area_ha
+                ELSE NULL
+            END as actual_dosage_per_ha,
+            -- Dosage compliance status
+            CASE 
+                WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
+                WHEN a.dosage_unit != d.product_unit THEN 'UNIT_MISMATCH'
+                WHEN a.allocated_area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
+                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
+                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
+                ELSE 'MAJOR_OVERDOSE'
+            END as dosage_compliance_status,
+            -- Dosage ratio (actual / allowed)
+            CASE 
+                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0 AND a.allocated_area_ha > 0 
+                     AND a.dosage_unit = d.product_unit THEN 
+                    (a.dosage_quantity / a.allocated_area_ha) / d.max_dosage_app
+                ELSE NULL
+            END as dosage_ratio,
+            -- Categorize compliance status
+            CASE 
+                WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
                 WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
+                WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0 AND a.dosage_quantity IS NOT NULL
+                     AND a.dosage_unit = d.product_unit 
+                     AND (a.dosage_quantity / a.allocated_area_ha) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
                 ELSE 'COMPLIANT'
-            END as issue_type,
+            END as compliance_status,
             -- Analysis metadata
             '{ag_year}' as agricultural_year_analyzed,
             CURRENT_TIMESTAMP as analysis_timestamp
         FROM pesticide_applications a
         INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
-        WHERE a.agricultural_year = '{ag_year}'
-        AND (
-            -- Include violations where restriction date is before or during agricultural year
-            (b.restriction_date_parsed IS NOT NULL AND b.restriction_date_parsed <= DATE '{year_info["end"]}')
-            OR 
-            -- Include withdrawn/expired products regardless of restriction date
-            (b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet')
+        LEFT JOIN agricultural_fields f ON a.field_uuid = f.field_uuid
+        LEFT JOIN dosage_limits d ON (
+            f.crop_code = d.crop_code 
+            AND a.pesticide_registration_number = d.registration_number
         )
+        WHERE a.agricultural_year = '{ag_year}'
         """
         
-        # Create a DuckDB table with the violations data for later export
-        violations_table_name = f"violations_{ag_year.replace('_', '')}"
+        # Create a DuckDB table with the compliance data for later export
+        compliance_table_name = f"compliance_{ag_year.replace('_', '')}"
         self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {violations_table_name} AS ({violations_query})
+            CREATE OR REPLACE TABLE {compliance_table_name} AS ({compliance_query})
         """)
         
         # Get the DataFrame for statistics calculations
-        violations_df = self.conn.execute(f"SELECT * FROM {violations_table_name}").fetchdf()
+        compliance_df = self.conn.execute(f"SELECT * FROM {compliance_table_name}").fetchdf()
         
         # Calculate statistics
-        potential_violations = len(violations_df[violations_df['issue_type'] == 'POTENTIAL_VIOLATION'])
-        withdrawn_uses = len(violations_df[violations_df['issue_type'] == 'WITHDRAWN_PRODUCT_USE'])
-        companies_with_issues = violations_df['cvr_number'].nunique()
-        products_with_issues = violations_df['pesticide_registration_number'].nunique()
-        fields_affected = violations_df['field_uuid'].nunique()
-        total_area_affected = violations_df['allocated_area_ha'].sum()
+        timing_violations = len(compliance_df[compliance_df['compliance_status'] == 'TIMING_VIOLATION'])
+        withdrawn_uses = len(compliance_df[compliance_df['compliance_status'] == 'WITHDRAWN_PRODUCT_USE'])
+        dosage_violations = len(compliance_df[compliance_df['compliance_status'] == 'DOSAGE_VIOLATION'])
+        compliant_applications = len(compliance_df[compliance_df['compliance_status'] == 'COMPLIANT'])
+        total_applications = len(compliance_df)
+        companies_analyzed = compliance_df['cvr_number'].nunique()
+        products_analyzed = compliance_df['pesticide_registration_number'].nunique()
+        fields_analyzed = compliance_df['field_uuid'].nunique()
         
-        # Get top violating companies (by area affected)
-        top_companies = violations_df.groupby('cvr_number').agg({
-            'allocated_area_ha': 'sum',
-            'pesticide_registration_number': 'nunique',
-            'field_uuid': 'nunique'
-        }).reset_index()
-        top_companies.columns = ['cvr_number', 'total_area_ha', 'products_used', 'fields_affected']
-        top_companies = top_companies.nlargest(10, 'total_area_ha')
+        # Get violations only for top companies/products analysis
+        violations_only_df = compliance_df[compliance_df['compliance_status'] != 'COMPLIANT']
         
-        # Get most violated products (by number of fields affected)
-        top_products = violations_df.groupby(['bmd_product_name', 'pesticide_registration_number']).agg({
-            'allocated_area_ha': 'sum',
-            'cvr_number': 'nunique',
-            'field_uuid': 'nunique'
-        }).reset_index()
-        top_products.columns = ['bmd_product_name', 'pesticide_registration_number', 'total_area_ha', 'companies_affected', 'fields_affected']
-        top_products = top_products.nlargest(10, 'fields_affected')
+        # Get top companies with most violations
+        if not violations_only_df.empty:
+            top_companies = violations_only_df.groupby('cvr_number').agg({
+                'field_uuid': 'nunique',
+                'pesticide_registration_number': 'nunique'
+            }).reset_index()
+            top_companies.columns = ['cvr_number', 'fields_with_violations', 'products_violated']
+            top_companies = top_companies.nlargest(10, 'fields_with_violations')
+            
+            # Get most problematic products
+            top_products = violations_only_df.groupby('pesticide_name').agg({
+                'field_uuid': 'nunique',
+                'cvr_number': 'nunique'
+            }).reset_index()
+            top_products.columns = ['pesticide_name', 'fields_affected', 'companies_affected']
+            top_products = top_products.nlargest(10, 'fields_affected')
+        else:
+            top_companies = []
+            top_products = []
         
         results = {
             "agricultural_year": ag_year,
-            "potential_violations": potential_violations,
+            "timing_violations": timing_violations,
             "withdrawn_product_uses": withdrawn_uses,
-            "companies_with_issues": companies_with_issues,
-            "products_with_issues": products_with_issues,
-            "fields_affected": fields_affected,
-            "total_area_affected_hectares": float(total_area_affected),
-            "issues_data": violations_df.to_dict('records'),
-            "violations_table_name": violations_table_name,  # Store table name for upload
-            "top_companies_with_issues": top_companies.to_dict('records'),
-            "most_problematic_products": top_products.to_dict('records'),
+            "dosage_violations": dosage_violations,
+            "compliant_applications": compliant_applications,
+            "total_applications": total_applications,
+            "companies_analyzed": companies_analyzed,
+            "products_analyzed": products_analyzed,
+            "fields_analyzed": fields_analyzed,
+            "compliance_data": compliance_df.to_dict('records'),
+            "compliance_table_name": compliance_table_name,  # Store table name for upload
+            "top_companies_with_violations": top_companies.to_dict('records') if len(top_companies) > 0 else [],
+            "most_problematic_products": top_products.to_dict('records') if len(top_products) > 0 else [],
             "analysis_date": datetime.now().isoformat()
         }
         
-        self.logger.info(f"📊 {ag_year}: {potential_violations} potential violations, {withdrawn_uses} withdrawn product uses")
-        self.logger.info(f"🏢 Companies affected: {companies_with_issues}, Fields affected: {fields_affected}")
-        self.logger.info(f"📏 Total area affected: {total_area_affected:.1f} ha")
+        total_violations = timing_violations + withdrawn_uses + dosage_violations
+        compliance_rate = (compliant_applications / total_applications * 100) if total_applications > 0 else 0
+        
+        self.logger.info(f"📊 {ag_year}: {total_violations} total violations ({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)")
+        self.logger.info(f"✅ Compliance rate: {compliance_rate:.1f}% ({compliant_applications}/{total_applications} applications)")
+        self.logger.info(f"🏢 Companies analyzed: {companies_analyzed}, Fields analyzed: {fields_analyzed}")
         
         return results
 
@@ -536,24 +826,32 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
             # Save compliance issues data as parquet - this is the main usable dataset
-            if year_results.get("violations_table_name"):
-                compliance_path = f"gs://{self.config.bucket}/{base_path}/compliance_issues_{ag_year}.parquet"
-                violations_table_name = year_results["violations_table_name"]
+            if year_results.get("compliance_table_name"):
+                compliance_path = f"gs://{self.config.bucket}/{base_path}/compliance_analysis_{ag_year}.parquet"
+                compliance_table_name = year_results["compliance_table_name"]
                 
                 # Get record count and column info for logging
-                record_count = self.conn.execute(f"SELECT COUNT(*) FROM {violations_table_name}").fetchone()[0]
-                columns = self.conn.execute(f"PRAGMA table_info({violations_table_name})").fetchall()
+                record_count = self.conn.execute(f"SELECT COUNT(*) FROM {compliance_table_name}").fetchone()[0]
+                columns = self.conn.execute(f"PRAGMA table_info({compliance_table_name})").fetchall()
                 column_names = [col[1] for col in columns]
                 
                 # Log the output structure for verification
                 self.logger.info(f"📊 Saving {record_count} compliance records with columns: {column_names}")
                 self.logger.info(f"🔍 Field UUID column present: {'field_uuid' in column_names}")
                 self.logger.info(f"🌾 Crop code column present: {'crop_code' in column_names}")
+                self.logger.info(f"🌱 Crop name column present: {'crop_name' in column_names}")
+                self.logger.info(f"🔗 API crop ID column present: {'api_crop_id' in column_names}")
+                self.logger.info(f"🔗 API crop name column present: {'api_crop_name' in column_names}")
+                self.logger.info(f"🌐 Plante IT crop name column present: {'api_crop_name_from_plante_it' in column_names}")
                 self.logger.info(f"🧪 Pesticide name column present: {'pesticide_name' in column_names}")
+                self.logger.info(f"💊 API max dosage column present: {'api_max_dosage_per_ha' in column_names}")
+                self.logger.info(f"📊 Actual dosage per ha column present: {'actual_dosage_per_ha' in column_names}")
+                self.logger.info(f"⚖️ Dosage compliance status column present: {'dosage_compliance_status' in column_names}")
+                self.logger.info(f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}")
                 
                 if record_count > 0:
                     # Save using the proper DuckDB table upload method
-                    self.gcs_access.upload_from_duckdb_table(violations_table_name, compliance_path)
+                    self.gcs_access.upload_from_duckdb_table(compliance_table_name, compliance_path)
                     
                     self.logger.info(f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}")
                     self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
@@ -563,7 +861,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
                 
                 # Clean up temporary table
-                self.conn.execute(f"DROP TABLE IF EXISTS {violations_table_name}")
+                self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
             
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
