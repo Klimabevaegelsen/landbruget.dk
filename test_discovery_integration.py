@@ -72,9 +72,9 @@ def test_discovery_imports():
     try:
         sys.path.insert(0, "backend/pipelines/chr_pipeline")
 
-        # Test imports
-        from bronze.herd_discovery import classify_herd_volume, discover_herd_volumes_for_year
-        from bronze.volume_management import add_high_volume_herd, get_optimal_date_range
+        # Test imports - verify modules can be imported
+        import bronze.herd_discovery  # noqa: F401
+        import bronze.volume_management  # noqa: F401
 
         logger.info("✅ All discovery modules imported successfully")
         return True

@@ -326,7 +326,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         # TABLE 1: Field-Level Environmental Analysis (one record per field)
-
+        consolidation_query = """
+            CREATE OR REPLACE TABLE field_area_analysis_final AS
+            SELECT * FROM wetland_field_summary
+        """
         self.conn.execute(consolidation_query)
 
         # Log results
