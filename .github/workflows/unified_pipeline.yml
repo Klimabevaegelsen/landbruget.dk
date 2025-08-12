@@ -81,6 +81,8 @@ jobs:
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -241,6 +243,8 @@ jobs:
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
