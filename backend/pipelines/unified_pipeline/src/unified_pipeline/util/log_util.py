@@ -42,6 +42,7 @@ class LogLevel(Enum):
     FATAL = "FATAL"
     OFF = "OFF"
 
+
 class Logger(metaclass=Singleton):
     """
     Singleton logger class that provides consistent logging configuration.

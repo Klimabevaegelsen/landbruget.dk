@@ -16,6 +16,7 @@ except ImportError:
 
     def get_logger():
         return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
     from silver.transformers.base import BaseTransformer, FileMetadata, TransformResult
 

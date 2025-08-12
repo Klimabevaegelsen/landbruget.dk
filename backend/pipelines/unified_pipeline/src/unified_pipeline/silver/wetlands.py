@@ -502,8 +502,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             # Create spatial table with wetland IDs using ORIGINAL geometry (before transformation)
             # Handle overlapping peat percentages by prioritizing higher percentages
-            self.log.info("Handling overlapping peat percentage areas - prioritizing higher percentages...")
-            
+            self.log.info(
+                "Handling overlapping peat percentage areas - prioritizing higher percentages..."
+            )
+
             # First, create a staging table with all wetlands
             conn.execute(f"""
                 CREATE TABLE wetlands_staging AS
@@ -515,13 +517,15 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     geometry
                 FROM {input_table_name}
             """)
-            
+
             # Create index to improve spatial query performance
-            conn.execute("CREATE INDEX idx_wetlands_staging_geometry ON wetlands_staging USING RTREE (geometry)")
-            
+            conn.execute(
+                "CREATE INDEX idx_wetlands_staging_geometry ON wetlands_staging USING RTREE (geometry)"
+            )
+
             # Handle peat percentage overlaps using SPATIAL_JOIN operator (PR #545)
             # Strategy: Exclude overlapping 6-12% areas entirely, keep >12% priority
-            
+
             # Step 1: Keep all >12% areas unchanged
             conn.execute("""
                 CREATE TABLE wetlands_high_peat AS
@@ -529,7 +533,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM wetlands_staging
                 WHERE toerv_pct = '>12'
             """)
-            
+
             # Step 2: Keep only 6-12% areas that DON'T overlap with >12% areas
             # Uses ST_Intersects in JOIN to trigger optimized SPATIAL_JOIN operator
             conn.execute("""
@@ -542,7 +546,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                       WHERE ST_Intersects(ws.geometry, hp.geometry)
                   )
             """)
-            
+
             # Step 3: Keep all other peat percentage areas unchanged
             conn.execute("""
                 CREATE TABLE wetlands_other_peat AS
@@ -550,7 +554,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM wetlands_staging
                 WHERE toerv_pct NOT IN ('>12', '6-12')
             """)
-            
+
             # Step 4: Combine all non-overlapping areas (no complex geometry filtering needed)
             conn.execute("""
                 CREATE TABLE wetlands_spatial AS
@@ -568,20 +572,26 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_other_peat
                 ) combined_wetlands
             """)
-            
+
             # Clean up temporary tables
             conn.execute("DROP TABLE wetlands_staging")
             conn.execute("DROP TABLE wetlands_high_peat")
-            conn.execute("DROP TABLE wetlands_medium_peat")  
+            conn.execute("DROP TABLE wetlands_medium_peat")
             conn.execute("DROP TABLE wetlands_other_peat")
-            
+
             # Log the overlap resolution results
             original_count = conn.execute(f"SELECT COUNT(*) FROM {input_table_name}").fetchone()[0]
             processed_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial").fetchone()[0]
-            high_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'").fetchone()[0]
-            medium_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'").fetchone()[0]
-            
-            self.log.info("✅ Peat overlap resolution completed using SPATIAL_JOIN optimization (PR #545):")
+            high_peat_count = conn.execute(
+                "SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'"
+            ).fetchone()[0]
+            medium_peat_count = conn.execute(
+                "SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'"
+            ).fetchone()[0]
+
+            self.log.info(
+                "✅ Peat overlap resolution completed using SPATIAL_JOIN optimization (PR #545):"
+            )
             self.log.info(f"   Original features: {original_count:,}")
             self.log.info(f"   Processed features: {processed_count:,}")
             self.log.info(f"   >12% peat areas: {high_peat_count:,}")
@@ -812,7 +822,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             # Create final dissolved table WITH PEAT PERCENTAGE PRESERVATION
             dissolved_table_name = f"{dataset}_dissolved"
             conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
-            
+
             # Create final dissolved table - just wetland_id, geometry, and toerv_pct
             conn.execute(f"""
                 CREATE TABLE {dissolved_table_name} AS
@@ -937,7 +947,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 "silver",
             )
             self.log.info("Saved processed data successfully")
-            
+
             # Return success information for the main app
             return {
                 "dataset": self.config.dataset,

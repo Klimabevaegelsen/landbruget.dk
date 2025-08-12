@@ -116,7 +116,9 @@ class H3ResultSaver:
 
         return count
 
-    def save_kommune_results(self, results_table: str, year: int, kommune_boundaries_table: str = "kommune_boundaries") -> int:
+    def save_kommune_results(
+        self, results_table: str, year: int, kommune_boundaries_table: str = "kommune_boundaries"
+    ) -> int:
         """Save kommune-level results to GCS."""
         self.log.info(f"💾 Saving kommune-level pesticide exposure results for year {year} to GCS")
 
@@ -384,7 +386,12 @@ class H3ResultSaver:
 
         return count
 
-    def save_cumulative_kommune_results(self, results_table: str, years: list[int], kommune_boundaries_table: str = "kommune_boundaries") -> int:
+    def save_cumulative_kommune_results(
+        self,
+        results_table: str,
+        years: list[int],
+        kommune_boundaries_table: str = "kommune_boundaries",
+    ) -> int:
         """Save cumulative kommune-level results to GCS with special 'total' year identifier."""
         self.log.info("💾 Saving cumulative kommune-level pesticide exposure results to GCS")
         self.log.info(f"   📅 Years included: {years}")

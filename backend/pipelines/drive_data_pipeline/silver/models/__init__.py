@@ -18,4 +18,4 @@ __all__ = [
     "SchemaAdapter",
     "create_animal_welfare_schema",
     "create_farm_schema",
-] 
+]

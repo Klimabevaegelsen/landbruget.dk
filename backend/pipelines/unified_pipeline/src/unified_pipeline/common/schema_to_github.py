@@ -342,6 +342,7 @@ class SchemaToGitHub:
             self.logger.error(f"Failed to generate and commit schemas: {e}")
             return generated_files
 
+
 class SchemaGitHubMixin:
     """Mixin to add GitHub schema integration to pipeline sources."""
 

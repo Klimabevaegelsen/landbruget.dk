@@ -42,7 +42,7 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
 )
 
 # Get the path to the specific cvr_enrichment.py file
-cvr_enrichment_file = os.path.join(os.path.dirname(__file__), 'gold', 'cvr_enrichment.py')
+cvr_enrichment_file = os.path.join(os.path.dirname(__file__), "gold", "cvr_enrichment.py")
 spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
 cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cvr_enrichment_legacy)
@@ -163,11 +163,13 @@ async def execute_pipeline_jobs(
         # Create config instance and pass CLI config for FVM WFS filtering
         config_instance = config_cls()
         print(f"🚨 APP: Created config instance: {config_instance}")
-        
+
         if hasattr(config_instance, "apply_cli_filters"):
             print(f"🚨 APP: Applying CLI filters to {config_cls.__name__}")
             config_instance.apply_cli_filters(cli_config)
-            print(f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}")
+            print(
+                f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
+            )
         else:
             print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
@@ -201,15 +203,17 @@ async def execute_pipeline_jobs(
 
             elif issubclass(job_cls, SilverJobInterface):
                 # Check if this is an enrichment-only job
-                if stage == cli.Stage.enrichment and hasattr(instance, 'run_enrichment_only'):
+                if stage == cli.Stage.enrichment and hasattr(instance, "run_enrichment_only"):
                     # Enrichment stage - run only enrichment functions
                     result = await instance.run_enrichment_only()
                     stage_description = "enrichment-only"
                 else:
                     # Silver stage - pass in-memory data if available and collect results
                     result = await instance.run(bronze_data=bronze_data)
-                    stage_description = f"{'in-memory' if bronze_data is not None else 'storage'} data"
-                
+                    stage_description = (
+                        f"{'in-memory' if bronze_data is not None else 'storage'} data"
+                    )
+
                 if result is not None:
                     job_successful = True
                     # Collect silver data for gold stage
@@ -241,7 +245,9 @@ async def execute_pipeline_jobs(
             elif issubclass(job_cls, GoldJobInterface):
                 # Gold stage - pass collected silver data
                 print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
-                print(f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}")
+                print(
+                    f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}"
+                )
                 await instance.run(silver_data=silver_data)
                 print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
                 # Gold jobs don't return data, so we consider them successful if they don't raise an exception
@@ -295,10 +301,11 @@ def execute(cli_config: cli.CliConfig) -> int:
     """
     # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
     import os
+
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     print(f"🚨 APP EXECUTE: Initializing logger with level: {log_level}")
     sys.stdout.flush()  # Force flush for GitHub Actions
-    
+
     # Force reset the singleton logger to ensure LOG_LEVEL is respected
     Logger.LOG = None  # Reset singleton to force recreation with correct level
     log = Logger.get_logger(log_level)
@@ -449,7 +456,6 @@ def execute(cli_config: cli.CliConfig) -> int:
                 # and fetches CVR register data for enrichment
                 (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
-            
             # New modular pipeline steps
             cli.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
             cli.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],

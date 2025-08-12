@@ -70,7 +70,9 @@ class GeoDanmarkWFSFetcher:
 
         self.logger.info("Using authenticated access to GeoDanmark WFS")
 
-    def fetch_samples(self, output_dir: Path, max_features: int = 1000, return_data: bool = False) -> None:
+    def fetch_samples(
+        self, output_dir: Path, max_features: int = 1000, return_data: bool = False
+    ) -> None:
         """
         Fetch sample data from GeoDanmark WFS.
 

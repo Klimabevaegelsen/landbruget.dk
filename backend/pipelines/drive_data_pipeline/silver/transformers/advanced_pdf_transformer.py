@@ -18,6 +18,8 @@ except ImportError:
 
     def get_logger():
         return logging.getLogger(__name__)
+
+
 from .pdf_transformer import PDFTransformer
 
 # Get logger

@@ -33,14 +33,14 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load geometric foundation data from previous stages."""
         updated_outputs = CONFIG.update_outputs_for_year()
-        
+
         # Load field-property intersections from Stage 1C (foundation data)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
         self.gcs_access.query_parquet_direct(
-            stage1c_path, 
-            "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry", 
-            "field_property_intersections"
+            stage1c_path,
+            "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry",
+            "field_property_intersections",
         )
         self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
 
@@ -63,9 +63,15 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.log.info("✅ SIMPLIFIED STAGE 3A: Using existing geometries from Stage 2A")
 
         # Input validation
-        property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
-        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
-        water_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections").fetchone()[0]
+        property_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_property_intersections"
+        ).fetchone()[0]
+        bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[
+            0
+        ]
+        water_bnbo_count = self.conn.execute(
+            "SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections"
+        ).fetchone()[0]
 
         self.log.info("📊 Input data loaded:")
         self.log.info(f"  Field-property intersections: {property_count:,}")
@@ -81,11 +87,11 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
         Simplified Stage 3A: Create property-level BNBO geometries using existing Stage 2A data.
-        
+
         Creates property-level environmental intersections with existing geometries:
         1. property_bnbo_intersections: Properties × BNBO total geometries
         2. property_bnbo_water_intersections: Properties × BNBO water-covered geometries
-        
+
         Key Principles:
         - GEOMETRY ONLY: No ST_Area_Spheroid() calculations (moved to Stage 4)
         - SPATIAL_JOIN Compliance: Single spatial predicates in JOIN ON clauses
@@ -139,7 +145,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         property_bnbo_count = self.conn.execute(
             "SELECT COUNT(*) FROM property_bnbo_intersections"
         ).fetchone()[0]
-        
+
         property_bnbo_water_count = self.conn.execute(
             "SELECT COUNT(*) FROM property_bnbo_water_intersections"
         ).fetchone()[0]
@@ -167,114 +173,150 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         """Save both geometric intersection tables to GCS."""
         # Save property × BNBO intersections
         self._save_stage_output("property_bnbo_intersections", "property_bnbo_intersections")
-        
+
         # Save property × BNBO × water intersections
-        self._save_stage_output("property_bnbo_water_intersections", "property_bnbo_water_intersections")
-    
+        self._save_stage_output(
+            "property_bnbo_water_intersections", "property_bnbo_water_intersections"
+        )
+
     def _validate_geometric_output(self):
         """Comprehensive validation including geometry, record counts, and data consistency."""
-        
+
         self.log.info("🔍 REDESIGNED STAGE 3A: Running comprehensive validations...")
-        
+
         # 1. GEOMETRY VALIDATIONS
         self._validate_geometry_quality()
-        
-        # 2. RECORD COUNT VALIDATIONS  
+
+        # 2. RECORD COUNT VALIDATIONS
         self._validate_record_counts()
-        
+
         # 3. DATA CONSISTENCY VALIDATIONS
         self._validate_data_consistency()
-        
+
         self.log.info("✅ REDESIGNED STAGE 3A: All comprehensive validations completed")
 
     def _validate_geometry_quality(self):
         """Validate geometry quality and integrity."""
         self.log.info("🔍 Validating geometry quality...")
-        
+
         # Check property_bnbo_intersections geometry validity
         invalid_bnbo = self.conn.execute("""
             SELECT COUNT(*) 
             FROM property_bnbo_intersections 
             WHERE property_bnbo_geometry IS NULL OR NOT ST_IsValid(property_bnbo_geometry)
         """).fetchone()[0]
-        
-        # Check property_bnbo_water_intersections geometry validity  
+
+        # Check property_bnbo_water_intersections geometry validity
         invalid_water = self.conn.execute("""
             SELECT COUNT(*) 
             FROM property_bnbo_water_intersections 
             WHERE property_bnbo_water_geometry IS NULL OR NOT ST_IsValid(property_bnbo_water_geometry)
         """).fetchone()[0]
-        
+
         # Check for empty geometries
         empty_bnbo = self.conn.execute("""
             SELECT COUNT(*) 
             FROM property_bnbo_intersections 
             WHERE property_bnbo_geometry IS NOT NULL AND ST_IsEmpty(property_bnbo_geometry)
         """).fetchone()[0]
-        
+
         empty_water = self.conn.execute("""
             SELECT COUNT(*) 
             FROM property_bnbo_water_intersections 
             WHERE property_bnbo_water_geometry IS NOT NULL AND ST_IsEmpty(property_bnbo_water_geometry)
         """).fetchone()[0]
-        
+
         # Report geometry validation results
-        total_bnbo = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_intersections").fetchone()[0]
-        total_water = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_water_intersections").fetchone()[0]
-        
+        total_bnbo = self.conn.execute(
+            "SELECT COUNT(*) FROM property_bnbo_intersections"
+        ).fetchone()[0]
+        total_water = self.conn.execute(
+            "SELECT COUNT(*) FROM property_bnbo_water_intersections"
+        ).fetchone()[0]
+
         if invalid_bnbo > 0:
-            self.log.error(f"❌ Found {invalid_bnbo:,}/{total_bnbo:,} invalid/NULL geometries in property_bnbo_intersections")
+            self.log.error(
+                f"❌ Found {invalid_bnbo:,}/{total_bnbo:,} invalid/NULL geometries in property_bnbo_intersections"
+            )
         else:
             self.log.info(f"✅ All {total_bnbo:,} property_bnbo_intersections geometries are valid")
-            
+
         if invalid_water > 0:
-            self.log.error(f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in property_bnbo_water_intersections") 
+            self.log.error(
+                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in property_bnbo_water_intersections"
+            )
         else:
-            self.log.info(f"✅ All {total_water:,} property_bnbo_water_intersections geometries are valid")
-            
+            self.log.info(
+                f"✅ All {total_water:,} property_bnbo_water_intersections geometries are valid"
+            )
+
         if empty_bnbo > 0:
-            self.log.warning(f"⚠️ Found {empty_bnbo:,} empty geometries in property_bnbo_intersections")
+            self.log.warning(
+                f"⚠️ Found {empty_bnbo:,} empty geometries in property_bnbo_intersections"
+            )
         if empty_water > 0:
-            self.log.warning(f"⚠️ Found {empty_water:,} empty geometries in property_bnbo_water_intersections")
+            self.log.warning(
+                f"⚠️ Found {empty_water:,} empty geometries in property_bnbo_water_intersections"
+            )
 
     def _validate_record_counts(self):
         """Validate record counts and data preservation."""
         self.log.info("🔍 Validating record counts and data preservation...")
-        
+
         # Get input counts
-        field_property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
-        field_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
-        field_bnbo_water_count = self.conn.execute("SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections").fetchone()[0]
-        
+        field_property_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_property_intersections"
+        ).fetchone()[0]
+        field_bnbo_count = self.conn.execute(
+            "SELECT COUNT(*) FROM field_bnbo_intersections"
+        ).fetchone()[0]
+        field_bnbo_water_count = self.conn.execute(
+            "SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections"
+        ).fetchone()[0]
+
         # Get output counts
-        property_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_intersections").fetchone()[0]
-        property_bnbo_water_count = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_water_intersections").fetchone()[0]
-        
+        property_bnbo_count = self.conn.execute(
+            "SELECT COUNT(*) FROM property_bnbo_intersections"
+        ).fetchone()[0]
+        property_bnbo_water_count = self.conn.execute(
+            "SELECT COUNT(*) FROM property_bnbo_water_intersections"
+        ).fetchone()[0]
+
         # Validate property coverage
         unique_properties_with_bnbo = self.conn.execute("""
             SELECT COUNT(DISTINCT bfe_number) FROM property_bnbo_intersections
         """).fetchone()[0]
-        
+
         unique_properties_with_water = self.conn.execute("""
             SELECT COUNT(DISTINCT bfe_number) FROM property_bnbo_water_intersections
         """).fetchone()[0]
-        
+
         # Log validation results
-        self.log.info(f"📊 Input data: {field_property_count:,} field×property intersections, {field_bnbo_count:,} field×BNBO, {field_bnbo_water_count:,} field×BNBO×water")
-        self.log.info(f"📊 Output data: {property_bnbo_count:,} property×BNBO intersections, {property_bnbo_water_count:,} property×BNBO×water intersections")
-        self.log.info(f"📊 Property coverage: {unique_properties_with_bnbo:,} properties with BNBO, {unique_properties_with_water:,} properties with water-covered BNBO")
-        
+        self.log.info(
+            f"📊 Input data: {field_property_count:,} field×property intersections, {field_bnbo_count:,} field×BNBO, {field_bnbo_water_count:,} field×BNBO×water"
+        )
+        self.log.info(
+            f"📊 Output data: {property_bnbo_count:,} property×BNBO intersections, {property_bnbo_water_count:,} property×BNBO×water intersections"
+        )
+        self.log.info(
+            f"📊 Property coverage: {unique_properties_with_bnbo:,} properties with BNBO, {unique_properties_with_water:,} properties with water-covered BNBO"
+        )
+
         # Sanity checks
         if property_bnbo_count == 0:
-            self.log.warning("⚠️ No property×BNBO intersections produced (may be expected if no field×property×BNBO overlap)")
-        
+            self.log.warning(
+                "⚠️ No property×BNBO intersections produced (may be expected if no field×property×BNBO overlap)"
+            )
+
         if property_bnbo_count > field_property_count * field_bnbo_count:
-            self.log.warning(f"⚠️ Very high intersection count: {property_bnbo_count:,} (check for data explosion)")
+            self.log.warning(
+                f"⚠️ Very high intersection count: {property_bnbo_count:,} (check for data explosion)"
+            )
 
     def _validate_data_consistency(self):
         """Validate data consistency and logical relationships."""
         self.log.info("🔍 Validating data consistency...")
-        
+
         # Validate that water-covered BNBO properties are subset of total BNBO
         water_only_properties = self.conn.execute("""
             SELECT COUNT(DISTINCT pbw.bfe_number)
@@ -282,12 +324,16 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             LEFT JOIN property_bnbo_intersections pb ON pbw.bfe_number = pb.bfe_number AND pbw.field_uuid = pb.field_uuid
             WHERE pb.bfe_number IS NULL
         """).fetchone()[0]
-        
+
         if water_only_properties > 0:
-            self.log.error(f"❌ CRITICAL: {water_only_properties:,} properties have water-covered BNBO but no total BNBO (data inconsistency)")
+            self.log.error(
+                f"❌ CRITICAL: {water_only_properties:,} properties have water-covered BNBO but no total BNBO (data inconsistency)"
+            )
         else:
-            self.log.info("✅ Data consistency: All water-covered BNBO properties also have total BNBO records")
-        
+            self.log.info(
+                "✅ Data consistency: All water-covered BNBO properties also have total BNBO records"
+            )
+
         # Validate bfe_number consistency
         invalid_bfe_numbers = self.conn.execute("""
             SELECT COUNT(*)
@@ -295,26 +341,32 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             LEFT JOIN field_property_intersections fp ON pb.field_uuid = fp.field_uuid AND pb.bfe_number = fp.bfe_number
             WHERE fp.bfe_number IS NULL
         """).fetchone()[0]
-        
+
         if invalid_bfe_numbers > 0:
-            self.log.error(f"❌ CRITICAL: {invalid_bfe_numbers:,} intersection records have invalid bfe_number references")
+            self.log.error(
+                f"❌ CRITICAL: {invalid_bfe_numbers:,} intersection records have invalid bfe_number references"
+            )
         else:
             self.log.info("✅ All intersection records have valid bfe_number references")
-        
+
         # Validate no duplicate property×BNBO combinations within fields
-        total_records = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_intersections").fetchone()[0]
+        total_records = self.conn.execute(
+            "SELECT COUNT(*) FROM property_bnbo_intersections"
+        ).fetchone()[0]
         unique_combinations = self.conn.execute("""
             SELECT COUNT(*) FROM (
                 SELECT DISTINCT field_uuid, bfe_number, bnbo_id FROM property_bnbo_intersections
             )
         """).fetchone()[0]
         duplicates = total_records - unique_combinations
-        
+
         if duplicates > 0:
-            self.log.error(f"❌ CRITICAL: {duplicates:,} duplicate field×property×BNBO combinations found")
+            self.log.error(
+                f"❌ CRITICAL: {duplicates:,} duplicate field×property×BNBO combinations found"
+            )
         else:
             self.log.info("✅ No duplicate field×property×BNBO combinations found")
-    
+
     def _get_main_output_table(self) -> str:
         """Get the name of the main output table for area validation."""
         return "property_bnbo_intersections"

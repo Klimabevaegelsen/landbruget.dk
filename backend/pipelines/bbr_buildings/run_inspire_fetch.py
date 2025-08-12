@@ -109,14 +109,14 @@ def _save_attributes_streaming(attributes_data, output_dir) -> None:
 
     # SCHEMA NORMALIZATION FIX: Ensure all records have the same fields
     print("🔧 Normalizing schema to prevent parquet write errors...")
-    
+
     # Collect all possible keys from all records
     all_keys = set()
     for record in attributes_data:
         all_keys.update(record.keys())
-    
+
     print(f"   📋 Found {len(all_keys)} unique fields across all records")
-    
+
     # Normalize all records to have the same schema
     normalized_data = []
     for record in attributes_data:
@@ -124,7 +124,7 @@ def _save_attributes_streaming(attributes_data, output_dir) -> None:
         for key in all_keys:
             normalized_record[key] = record.get(key, None)  # Use None for missing fields
         normalized_data.append(normalized_record)
-    
+
     print(f"   ✅ Normalized {len(normalized_data):,} records with consistent schema")
 
     # Process in smaller chunks to avoid memory issues

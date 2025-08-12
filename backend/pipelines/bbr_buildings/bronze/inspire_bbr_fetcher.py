@@ -1080,7 +1080,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to load and stream with GraphQL: {e}")
             raise
 
-    def _enrich_and_stream_category(self, building_uuids, category_name, building_queue, conn) -> None:
+    def _enrich_and_stream_category(
+        self, building_uuids, category_name, building_queue, conn
+    ) -> None:
         """
         Enrich buildings with GraphQL data and stream to queue in batches.
         """

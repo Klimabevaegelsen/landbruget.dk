@@ -123,7 +123,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_reasons": [],
                 "cattle_type_breakdown": defaultdict(int),
                 "nation_codes_from": set(),  # Track source countries
-                "nation_codes_to": set(),    # Track destination countries
+                "nation_codes_to": set(),  # Track destination countries
             }
         )
 
@@ -157,7 +157,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     dest_herd = getattr(animal, "BesaetningsNummerTil", None)
                     exit_reason = getattr(animal, "AarsagAfgaaet", None)
                     cattle_type = getattr(animal, "Koen", None)  # Extract cattle type
-                    
+
                     # IMPORTANT: Add nation codes for international movement analysis
                     nation_code_from = getattr(animal, "NationskodeFra", None)
                     nation_code_to = getattr(animal, "NationskodeTil", None)
@@ -250,8 +250,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
                 "cattle_type_breakdown": dict(group_data["cattle_type_breakdown"]),
                 "nation_codes_from": list(group_data["nation_codes_from"]),  # Convert set to list for JSON
-                "nation_codes_to": list(group_data["nation_codes_to"]),      # Convert set to list for JSON
-                "is_international": bool(group_data["nation_codes_from"] or group_data["nation_codes_to"]),  # Flag for easy filtering
+                "nation_codes_to": list(group_data["nation_codes_to"]),  # Convert set to list for JSON
+                "is_international": bool(
+                    group_data["nation_codes_from"] or group_data["nation_codes_to"]
+                ),  # Flag for easy filtering
                 "source_data": "chr_dyr_aggregated",
             }
             movement_summaries["movements"].append(movement_summary)

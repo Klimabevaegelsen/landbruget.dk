@@ -187,18 +187,18 @@ class BronzePipeline:
                 # Click on PowerBI container element
                 powerbi_container_selector = (
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
-                    '/div/div[2]/div/div[2]/div[2]/visual-container-repeat'
-                    '/visual-container[2]/transform/div/div[2]/div/div/visual-modern'
-                    '/div/div'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[2]/transform/div/div[2]/div/div/visual-modern"
+                    "/div/div"
                 )
                 await powerbi_frame.locator(powerbi_container_selector).click(timeout=120000)
                 await page.wait_for_timeout(3000)
                 # Click on PowerBI visualization element
                 powerbi_visualization_selector = (
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
-                    '/div/div[2]/div/div[2]/div[2]/visual-container-repeat'
-                    '/visual-container-group[2]/transform/div/div[2]/visual-container[1]'
-                    '/transform/div/div[2]/div/div/visual-modern/div'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container-group[2]/transform/div/div[2]/visual-container[1]"
+                    "/transform/div/div[2]/div/div/visual-modern/div"
                 )
                 await powerbi_frame.locator(powerbi_visualization_selector).click(timeout=10000)
                 await page.wait_for_timeout(3000)
@@ -206,22 +206,22 @@ class BronzePipeline:
                 # PowerBI filter and interaction selectors
                 filter_selector_xpath = (
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
-                    '/div/div[2]/div/div[2]/div[2]/visual-container-repeat'
-                    '/visual-container-group[1]/transform/div/div[2]/visual-container[3]'
-                    '/transform/div/div[2]/div/div/visual-modern/div/div/div[2]/div'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container-group[1]/transform/div/div[2]/visual-container[3]"
+                    "/transform/div/div[2]/div/div/visual-modern/div/div/div[2]/div"
                 )
                 hover_target_xpath = (
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
-                    '/div/div[2]/div/div[2]/div[2]/visual-container-repeat'
-                    '/visual-container[3]/transform/div/div[2]/div/div/visual-modern'
-                    '/div/div/div[2]/div[1]/div[1]/div/div/div/div[8]'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[3]/transform/div/div[2]/div/div/visual-modern"
+                    "/div/div/div[2]/div[1]/div[1]/div/div/div/div[8]"
                 )
                 options_button_xpath = (
                     '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
-                    '/div/div[2]/div/div[2]/div[2]/visual-container-repeat'
-                    '/visual-container[3]/transform/div/visual-container-header'
-                    '/div/div/div/visual-container-options-menu'
-                    '/visual-header-item-container/div/button'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[3]/transform/div/visual-container-header"
+                    "/div/div/div/visual-container-options-menu"
+                    "/visual-header-item-container/div/button"
                 )
 
                 for filter_info in filters_to_apply:

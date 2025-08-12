@@ -59,9 +59,9 @@ class WaterTypologyBronzeConfig(BaseJobConfig):
     headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
     layers: list[str] = [
-        "vp3endelig2022:vp3e2022_soe_samlet",      # Lakes typology (Søer typologi)
-        "vp3endelig2022:vp3e2022_marin_samlet",    # Coastal waters typology (Kystvande typologi)
-        "vp3endelig2022:vp3e2022_vandloeb_samlet", # Watercourses typology (Åer typologi)
+        "vp3endelig2022:vp3e2022_soe_samlet",  # Lakes typology (Søer typologi)
+        "vp3endelig2022:vp3e2022_marin_samlet",  # Coastal waters typology (Kystvande typologi)
+        "vp3endelig2022:vp3e2022_vandloeb_samlet",  # Watercourses typology (Åer typologi)
     ]
     url_mapping: dict[str, str] = {
         "vp3endelig2022:vp3e2022_soe_samlet": "https://wfs2-miljoegis.mim.dk/vp3endelig2022/ows",
@@ -137,12 +137,12 @@ class WaterTypologyBronze(BaseSource[WaterTypologyBronzeConfig], BronzeJobInterf
                     async with session.get(url, params=params) as response:
                         if response.status == 200:
                             content = await response.text()
-                            self.log.info(f"Successfully fetched {len(content)} bytes for layer {layer}")
+                            self.log.info(
+                                f"Successfully fetched {len(content)} bytes for layer {layer}"
+                            )
                             return content
                         else:
-                            self.log.error(
-                                f"Failed to fetch layer {layer}: HTTP {response.status}"
-                            )
+                            self.log.error(f"Failed to fetch layer {layer}: HTTP {response.status}")
                             return None
 
         except Exception as e:
@@ -190,11 +190,11 @@ class WaterTypologyBronze(BaseSource[WaterTypologyBronzeConfig], BronzeJobInterf
 
                 # Store raw data using prepared statements (safe for XML content)
                 current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
-                
+
                 for layer, raw_data in raw_data_list:
                     # Create safe table name
                     table_name = f"{layer.replace(':', '_')}_raw"
-                    
+
                     # Create table with proper schema
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {table_name} (
@@ -205,11 +205,20 @@ class WaterTypologyBronze(BaseSource[WaterTypologyBronzeConfig], BronzeJobInterf
                             updated_at TIMESTAMP
                         )
                     """)
-                    
+
                     # Use prepared statement to safely insert XML data
-                    self.conn.execute(f"""
+                    self.conn.execute(
+                        f"""
                         INSERT INTO {table_name} VALUES (?, ?, ?, ?, ?)
-                    """, [raw_data, layer, self.config.dataset, current_timestamp, current_timestamp])
+                    """,
+                        [
+                            raw_data,
+                            layer,
+                            self.config.dataset,
+                            current_timestamp,
+                            current_timestamp,
+                        ],
+                    )
 
                     # Save to GCS
                     self._save_data(

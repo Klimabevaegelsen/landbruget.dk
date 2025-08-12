@@ -136,9 +136,7 @@ def perform_uuid_join_optimized(
         conn.execute("DROP TABLE geodanmark_buildings_raw")
 
         # Check how many buildings we have
-        building_count = conn.execute(
-            "SELECT COUNT(*) FROM geodanmark_buildings"
-        ).fetchone()[0]
+        building_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
         print(f"✅ Loaded {building_count:,} valid GeoDanmark buildings")
 
         # Skip building IDs table - we're doing direct join between attributes and GeoDanmark
@@ -496,7 +494,9 @@ def perform_chunked_spatial_join(
     # Get optimized building count
     optimized_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
 
-    print(f"✅ Optimized {filtered_count:,} → {optimized_count:,} building geometries with ST_Union")
+    print(
+        f"✅ Optimized {filtered_count:,} → {optimized_count:,} building geometries with ST_Union"
+    )
 
     # Process in chunks with memory management
     # GitHub Actions optimization: Use smaller chunks for memory efficiency
@@ -1121,20 +1121,21 @@ def run_silver_layer(
 
     # Step 4: Use BuildingProcessor for final enrichment and transformations
     logger.info("🔧 Step 4: Using BuildingProcessor for final enrichment...")
-    
+
     try:
         from silver.building_processor import BuildingProcessor
-        
+
         processor = BuildingProcessor(settings, logger)
-        
+
         # Save joined buildings to temporary location for BuildingProcessor
-        temp_joined_file = silver_output_dir / "joined_buildings.geoparquet" 
-        
+        temp_joined_file = silver_output_dir / "joined_buildings.geoparquet"
+
         # Copy the main joined file to expected location
         main_joined_file = silver_output_dir / "joined_buildings.parquet"
         if main_joined_file.exists():
             # Convert parquet to geoparquet for BuildingProcessor
             import duckdb
+
             temp_conn = duckdb.connect()
             temp_conn.execute("INSTALL spatial")
             temp_conn.execute("LOAD spatial")
@@ -1143,25 +1144,28 @@ def run_silver_layer(
                 TO '{temp_joined_file}' (FORMAT PARQUET)
             """)
             temp_conn.close()
-            
+
             # Save attributes for BuildingProcessor
             if attributes_df is not None:
                 if isinstance(attributes_df, list):
                     import pandas as pd
+
                     attributes_df = pd.DataFrame(attributes_df)
-                
+
                 attributes_file = silver_output_dir / "inspire_attributes.parquet"
                 attributes_df.to_parquet(attributes_file, index=False)
-                logger.info(f"✅ Saved attributes for BuildingProcessor: {len(attributes_df)} records")
-            
+                logger.info(
+                    f"✅ Saved attributes for BuildingProcessor: {len(attributes_df)} records"
+                )
+
             # Run BuildingProcessor for final enrichment
             final_output_dir = silver_output_dir / "processed"
             processor.process_buildings(silver_output_dir, final_output_dir)
-            
+
             logger.info("✅ BuildingProcessor completed final enrichment")
         else:
             logger.warning("⚠️ Main joined file not found, skipping BuildingProcessor")
-            
+
     except Exception as e:
         logger.warning(f"⚠️ BuildingProcessor failed, continuing without enrichment: {e}")
 
@@ -1285,7 +1289,9 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         return [], None
 
 
-def _upload_silver_data_to_gcs(silver_output_dir: Path, timestamp: str, logger: logging.Logger) -> None:
+def _upload_silver_data_to_gcs(
+    silver_output_dir: Path, timestamp: str, logger: logging.Logger
+) -> None:
     """Upload silver results to GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - skipping silver data upload")

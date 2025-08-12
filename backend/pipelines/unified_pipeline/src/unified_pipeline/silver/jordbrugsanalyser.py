@@ -79,6 +79,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJobInterface):
     """
     Silver layer processing for Jordbrugsanalyser marker data.
@@ -108,7 +109,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         Initialize the JordbrugsanalyserSilver processor.
 
         Args:
-            config (JordbrugsanalyserSilverConfig): Configuration for the processor        """
+            config (JordbrugsanalyserSilverConfig): Configuration for the processor"""
         super().__init__(config)
 
     def _clean_text_value(self, value: Optional[str]) -> Optional[str]:

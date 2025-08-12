@@ -30,9 +30,9 @@ def mock_credentials():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         f.write(content)
         temp_path = f.name
-    
+
     yield Path(temp_path)
-    
+
     # Clean up
     os.unlink(temp_path)
 
@@ -49,25 +49,28 @@ def mock_build():
 @pytest.fixture
 def mock_service_account():
     """Mock for service_account.Credentials."""
-    with mock.patch("drive_data_pipeline.bronze.drive.auth.service_account.Credentials") as mock_creds:
+    with mock.patch(
+        "drive_data_pipeline.bronze.drive.auth.service_account.Credentials"
+    ) as mock_creds:
         mock_creds.from_service_account_file.return_value = mock.MagicMock()
         yield mock_creds
 
 
-def test_get_drive_service_with_valid_credentials(mock_credentials, mock_build, mock_service_account) -> None:
+def test_get_drive_service_with_valid_credentials(
+    mock_credentials, mock_build, mock_service_account
+) -> None:
     """Test get_drive_service with valid credentials."""
     # Call the function
     result = get_drive_service(mock_credentials)
-    
+
     # Verify service_account.Credentials.from_service_account_file was called
     mock_service_account.from_service_account_file.assert_called_once_with(
-        str(mock_credentials),
-        scopes=['https://www.googleapis.com/auth/drive.readonly']
+        str(mock_credentials), scopes=["https://www.googleapis.com/auth/drive.readonly"]
     )
-    
+
     # Verify build was called
     mock_build.assert_called_once()
-    
+
     # Verify the result
     assert result is mock_build.return_value
 
@@ -82,7 +85,7 @@ def test_get_drive_service_with_invalid_credentials(mock_credentials, mock_servi
     """Test get_drive_service with invalid credentials."""
     # Mock service_account.Credentials.from_service_account_file to raise an exception
     mock_service_account.from_service_account_file.side_effect = ValueError("Invalid credentials")
-    
+
     # Call the function and verify it raises a ValueError
     with pytest.raises(ValueError):
-        get_drive_service(mock_credentials) 
+        get_drive_service(mock_credentials)
