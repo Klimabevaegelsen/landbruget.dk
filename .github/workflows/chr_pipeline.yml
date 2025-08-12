@@ -74,10 +74,6 @@ on:
         description: 'Limit number of herds processed per species'
         type: string
         default: ''
-      discovery_year:
-        description: 'Year for herd volume discovery (default: current year)'
-        type: string
-        default: ''
       max_concurrent_jobs:
         description: 'Maximum number of concurrent matrix jobs'
         type: string
@@ -246,9 +242,6 @@ jobs:
           fi
           if [[ -n "${{ inputs.species_codes }}" ]]; then
             CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-          fi
-          if [[ -n "${{ inputs.discovery_year }}" ]]; then
-            CMD="$CMD --discovery-year ${{ inputs.discovery_year }}"
           fi
           
           echo "Running foundation command: $CMD"
@@ -1492,9 +1485,6 @@ jobs:
           fi
           if [[ -n "${{ inputs.species_codes }}" ]]; then
             CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
-          fi
-          if [[ -n "${{ inputs.discovery_year }}" ]]; then
-            CMD="$CMD --discovery-year ${{ inputs.discovery_year }}"
           fi
           
           echo "Running single step command: $CMD"
