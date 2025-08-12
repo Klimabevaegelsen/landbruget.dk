@@ -55,7 +55,6 @@ from typing import Any, Dict, List, Optional
 
 import duckdb
 import requests
-from google.cloud import secretmanager
 from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
 
@@ -89,21 +88,8 @@ class PlanteITAPI:
         self.session.auth = HTTPBasicAuth(self.username, self.password)
     
     def _get_credential(self, env_var: str, secret_name: str) -> Optional[str]:
-        """Get credential from environment variable or Google Secrets Manager."""
-        # Try environment variable first
-        credential = os.getenv(env_var)
-        if credential:
-            return credential
-        
-        # Fall back to Google Secrets Manager
-        try:
-            client = secretmanager.SecretManagerServiceClient()
-            name = f"projects/{self.project_id}/secrets/{secret_name}/versions/latest"
-            response = client.access_secret_version(name=name)
-            return response.payload.data.decode("UTF-8").strip()
-        except Exception as e:
-            logger.warning(f"Could not retrieve {secret_name} from Secrets Manager: {e}")
-            return None
+        """Get credential from environment variable."""
+        return os.getenv(env_var)
 
     def get_products_for_crop(self, crop_id: int) -> List[Dict]:
         """Get all pesticide products approved for a specific crop."""
