@@ -121,6 +121,22 @@ class CVREnrichmentSharedConfig(BaseModel):
         description="Total number of batches in the current step"
     )
     
+    # Independent execution configuration
+    enable_independent_execution: bool = Field(
+        default=True,
+        description="Whether to enable independent step execution by fetching latest files from GCS"
+    )
+    
+    max_days_back_for_inputs: int = Field(
+        default=30,
+        description="Maximum number of days to look back when fetching latest input files from GCS"
+    )
+    
+    fallback_to_pipeline_dependencies: bool = Field(
+        default=True,
+        description="Whether to fall back to pipeline dependencies if latest files are not found"
+    )
+    
     model_config = {"frozen": True}
 
 
@@ -154,7 +170,9 @@ def get_step_input_paths(
     step: CVREnrichmentStep, 
     date_pattern: str, 
     total_batches: Optional[int] = None,
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbrugsdata-raw-data",
+    enable_independent_execution: bool = True,
+    max_days_back: int = 30
 ) -> list[str]:
     """
     Get the GCS input paths for a specific pipeline step.
@@ -163,6 +181,84 @@ def get_step_input_paths(
         step: Pipeline step
         date_pattern: Date pattern for the pipeline run
         total_batches: Total number of batches (for batch-dependent steps)
+        bucket: GCS bucket name
+        enable_independent_execution: Whether to fetch latest files independently
+        max_days_back: Maximum days to look back for latest files
+        
+    Returns:
+        List of GCS paths for the step inputs
+    """
+    # If independent execution is disabled, use traditional pipeline dependencies
+    if not enable_independent_execution:
+        return _get_traditional_input_paths(step, date_pattern, bucket)
+    
+    # Independent execution: fetch latest available files from GCS
+    from unified_pipeline.util.gcs_latest_fetcher import create_gcs_fetcher
+    
+    fetcher = create_gcs_fetcher(bucket)
+    
+    # Step-specific input logic with latest file fetching
+    if step == CVREnrichmentStep.COLLECTION:
+        # Collection step has no inputs (reads from all pipeline CVR collections)
+        return []
+    
+    elif step == CVREnrichmentStep.COMPANY_FETCHING:
+        # Company fetching depends on collection step
+        latest_collection = fetcher.find_latest_cvr_collection_data(max_days_back)
+        return [latest_collection] if latest_collection else []
+    
+    elif step == CVREnrichmentStep.PNUMBER_FETCHING:
+        # P-number fetching depends on company fetching
+        latest_company = fetcher.find_latest_company_data(max_days_back)
+        return [latest_company] if latest_company else []
+    
+    elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
+        # Financial documents depend on company fetching
+        latest_company = fetcher.find_latest_company_data(max_days_back)
+        return [latest_company] if latest_company else []
+    
+    elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
+        # Address geocoding depends on both company and P-number data
+        latest_company = fetcher.find_latest_company_data(max_days_back)
+        latest_pnumber = fetcher.find_latest_pnumber_data(max_days_back)
+        
+        inputs = []
+        if latest_company:
+            inputs.append(latest_company)
+        if latest_pnumber:
+            inputs.append(latest_pnumber)
+        return inputs
+    
+    elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
+        # Data consolidation depends on all previous steps
+        company_data, pnumber_data, financial_data, address_data = fetcher.find_latest_consolidation_inputs(max_days_back)
+        
+        inputs = []
+        if company_data:
+            inputs.append(company_data)
+        if pnumber_data:
+            inputs.append(pnumber_data)
+        if financial_data:
+            inputs.append(financial_data)
+        if address_data:
+            inputs.append(address_data)
+        return inputs
+    
+    else:
+        return []
+
+
+def _get_traditional_input_paths(
+    step: CVREnrichmentStep, 
+    date_pattern: str, 
+    bucket: str = "landbrugsdata-raw-data"
+) -> list[str]:
+    """
+    Get traditional pipeline dependency input paths (original behavior).
+    
+    Args:
+        step: Pipeline step
+        date_pattern: Date pattern for the pipeline run
         bucket: GCS bucket name
         
     Returns:
