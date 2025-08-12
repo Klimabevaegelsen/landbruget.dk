@@ -211,8 +211,20 @@ def migrate_save_data_pattern(
     path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
     gcs_path = f"gs://{bucket}/{path}"
 
-    # Direct upload from table
-    gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+    # 🚀 ENHANCED: Try native HMAC export first, fallback to existing method
+    if hasattr(gcs_access, 'export_to_gcs_native'):
+        native_used = gcs_access.export_to_gcs_native(
+            table_name, 
+            gcs_path, 
+            compression="zstd",  # Optimal compression
+            row_group_size=100000
+        )
+        if not native_used:
+            # Fallback to existing method
+            gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+    else:
+        # Original method for backward compatibility
+        gcs_access.upload_from_duckdb_table(table_name, gcs_path)
 
 
 def migrate_read_data_pattern(
@@ -232,4 +244,14 @@ def migrate_read_data_pattern(
     ```
     """
     gcs_path = f"gs://{bucket}/{blob_name}"
-    gcs_access.create_table_from_gcs(table_name, gcs_path)
+    
+    # 🚀 ENHANCED: Try native HMAC loading first, fallback to existing method
+    if hasattr(gcs_access, 'query_parquet_native'):
+        try:
+            gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
+        except Exception as e:
+            # Fallback to existing method
+            gcs_access.create_table_from_gcs(table_name, gcs_path)
+    else:
+        # Original method for backward compatibility
+        gcs_access.create_table_from_gcs(table_name, gcs_path)
