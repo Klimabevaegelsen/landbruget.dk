@@ -227,7 +227,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
             # Apply unified geometry validation and transformation
             validate_and_transform_geometries_duckdb(
-                self.conn, processed_table, f"dagi_{division_type}", geometry_column="geometry"
+                self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
             )
 
             # Transform to target CRS if needed (after validation ensures WGS84)
