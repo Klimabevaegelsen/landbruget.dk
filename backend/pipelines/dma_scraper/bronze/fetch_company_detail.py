@@ -75,7 +75,7 @@ class DMACompanyDetailScraper:
             cvr = fetch_text(soup, cvr_selector)
             chr = fetch_text(soup, chr_selector)
             pdf_url_selector = "#hent-0"
-            if soup.select_one(pdf_url_selector) != None:
+            if soup.select_one(pdf_url_selector) is not None:
                 pdf_url = "https://dma.mst.dk" + soup.select_one(pdf_url_selector).get("href")
             else:
                 pdf_url = None

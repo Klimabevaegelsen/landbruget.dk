@@ -15,7 +15,7 @@ logger = get_logger()
 class DuckDBHelper:
     """Helper class for DuckDB and Ibis operations."""
 
-    def __init__(self, database_path: Path | None = None):
+    def __init__(self, database_path: Path | None = None) -> None:
         """Initialize the DuckDB helper.
 
         Args:
@@ -94,7 +94,7 @@ class DuckDBHelper:
         """
         try:
             # Execute the Ibis expression and convert to a DataFrame
-            df = self.ibis_to_dataframe(table)
+            self.ibis_to_dataframe(table)
 
             # Use DuckDB's COPY statement to write the Parquet file
             # This performs better than pandas to_parquet for large datasets
@@ -158,7 +158,7 @@ class DuckDBHelper:
             logger.error(f"Failed to cast column types: {str(e)}")
             raise
 
-    def close(self):
+    def close(self) -> None:
         """Close the DuckDB connection."""
         try:
             self.conn.close()

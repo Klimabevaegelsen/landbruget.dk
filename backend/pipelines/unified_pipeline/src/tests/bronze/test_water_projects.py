@@ -9,6 +9,7 @@ from tenacity import stop_after_attempt
 
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 
+
 @pytest.fixture
 def config() -> WaterProjectsBronzeConfig:
     return WaterProjectsBronzeConfig()

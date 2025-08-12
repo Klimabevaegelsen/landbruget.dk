@@ -10,6 +10,7 @@ from tenacity import stop_after_attempt
 
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 
+
 @pytest.fixture
 def config() -> WetlandsBronzeConfig:
     """Return a test configuration."""

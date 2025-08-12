@@ -28,8 +28,8 @@ def _get_gcs_access():
         
         # Try alternative import paths that might work in different environments
         try:
-            import sys
             import os
+            import sys
             
             # Add unified pipeline to path if it exists
             current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -58,7 +58,7 @@ GCSDataAccess = _get_gcs_access()
 class DriveStorageManager:
     """Storage manager wrapper that uses optimized GCS access for drive pipeline needs."""
 
-    def __init__(self, storage_type: str, bucket_name: str | None = None, base_dir: str = ""):
+    def __init__(self, storage_type: str, bucket_name: str | None = None, base_dir: str = "") -> None:
         """Initialize with storage configuration.
 
         Args:
@@ -100,7 +100,7 @@ class DriveStorageManager:
                 f"✅ DriveStorageManager: Initialized with local storage at: {self.base_dir}"
             )
 
-    def _init_fallback_gcs(self, bucket_name: str):
+    def _init_fallback_gcs(self, bucket_name: str) -> None:
         """Initialize fallback GCS storage using google-cloud-storage directly."""
         try:
             from google.cloud import storage

@@ -14,11 +14,11 @@ them all for enrichment.
 
 import json
 import os
-import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, Optional, Set
 
+import requests
 from pydantic import Field
 from tqdm import tqdm
 
@@ -159,7 +159,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         # Log configuration
         self.log.info("CVR enrichment gold layer initialized")
-        self.log.info(f"📋 Configuration:")
+        self.log.info("📋 Configuration:")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled'}")
         self.log.info(f"   • Financial documents: {'enabled' if self.config.fetch_financial_documents else 'disabled'}")
@@ -1439,13 +1439,13 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 LIMIT 5
             """).fetchall()
             
-            self.log.info(f"🎉 Successfully created normalized CVR tables using chunked processing!")
+            self.log.info("🎉 Successfully created normalized CVR tables using chunked processing!")
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
             self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
             self.log.info(f"   🏭 Industry entries: {industries_count}")
-            self.log.info(f"   👷 Employment data:")
+            self.log.info("   👷 Employment data:")
             for table_suffix, count in employment_counts.items():
                 self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
             

@@ -53,7 +53,7 @@ def mock_fetcher(mock_drive_service, mock_drive_files):
         fetcher_instance.list_folder_contents.return_value = mock_drive_files
         
         # Mock download_file to create a simple file
-        def mock_download(file_id, destination_path):
+        def mock_download(file_id, destination_path) -> bool:
             # Create a simple test file at the destination
             with open(destination_path, "w") as f:
                 if destination_path.endswith(".xlsx"):
@@ -93,7 +93,7 @@ def test_settings():
 
 
 @pytest.mark.integration
-def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch):
+def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch) -> None:
     """Test the full pipeline execution from Bronze to Silver."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -156,7 +156,7 @@ def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch):
 
 
 @pytest.mark.integration
-def test_bronze_only_mode(test_settings, mock_fetcher, monkeypatch):
+def test_bronze_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
     """Test the pipeline in bronze-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -192,7 +192,7 @@ def test_bronze_only_mode(test_settings, mock_fetcher, monkeypatch):
 
 
 @pytest.mark.integration
-def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch):
+def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
     """Test the pipeline in silver-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -256,7 +256,7 @@ def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch):
 
 
 @pytest.mark.integration
-def test_error_recovery(test_settings, mock_fetcher, monkeypatch):
+def test_error_recovery(test_settings, mock_fetcher, monkeypatch) -> None:
     """Test the pipeline's error recovery capabilities."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")

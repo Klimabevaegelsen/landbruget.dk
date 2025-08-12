@@ -313,7 +313,7 @@ class H3PFASProcessorRefactored:
 
         # Get statistics and validate
         stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_cells,
                 AVG(h3_area_ha) as avg_area,
                 MIN(h3_area_ha) as min_area,
@@ -421,7 +421,7 @@ class H3PFASProcessorRefactored:
         # Check for NULL values in critical columns
         try:
             null_check = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_rows,
                     COUNT(h3_area_ha) as non_null_h3_area,
                     COUNT(total_intersection_area_ha) as non_null_intersection_area,
@@ -1042,22 +1042,22 @@ class H3PFASProcessorRefactored:
                     p.contains_diquat,
                     p.contains_glyphosate,
                     -- Weight pesticide amounts by intersection area ratio
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pfas_containing_active_ingredient_grams, 0) as weighted_pfas_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.diquat_containing_active_ingredient_grams, 0) as weighted_diquat_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.glyphosate_containing_active_ingredient_grams, 0) as weighted_glyphosate_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pesticide_belastning_applied, 0) as weighted_pesticide_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pfas_containing_pesticide_belastning_applied, 0) as weighted_pfas_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.diquat_containing_pesticide_belastning_applied, 0) as weighted_diquat_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.glyphosate_containing_pesticide_belastning_applied, 0) as weighted_glyphosate_belastning
                 FROM field_kommune_intersections fki
-                LEFT JOIN {pesticide_table} p ON fki.field_uuid = p.field_uuid 
+                LEFT JOIN {pesticide_table} p ON fki.field_uuid = p.field_uuid
                     AND fki.cvr_number = p.cvr
             )
             SELECT
@@ -1095,51 +1095,51 @@ class H3PFASProcessorRefactored:
                 COUNT(DISTINCT CASE WHEN contains_glyphosate = true THEN PesticideRegistrationNumber END) as unique_glyphosate_products,
                 COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticide_products,
                 -- Intensity metrics (grams per hectare)
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pfas_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_diquat_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_glyphosate_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
                 -- Pesticide load intensity metrics
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pesticide_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pfas_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pfas_pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_diquat_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as diquat_pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_glyphosate_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as glyphosate_pesticide_belastning_per_ha,
                 -- Coverage metrics
-                CASE 
-                    WHEN kommune_area_ha > 0 THEN 
+                CASE
+                    WHEN kommune_area_ha > 0 THEN
                         (SUM(intersection_area_ha) / kommune_area_ha) * 100.0
-                    ELSE 0 
+                    ELSE 0
                 END as agricultural_coverage_pct,
                 CURRENT_TIMESTAMP as created_at
             FROM pesticide_kommune_data
-            GROUP BY 
+            GROUP BY
                 kommune_code, kommune_name, region_code, kommune_area_ha,
                 kommune_centroid_x, kommune_centroid_y
             HAVING SUM(intersection_area_ha) > 0
@@ -1296,10 +1296,10 @@ class H3PFASProcessorRefactored:
         pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticide_raw)").fetchall()
         pest_column_names = [col[1] for col in pest_columns]
         has_field_uuid = "field_uuid" in pest_column_names
-        
+
         if not has_field_uuid:
             raise ValueError("field_uuid column is required in pesticide data for H3 PFAS analysis")
-        
+
         # Get pesticide field lookup - UUID based
         self.conn.execute("""
             CREATE OR REPLACE TABLE pesticide_field_lookup AS
@@ -1368,7 +1368,7 @@ class H3PFASProcessorRefactored:
         # Require field UUID column for proper field identification
         if "field_uuid" not in fvm_column_names:
             raise ValueError("field_uuid column is required in FVM data for H3 PFAS analysis")
-        
+
         field_uuid_select = "f.field_uuid"
         primary_field_id_select = "f.field_uuid as primary_field_id"
         self.log.info("✅ Using field_uuid for unique field identification")
@@ -1388,7 +1388,7 @@ class H3PFASProcessorRefactored:
                 {field_uuid_select},
                 {primary_field_id_select}
             FROM temp_fvm_raw f
-            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid 
+            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid
                 AND {cvr_join_condition}
             WHERE {geometry_column} IS NOT NULL
             AND {geometry_validation}

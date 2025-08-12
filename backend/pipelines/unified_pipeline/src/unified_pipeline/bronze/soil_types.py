@@ -20,6 +20,7 @@ from pydantic import ConfigDict
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class SoilTypesBronzeConfig(BaseJobConfig):
     """
     Configuration for the Soil Types Bronze source.

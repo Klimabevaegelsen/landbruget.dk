@@ -42,7 +42,7 @@ def storage_manager(temp_dir):
 
 
 @pytest.fixture
-def sample_file_content():
+def sample_file_content() -> bytes:
     """Create sample file content for testing."""
     return b"Sample file content for testing"
 

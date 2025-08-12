@@ -70,7 +70,7 @@ def mock_drive_fetcher(mock_drive_files):
         fetcher_instance.get_file_metadata.side_effect = mock_get_metadata
         
         # Mock download_file to create a simple file
-        def mock_download(file_id, destination_path):
+        def mock_download(file_id, destination_path) -> bool:
             # Create a simple test file at the destination
             with open(destination_path, "w") as f:
                 if destination_path.endswith(".xlsx"):
@@ -109,7 +109,7 @@ def test_settings():
 
 
 @pytest.mark.integration
-def test_bronze_processor(test_settings, mock_drive_fetcher):
+def test_bronze_processor(test_settings, mock_drive_fetcher) -> None:
     """Test bronze processor end-to-end functionality."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -152,7 +152,7 @@ def test_bronze_processor(test_settings, mock_drive_fetcher):
 
 
 @pytest.mark.integration
-def test_bronze_specific_subfolders(test_settings, mock_drive_fetcher):
+def test_bronze_specific_subfolders(test_settings, mock_drive_fetcher) -> None:
     """Test bronze processor with specific subfolders filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -229,7 +229,7 @@ def test_bronze_specific_subfolders(test_settings, mock_drive_fetcher):
 
 
 @pytest.mark.integration
-def test_bronze_specific_file_types(test_settings, mock_drive_fetcher):
+def test_bronze_specific_file_types(test_settings, mock_drive_fetcher) -> None:
     """Test bronze processor with specific file types filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -263,7 +263,7 @@ def test_bronze_specific_file_types(test_settings, mock_drive_fetcher):
 
 
 @pytest.mark.integration
-def test_bronze_error_handling(test_settings, mock_drive_fetcher):
+def test_bronze_error_handling(test_settings, mock_drive_fetcher) -> None:
     """Test bronze processor error handling capabilities."""
     # Create storage manager
     storage_manager = LocalStorageManager()

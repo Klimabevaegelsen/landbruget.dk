@@ -6,7 +6,7 @@ Simple test for DuckDB functionality.
 import duckdb
 
 
-def test_duckdb():
+def test_duckdb() -> bool:
     """Test basic DuckDB functionality."""
     print("Testing basic DuckDB functionality...")
     

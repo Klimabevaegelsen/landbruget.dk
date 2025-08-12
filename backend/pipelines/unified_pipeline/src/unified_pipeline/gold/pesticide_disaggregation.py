@@ -348,19 +348,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info("🎯 VALIDATION: Final Disaggregation Results")
                 self.log.info("=" * 60)
                 
-                self.log.info(f"📈 DISAGGREGATION RESULTS:")
+                self.log.info("📈 DISAGGREGATION RESULTS:")
                 self.log.info(f"   Successfully disaggregated: {unique_originals:,} original applications")
                 self.log.info(f"   Total disaggregated records: {final_count:,} (multi-field expansions)")
                 self.log.info(f"   Disaggregated dosage: {final_dosage:,.2f} units")
                 self.log.info(f"   Disaggregated acreage: {final_acreage:,.2f} ha")
                 
-                self.log.info(f"📉 REMAINING UNPROCESSED:")
+                self.log.info("📉 REMAINING UNPROCESSED:")
                 self.log.info(f"   Pending records: {pending_count:,}")
                 self.log.info(f"   Pending dosage: {pending_dosage:,.2f} units")
                 self.log.info(f"   Pending acreage: {pending_acreage:,.2f} ha")
 
                 # Strategy breakdown
-                self.log.info(f"📋 STRATEGY BREAKDOWN:")
+                self.log.info("📋 STRATEGY BREAKDOWN:")
                 for strategy, stats in self._validation_data.get("strategy_totals", {}).items():
                     self.log.info(f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records")
 
@@ -1070,7 +1070,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # For CVR+crop combinations with organic fields, calculate both main and non-organic
             # strategies and use whichever gives the better area match within 2% tolerance
             # This ensures every farmer gets the most accurate disaggregation possible
-            self.log.info(f"🌟 Ethical Strategy 1: Best-match for mixed farming operations")
+            self.log.info("🌟 Ethical Strategy 1: Best-match for mixed farming operations")
             mixed_combinations = self._get_mixed_farming_combinations()
             processed_ethical = self._process_mixed_farming_best_match(mixed_combinations)
             total_processed += processed_ethical
@@ -1084,7 +1084,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =========================================================
             # Process remaining conventional-only applications with the proven main strategy
             # These are CVR+crop combinations that don't have organic fields
-            self.log.info(f"🎯 Strategy 2: Main area matching for conventional-only operations")
+            self.log.info("🎯 Strategy 2: Main area matching for conventional-only operations")
             processed_main_remaining = self._disaggregate_by_marker_match()
             total_processed += processed_main_remaining
             self.log.info(
@@ -1097,7 +1097,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ==============================================
             # Handle any remaining applications that main strategy couldn't process
             # This catches edge cases and provides final cleanup
-            self.log.info(f"🎯 Strategy 3: Non-organic cleanup for remaining applications")
+            self.log.info("🎯 Strategy 3: Non-organic cleanup for remaining applications")
             processed_nonorg_cleanup = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_nonorg_cleanup
             self.log.info(
@@ -1920,7 +1920,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             total_processed = processed_count + nonorg_processed
             
                         # Remove processed applications from pending queue
-            self.duckdb_conn.execute(f"""
+            self.duckdb_conn.execute("""
                 DELETE FROM pending_pesticide_rows 
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT da.OriginalPesticideRowID

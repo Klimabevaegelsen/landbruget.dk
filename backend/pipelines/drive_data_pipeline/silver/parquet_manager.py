@@ -18,7 +18,8 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
     DriveStorageManager = None
 from .duckdb_base import DuckDBProcessor
 
@@ -34,7 +35,7 @@ class ParquetManager(DuckDBProcessor):
         storage_manager: "DriveStorageManager",
         compression: str = "snappy",
         partition_by: list[str] | None = None,
-    ):
+    ) -> None:
         """Initialize the Parquet manager.
 
         Args:

@@ -25,6 +25,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class JordbrugsanalyserSilverConfig(BaseJobConfig):
     """
     Configuration for the Jordbrugsanalyser Silver processing.

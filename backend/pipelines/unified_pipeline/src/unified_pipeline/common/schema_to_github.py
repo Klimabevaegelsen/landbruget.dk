@@ -17,6 +17,7 @@ import duckdb
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.log_util import Logger
 
+
 class SchemaToGitHub:
     """Manages automatic schema generation and GitHub commits."""
 

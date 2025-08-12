@@ -1,4 +1,3 @@
-import duckdb
 #!/usr/bin/env python3
 """
 Standalone test for the DuckDBHelper class.
@@ -21,7 +20,7 @@ from utils.logging import get_logger
 logger = get_logger()
 
 
-def test_duckdb_helper():
+def test_duckdb_helper() -> bool:
     """Test the DuckDBHelper class."""
     print("Testing DuckDBHelper class...")
     

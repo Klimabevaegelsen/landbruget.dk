@@ -4,9 +4,10 @@ Local test script for pesticide proximity analysis using downloaded data.
 This avoids repeated GCS downloads during development.
 """
 
-import duckdb
-import os
 from pathlib import Path
+
+import duckdb
+
 
 def test_proximity_analysis():
     print("🧪 Testing pesticide proximity analysis with local data")

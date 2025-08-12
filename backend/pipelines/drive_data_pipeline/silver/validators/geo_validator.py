@@ -13,7 +13,8 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult
 
@@ -31,7 +32,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
         validate_geometry: bool = True,
         auto_fix_geometry: bool = True,
         use_duckdb_spatial: bool = True,
-    ):
+    ) -> None:
         """Initialize the geospatial validator.
 
         Args:
@@ -397,7 +398,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
         gdf = gpd.GeoDataFrame(data, geometry=self.geometry_column)
         return gdf
 
-    def _validate_geometries(self, data: gpd.GeoDataFrame, result: ValidationResult):
+    def _validate_geometries(self, data: gpd.GeoDataFrame, result: ValidationResult) -> None:
         """Validate geometries in a GeoDataFrame.
 
         Args:

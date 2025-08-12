@@ -39,7 +39,7 @@ except ImportError:
     GCS_AVAILABLE = False
 
 
-def check_memory_usage():
+def check_memory_usage() -> None:
     """Monitor memory and disk usage."""
     if not PSUTIL_AVAILABLE:
         return
@@ -284,14 +284,14 @@ def perform_uuid_join_optimized(
             print(f"💾 Saved UUID JOIN results to {output_file}")
 
             # Verify the join was UUID-based (not spatial)
-            explain_result = conn.execute("""
+            conn.execute("""
                 EXPLAIN SELECT * FROM joined_results LIMIT 1
             """).fetchall()
 
             print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
 
             # Final cleanup - use robust drop that handles both tables and views
-            def robust_drop(object_name: str):
+            def robust_drop(object_name: str) -> None:
                 """Drop a table or view, handling both types safely."""
                 try:
                     # Check if it's a table or view by querying information schema
@@ -681,7 +681,7 @@ def perform_chunked_spatial_join(
         conn.close()
 
 
-def main():
+def main() -> None:
     """Main entry point for the BBR buildings pipeline."""
     parser = argparse.ArgumentParser(
         description="BBR Buildings Data Pipeline - Now with bulk GeoDanmark download!",
@@ -868,7 +868,7 @@ def run_bronze_layer_bulk(
 
 def _upload_bronze_data_to_gcs(
     building_ids: list, attributes_df, timestamp: str, logger: logging.Logger
-):
+) -> None:
     """Upload bronze data to GCS for silver layer consumption."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - skipping bronze data upload")
@@ -1285,7 +1285,7 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         return [], None
 
 
-def _upload_silver_data_to_gcs(silver_output_dir: Path, timestamp: str, logger: logging.Logger):
+def _upload_silver_data_to_gcs(silver_output_dir: Path, timestamp: str, logger: logging.Logger) -> None:
     """Upload silver results to GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - skipping silver data upload")

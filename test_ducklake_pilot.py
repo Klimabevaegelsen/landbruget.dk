@@ -16,11 +16,10 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 
 try:
     import duckdb
@@ -309,7 +308,7 @@ class DuckLakePilot:
             query_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(f"✅ Analytical query completed in {query_time:.3f}s")
-            logger.info(f"📊 Analysis results:")
+            logger.info("📊 Analysis results:")
             for row in results:
                 year, count, avg_quality, avg_sustainability, with_permits = row
                 logger.info(f"   {year}: {count} companies, quality: {avg_quality:.3f}, sustainability: {avg_sustainability:.3f}, permits: {with_permits}")

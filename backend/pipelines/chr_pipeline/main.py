@@ -10,13 +10,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from bronze.export import (
-    EXPORT_TIMESTAMP,
-    export_context_data,
-    get_data_buffer,
-    import_context_data,
-    save_raw_data,
-)
 from bronze.auth import (
     create_besaetning_client,
     create_chr_dyr_client,
@@ -26,18 +19,25 @@ from bronze.auth import (
     get_fvm_credentials,
     get_legacy_fvm_credentials,
 )
+from bronze.export import (
+    EXPORT_TIMESTAMP,
+    export_context_data,
+    get_data_buffer,
+    import_context_data,
+    save_raw_data,
+)
 from bronze.load_besaetning import load_herd_details, load_herd_list
 from bronze.load_diko import load_diko_flytninger
 from bronze.load_ejendom import load_ejendom_oplysninger, load_ejendom_vet_events
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
+
+# Import gold processing orchestrator
+from gold.chr_gold_processing import process_gold_data as run_gold_processing
 from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
-
-# Import gold processing orchestrator
-from gold.chr_gold_processing import process_gold_data as run_gold_processing
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -318,7 +318,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
             )
 
             # Track start time for performance monitoring
-            start_time = time.time()
+            time.time()
             running_tasks = {}  # future -> start_time
 
             try:
