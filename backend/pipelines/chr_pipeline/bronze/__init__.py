@@ -43,6 +43,11 @@ from .volume_management import (
     get_optimal_date_range,
     is_high_volume_herd,
 )
+from .herd_discovery import (
+    discover_herd_volumes_for_year,
+    load_previous_discovery_results,
+    classify_herd_volume,
+)
 
 __all__ = [
     # Main loading functions
@@ -69,6 +74,10 @@ __all__ = [
     "detect_herd_volume",
     "get_optimal_date_range",
     "is_high_volume_herd",
+    # Herd discovery
+    "discover_herd_volumes_for_year",
+    "load_previous_discovery_results", 
+    "classify_herd_volume",
     # Utilities
     "create_base_request",
     "parse_date",
