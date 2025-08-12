@@ -79,6 +79,8 @@ jobs:
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -237,6 +239,8 @@ jobs:
     env:
       ENVIRONMENT: production
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code

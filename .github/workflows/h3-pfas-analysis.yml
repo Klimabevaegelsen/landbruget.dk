@@ -47,6 +47,8 @@ on:
 env:
   GCS_BUCKET: landbrugsdata-raw-data
   PIPELINE_DIR: backend/pipelines/h3_pfas_exposure_pipeline
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
 jobs:
   # Prepare matrix strategy
