@@ -829,7 +829,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     f"CREATE OR REPLACE TABLE {fallback_table} AS SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return fallback_table
-            except:
+            except Exception:
                 pass
             return marker_data if isinstance(marker_data, str) else "temp_marker_input"
 

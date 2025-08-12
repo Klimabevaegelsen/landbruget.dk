@@ -303,7 +303,7 @@ class BaseSource(Generic[T], ABC):
         if hasattr(self, "conn") and self.conn:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def cleanup_resources(self):
@@ -345,7 +345,7 @@ class BaseSource(Generic[T], ABC):
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table}")
                         self.log.debug(f"🧹 Dropped table: {table}")
-                    except:
+                    except Exception:
                         pass
 
                 # Force DuckDB cleanup
@@ -354,7 +354,7 @@ class BaseSource(Generic[T], ABC):
                     # Note: PRAGMA force_checkpoint may not be available in all DuckDB versions
                     # self.conn.execute("PRAGMA force_checkpoint")
                     self.conn.execute("PRAGMA wal_autocheckpoint = 1")
-                except:
+                except Exception:
                     pass
 
                 self.log.info(f"🧹 Cleaned up {len(temp_tables)} tables")
@@ -395,7 +395,7 @@ class BaseSource(Generic[T], ABC):
                     result = self.conn.execute("PRAGMA memory_usage").fetchone()
                     if result:
                         duckdb_memory["usage_mb"] = result[0]
-                except:
+                except Exception:
                     pass
 
                 # Get table count

@@ -402,7 +402,7 @@ class FieldAreaAnalysisRedesigned:
         try:
             self.conn.execute("SELECT COUNT(*) FROM field_property_results").fetchone()
             has_properties = True
-        except:
+        except Exception:
             pass
 
         if has_properties:

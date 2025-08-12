@@ -2504,7 +2504,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             for table in temp_tables:
                 try:
                     self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
 
         except Exception:

@@ -190,7 +190,7 @@ class SchemaToGitHub:
                     count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                     if count_result:
                         context_lines.append(f"-- Row count: {count_result[0]:,}")
-                except:
+                except Exception:
                     pass
 
                 context_lines.extend(["```", ""])
