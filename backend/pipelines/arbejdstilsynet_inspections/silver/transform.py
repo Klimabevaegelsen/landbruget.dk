@@ -552,9 +552,34 @@ class SilverPipeline:
             return True
 
     def save_output(self):
-        """Save the transformed data to parquet."""
+        """Save the transformed data to parquet with enhanced GCS export."""
         try:
-            # Save to temp location first
+            # 🚀 ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
+            gcs_export_success = False
+            if self.gcs_bucket and OptimizedGCSDataAccess:
+                try:
+                    gcs_access = OptimizedGCSDataAccess()
+                    gcs_path = f"gs://{self.gcs_bucket}/silver/arbejdstilsynet_inspections/{self.timestamp}/workplace_inspections.parquet"
+                    
+                    # Convert pandas DataFrame back to DuckDB table for native export
+                    import duckdb
+                    temp_conn = duckdb.connect(":memory:")
+                    temp_conn.register("workplace_inspections_temp", self.df)
+                    
+                    # Use native GCS export with server-side compression
+                    gcs_access.export_to_gcs_native(
+                        connection=temp_conn,
+                        table_name="workplace_inspections_temp",
+                        gcs_path=gcs_path,
+                        compression="zstd"
+                    )
+                    
+                    self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                    gcs_export_success = True
+                except Exception as e:
+                    self.logger.warning(f"Native GCS export failed, using local export + upload: {e}")
+            
+            # Save to temp location first (always create local copy)
             temp_output = os.path.join(self.temp_dir, "workplace_inspections.parquet")
             self.df.to_parquet(temp_output, index=False)
 
@@ -564,8 +589,8 @@ class SilverPipeline:
 
             self.logger.info(f"✅ Silver layer saved locally to: {self.output_parquet}")
 
-            # Upload to Google Cloud Storage if bucket name is provided
-            if self.gcs_bucket:
+            # Upload to Google Cloud Storage if bucket name is provided (fallback method)
+            if self.gcs_bucket and not gcs_export_success:
                 self.upload_to_gcs()
 
             return True

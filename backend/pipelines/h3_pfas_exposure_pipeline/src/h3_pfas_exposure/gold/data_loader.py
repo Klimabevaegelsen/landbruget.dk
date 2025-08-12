@@ -22,12 +22,17 @@ class H3DataLoader:
     def _load_table_from_gcs(self, gcs_path: str, table_name: str):
         """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
         try:
-            # Use the optimized download approach with our DuckDB connection
-            with self.gcs_access._temp_download(gcs_path) as temp_file:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {table_name} AS
-                    SELECT * FROM read_parquet('{temp_file}')
-                """)
+            # 🚀 ENHANCED: Use native HMAC acceleration for faster H3 PFAS data loading
+            try:
+                self.gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
+            except Exception as e:
+                self.log.warning(f"Native loading failed for {table_name}, using fallback: {e}")
+                # Fallback to existing temp file method
+                with self.gcs_access._temp_download(gcs_path) as temp_file:
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{temp_file}')
+                    """)
             self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
 
             # Force garbage collection after loading large files
