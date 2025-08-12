@@ -1,7 +1,7 @@
 """Base class for bronze layer processing."""
 
 from .duckdb_processor import DuckDBProcessor
-from typing import Union, Optional
+from typing import Union
 from pathlib import Path
 
 class BronzeBase(DuckDBProcessor):

@@ -249,7 +249,7 @@ def migrate_read_data_pattern(
     if hasattr(gcs_access, 'query_parquet_native'):
         try:
             gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
-        except Exception as e:
+        except Exception:
             # Fallback to existing method
             gcs_access.create_table_from_gcs(table_name, gcs_path)
     else:

@@ -18,7 +18,6 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, Optional, Set
-from urllib.parse import urlparse
 
 from pydantic import Field
 from tqdm import tqdm
@@ -1012,7 +1011,6 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
     def _process_companies_chunk(self, chunk_companies: list, table_name: str, chunk_idx: int) -> None:
         """Process a chunk of companies and append to existing tables."""
-        import json
         
         json_strings = [json.dumps(company) for company in chunk_companies]
         

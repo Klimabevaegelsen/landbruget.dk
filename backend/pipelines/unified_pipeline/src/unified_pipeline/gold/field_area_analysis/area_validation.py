@@ -449,7 +449,7 @@ class FieldAreaValidator:
         try:
             # Properly prefix group columns with table aliases
             group_by_clause_detail = ", ".join([f"d.{col}" for col in group_columns])
-            group_by_clause_plain = ", ".join(group_columns)
+            ", ".join(group_columns)
             join_conditions = " AND ".join([f"d.{col} = a.{col}" for col in group_columns])
             
             validation_query = f"""

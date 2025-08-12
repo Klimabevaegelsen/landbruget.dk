@@ -13,7 +13,6 @@ The data is fetched from the vp3endelig2022 WFS service with proper error handli
 and async processing for robustness.
 """
 
-import logging
 from typing import Any, Optional
 from asyncio import Semaphore
 

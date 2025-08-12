@@ -227,7 +227,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             """)
 
             # Process data using DuckDB and calculate statistics
-            result = self.conn.execute("""
+            self.conn.execute("""
                 SELECT
                     parameter_id,
                     valid_time,
@@ -312,7 +312,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     continue
 
                 raw_data = parameter_bronze_data.get("data")
-                metadata = parameter_bronze_data.get("metadata", {})
+                parameter_bronze_data.get("metadata", {})
 
                 if not raw_data:
                     self.log.warning(f"No raw data found for parameter {parameter_id}")

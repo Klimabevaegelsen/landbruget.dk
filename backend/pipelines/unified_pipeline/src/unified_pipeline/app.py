@@ -279,7 +279,6 @@ def execute(cli_config: cli.CliConfig) -> int:
     """
     # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
     import os
-    import sys
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     print(f"🚨 APP EXECUTE: Initializing logger with level: {log_level}")
     sys.stdout.flush()  # Force flush for GitHub Actions

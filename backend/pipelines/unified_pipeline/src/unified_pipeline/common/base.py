@@ -402,7 +402,7 @@ class BaseSource(Generic[T], ABC):
                 try:
                     tables = self.conn.execute("SHOW TABLES").fetchall()
                     duckdb_memory["table_count"] = len(tables)
-                except:
+                except Exception:
                     duckdb_memory["table_count"] = 0
 
             return {
