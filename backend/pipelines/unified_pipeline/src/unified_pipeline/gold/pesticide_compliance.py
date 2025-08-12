@@ -303,10 +303,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         
         self.logger.info(f"📄 Loading BMD data from: {latest_path} (timestamp: {timestamp})")
         
-        # Load BMD data using proper GCS access pattern (like other processors)
-        with self.gcs_access._temp_download(latest_path) as temp_file:
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE bmd_data AS
+        # 🚀 ENHANCED: Load BMD data using native HMAC acceleration for faster processing
+        try:
+            # Use enhanced loading with server-side processing and filtering
+            self.gcs_access.query_parquet_native(latest_path, """
                 SELECT 
                     registrerings_nr as registration_number,
                     produktnavn as product_name,
@@ -320,10 +320,32 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     -- Additional fields for analysis
                     formulering as formulation,
                     anvendelse as application_area
-                FROM read_parquet('{temp_file}')
                 WHERE registrerings_nr IS NOT NULL
-                AND registrerings_nr != ''
-            """)
+                    AND registrerings_nr != ''
+            """, "bmd_data")
+        except Exception as e:
+            self.logger.warning(f"Native loading failed, using fallback: {e}")
+            # Fallback to original temp file method
+            with self.gcs_access._temp_download(latest_path) as temp_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE bmd_data AS
+                    SELECT 
+                        registrerings_nr as registration_number,
+                        produktnavn as product_name,
+                        aktivstofnavn_e as active_substances,
+                        produktstatus as product_status,
+                        godkendelsesdato as approval_date,
+                        udløbsdato as expiry_date,
+                        frist_for_anvendelse_og_besiddelse as restriction_date,
+                        -- Parse restriction date for comparison
+                        TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
+                        -- Additional fields for analysis
+                        formulering as formulation,
+                        verwendelse as application_area
+                    FROM read_parquet('{temp_file}')
+                    WHERE registrerings_nr IS NOT NULL
+                    AND registrerings_nr != ''
+                """)
         
         bmd_count = self.conn.execute("SELECT COUNT(*) FROM bmd_data").fetchone()[0]
         restricted_count = self.conn.execute(
@@ -836,8 +858,16 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.logger.info(f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}")
                 
                 if record_count > 0:
-                    # Save using the proper DuckDB table upload method
-                    self.gcs_access.upload_from_duckdb_table(compliance_table_name, compliance_path)
+                    # 🚀 ENHANCED: Save using native HMAC acceleration for faster uploads
+                    native_used = self.gcs_access.export_to_gcs_native(
+                        compliance_table_name, 
+                        compliance_path,
+                        compression="zstd",  # Optimal compression
+                        row_group_size=50000  # Smaller row groups for compliance data
+                    )
+                    if not native_used:
+                        # Fallback to existing method
+                        self.gcs_access.upload_from_duckdb_table(compliance_table_name, compliance_path)
                     
                     self.logger.info(f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}")
                     self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")

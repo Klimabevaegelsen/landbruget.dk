@@ -80,8 +80,8 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
                     latest_file = sorted(files, reverse=True)[0]
                 logger.info(f"📥 Loading {table_name} from: {latest_file}")
                 
-                # Use unified pipeline pattern: query_parquet_direct with shared connection
-                gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                # 🚀 ENHANCED: Use native HMAC acceleration for faster CHR data loading
+                gcs_access.query_parquet_native(latest_file, "SELECT *", table_name)
                 loaded_tables[table_name] = True
                 
                 # Log row count using shared connection

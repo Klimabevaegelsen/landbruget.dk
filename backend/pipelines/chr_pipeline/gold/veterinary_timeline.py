@@ -704,14 +704,16 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
                         logger.info(f"   {i+1}. {file_path}")
                     
                     # Load first file to establish table structure
-                    gcs_access.query_parquet_direct(valid_files[0], "SELECT *", table_name)
+                    # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
+                    gcs_access.query_parquet_native(valid_files[0], "SELECT *", table_name)
                     
                     # Union all additional files
                     for i, additional_file in enumerate(valid_files[1:], 1):
                         try:
                             # Create a temporary table for each additional file
                             temp_table = f"{table_name}_temp_{i}"
-                            gcs_access.query_parquet_direct(additional_file, "SELECT *", temp_table)
+                            # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
+                            gcs_access.query_parquet_native(additional_file, "SELECT *", temp_table)
                             
                             # Union with main table
                             gcs_access.duckdb_conn.execute(f"""
@@ -734,7 +736,8 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
                     # Single file loading (existing behavior)
                     latest_file = valid_files[0]
                     logger.info(f"📥 Loading {table_name} from: {latest_file}")
-                    gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+                    # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
+                    gcs_access.query_parquet_native(latest_file, "SELECT *", table_name)
                 
                 loaded_tables[table_name] = True
                 
