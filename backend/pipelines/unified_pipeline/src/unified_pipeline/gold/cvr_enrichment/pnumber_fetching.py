@@ -454,7 +454,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             data=table_name,
             dataset=self.config.dataset,
             bucket=self.config.bucket,
-            stage="gold"
+            stage="gold",
+            filename="pnumber_fetching.parquet"
         )
         
         # Also save locally for GitHub Actions artifact sharing

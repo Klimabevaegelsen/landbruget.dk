@@ -333,8 +333,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         
         if not local_path:
             # Fallback: use GCS path directly for local development or when artifact not available
-            self.log.info("Financial data artifact not available, skipping financial data loading")
-            return
+            self.log.info("Financial data artifact not available, using GCS path directly")
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT cvr_number, financial_data_json
@@ -366,8 +366,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         
         if not local_path:
             # Fallback: use GCS path directly for local development or when artifact not available
-            self.log.info("Address data artifact not available, skipping address data loading")
-            return
+            self.log.info("Address data artifact not available, using GCS path directly")
+            local_path = input_path
         
         result = self.conn.execute("""
             SELECT source_type, cvr_number, p_number, address_data_json
