@@ -6,6 +6,19 @@ from typing import Any
 
 import duckdb
 
+# Try to import optimized GCS access with fallback
+def _get_optimized_gcs_access():
+    """Get optimized GCS access with robust import handling."""
+    try:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+        logging.info("✅ Successfully imported optimized GCSDataAccess for BBR buildings")
+        return GCSDataAccess
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        return None
+
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
 
 class BuildingProcessor:
     """Process BBR building data in the silver layer."""
@@ -159,7 +172,30 @@ class BuildingProcessor:
         # Save processed buildings
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / "buildings_processed.geoparquet"
+        
+        # 🚀 ENHANCED: Try native GCS export first if available
+        gcs_export_success = False
+        if OptimizedGCSDataAccess:
+            try:
+                gcs_access = OptimizedGCSDataAccess()
+                timestamp = Path(output_dir).name  # Extract timestamp from output directory
+                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.geoparquet"
+                
+                # Use native GCS export with server-side compression
+                gcs_access.export_to_gcs_native(
+                    connection=conn,
+                    table_name="processed_buildings",
+                    gcs_path=gcs_path,
+                    compression="zstd",
+                    query="SELECT * FROM processed_buildings ORDER BY building_floor_area_sqm DESC"
+                )
+                
+                self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                gcs_export_success = True
+            except Exception as e:
+                self.logger.warning(f"Native GCS export failed, using local export: {e}")
 
+        # Always create local file as well (for compatibility)
         conn.execute(f"""
             COPY (
                 SELECT * FROM processed_buildings
@@ -167,7 +203,8 @@ class BuildingProcessor:
             ) TO '{output_file}' (FORMAT PARQUET)
         """)
 
-        self.logger.info(f"Saved processed buildings to: {output_file}")
+        export_location = f"GCS and local: {output_file}" if gcs_export_success else f"local: {output_file}"
+        self.logger.info(f"Saved processed buildings to: {export_location}")
 
     def close(self):
         """Close database connection."""

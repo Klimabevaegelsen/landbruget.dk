@@ -124,11 +124,16 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
                 file_display_name = Path(file_path).name if source == "local" else file_path.split("/")[-1]
                 
                 if source == "gcs":
-                    # Download from GCS and load into DuckDB
-                    with gcs_access._temp_download(file_path) as temp_file:
-                        conn.execute(
-                            f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
-                        )
+                    # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
+                    try:
+                        gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
+                    except Exception as e:
+                        print(f"Native loading failed, using fallback: {e}")
+                        # Fallback to existing temp file method
+                        with gcs_access._temp_download(file_path) as temp_file:
+                            conn.execute(
+                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                            )
                 else:
                     # Local file - use directly
                     conn.execute(
