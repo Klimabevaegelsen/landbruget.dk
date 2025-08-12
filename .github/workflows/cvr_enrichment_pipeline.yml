@@ -112,8 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-collection-data
-          path: /tmp/
-        continue-on-error: truecvr_collection_data.parquet
+          path: /tmp/cvr_collection_data.parquet
           retention-days: 1
 
   # Step 2: Company Fetching (Sequential - single job with API-level batching)
@@ -146,7 +145,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download CVR Collection Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
         if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
@@ -183,8 +181,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-company-data
-          path: /tmp/
-        continue-on-error: truecvr_company_data.parquet
+          path: /tmp/cvr_company_data.parquet
           retention-days: 1
 
   # Step 3: P-Number Fetching (Sequential - single job with API-level batching)
@@ -244,8 +241,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-pnumber-data
-          path: /tmp/
-        continue-on-error: truecvr_pnumber_data.parquet
+          path: /tmp/cvr_pnumber_data.parquet
           retention-days: 1
 
   # Step 4: Financial Documents (Sequential - process all companies)
@@ -318,8 +314,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-financial-data
-          path: /tmp/
-        continue-on-error: truecvr_financial_data.parquet
+          path: /tmp/cvr_financial_data.parquet
           retention-days: 1
 
 
@@ -399,8 +394,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-address-data
-          path: /tmp/
-        continue-on-error: truecvr_address_data.parquet
+          path: /tmp/cvr_address_data.parquet
           retention-days: 1
 
 
