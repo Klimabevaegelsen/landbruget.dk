@@ -614,7 +614,7 @@ class FieldAreaValidator:
         return results
 
 
-class ValidationException(Exception):
+class ValidationError(Exception):
     """Exception raised when area validation fails."""
 
     def __init__(self, validation_result: AreaValidationResult):

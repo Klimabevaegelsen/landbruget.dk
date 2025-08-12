@@ -10,12 +10,12 @@ import json
 import os
 import sys
 
+from drive_data_pipeline.config.cli import create_config_file
+
 # Add the parent directory to sys.path to enable imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-
-from drive_data_pipeline.config.cli import create_config_file
 
 
 def parse_args() -> argparse.Namespace:

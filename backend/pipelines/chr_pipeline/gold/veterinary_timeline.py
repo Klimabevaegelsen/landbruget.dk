@@ -322,7 +322,7 @@ def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[
             return number_candidates[0]
 
         return None
-    except:
+    except Exception:
         return None
 
 
@@ -351,7 +351,7 @@ def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[st
         result["date"] = date_candidates[0] if date_candidates else None
 
         return result
-    except:
+    except Exception:
         return {}
 
 
@@ -867,7 +867,7 @@ def create_veterinary_timeline(
             con.execute("SELECT COUNT(*) FROM fire_property_matches")
             stable_fire_parts = create_stable_fire_timeline_parts(con)
             timeline_parts.extend(stable_fire_parts)
-        except:
+        except Exception:
             logger.info("No stable fire matches available")
 
         if not timeline_parts:
@@ -977,7 +977,7 @@ def process_veterinary_timeline(
                     migrate_save_data_pattern(
                         gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp, "timeline_summary"
                     )
-                except:
+                except Exception:
                     logger.info("ℹ️ No timeline_summary table to export")
             else:
                 # Fallback to local export
