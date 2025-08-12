@@ -215,60 +215,137 @@ def get_step_input_paths(
         # We're running as part of a pipeline - use pipeline dependencies (artifacts)
         return pipeline_paths
     
-    # We're running independently - fetch latest available files from GCS
-    from unified_pipeline.util.gcs_latest_fetcher import create_gcs_fetcher
+    # We're running independently - fetch latest available files from GCS using existing utility
+    return _get_latest_input_paths_from_gcs(step, bucket, max_days_back)
+
+
+def _get_latest_input_paths_from_gcs(
+    step: CVREnrichmentStep,
+    bucket: str,
+    max_days_back: int
+) -> list[str]:
+    """
+    Get the latest available input files for a step from GCS using existing utility.
     
-    fetcher = create_gcs_fetcher(bucket)
-    
-    # Step-specific input logic with latest file fetching
-    if step == CVREnrichmentStep.COLLECTION:
-        # Collection step has no inputs (reads from all pipeline CVR collections)
-        return []
-    
-    elif step == CVREnrichmentStep.COMPANY_FETCHING:
-        # Company fetching depends on collection step
-        latest_collection = fetcher.find_latest_cvr_collection_data(max_days_back)
-        return [latest_collection] if latest_collection else []
-    
-    elif step == CVREnrichmentStep.PNUMBER_FETCHING:
-        # P-number fetching depends on company fetching
-        latest_company = fetcher.find_latest_company_data(max_days_back)
-        return [latest_company] if latest_company else []
-    
-    elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
-        # Financial documents depend on company fetching
-        latest_company = fetcher.find_latest_company_data(max_days_back)
-        return [latest_company] if latest_company else []
-    
-    elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
-        # Address geocoding depends on both company and P-number data
-        latest_company = fetcher.find_latest_company_data(max_days_back)
-        latest_pnumber = fetcher.find_latest_pnumber_data(max_days_back)
+    Args:
+        step: Pipeline step
+        bucket: GCS bucket name
+        max_days_back: Maximum days to look back
         
-        inputs = []
-        if latest_company:
-            inputs.append(latest_company)
-        if latest_pnumber:
-            inputs.append(latest_pnumber)
-        return inputs
+    Returns:
+        List of GCS paths for the latest available inputs
+    """
+    from unified_pipeline.util.gcs_access import GCSDataAccess
     
-    elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
-        # Data consolidation depends on all previous steps
-        company_data, pnumber_data, financial_data, address_data = fetcher.find_latest_consolidation_inputs(max_days_back)
+    try:
+        gcs_access = GCSDataAccess()
+        base_pattern = f"gs://{bucket}/gold/cvr_enrichment"
         
-        inputs = []
-        if company_data:
-            inputs.append(company_data)
-        if pnumber_data:
-            inputs.append(pnumber_data)
-        if financial_data:
-            inputs.append(financial_data)
-        if address_data:
-            inputs.append(address_data)
-        return inputs
-    
-    else:
+        # Step-specific input logic with latest file fetching using existing utility
+        if step == CVREnrichmentStep.COLLECTION:
+            # Collection step has no inputs (reads from all pipeline CVR collections)
+            return []
+        
+        elif step == CVREnrichmentStep.COMPANY_FETCHING:
+            # Company fetching depends on collection step
+            pattern = f"{base_pattern}/*/collection.parquet"
+            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            return [latest_file] if latest_file else []
+        
+        elif step == CVREnrichmentStep.PNUMBER_FETCHING:
+            # P-number fetching depends on company fetching
+            pattern = f"{base_pattern}/*/company_fetching.parquet"
+            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            return [latest_file] if latest_file else []
+        
+        elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
+            # Financial documents depend on company fetching
+            pattern = f"{base_pattern}/*/company_fetching.parquet"
+            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            return [latest_file] if latest_file else []
+        
+        elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
+            # Address geocoding depends on both company and P-number data
+            company_pattern = f"{base_pattern}/*/company_fetching.parquet"
+            pnumber_pattern = f"{base_pattern}/*/pnumber_fetching.parquet"
+            
+            latest_company = _find_latest_file_with_pattern(gcs_access, company_pattern, max_days_back)
+            latest_pnumber = _find_latest_file_with_pattern(gcs_access, pnumber_pattern, max_days_back)
+            
+            inputs = []
+            if latest_company:
+                inputs.append(latest_company)
+            if latest_pnumber:
+                inputs.append(latest_pnumber)
+            return inputs
+        
+        elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
+            # Data consolidation depends on all previous steps
+            patterns = [
+                f"{base_pattern}/*/company_fetching.parquet",
+                f"{base_pattern}/*/pnumber_fetching.parquet",
+                f"{base_pattern}/*/financial_documents.parquet",
+                f"{base_pattern}/*/address_geocoding.parquet"
+            ]
+            
+            inputs = []
+            for pattern in patterns:
+                latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+                if latest_file:
+                    inputs.append(latest_file)
+            return inputs
+        
+        else:
+            return []
+            
+    except Exception as e:
+        from unified_pipeline.util.log_util import Logger
+        logger = Logger.get_logger()
+        logger.warning(f"Error finding latest files from GCS: {e}")
         return []
+
+
+def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
+    """
+    Find the latest file matching a pattern using the existing GCS utility.
+    
+    Args:
+        gcs_access: GCSDataAccess instance
+        pattern: GCS file pattern to search
+        max_days_back: Maximum days to look back
+        
+    Returns:
+        Path to latest file or None
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        # Get files with timestamps using existing utility
+        files_with_timestamps = gcs_access.list_files_with_timestamps(pattern)
+        
+        if not files_with_timestamps:
+            return None
+        
+        # Filter files within the time window
+        cutoff_date = datetime.now() - timedelta(days=max_days_back)
+        recent_files = [
+            (filepath, timestamp) 
+            for filepath, timestamp in files_with_timestamps 
+            if timestamp >= cutoff_date
+        ]
+        
+        if not recent_files:
+            return None
+        
+        # Sort by timestamp (most recent first) and return the latest
+        recent_files.sort(key=lambda x: x[1], reverse=True)
+        return recent_files[0][0]  # Return the file path
+        
+    except Exception as e:
+        from unified_pipeline.util.log_util import Logger
+        logger = Logger.get_logger()
+        logger.warning(f"Error searching for pattern {pattern}: {e}")
+        return None
 
 
 def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
