@@ -72,13 +72,21 @@ shared_config.enable_independent_execution = False
 - Steps depend on outputs from the same pipeline run
 - Uses date-specific paths like `gs://bucket/gold/cvr_enrichment/2024-01-15/collection.parquet`
 
-### Independent Mode (New Default)
+### Smart Independent Mode (New Default)
 ```python  
 shared_config.enable_independent_execution = True
 shared_config.max_days_back_for_inputs = 30
 ```
-- Steps search for the latest available input files within the time window
-- Uses the GCS fetcher to find files like `gs://bucket/gold/cvr_enrichment/2024-01-10/collection.parquet` (latest within 30 days)
+
+**When running as part of a pipeline workflow:**
+- Steps first check if pipeline dependencies exist (artifacts or GCS files from current run)
+- If they exist, uses them (traditional pipeline behavior)
+- This ensures normal pipeline workflows continue to work with artifacts
+
+**When running independently:**
+- If no pipeline dependencies are found, automatically fetches latest available files from GCS
+- Searches within the configured time window (default 30 days)
+- Uses the GCS fetcher to find files like `gs://bucket/gold/cvr_enrichment/2024-01-10/collection.parquet`
 
 ## Usage Examples
 

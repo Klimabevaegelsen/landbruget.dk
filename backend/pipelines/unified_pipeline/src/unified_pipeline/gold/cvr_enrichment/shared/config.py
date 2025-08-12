@@ -177,13 +177,25 @@ def get_step_input_paths(
     """
     Get the GCS input paths for a specific pipeline step.
     
+    This function intelligently determines whether to use pipeline dependencies
+    or independent execution based on data availability:
+    
+    1. If independent_execution is disabled, always use pipeline dependencies
+    2. If independent_execution is enabled:
+       - First check if pipeline dependencies exist (artifacts or GCS files)
+       - If they exist, use them (pipeline mode)
+       - If they don't exist, fetch latest files from GCS (independent mode)
+    
+    This ensures that steps running as part of a pipeline workflow use artifacts,
+    while steps running independently fetch the latest available data.
+    
     Args:
         step: Pipeline step
         date_pattern: Date pattern for the pipeline run
         total_batches: Total number of batches (for batch-dependent steps)
         bucket: GCS bucket name
-        enable_independent_execution: Whether to fetch latest files independently
-        max_days_back: Maximum days to look back for latest files
+        enable_independent_execution: Whether to enable smart independent execution
+        max_days_back: Maximum days to look back for latest files (independent mode)
         
     Returns:
         List of GCS paths for the step inputs
@@ -192,7 +204,18 @@ def get_step_input_paths(
     if not enable_independent_execution:
         return _get_traditional_input_paths(step, date_pattern, bucket)
     
-    # Independent execution: fetch latest available files from GCS
+    # Check if we're running as part of a pipeline (artifacts available) or truly independently
+    # First try to find pipeline dependencies from the current run
+    pipeline_paths = _get_traditional_input_paths(step, date_pattern, bucket)
+    
+    # Check if pipeline dependencies exist (indicating we're part of a pipeline run)
+    pipeline_dependencies_exist = _check_pipeline_dependencies_exist(pipeline_paths)
+    
+    if pipeline_dependencies_exist:
+        # We're running as part of a pipeline - use pipeline dependencies (artifacts)
+        return pipeline_paths
+    
+    # We're running independently - fetch latest available files from GCS
     from unified_pipeline.util.gcs_latest_fetcher import create_gcs_fetcher
     
     fetcher = create_gcs_fetcher(bucket)
@@ -246,6 +269,67 @@ def get_step_input_paths(
     
     else:
         return []
+
+
+def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
+    """
+    Check if pipeline dependencies exist, indicating we're part of a pipeline run.
+    
+    This function checks for both local artifacts (GitHub Actions) and GCS files.
+    
+    Args:
+        pipeline_paths: List of expected pipeline dependency paths
+        
+    Returns:
+        True if pipeline dependencies exist, False otherwise
+    """
+    import os
+    
+    if not pipeline_paths:
+        return False  # No dependencies expected
+    
+    # Check for local artifacts first (GitHub Actions workflow)
+    local_artifact_patterns = {
+        "collection.parquet": "/tmp/cvr_collection_data.parquet",
+        "company_fetching.parquet": "/tmp/cvr_company_data.parquet", 
+        "pnumber_fetching.parquet": "/tmp/cvr_pnumber_data.parquet",
+        "financial_documents.parquet": "/tmp/cvr_financial_data.parquet",
+        "address_geocoding.parquet": "/tmp/cvr_address_data.parquet"
+    }
+    
+    # If running in GitHub Actions, check for local artifacts
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        for pipeline_path in pipeline_paths:
+            # Extract the file type from the pipeline path
+            for file_type, local_path in local_artifact_patterns.items():
+                if file_type in pipeline_path and os.path.exists(local_path):
+                    return True  # Found at least one local artifact
+        return False  # No local artifacts found
+    
+    # Check GCS files existence (for non-GitHub Actions environments)
+    try:
+        from google.cloud import storage
+        
+        # Parse bucket and path from GCS URLs
+        for pipeline_path in pipeline_paths[:1]:  # Check just the first one for efficiency
+            if pipeline_path.startswith("gs://"):
+                # Extract bucket and blob path
+                parts = pipeline_path[5:].split("/", 1)
+                if len(parts) == 2:
+                    bucket_name, blob_path = parts
+                    
+                    client = storage.Client()
+                    bucket = client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    
+                    if blob.exists():
+                        return True  # Found at least one pipeline file
+        
+        return False  # No pipeline files found
+        
+    except Exception:
+        # If we can't check GCS, assume independent execution
+        return False
 
 
 def _get_traditional_input_paths(

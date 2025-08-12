@@ -164,10 +164,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         Returns:
             List of CVR numbers to process in this batch
         """
-        if self.config.shared_config.enable_independent_execution:
-            self.log.info("Loading CVR numbers from latest collection data (independent execution mode)")
-        else:
-            self.log.info("Loading CVR numbers from collection step (pipeline dependency mode)")
+        self.log.info("Loading CVR numbers from collection step")
         
         # Get input paths from collection step (with independent execution support)
         input_paths = get_step_input_paths(
@@ -179,13 +176,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         )
         
         if not input_paths:
-            if self.config.shared_config.enable_independent_execution:
-                raise ValueError(
-                    f"No collection data found within {self.config.shared_config.max_days_back_for_inputs} days. "
-                    f"Please run the collection step first or disable independent execution."
-                )
-            else:
-                raise ValueError("No input paths found for company fetching step")
+            raise ValueError("No collection data found for company fetching step")
         
         collection_path = input_paths[0]  # Should be collection.parquet
         
