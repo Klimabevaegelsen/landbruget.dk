@@ -78,14 +78,14 @@ def load_herd_list(
     # --- Construct the request structure precisely according to WSDL/XSD ---
     try:
         # 1. Get the factory for the innermost request parameters type
-        RequestParamsFactory = besaetning_client.get_type("ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType")
-        request_params = RequestParamsFactory(
+        request_params_factory = besaetning_client.get_type("ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType")
+        request_params = request_params_factory(
             DyreArtKode=species_code, BrugsArtKode=usage_code, FraBesNr=start_herd_number
         )
 
         # 2. Get the factory for the common inbound header type (Corrected type name)
-        GLRCHRWSInfoInboundFactory = besaetning_client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(**create_base_request(username))
+        glr_chr_ws_info_inbound_factory = besaetning_client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
 
         # 3. Combine the header and request parameters into the structure expected by the operation argument
         #    We don't need a factory for the wrapping element itself.
@@ -183,14 +183,14 @@ def load_herd_details(client: Client, username: str, herd_number: int, species_c
     # Construct request using factories (similar pattern)
     try:
         # --- Use Factory for Header ---
-        GLRCHRWSInfoInboundFactory = client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(
+        glr_chr_ws_info_inbound_factory = client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(
             **create_base_request(username=username, track_id=f"load_details_{herd_number}")
         )
 
         # --- Use Factory for Request Parameters with Integers ---
-        RequestParamsFactory = client.get_type("ns0:CHR_besaetningHentStamoplysningerRequestType")
-        request_params = RequestParamsFactory(
+        request_params_factory = client.get_type("ns0:CHR_besaetningHentStamoplysningerRequestType")
+        request_params = request_params_factory(
             BesaetningsNummer=herd_number,  # Use int
             DyreArtKode=species_code,  # Use int
         )
@@ -265,7 +265,7 @@ if __name__ == "__main__":
                             if chr_number_str:
                                 try:
                                     chr_number = int(chr_number_str)
-                                except:
+                                except (ValueError, TypeError):
                                     pass
                 logger.info(f"Attempted CHR extraction from test response: {chr_number}")
 

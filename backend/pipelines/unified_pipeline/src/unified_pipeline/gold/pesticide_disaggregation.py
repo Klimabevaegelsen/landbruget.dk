@@ -2330,7 +2330,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in partial field coverage strategy: {str(e)}")
             return 0
 
-    def _disaggregate_by_adjacent_fields_single_cluster_REMOVED(self) -> int:
+    def _disaggregate_by_adjacent_fields_single_cluster_removed(self) -> int:
         """
         Strategy 4: Adjacent Fields Single Cluster using DuckDB spatial operations.
         CORRECTED VERSION: Only allocates when BOTH spatial coherence AND area match exist.

@@ -55,13 +55,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import vertexai
 from dotenv import load_dotenv
+from vertexai.generative_models import GenerativeModel, Part
 
 # Load environment variables
 load_dotenv()
-
-import vertexai
-from vertexai.generative_models import GenerativeModel, Part
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -732,10 +731,10 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
 
         try:
             return datetime.strptime(date_str, "%Y-%m-%d")
-        except:
+        except ValueError:
             try:
                 return datetime.strptime(date_str, "%d-%m-%Y")
-            except:
+            except ValueError:
                 return datetime.min
 
     def analyze_facility_documents(

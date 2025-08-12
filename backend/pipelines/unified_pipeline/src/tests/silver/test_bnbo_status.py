@@ -7,7 +7,7 @@ import pytest
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 
 # Create alias for test compatibility
-gGeo = gpd.GeoDataFrame
+g_geo = gpd.GeoDataFrame
 
 
 def get_current_working_directory() -> str:

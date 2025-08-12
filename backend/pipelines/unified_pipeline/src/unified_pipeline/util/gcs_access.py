@@ -235,12 +235,12 @@ class GCSDataAccess:
             file_size_gb = file_info["size"] / (1024**3)
 
             # Conservative limit: 8 GB (leave room for DuckDB processing)
-            MAX_FILE_SIZE_GB = 8
+            max_file_size_gb = 8
 
-            if file_size_gb > MAX_FILE_SIZE_GB:
+            if file_size_gb > max_file_size_gb:
                 raise ValueError(
                     f"File {gcs_path} is {file_size_gb:.1f} GB, "
-                    f"exceeds runner limit of {MAX_FILE_SIZE_GB} GB. "
+                    f"exceeds runner limit of {max_file_size_gb} GB. "
                     f"Consider using chunked processing or larger runners."
                 )
             return True

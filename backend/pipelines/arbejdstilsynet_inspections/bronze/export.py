@@ -264,7 +264,9 @@ class BronzePipeline:
 
                         try:
                             await powerbi_frame.locator(
-                                '//div[contains(@class, "export-data-dialog")]//*[contains(text(), "File format") or contains(@aria-label, "format")]//button'
+                                '//div[contains(@class, "export-data-dialog")]'
+                                '//*[contains(text(), "File format") or contains(@aria-label, "format")]'
+                                "//button"
                             ).click(timeout=5000)
                         except Exception:
                             await powerbi_frame.locator("mat-dialog-content pbi-dropdown button").click(timeout=5000)

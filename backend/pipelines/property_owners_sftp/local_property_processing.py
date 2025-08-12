@@ -69,7 +69,7 @@ class PropertyDataProcessor:
         if self.conn:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def detect_and_setup_crs_transformer(self, sample_geometry):

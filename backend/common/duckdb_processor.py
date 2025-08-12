@@ -17,7 +17,7 @@ import duckdb
 class SharedDuckDBProcessor:
     """
     Shared base class for DuckDB-based data processing across all pipelines.
-    
+
     This class consolidates common DuckDB operations that were previously
     duplicated across multiple pipeline implementations.
     """
@@ -25,7 +25,7 @@ class SharedDuckDBProcessor:
     def __init__(self, db_path: str = ":memory:", dataset_name: str = "data"):
         """
         Initialize DuckDB processor.
-        
+
         Args:
             db_path: Path to DuckDB database file or ":memory:" for in-memory
             dataset_name: Default name prefix for generated tables
@@ -40,7 +40,7 @@ class SharedDuckDBProcessor:
             ("spatial", "Geospatial operations"),
             ("httpfs", "HTTP/S3 file system access"),
         ]
-        
+
         for ext_name, description in extensions:
             try:
                 self.conn.execute(f"INSTALL {ext_name}")
@@ -79,9 +79,7 @@ class SharedDuckDBProcessor:
         except Exception:
             return False
 
-    def create_table_from_parquet(
-        self, parquet_path: Union[str, Path], table_name: Optional[str] = None
-    ) -> str:
+    def create_table_from_parquet(self, parquet_path: Union[str, Path], table_name: Optional[str] = None) -> str:
         """Create a table from parquet file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -92,9 +90,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_table_from_csv(
-        self, csv_path: Union[str, Path], table_name: Optional[str] = None
-    ) -> str:
+    def create_table_from_csv(self, csv_path: Union[str, Path], table_name: Optional[str] = None) -> str:
         """Create a table from CSV file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -105,9 +101,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_spatial_table(
-        self, geospatial_path: Union[str, Path], table_name: Optional[str] = None
-    ) -> str:
+    def create_spatial_table(self, geospatial_path: Union[str, Path], table_name: Optional[str] = None) -> str:
         """Create a table from geospatial file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
@@ -130,9 +124,7 @@ class SharedDuckDBProcessor:
             COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)
         """)
 
-    def create_table_from_gcs_parquet(
-        self, gcs_path: str, table_name: Optional[str] = None
-    ) -> str:
+    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: Optional[str] = None) -> str:
         """Create a table directly from GCS parquet file using native DuckDB access."""
         if table_name is None:
             table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
@@ -143,11 +135,9 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def save_table_to_gcs_parquet(
-        self, table_name: str, gcs_path: str, compression: str = "zstd", **options
-    ):
+    def save_table_to_gcs_parquet(self, table_name: str, gcs_path: str, compression: str = "zstd", **options):
         """Save table directly to GCS parquet file using native DuckDB access."""
-        copy_options = [f"FORMAT PARQUET", f"COMPRESSION {compression}"]
+        copy_options = ["FORMAT PARQUET", f"COMPRESSION {compression}"]
 
         if "row_group_size" in options:
             copy_options.append(f"ROW_GROUP_SIZE {options['row_group_size']}")
@@ -203,7 +193,7 @@ class SharedDuckDBProcessor:
 class PipelineProcessor(SharedDuckDBProcessor):
     """
     Extended processor for pipeline-specific operations.
-    
+
     This class adds pipeline-specific functionality on top of the base
     SharedDuckDBProcessor, such as logging integration and error handling.
     """
@@ -216,7 +206,7 @@ class PipelineProcessor(SharedDuckDBProcessor):
     ):
         """
         Initialize pipeline processor.
-        
+
         Args:
             db_path: Path to DuckDB database file or ":memory:" for in-memory
             dataset_name: Default name prefix for generated tables
@@ -249,11 +239,11 @@ class PipelineProcessor(SharedDuckDBProcessor):
     def safe_execute(self, query: str, description: str = "Query") -> Optional[List[Any]]:
         """
         Execute query with error handling and logging.
-        
+
         Args:
             query: SQL query to execute
             description: Description of the operation for logging
-            
+
         Returns:
             Query results or None if error occurred
         """
@@ -269,31 +259,28 @@ class PipelineProcessor(SharedDuckDBProcessor):
     def process_with_memory_monitoring(self, operation_func, description: str = "Operation"):
         """
         Execute an operation with memory monitoring.
-        
+
         Args:
             operation_func: Function to execute
             description: Description for logging
         """
         try:
             import psutil
-            
+
             process = psutil.Process()
             memory_before = process.memory_info().rss / 1024 / 1024  # MB
-            
+
             self.log_info(f"🔄 Starting {description} (Memory: {memory_before:.1f}MB)")
-            
+
             result = operation_func()
-            
+
             memory_after = process.memory_info().rss / 1024 / 1024  # MB
             memory_diff = memory_after - memory_before
-            
-            self.log_info(
-                f"✅ {description} completed "
-                f"(Memory: {memory_after:.1f}MB, Change: {memory_diff:+.1f}MB)"
-            )
-            
+
+            self.log_info(f"✅ {description} completed (Memory: {memory_after:.1f}MB, Change: {memory_diff:+.1f}MB)")
+
             return result
-            
+
         except ImportError:
             self.log_warning("psutil not available, memory monitoring disabled")
             return operation_func()

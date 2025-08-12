@@ -98,16 +98,16 @@ def test_silver_processor(test_settings, mock_bronze_data) -> None:
     with (
         patch(
             "drive_data_pipeline.silver.transformers.excel_transformer.ExcelTransformer"
-        ) as MockExcelTransformer,
+        ) as mock_excel_transformer,
         patch(
             "drive_data_pipeline.silver.transformers.pdf_transformer.PDFTransformer"
-        ) as MockPDFTransformer,
+        ) as mock_pdf_transformer,
     ):
         # Configure transformers to create mock output files
         excel_transformer = MagicMock()
         pdf_transformer = MagicMock()
-        MockExcelTransformer.return_value = excel_transformer
-        MockPDFTransformer.return_value = pdf_transformer
+        mock_excel_transformer.return_value = excel_transformer
+        mock_pdf_transformer.return_value = pdf_transformer
 
         def mock_transform(file_path, output_dir):
             # Create a mock transformed file
@@ -157,16 +157,16 @@ def test_silver_specific_subfolders(test_settings, mock_bronze_data) -> None:
     with (
         patch(
             "drive_data_pipeline.silver.transformers.excel_transformer.ExcelTransformer"
-        ) as MockExcelTransformer,
+        ) as mock_excel_transformer,
         patch(
             "drive_data_pipeline.silver.transformers.pdf_transformer.PDFTransformer"
-        ) as MockPDFTransformer,
+        ) as mock_pdf_transformer,
     ):
         # Configure transformers to create mock output files
         excel_transformer = MagicMock()
         pdf_transformer = MagicMock()
-        MockExcelTransformer.return_value = excel_transformer
-        MockPDFTransformer.return_value = pdf_transformer
+        mock_excel_transformer.return_value = excel_transformer
+        mock_pdf_transformer.return_value = pdf_transformer
 
         def mock_transform(file_path, output_dir):
             # Create a mock transformed file
@@ -206,16 +206,16 @@ def test_silver_specific_file_types(test_settings, mock_bronze_data) -> None:
     with (
         patch(
             "drive_data_pipeline.silver.transformers.excel_transformer.ExcelTransformer"
-        ) as MockExcelTransformer,
+        ) as mock_excel_transformer,
         patch(
             "drive_data_pipeline.silver.transformers.pdf_transformer.PDFTransformer"
-        ) as MockPDFTransformer,
+        ) as mock_pdf_transformer,
     ):
         # Configure transformers to create mock output files
         excel_transformer = MagicMock()
         pdf_transformer = MagicMock()
-        MockExcelTransformer.return_value = excel_transformer
-        MockPDFTransformer.return_value = pdf_transformer
+        mock_excel_transformer.return_value = excel_transformer
+        mock_pdf_transformer.return_value = pdf_transformer
 
         def mock_transform(file_path, output_dir):
             # Create a mock transformed file
@@ -253,16 +253,16 @@ def test_silver_error_handling(test_settings, mock_bronze_data) -> None:
     with (
         patch(
             "drive_data_pipeline.silver.transformers.excel_transformer.ExcelTransformer"
-        ) as MockExcelTransformer,
+        ) as mock_excel_transformer,
         patch(
             "drive_data_pipeline.silver.transformers.pdf_transformer.PDFTransformer"
-        ) as MockPDFTransformer,
+        ) as mock_pdf_transformer,
     ):
         # Configure transformers - make excel transformer fail
         excel_transformer = MagicMock()
         pdf_transformer = MagicMock()
-        MockExcelTransformer.return_value = excel_transformer
-        MockPDFTransformer.return_value = pdf_transformer
+        mock_excel_transformer.return_value = excel_transformer
+        mock_pdf_transformer.return_value = pdf_transformer
 
         def mock_pdf_transform(file_path, output_dir):
             # Create a mock transformed file

@@ -339,7 +339,8 @@ class BulkGeoDanmarkFetcher:
                 # Check if we got fewer records than requested - indicates end of dataset
                 if current_batch_size < batch_size:
                     logger.info(
-                        f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                        f"Got {current_batch_size:,} buildings "
+                        f"(less than batch size {batch_size:,}) - reached end of dataset"
                     )
                     break
 
@@ -381,7 +382,8 @@ class BulkGeoDanmarkFetcher:
             all_columns = sorted(all_columns)
 
             logger.info(
-                f"Normalizing schemas across {len(table_names)} tables with {len(all_columns)} total columns"
+                f"Normalizing schemas across {len(table_names)} tables "
+                f"with {len(all_columns)} total columns"
             )
 
             # Build normalized SELECT statements for each table
@@ -472,7 +474,7 @@ class BulkGeoDanmarkFetcher:
                         WHEN synligBygning IS NULL THEN NULL
                         WHEN synligBygning = 'true' OR synligBygning = '1' THEN true
                         WHEN synligBygning = 'false' OR synligBygning = '0' THEN false
-                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values as NULL
+                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values
                     END as synligBygning
                 FROM read_parquet(['{file_list}'], union_by_name=true)
             ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 

@@ -74,11 +74,11 @@ def load_animal_movements(
 
             # Create request structure
             logger.debug(f"🔧 Herd {herd_number}: Creating SOAP request structure...")
-            GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
-            common_header = GLRCHRWSInfoInboundFactory(**create_base_request(username))
+            glr_chr_ws_info_inbound_factory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+            common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
             logger.debug(f"✅ Herd {herd_number}: SOAP auth header created successfully")
 
-            CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+            chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
 
             # Build request parameters
             request_params_dict = {"BesaetningsNummer": herd_number}
@@ -88,7 +88,7 @@ def load_animal_movements(
                 request_params_dict["PeriodeTil"] = end_date
 
             logger.debug(f"📋 Herd {herd_number}: Request params: {request_params_dict}")
-            request_params = CHR_dyrChrBesListeRequestTypeFactory(**request_params_dict)
+            request_params = chr_dyr_chr_bes_liste_request_type_factory(**request_params_dict)
 
             # Combine into payload
             payload_content = {"GLRCHRWSInfoInbound": common_header, "Request": request_params}

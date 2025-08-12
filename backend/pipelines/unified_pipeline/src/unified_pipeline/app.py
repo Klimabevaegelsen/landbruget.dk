@@ -9,9 +9,6 @@ data pipeline application. It orchestrates different data processing stages
 import asyncio
 import importlib.util
 import os
-
-# Import legacy monolithic CVR enrichment from the specific .py file
-# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
 import sys
 
 import click
@@ -40,15 +37,6 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
-
-# Get the path to the specific cvr_enrichment.py file
-cvr_enrichment_file = os.path.join(os.path.dirname(__file__), "gold", "cvr_enrichment.py")
-spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
-cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cvr_enrichment_legacy)
-
-CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
-CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 # Import new modular CVR enrichment steps from the package directory
 from unified_pipeline.gold.cvr_enrichment.address_geocoding import (
@@ -127,6 +115,17 @@ from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfi
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
+
+# Import legacy monolithic CVR enrichment from the specific .py file
+# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
+# Get the path to the specific cvr_enrichment.py file
+cvr_enrichment_file = os.path.join(os.path.dirname(__file__), "gold", "cvr_enrichment.py")
+spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
+cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cvr_enrichment_legacy)
+
+CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
+CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 
 async def execute_pipeline_jobs(
