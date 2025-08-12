@@ -79,6 +79,8 @@ jobs:
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+      PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+      PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -237,6 +239,8 @@ jobs:
     env:
       ENVIRONMENT: production
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+      PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
