@@ -328,11 +328,28 @@ def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int)
         
         # Filter files within the time window
         cutoff_date = datetime.now() - timedelta(days=max_days_back)
-        recent_files = [
-            (filepath, timestamp) 
-            for filepath, timestamp in files_with_timestamps 
-            if timestamp >= cutoff_date
-        ]
+        recent_files = []
+        for filepath, timestamp in files_with_timestamps:
+            try:
+                # Handle timezone-aware vs timezone-naive comparison
+                if timestamp.tzinfo is not None:
+                    # timestamp is timezone-aware, make cutoff_date timezone-aware too
+                    from datetime import timezone
+                    if cutoff_date.tzinfo is None:
+                        cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+                else:
+                    # timestamp is timezone-naive, ensure cutoff_date is timezone-naive
+                    if cutoff_date.tzinfo is not None:
+                        cutoff_date = cutoff_date.replace(tzinfo=None)
+                
+                if timestamp >= cutoff_date:
+                    recent_files.append((filepath, timestamp))
+            except Exception as e:
+                from unified_pipeline.util.log_util import Logger
+                logger = Logger.get_logger()
+                logger.warning(f"Error comparing timestamps for {filepath}: {e}")
+                # Include the file anyway to avoid missing data
+                recent_files.append((filepath, timestamp))
         
         if not recent_files:
             return None
