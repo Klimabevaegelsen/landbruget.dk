@@ -77,19 +77,38 @@ shared_config.max_days_back_for_inputs = 30
 
 ## Usage Examples
 
-### Run a Single Step Independently
+### GitHub Actions Workflow
+
+**Run Full Pipeline (Default):**
+- Navigate to Actions → CVR Enrichment Pipeline → Run workflow
+- Leave "Run only specific step" empty to run the full pipeline
+
+**Run Single Step Independently:**
+- Navigate to Actions → CVR Enrichment Pipeline → Run workflow  
+- Select a specific step from "Run only specific step" dropdown
+- The step will automatically fetch the latest available data from GCS
+
+**Example Independent Steps:**
+- `company_fetching` - Fetches latest collection data from GCS
+- `pnumber_fetching` - Fetches latest company data from GCS
+- `address_geocoding` - Fetches latest company and P-number data from GCS
+- `data_consolidation` - Fetches latest data from all previous steps
+
+### Command Line (Local Development)
+
+**Run a Single Step Independently:**
 ```bash
 # Run just the company fetching step using latest collection data
 python -m unified_pipeline --source cvr_enrichment --stage company_fetching
 ```
 
-### Run with Custom Time Window
+**Run with Custom Time Window:**
 ```bash  
 # Look back 7 days instead of 30
 python -m unified_pipeline --source cvr_enrichment --stage company_fetching --max-days-back 7
 ```
 
-### Disable Independent Mode
+**Disable Independent Mode:**
 ```bash
 # Use traditional pipeline dependencies
 python -m unified_pipeline --source cvr_enrichment --stage company_fetching --no-independent-execution

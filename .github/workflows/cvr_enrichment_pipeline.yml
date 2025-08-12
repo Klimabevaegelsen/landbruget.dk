@@ -1,4 +1,6 @@
 name: CVR Enrichment Pipeline
+# Supports both full pipeline execution and independent step execution
+# Use 'run_only_step' to run a single step independently (will fetch latest data from GCS)
 
 on:
   workflow_dispatch:
@@ -16,6 +18,19 @@ on:
         description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
         required: false
         type: string
+      run_only_step:
+        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - collection
+          - company_fetching
+          - pnumber_fetching
+          - financial_documents
+          - address_geocoding
+          - data_consolidation
+        default: ''
       log_level:
         description: 'Logging level'
         type: choice
@@ -39,7 +54,7 @@ jobs:
   cvr_collection:
     name: "CVR Collection"
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.inputs.skip_steps, 'collection') }}
+    if: ${{ (github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'collection')) || github.event.inputs.run_only_step == 'collection' }}
     outputs:
       collection_success: ${{ steps.collection.outputs.success }}
     
@@ -97,7 +112,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-collection-data
-          path: /tmp/cvr_collection_data.parquet
+          path: /tmp/
+        continue-on-error: truecvr_collection_data.parquet
           retention-days: 1
 
   # Step 2: Company Fetching (Sequential - single job with API-level batching)
@@ -105,7 +121,7 @@ jobs:
     name: "Company Fetching"
     runs-on: ubuntu-latest
     needs: cvr_collection
-    if: ${{ needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching') }}
+    if: ${{ always() && ((github.event.inputs.run_only_step == '' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
     
     steps:
       - name: Checkout code
@@ -130,10 +146,13 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download CVR Collection Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-collection-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Run Company Fetching
         env:
@@ -164,15 +183,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-company-data
-          path: /tmp/cvr_company_data.parquet
+          path: /tmp/
+        continue-on-error: truecvr_company_data.parquet
           retention-days: 1
 
   # Step 3: P-Number Fetching (Sequential - single job with API-level batching)
   pnumber_fetching:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
-    needs: company_fetching
-    if: ${{ !contains(github.event.inputs.skip_steps, 'pnumber_fetching') }}
+    needs: [cvr_collection, company_fetching]
+    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
     
     steps:
       - name: Checkout code
@@ -197,10 +217,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Run P-Number Fetching
         env:
@@ -222,15 +244,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-pnumber-data
-          path: /tmp/cvr_pnumber_data.parquet
+          path: /tmp/
+        continue-on-error: truecvr_pnumber_data.parquet
           retention-days: 1
 
   # Step 4: Financial Documents (Sequential - process all companies)
   financial_documents:
     name: "Financial Documents"
     runs-on: ubuntu-latest
-    needs: company_fetching
-    if: ${{ !contains(github.event.inputs.skip_steps, 'financial_documents') }}
+    needs: [cvr_collection, company_fetching]
+    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
     
     steps:
       - name: Checkout code
@@ -255,10 +278,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Run Financial Documents
         env:
@@ -293,7 +318,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-financial-data
-          path: /tmp/cvr_financial_data.parquet
+          path: /tmp/
+        continue-on-error: truecvr_financial_data.parquet
           retention-days: 1
 
 
@@ -302,8 +328,8 @@ jobs:
   address_geocoding:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
-    needs: [company_fetching, pnumber_fetching]
-    if: ${{ !contains(github.event.inputs.skip_steps, 'address_geocoding') }}
+    needs: [cvr_collection, company_fetching, pnumber_fetching]
+    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
     
     steps:
       - name: Checkout code
@@ -328,16 +354,20 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company and P-Number Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Download P-Number Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-pnumber-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Run Address Geocoding
         run: |
@@ -369,7 +399,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cvr-address-data
-          path: /tmp/cvr_address_data.parquet
+          path: /tmp/
+        continue-on-error: truecvr_address_data.parquet
           retention-days: 1
 
 
@@ -379,7 +410,7 @@ jobs:
     name: "Data Consolidation"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding]
-    if: ${{ always() && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'data_consolidation') }}
+    if: ${{ always() && ((github.event.inputs.run_only_step == '' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'data_consolidation')) || github.event.inputs.run_only_step == 'data_consolidation') }}
     
     steps:
       - name: Checkout code
@@ -404,18 +435,23 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Download P-Number Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-pnumber-data
           path: /tmp/
+        continue-on-error: true
       
       - name: Download Financial Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-financial-data
@@ -423,6 +459,7 @@ jobs:
         continue-on-error: true  # Don't fail if financial data not available
       
       - name: Download Address Data
+        if: ${{ github.event.inputs.run_only_step == '' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-address-data
