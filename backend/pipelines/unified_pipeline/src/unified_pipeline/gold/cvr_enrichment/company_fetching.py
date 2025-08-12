@@ -166,15 +166,17 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """
         self.log.info("Loading CVR numbers from collection step")
         
-        # Get input paths from collection step
+        # Get input paths from collection step (with independent execution support)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.COMPANY_FETCHING,
             self.date_pattern,
-            bucket=self.config.bucket
+            bucket=self.config.bucket,
+            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
         if not input_paths:
-            raise ValueError("No input paths found for company fetching step")
+            raise ValueError("No collection data found for company fetching step")
         
         collection_path = input_paths[0]  # Should be collection.parquet
         
