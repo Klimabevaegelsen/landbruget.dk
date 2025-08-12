@@ -10,17 +10,15 @@ logger = logging.getLogger("drive_data_pipeline")
 # Define ANSI color codes for different log levels and components
 COLORS = {
     # Log levels
-    'DEBUG': '\033[36m',     # Cyan
-    'INFO': '\033[32m',      # Green
-    'WARNING': '\033[33m',   # Yellow
-    'ERROR': '\033[31m',     # Red
-    'CRITICAL': '\033[41m',  # Red background
-    
+    "DEBUG": "\033[36m",  # Cyan
+    "INFO": "\033[32m",  # Green
+    "WARNING": "\033[33m",  # Yellow
+    "ERROR": "\033[31m",  # Red
+    "CRITICAL": "\033[41m",  # Red background
     # Other log components
-    'DATETIME': '\033[34m',  # Blue
-    'MODULE': '\033[35m',    # Magenta
-    
-    'RESET': '\033[0m'       # Reset to default
+    "DATETIME": "\033[34m",  # Blue
+    "MODULE": "\033[35m",  # Magenta
+    "RESET": "\033[0m",  # Reset to default
 }
 
 
@@ -34,30 +32,29 @@ class ColoredFormatter(logging.Formatter):
         if levelname in COLORS:
             colored = f"{COLORS[levelname]}{levelname}{COLORS['RESET']}"
             record.levelname = colored
-            
+
         # Store the original format
         original_fmt = self._style._fmt
-        
+
         # Apply colors to other parts of the format string
         colored_fmt = original_fmt.replace(
-            "%(asctime)s", 
-            f"{COLORS['DATETIME']}%(asctime)s{COLORS['RESET']}"
+            "%(asctime)s", f"{COLORS['DATETIME']}%(asctime)s{COLORS['RESET']}"
         )
-        
+
         # Color for module:function:lineno
         module_part = "%(name)s:%(funcName)s:%(lineno)d"
         colored_module = f"{COLORS['MODULE']}{module_part}{COLORS['RESET']}"
         colored_fmt = colored_fmt.replace(module_part, colored_module)
-        
+
         # Set the colored format
         self._style._fmt = colored_fmt
-        
+
         # Format the record
         result = super().format(record)
-        
+
         # Restore the original format
         self._style._fmt = original_fmt
-        
+
         return result
 
 
@@ -97,10 +94,7 @@ def setup_logging(log_level: str = "INFO") -> None:
     console_handler.setLevel(level)
 
     # Create formatter - Remove the newline character at the end
-    format_str = (
-        "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d"
-        " - %(message)s"
-    )
+    format_str = "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
     # Use a standard time format without microseconds
     time_format = "%Y-%m-%d %H:%M:%S"
     formatter = ColoredFormatter(format_str, time_format)
@@ -115,9 +109,7 @@ def setup_logging(log_level: str = "INFO") -> None:
 
 
 def log_exception(
-    exception: Exception, 
-    level: str = "ERROR", 
-    context: dict[str, Any] | None = None
+    exception: Exception, level: str = "ERROR", context: dict[str, Any] | None = None
 ) -> None:
     """Log an exception with context.
 
@@ -133,4 +125,4 @@ def log_exception(
         context_str = ", ".join([f"{k}={v}" for k, v in context.items()])
         message = f"{message} (Context: {context_str})"
 
-    log_func(message, exc_info=True) 
+    log_func(message, exc_info=True)

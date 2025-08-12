@@ -26,6 +26,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class WetlandsBronzeConfig(BaseJobConfig):
     """
     Configuration for the Wetlands Bronze source.
@@ -71,6 +72,7 @@ class WetlandsBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for wetlands data.
@@ -93,7 +95,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
         Initialize the WetlandsBronze source.
 
         Args:
-            config (WetlandsBronzeConfig): Configuration for the data source        """
+            config (WetlandsBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:

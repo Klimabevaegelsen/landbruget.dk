@@ -32,7 +32,7 @@ SUPPORTED_MIME_TYPES = {
 class GoogleDriveFetcher:
     """Fetcher for Google Drive files."""
 
-    def __init__(self, drive_service: Resource, use_public_access: bool = False):
+    def __init__(self, drive_service: Resource, use_public_access: bool = False) -> None:
         """Initialize the fetcher.
 
         Args:

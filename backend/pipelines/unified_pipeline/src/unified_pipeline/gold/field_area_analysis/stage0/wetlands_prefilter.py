@@ -98,13 +98,14 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 f"📦 Chunk {chunk_num + 1}/{num_chunks} (offset: {offset:,}) - {progress_pct:.1f}%"
             )
 
-            # Create wetlands chunk
+            # Create wetlands chunk with deterministic ordering to prevent cross-chunk duplicates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_chunk AS
                 SELECT 
                     toerv_pct,
                     geometry
                 FROM wetlands_full
+                ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
@@ -140,16 +141,34 @@ class WetlandsPreFilter(PreFilteringStageBase):
             )
 
             # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
-        self.log.info("Adding unique IDs to filtered wetland polygons...")
+        self.log.info(
+            "Adding deterministic keys to filtered wetland polygons (and keeping legacy IDs)..."
+        )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as wetland_id,
+                -- Deterministic fragment key based on initial decomposed geometry
+                md5(CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
+                -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)
+                ROW_NUMBER() OVER (
+                    ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
+                ) AS wetland_id,
                 toerv_pct,
                 geometry,
                 ST_Area_Spheroid(geometry) as wetland_area_m2
             FROM wetlands_intersecting
         """)
+        # DIAGNOSTIC: Assert wetland_key exists immediately; fail fast to expose root cause
+        cols = [
+            r[0]
+            for r in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
+            ).fetchall()
+        ]
+        if "wetland_key" not in [c.lower() for c in cols]:
+            schema = self.conn.execute("DESCRIBE wetlands_filtered").fetchall()
+            self.log.error(f"wetlands_filtered schema: {schema}")
+            raise RuntimeError("Stage 0: wetlands_filtered missing wetland_key after creation")
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM wetlands_filtered").fetchone()[0]
 

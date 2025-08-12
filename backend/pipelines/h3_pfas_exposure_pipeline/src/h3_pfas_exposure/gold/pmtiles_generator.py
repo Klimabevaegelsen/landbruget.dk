@@ -88,7 +88,12 @@ class H3PMTilesGenerator:
             self._cleanup_temp_files_for_year(year)
             return None
 
-    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
+    def generate_kommune_pmtiles_for_year(
+        self,
+        results_table: str,
+        year: int | str,
+        kommune_boundaries_table: str = "kommune_boundaries",
+    ) -> str | None:
         """Generate PMTiles for kommune (municipality) data."""
         self.log.info(f"🏛️ Generating kommune PMTiles for year {year}")
 
@@ -112,7 +117,9 @@ class H3PMTilesGenerator:
             self.log.info(f"📊 Processing {count:,} kommuner for PMTiles generation")
 
             # Create GeoJSON for kommune data
-            geojson_path = self._create_kommune_geojson(results_table, year, kommune_boundaries_table)
+            geojson_path = self._create_kommune_geojson(
+                results_table, year, kommune_boundaries_table
+            )
             if not geojson_path:
                 return None
 
@@ -278,7 +285,7 @@ class H3PMTilesGenerator:
 
             self.conn.execute(f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt({h3_col})))::JSON as geometry,
                         json_object(
@@ -297,15 +304,15 @@ class H3PMTilesGenerator:
                             'coverage', ROUND({coverage_value}, 3),
                             'area_ha', ROUND(h3_area_ha, 3),
                             'agricultural_area_ha', ROUND(COALESCE(total_intersection_area_ha, 0), 3),
-                            
+
                             -- Use pre-calculated intensity fields (grams per hectare)
                             'pfas_intensity', ROUND({pfas_intensity_value}, 6),
                             'pesticide_intensity', ROUND({pesticide_intensity_value}, 6),
                             'diquat_intensity', ROUND({diquat_intensity_value}, 6),
                             'glyphosate_intensity', ROUND({glyphosate_intensity_value}, 6),
-                            
+
                             -- Zoom classification for level-of-detail rendering (based on total pesticide load)
-                            'zoom_class', CASE 
+                            'zoom_class', CASE
                                 WHEN {pesticide_value} > 1000 THEN 'very_high'
                                 WHEN {pesticide_value} > 100 THEN 'high'
                                 WHEN {pesticide_value} > 10 THEN 'medium'
@@ -409,7 +416,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)
@@ -490,7 +497,7 @@ class H3PMTilesGenerator:
                 # Fallback to gsutil command if google-cloud-storage is not available
                 import subprocess
 
-                result = subprocess.run(
+                subprocess.run(
                     ["gsutil", "acl", "ch", "-u", "AllUsers:R", gcs_path],
                     capture_output=True,
                     text=True,
@@ -504,7 +511,12 @@ class H3PMTilesGenerator:
             self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
             self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
 
-    def _create_kommune_geojson(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
+    def _create_kommune_geojson(
+        self,
+        results_table: str,
+        year: int | str,
+        kommune_boundaries_table: str = "kommune_boundaries",
+    ) -> str | None:
         """Create GeoJSON from kommune results table."""
         try:
             # Create temporary file for GeoJSON
@@ -524,8 +536,10 @@ class H3PMTilesGenerator:
                 tables = self.conn.execute("SHOW TABLES").fetchall()
                 table_names = [table[0] for table in tables]
                 self.log.info(f"🔍 Available tables: {table_names}")
-                
-                count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_boundaries_table}").fetchone()[0]
+
+                count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {kommune_boundaries_table}"
+                ).fetchone()[0]
                 has_kommune_boundaries = True
                 self.log.info(
                     f"✅ Using actual kommune polygon geometries from {kommune_boundaries_table} table ({count} kommuner)"
@@ -541,7 +555,9 @@ class H3PMTilesGenerator:
                     ST_AsGeoJSON(kb.geometry)::JSON
                 """
                 geometry_condition = "kb.geometry IS NOT NULL"
-                join_clause = f"LEFT JOIN {kommune_boundaries_table} kb ON r.kommune_code = kb.kommune_code"
+                join_clause = (
+                    f"LEFT JOIN {kommune_boundaries_table} kb ON r.kommune_code = kb.kommune_code"
+                )
             else:
                 # Fallback to centroids as points if boundaries table is not available
                 geometry_select = """
@@ -561,7 +577,7 @@ class H3PMTilesGenerator:
 
             query = f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         {geometry_select} as geometry,
                         json_object(
@@ -588,18 +604,18 @@ class H3PMTilesGenerator:
                             'glyphosate_applications', COALESCE(r.glyphosate_containing_applications, 0),
                             'crop_diversity', COALESCE(r.crop_diversity, 0),
                             'crop_types', COALESCE(r.crop_types, ''),
-                            
+
                             -- Classification for visualization
-                            'pfas_class', CASE 
+                            'pfas_class', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN 'very_high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN 'high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN 'medium'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 0 THEN 'low'
                                 ELSE 'none'
                             END,
-                            
+
                             -- Color coding for visualization
-                            'pfas_color', CASE 
+                            'pfas_color', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN '#8c2d04'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN '#d73027'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN '#f46d43'
@@ -710,7 +726,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)

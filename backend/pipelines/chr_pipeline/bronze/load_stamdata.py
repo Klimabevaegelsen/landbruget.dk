@@ -2,79 +2,18 @@
 
 import json
 import logging
-import os
-import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
-import certifi
-from dotenv import load_dotenv
-from requests import Session
 from zeep import Client
 from zeep.helpers import serialize_object
-from zeep.transports import Transport
-from zeep.wsse.username import UsernameToken
 
-# Import the exporter
+# Import the exporter and auth
+from .auth import create_stamdata_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
-
-# --- Constants ---
-
-# API Endpoints (WSDL URLs) - Only Stamdata needed here
-ENDPOINTS = {"stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?wsdl"}
-
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
-# --- Credential Handling ---
-
-
-def get_fvm_credentials() -> Tuple[str, str]:
-    """Get FVM username and password from environment variables."""
-    load_dotenv()  # Load environment variables from .env file
-
-    username = os.getenv("FVM_USERNAME")
-    password = os.getenv("FVM_PASSWORD")
-
-    if not username or not password:
-        raise ValueError("FVM_USERNAME and FVM_PASSWORD must be set in environment variables")
-
-    return username, password
-
-
-# --- SOAP Client Creation ---
-
-
-def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication."""
-    session = Session()
-    session.verify = certifi.where()  # Ensure CA certificates are used
-    transport = Transport(session=session)
-    try:
-        client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
-        return client
-    except Exception as e:
-        logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
-        raise
-
-
-# --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_stamdata") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Consider making SessionId and TrackID more dynamic if needed
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
 
 # --- Generic SOAP Fetcher ---
 
@@ -106,7 +45,7 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
         "Fetching species/usage combinations (ListDyrearterMedBrugsarter). This provides all species and usage types."
     )
     request = {
-        "GLRCHRWSInfoInbound": _create_base_request(username),
+        "GLRCHRWSInfoInbound": create_base_request(username),
         "Request": {},  # Empty request gets all combinations according to WSDL
     }
     # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
@@ -149,11 +88,11 @@ if __name__ == "__main__":
     logger.info("--- Starting Stamdata Load Test --- ")
 
     try:
-        # Get Credentials
-        username, password = get_fvm_credentials()
+        # Get Credentials and Client
+        username, password, certificate, private_key = get_fvm_credentials()
 
-        # Create Client
-        stamdata_client = create_soap_client(ENDPOINTS["stamdata"], username, password)
+        # Create Client with robust authentication
+        stamdata_client = create_stamdata_client()
 
         # Test load_species_usage_combinations
         logger.info("\n--- Testing load_species_usage_combinations (provides all species and usage types) ---")

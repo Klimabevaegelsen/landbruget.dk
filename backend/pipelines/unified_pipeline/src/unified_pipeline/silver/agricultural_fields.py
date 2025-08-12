@@ -377,26 +377,23 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 # First, create a mapping of problematic column names to cleaned names
                 temp_columns_info = processing_conn.execute("DESCRIBE temp_features").fetchall()
                 temp_column_names = [row[0] for row in temp_columns_info]
-                
+
                 # Build column mapping for renaming problematic columns
                 column_renames = {}
                 clean_select_parts = []
-                
+
                 for col in temp_column_names:
                     # Clean column name
                     clean_col = (
-                        col.replace(".", "_")
-                        .replace("()", "_")
-                        .replace("(", "_")
-                        .replace(")", "_")
+                        col.replace(".", "_").replace("()", "_").replace("(", "_").replace(")", "_")
                     )
-                    
+
                     if col != clean_col:  # Only rename if different
                         column_renames[col] = clean_col
                         clean_select_parts.append(f'"{col}" as {clean_col}')
                     else:
                         clean_select_parts.append(f'"{col}"')
-                
+
                 # Create features_raw with cleaned column names
                 if clean_select_parts:
                     clean_select_clause = ", ".join(clean_select_parts)
@@ -434,7 +431,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                             actual_col = cleaned_old_col
                         else:
                             continue  # Skip if neither version exists
-                    
+
                     # Apply proper type casting for area columns
                     if new_col in [
                         "area_ha",
@@ -458,7 +455,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         .replace(")", "_")
                     )
                     mapped_columns.add(cleaned_old_col)
-                
+
                 for col in available_columns:
                     if col not in mapped_columns and col not in [
                         "geometry_json",

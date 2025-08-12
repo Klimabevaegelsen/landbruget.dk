@@ -2,31 +2,19 @@
 
 import json
 import logging
-import os
-import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
-import certifi
-from dotenv import load_dotenv
-from requests import Session
 from zeep import Client
 from zeep.helpers import serialize_object
-from zeep.transports import Transport
-from zeep.wsse.username import UsernameToken
 
-# Import the exporter function
+# Import the exporter and auth
+from .auth import create_diko_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_diko")
 
-# --- Constants ---
-
-# API Endpoints (WSDL URLs)
-ENDPOINTS = {"diko": "https://ws.fvst.dk/service/DIKOWS?wsdl"}
-
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # Valid species codes for DIKO
 VALID_DIKO_SPECIES = {
@@ -36,53 +24,7 @@ VALID_DIKO_SPECIES = {
     15: "Pigs",
 }
 
-# --- Credential Handling ---
-
-
-def get_fvm_credentials() -> Tuple[str, str]:
-    """Get FVM username and password from environment variables."""
-    load_dotenv()  # Load environment variables from .env file
-
-    username = os.getenv("FVM_USERNAME")
-    password = os.getenv("FVM_PASSWORD")
-
-    if not username or not password:
-        raise ValueError("FVM_USERNAME and FVM_PASSWORD must be set in environment variables")
-
-    return username, password
-
-
-# --- SOAP Client Creation ---
-
-
-def create_soap_client(wsdl_url: str, username: str, password: str) -> Client:
-    """Create a Zeep SOAP client with WSSE authentication."""
-    # Note: Consider moving this to a shared utility module later
-    session = Session()
-    session.verify = certifi.where()  # Ensure CA certificates are used
-    transport = Transport(session=session)
-    try:
-        client = Client(wsdl_url, transport=transport, wsse=UsernameToken(username, password))
-        logger.info(f"Successfully created SOAP client for {wsdl_url}")
-        return client
-    except Exception as e:
-        logger.error(f"Failed to create SOAP client for {wsdl_url}: {e}")
-        raise
-
-
 # --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_diko") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Note: Consider moving this to a shared utility module later
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
 
 
 # --- Generic SOAP Fetcher ---
@@ -123,7 +65,7 @@ def load_diko_flytninger(client: Client, username: str, herd_number: int, specie
     # Input requires GLRCHRWSInfoInbound and Request{BesaetningsNummer, DyreArtKode}
     # Ensure parameters are strings based on successful calls in other modules
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_diko_flytninger"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_diko_flytninger"),
         "Request": {
             "BesaetningsNummer": str(herd_number),
             "DyreArtKode": str(species_code),
@@ -156,8 +98,8 @@ if __name__ == "__main__":
     # Consider adding a test with a different species (e.g., cattle=12) if available.
 
     try:
-        username, password = get_fvm_credentials()
-        diko_client = create_soap_client(ENDPOINTS["diko"], username, password)
+        username, password, certificate, private_key = get_fvm_credentials()
+        diko_client = create_diko_client()
 
         # Test load_diko_flytninger
         logger.info(f"\n--- Testing load_diko_flytninger (Herd: {TEST_HERD_NUMBER}, Species: {TEST_SPECIES_CODE}) ---")

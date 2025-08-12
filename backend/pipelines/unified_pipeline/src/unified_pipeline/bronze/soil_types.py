@@ -20,6 +20,7 @@ from pydantic import ConfigDict
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class SoilTypesBronzeConfig(BaseJobConfig):
     """
     Configuration for the Soil Types Bronze source.
@@ -52,6 +53,7 @@ class SoilTypesBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True)
 
+
 class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for soil types data.
@@ -75,7 +77,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         Initialize the SoilTypesBronze source.
 
         Args:
-            config (SoilTypesBronzeConfig): Configuration for the data source        """
+            config (SoilTypesBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
     async def _fetch_soil_types_data(self) -> Optional[Any]:

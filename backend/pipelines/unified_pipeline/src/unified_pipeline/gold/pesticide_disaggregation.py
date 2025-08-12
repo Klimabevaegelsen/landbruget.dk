@@ -58,9 +58,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInter
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-print("DEBUG: pesticide_disaggregation.py module loaded!")
 logger = logging.getLogger(__name__)
-print(f"DEBUG: Logger created: {logger}")
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
@@ -104,6 +102,12 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     # Input dataset names (what files to look for in cloud storage)
     pesticide_applications_dataset: str = "pesticides"
 
+    # Year filtering for matrix jobs (process single year instead of all years)
+    pesticide_year: Optional[int] = Field(
+        default=None,
+        description="Specific pesticide year to process (if None, processes all available years)",
+    )
+
     # Performance tuning for the database operations
     max_memory_gb: float = Field(
         default=12.0,
@@ -115,6 +119,19 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI filtering for matrix job processing.
+
+        This method sets the pesticide_year from CLI parameters to enable
+        processing of specific years for parallel matrix jobs.
+
+        Args:
+            cli_config: CLI configuration containing pesticide_year filter
+        """
+        if cli_config.pesticide_year:
+            object.__setattr__(self, "pesticide_year", cli_config.pesticide_year)
 
 
 class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig], GoldJobInterface):
@@ -185,7 +202,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             "strategy_totals": {},
             "final_total_dosage": 0.0,
             "final_total_acreage": 0.0,
-            "final_record_count": 0
+            "final_record_count": 0,
         }
 
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
@@ -201,13 +218,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             with self.gcs_access.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-
-
     def _validate_strategy_results(self, strategy_name: str, processed_count: int) -> None:
         """
         Validate results after each disaggregation strategy runs.
         Tracks cumulative progress and ensures no data corruption.
-        
+
         Args:
             strategy_name: Name of the strategy that just completed
             processed_count: Number of records processed by this strategy
@@ -219,7 +234,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Check if database connection is still valid
             if not self.duckdb_conn:
-                self.log.warning(f"⚠️ VALIDATION WARNING: No database connection for {strategy_name} validation")
+                self.log.warning(
+                    f"⚠️ VALIDATION WARNING: No database connection for {strategy_name} validation"
+                )
                 return
 
             # Get current disaggregated totals
@@ -249,16 +266,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     "record_count": strategy_stats[0] or 0,
                     "dosage": strategy_stats[1] or 0.0,
                     "acreage": strategy_stats[2] or 0.0,
-                    "original_records": strategy_stats[3] or 0
+                    "original_records": strategy_stats[3] or 0,
                 }
 
                 self.log.info(f"📊 VALIDATION: {strategy_name} completed")
-                self.log.info(f"   ✅ Strategy processed: {strategy_stats[0]:,} records from {strategy_stats[3]:,} original applications")
+                self.log.info(
+                    f"   ✅ Strategy processed: {strategy_stats[0]:,} records from {strategy_stats[3]:,} original applications"
+                )
                 self.log.info(f"   📈 Cumulative progress: {current_stats[0]:,} records")
 
                 # Simple check for major discrepancies
                 if strategy_stats[0] != processed_count:
-                    self.log.warning(f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but found {strategy_stats[0]:,} in database")
+                    self.log.warning(
+                        f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but found {strategy_stats[0]:,} in database"
+                    )
 
         except Exception as e:
             self.log.error(f"❌ VALIDATION ERROR: Failed to validate {strategy_name} results: {e}")
@@ -267,10 +288,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Map strategy names to their AllocationMethod patterns for querying."""
         strategy_patterns = {
             "Main Area Match": "Marker_ApplicationAreaToTotalFieldArea_FieldProportional",
-            "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional", 
+            "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional",
             "Partial Field Coverage": "Partial_Field_Coverage_SingleField",
             "Spatial Clustering": "Adjacent_Fields_Spatial_Cluster_AreaMatched",
-            "Ethical Best-Match": "Ethical_Best_Match_"
+            "Ethical Best-Match": "Ethical_Best_Match_",
         }
         return strategy_patterns.get(strategy_name, strategy_name)
 
@@ -284,7 +305,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Check if database connection is still valid
             if not self.duckdb_conn:
-                self.log.warning("⚠️ VALIDATION WARNING: No database connection for final integrity check")
+                self.log.warning(
+                    "⚠️ VALIDATION WARNING: No database connection for final integrity check"
+                )
                 return
 
             # Get remaining pending records (handle case where table might not exist)
@@ -311,7 +334,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM disaggregated_pesticide_applications
                 """).fetchone()
             except Exception as e:
-                self.log.warning(f"⚠️ VALIDATION WARNING: Could not query disaggregated results: {e}")
+                self.log.warning(
+                    f"⚠️ VALIDATION WARNING: Could not query disaggregated results: {e}"
+                )
                 final_stats = (0, 0.0, 0.0, 0)
 
             if pending_stats and final_stats:
@@ -330,35 +355,43 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Log simplified validation results
                 self.log.info("🎯 VALIDATION: Final Disaggregation Results")
                 self.log.info("=" * 60)
-                
-                self.log.info(f"📈 DISAGGREGATION RESULTS:")
-                self.log.info(f"   Successfully disaggregated: {unique_originals:,} original applications")
-                self.log.info(f"   Total disaggregated records: {final_count:,} (multi-field expansions)")
+
+                self.log.info("📈 DISAGGREGATION RESULTS:")
+                self.log.info(
+                    f"   Successfully disaggregated: {unique_originals:,} original applications"
+                )
+                self.log.info(
+                    f"   Total disaggregated records: {final_count:,} (multi-field expansions)"
+                )
                 self.log.info(f"   Disaggregated dosage: {final_dosage:,.2f} units")
                 self.log.info(f"   Disaggregated acreage: {final_acreage:,.2f} ha")
-                
-                self.log.info(f"📉 REMAINING UNPROCESSED:")
+
+                self.log.info("📉 REMAINING UNPROCESSED:")
                 self.log.info(f"   Pending records: {pending_count:,}")
                 self.log.info(f"   Pending dosage: {pending_dosage:,.2f} units")
                 self.log.info(f"   Pending acreage: {pending_acreage:,.2f} ha")
 
                 # Strategy breakdown
-                self.log.info(f"📋 STRATEGY BREAKDOWN:")
+                self.log.info("📋 STRATEGY BREAKDOWN:")
                 for strategy, stats in self._validation_data.get("strategy_totals", {}).items():
-                    self.log.info(f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records")
+                    self.log.info(
+                        f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records"
+                    )
 
                 # Simple validation: if we have pending records but no results, that's likely a processing failure
                 if pending_count > 0 and final_count == 0:
-                    self.log.warning(f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but 0 disaggregated results - this may indicate processing issues")
+                    self.log.warning(
+                        f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but 0 disaggregated results - this may indicate processing issues"
+                    )
 
                 self.log.info("✅ Validation completed")
 
         except Exception as e:
             self.log.error(f"❌ VALIDATION ERROR: Failed final integrity check: {e}")
 
-
-
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+        print("🚨 PESTICIDE DISAGGREGATION RUN METHOD: Starting execution")
+        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """
         THE MAIN ENTRY POINT - This is where the entire pesticide disaggregation process starts!
 
@@ -408,8 +441,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info(
             f"✅ Found {len(pesticide_field_pairs)} pesticide-field year pairs to process"
         )
+        print(f"🚨 FOUND {len(pesticide_field_pairs)} YEAR PAIRS: {pesticide_field_pairs}")
         for pest_year, field_year in pesticide_field_pairs:
             self.log.info(f"   📅 Will process: pesticide {pest_year} → field {field_year}")
+            print(f"🚨 WILL PROCESS: pesticide {pest_year} → field {field_year}")
 
         # STEP 2: INITIALIZE TRACKING VARIABLES
         # ====================================
@@ -552,7 +587,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         if failed_years > 0 and successful_years == 0 and len(pesticide_field_pairs) > 0:
             # This indicates a systematic processing failure, not just missing data
             if total_disaggregated_records == 0:
-                self.log.warning(f"⚠️ WARNING: All {failed_years} years failed to process - this may indicate systematic issues with column mapping, data schema, or processing logic")
+                self.log.warning(
+                    f"⚠️ WARNING: All {failed_years} years failed to process - this may indicate systematic issues with column mapping, data schema, or processing logic"
+                )
                 # Note: We don't fail here because this might be due to data quality issues rather than code bugs
 
         self.log.info("🎉 Pesticide disaggregation completed successfully!")
@@ -659,7 +696,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-            self.log.info(f"✅ Saved table {table_name} to gs://{self.config.bucket}/{gcs_path}")
+            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            self.log.info(f"📁 GCS Path: {full_gcs_path}")
+            print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            print(f"📁 GCS Path: {full_gcs_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
@@ -712,14 +753,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             List of (pesticide_year, field_year) tuples ready for processing
         """
         print("DEBUG: _get_pesticide_field_year_pairs called")
-        self.log.info("🔍 Discovering available pesticide and field years")
 
-        # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
-        # ==========================================
-        # Look through cloud storage for pesticide data files
-        self.log.info("📊 Scanning GCS for pesticide data...")
-        pesticide_years = self._get_available_pesticide_years()
-        self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
+        # Check if we should process only a specific year (for matrix jobs)
+        if self.config.pesticide_year:
+            self.log.info(
+                f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}"
+            )
+            print(f"🎯 MATRIX JOB: Processing only pesticide year {self.config.pesticide_year}")
+            pesticide_years = {self.config.pesticide_year}
+        else:
+            self.log.info("🔍 Discovering all available pesticide and field years")
+            # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
+            # ==========================================
+            # Look through cloud storage for pesticide data files
+            self.log.info("📊 Scanning GCS for pesticide data...")
+            pesticide_years = self._get_available_pesticide_years()
+            self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
         # STEP 2: DISCOVER AVAILABLE FIELD YEARS
         # ======================================
@@ -809,9 +858,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pesticide_path = self._read_pesticide_data_for_year(pesticide_year)
             if pesticide_path is not None:
                 datasets["pesticides"] = pesticide_path
-                self.log.info(
-                    f"✅ Successfully located pesticide data for {pesticide_year}: {pesticide_path}"
-                )
+                self.log.info(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                self.log.info(f"📁 Pesticide Data Path: {pesticide_path}")
+                print(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                print(f"📁 Pesticide Data Path: {pesticide_path}")
             else:
                 self.log.error(f"❌ No pesticide data found for year {pesticide_year}")
                 datasets["pesticides"] = None
@@ -827,9 +877,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             fields_path = self._read_fields_data_for_year(field_year)
             if fields_path is not None:
                 datasets["agricultural_fields"] = fields_path
-                self.log.info(
-                    f"✅ Successfully located agricultural fields data for {field_year}: {fields_path}"
-                )
+                self.log.info(f"✅ FIELDS INPUT: Located data for {field_year}")
+                self.log.info(f"📁 Fields Data Path: {fields_path}")
             else:
                 self.log.error(f"❌ No agricultural fields data found for year {field_year}")
                 datasets["agricultural_fields"] = None
@@ -973,7 +1022,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "strategy_totals": {},
                 "final_total_dosage": 0.0,
                 "final_total_acreage": 0.0,
-                "final_record_count": 0
+                "final_record_count": 0,
             }
 
             # STEP 1: SET UP THE DATABASE
@@ -1031,7 +1080,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ENHANCED WITH ETHICAL BEST-MATCH STRATEGY!
             # For mixed farming operations, we calculate both strategies and use whichever
             # gives the better area match - every farmer deserves the most accurate disaggregation
-            self.log.info(f"🌟 Starting ETHICAL disaggregation strategies for year {pesticide_year}")
+            self.log.info(
+                f"🌟 Starting ETHICAL disaggregation strategies for year {pesticide_year}"
+            )
             total_processed = 0
 
             # ETHICAL STRATEGY 1: MIXED FARMING BEST-MATCH (FAIRNESS FIRST!)
@@ -1039,7 +1090,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # For CVR+crop combinations with organic fields, calculate both main and non-organic
             # strategies and use whichever gives the better area match within 2% tolerance
             # This ensures every farmer gets the most accurate disaggregation possible
-            self.log.info(f"🌟 Ethical Strategy 1: Best-match for mixed farming operations")
+            self.log.info("🌟 Ethical Strategy 1: Best-match for mixed farming operations")
             mixed_combinations = self._get_mixed_farming_combinations()
             processed_ethical = self._process_mixed_farming_best_match(mixed_combinations)
             total_processed += processed_ethical
@@ -1053,7 +1104,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =========================================================
             # Process remaining conventional-only applications with the proven main strategy
             # These are CVR+crop combinations that don't have organic fields
-            self.log.info(f"🎯 Strategy 2: Main area matching for conventional-only operations")
+            self.log.info("🎯 Strategy 2: Main area matching for conventional-only operations")
             processed_main_remaining = self._disaggregate_by_marker_match()
             total_processed += processed_main_remaining
             self.log.info(
@@ -1066,7 +1117,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ==============================================
             # Handle any remaining applications that main strategy couldn't process
             # This catches edge cases and provides final cleanup
-            self.log.info(f"🎯 Strategy 3: Non-organic cleanup for remaining applications")
+            self.log.info("🎯 Strategy 3: Non-organic cleanup for remaining applications")
             processed_nonorg_cleanup = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_nonorg_cleanup
             self.log.info(
@@ -1095,7 +1146,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =======================================================
             # This strategy tried to group nearby fields and match against pesticide applications
             # Removed because it was complex and didn't provide sufficient additional coverage
-            processed_5 = 0
             self.log.info(
                 "ℹ️ Strategy 5: Spatial clustering removed for simplification - strategies 1-4 provide sufficient coverage"
             )
@@ -1302,7 +1352,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info("✅ Found is_organic column in FVM data - organic fields will be used")
         else:
             organic_farming_column = "false as organic_farming"
-            self.log.warning("⚠️ No is_organic column found in FVM data - assuming all fields are non-organic")
+            self.log.warning(
+                "⚠️ No is_organic column found in FVM data - assuming all fields are non-organic"
+            )
 
         # Check if field_uuid exists in the source data
         has_field_uuid = "field_uuid" in temp_column_names
@@ -1579,15 +1631,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 WHERE organic_farming = TRUE
                   AND field_uuid IS NOT NULL
             """).fetchall()
-            
+
             organic_field_uuids = {str(row[0]) for row in result}
-            self.log.info(f"Found {len(organic_field_uuids)} unique organic field UUIDs out of total marker fields")
-            
+            self.log.info(
+                f"Found {len(organic_field_uuids)} unique organic field UUIDs out of total marker fields"
+            )
+
             # Cache the result
             self._organic_marker_field_ids = organic_field_uuids
-            
+
             return self._organic_marker_field_ids
-            
+
         except Exception as e:
             self.log.error(f"Error querying organic fields: {e}")
             self.log.warning("Falling back to no organic fields due to query error")
@@ -1598,10 +1652,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _get_mixed_farming_combinations(self) -> Set[tuple]:
         """
         🌟 ETHICAL ENHANCEMENT: Identify CVR+crop combinations with organic fields
-        
+
         These are mixed farming operations that could benefit from dual calculation
         to determine which strategy gives the most accurate area match.
-        
+
         Returns a set of (CVR, CropCode) tuples for combinations that have organic fields.
         """
         try:
@@ -1617,11 +1671,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND crop_code IS NOT NULL 
                   AND area_ha > 0.0
             """).fetchall()
-            
+
             mixed_combinations = {(str(row[0]), int(row[1])) for row in result if row[0] and row[1]}
-            self.log.info(f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with organic fields (mixed farming)")
+            self.log.info(
+                f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with organic fields (mixed farming)"
+            )
             return mixed_combinations
-            
+
         except Exception as e:
             self.log.error(f"Error identifying mixed farming combinations: {e}")
             self.log.warning("Falling back to empty set - will use sequential processing")
@@ -1630,29 +1686,33 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _process_mixed_farming_best_match(self, mixed_combinations: Set[tuple]) -> int:
         """
         🌟 ETHICAL ENHANCEMENT: Process mixed farming applications with best-match logic
-        
+
         For applications from CVR+crop combinations that have organic fields,
         calculate both main and non-organic strategies and use whichever gives
         the better (lower error) area match within 2% tolerance.
-        
+
         This ensures each farmer gets the most accurate disaggregation possible.
-        
+
         Args:
             mixed_combinations: Set of (CVR, CropCode) tuples with organic fields
-            
+
         Returns:
             Number of applications processed
         """
         if not mixed_combinations:
             self.log.info("🤔 No mixed farming combinations found - skipping ethical best-match")
             return 0
-            
-        self.log.info(f"🎯 Starting ethical best-match processing for {len(mixed_combinations)} combinations")
-        
+
+        self.log.info(
+            f"🎯 Starting ethical best-match processing for {len(mixed_combinations)} combinations"
+        )
+
         try:
             # Create a temporary table with mixed farming applications
-            mixed_combinations_sql = ", ".join([f"('{cvr}', {crop})" for cvr, crop in mixed_combinations])
-            
+            mixed_combinations_sql = ", ".join(
+                [f"('{cvr}', {crop})" for cvr, crop in mixed_combinations]
+            )
+
             processed_count = self.duckdb_conn.execute(f"""
                 WITH MixedFarmingCombinations AS (
                     SELECT * FROM VALUES {mixed_combinations_sql} AS t(CVR, CropCode)
@@ -1771,7 +1831,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m_fields.area_ha > 0.0
             """).fetchone()[0]
-            
+
             # Process using non-organic strategy (best_strategy = 'nonorg')
             nonorg_processed = self.duckdb_conn.execute(f"""
                 WITH MixedFarmingCombinations AS (
@@ -1886,19 +1946,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND m_fields.area_ha > 0.0
                   AND m_fields.organic_farming = FALSE
             """).fetchone()[0]
-            
+
             total_processed = processed_count + nonorg_processed
-            
-                        # Remove processed applications from pending queue
-            self.duckdb_conn.execute(f"""
+
+            # Remove processed applications from pending queue
+            self.duckdb_conn.execute("""
                 DELETE FROM pending_pesticide_rows 
-                WHERE OriginalPesticideRowID IN (
+                WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT da.OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications da
                     WHERE da.AllocationMethod LIKE 'Ethical_Best_Match_%'
                 )
             """)
-            
+
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
                 SELECT 
@@ -1907,15 +1967,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM disaggregated_pesticide_applications
                 WHERE AllocationMethod LIKE 'Ethical_Best_Match_%'
             """).fetchone()
-            
+
             if best_match_stats:
                 main_wins, nonorg_wins = best_match_stats
-                self.log.info(f"🌟 Ethical best-match results: Main={main_wins:,}, Non-organic={nonorg_wins:,}")
-                self.log.info(f"✅ {nonorg_wins:,} farmers benefited from more accurate non-organic matching!")
-            
-            self.log.info(f"🎯 Ethical best-match processing completed: {total_processed:,} applications processed")
+                self.log.info(
+                    f"🌟 Ethical best-match results: Main={main_wins:,}, Non-organic={nonorg_wins:,}"
+                )
+                self.log.info(
+                    f"✅ {nonorg_wins:,} farmers benefited from more accurate non-organic matching!"
+                )
+
+            self.log.info(
+                f"🎯 Ethical best-match processing completed: {total_processed:,} applications processed"
+            )
             return total_processed
-            
+
         except Exception as e:
             self.log.error(f"Error in ethical best-match processing: {e}")
             self.log.warning("Falling back to sequential processing")
@@ -2064,7 +2130,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Use a condition that excludes nothing
                 organic_exclusion_condition = "TRUE"
             else:
-                self.log.info(f"Excluding {len(organic_field_uuids)} organic field UUIDs from Strategy 2")
+                self.log.info(
+                    f"Excluding {len(organic_field_uuids)} organic field UUIDs from Strategy 2"
+                )
                 # Use direct column check for efficiency
                 organic_exclusion_condition = "m.organic_farming = FALSE"
 
@@ -2262,7 +2330,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in partial field coverage strategy: {str(e)}")
             return 0
 
-    def _disaggregate_by_adjacent_fields_single_cluster_REMOVED(self) -> int:
+    def _disaggregate_by_adjacent_fields_single_cluster_removed(self) -> int:
         """
         Strategy 4: Adjacent Fields Single Cluster using DuckDB spatial operations.
         CORRECTED VERSION: Only allocates when BOTH spatial coherence AND area match exist.
@@ -2436,7 +2504,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             for table in temp_tables:
                 try:
                     self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
 
         except Exception:

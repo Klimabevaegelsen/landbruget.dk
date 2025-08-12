@@ -32,7 +32,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered soil types."""
         # Load agricultural fields (600K fields)
-        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw")
+        self._load_silver_dataset(
+            CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw"
+        )
 
         # Keep agricultural fields as original multipolygons for consistency with other stages
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
@@ -63,10 +65,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types AS
             SELECT 
-                soil_id,
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only keep useful Danish soil type classification
                 UNNEST(ST_Dump(geometry)).geom as geometry,
                 ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
             FROM soil_types_raw
@@ -78,7 +77,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         self.log.info(f"✅ Loaded {fields_count:,} agricultural fields (original multipolygons)")
         self.log.info(f"✅ Loaded {soil_count:,} soil type polygons (after ST_Dump)")
-        
+
         # Store input area reference for validation
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
@@ -88,10 +87,10 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 FROM agricultural_fields
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()
-            
+
             self._input_area_reference = {
                 "total_area": fields_area_stats[1] or 0,
-                "field_count": fields_area_stats[0] or 0
+                "field_count": fields_area_stats[0] or 0,
             }
         self.log.info(
             f"🚀 Processing {fields_count * soil_count:,} potential combinations (optimized)"
@@ -128,10 +127,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 f.year,
                 f.field_uuid,
                 f.field_area_m2,
-                s.soil_id,
-                s.soil_code,
-                s.soil_description,
-                s.soil_type_category,
+                s.soil_description,  -- Only keep useful soil classification (Danish soil types)
                 -- Calculate intersection geometry and area in single operation
                 ST_Intersection(f.geometry, s.geometry) as intersection_geometry,
                 ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry)) as soil_intersection_area_m2
@@ -162,13 +158,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 year,
                 field_uuid,
                 field_area_m2,
-                soil_id,
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only keep useful soil classification
                 intersection_geometry,
-                soil_intersection_area_m2,
-                (soil_intersection_area_m2 / field_area_m2) * 100 as soil_area_share_pct
+                soil_intersection_area_m2
             FROM field_soil_intersections
             WHERE 
                 -- Area filtering to remove noise (post-join, non-spatial)
@@ -190,9 +182,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # STEP 3: Create foundation data for downstream stages
         foundation_start = time.time()
-        self.log.info(
-            "STEP 3: Creating foundation data with soil_id for efficient downstream joins..."
-        )
+        self.log.info("STEP 3: Creating foundation data for downstream processing...")
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_foundation AS
@@ -202,19 +192,15 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 field_uuid,
-                soil_id,  -- Foundation data: enables ID-based joins in later stages
-                soil_code,
-                soil_description,
-                soil_type_category,
+                soil_description,  -- Only useful soil classification
                 soil_intersection_area_m2,
-                soil_area_share_pct,
                 field_area_m2,
                 intersection_geometry  -- Preserve for property-level analysis
             FROM field_soil_meaningful
             ORDER BY field_uuid, year, soil_intersection_area_m2 DESC
         """)
 
-        # STEP 4: Create simplified areas table (backward compatibility)
+        # STEP 4: Create simplified areas table (cleaned up - removed useless columns)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_areas AS
             SELECT 
@@ -223,12 +209,9 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 field_uuid,
-                soil_code,
-                soil_description,
-                soil_type_category,
-                soil_intersection_area_m2 as soil_area_m2,
-                soil_area_share_pct,
-                field_area_m2
+                soil_description,  -- Only useful soil data (8 Danish soil types)
+                soil_intersection_area_m2,  -- Area data needed for Stage 4
+                field_area_m2  -- Field area for percentage calculations in Stage 4
             FROM field_soil_foundation
         """)
 
@@ -248,13 +231,12 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Get soil type statistics
         soil_stats = self.conn.execute("""
             SELECT 
-                soil_type_category,
+                soil_description,
                 COUNT(*) as intersection_count,
                 COUNT(DISTINCT field_uuid) as field_count,
-                SUM(soil_intersection_area_m2) / 1000000 as total_area_km2,
-                AVG(soil_area_share_pct) as avg_coverage_pct
+                SUM(soil_intersection_area_m2) / 1000000 as total_area_km2
             FROM field_soil_foundation
-            GROUP BY soil_type_category
+            GROUP BY soil_description
             ORDER BY field_count DESC
         """).fetchall()
 
@@ -263,18 +245,14 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             SELECT 
                 COUNT(*) as total_intersections,
                 COUNT(DISTINCT field_uuid) as fields_with_soil,
-                AVG(soil_area_share_pct) as avg_soil_coverage,
-                COUNT(DISTINCT soil_id) as unique_soil_polygons,
-                COUNT(DISTINCT soil_code) as unique_soil_codes
+                COUNT(DISTINCT soil_description) as unique_soil_types
             FROM field_soil_foundation
         """).fetchone()
 
         (
             total_intersections,
             fields_with_soil,
-            avg_coverage,
-            unique_soil_polygons,
-            unique_soil_codes,
+            unique_soil_types,
         ) = coverage_stats
 
         stats_time = time.time() - stats_start
@@ -292,14 +270,13 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info("📊 COVERAGE STATISTICS:")
         self.log.info(f"   Total field-soil intersections: {total_intersections:,}")
         self.log.info(f"   Fields with soil data: {fields_with_soil:,}")
-        self.log.info(f"   Average soil coverage: {avg_coverage:.1f}%")
-        self.log.info(f"   Unique soil polygons: {unique_soil_polygons:,}")
-        self.log.info(f"   Unique soil codes: {unique_soil_codes:,}")
+        self.log.info(f"   Unique Danish soil types: {unique_soil_types:,}")
         self.log.info("=" * 60)
-        self.log.info("🏆 TOP SOIL CATEGORIES by field count:")
-        for soil_category, intersection_count, field_count, area_km2, avg_pct in soil_stats[:5]:
+        self.log.info("🇩🇰 DANISH SOIL TYPES by field coverage:")
+        for soil_description, intersection_count, field_count, area_km2 in soil_stats[:8]:
             self.log.info(
-                f"   {soil_category}: {field_count:,} fields, {intersection_count:,} intersections, {area_km2:.1f} km², {avg_pct:.1f}% avg coverage"
+                f"   {soil_description}: {field_count:,} fields, "
+                f"{intersection_count:,} intersections, {area_km2:.1f} km²"
             )
 
         # Clean up intermediate tables to save memory
@@ -309,10 +286,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         return {
             "total_intersections": total_intersections,
             "fields_with_soil": fields_with_soil,
-            "avg_soil_coverage": avg_coverage,
-            "unique_soil_polygons": unique_soil_polygons,
-            "unique_soil_codes": unique_soil_codes,
-            "soil_category_stats": soil_stats,
+            "unique_soil_types": unique_soil_types,
+            "soil_type_stats": soil_stats,
             "processing_time": total_time,
             "spatial_join_time": spatial_time,
             "raw_intersections": raw_intersections,
@@ -325,39 +300,39 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Save simplified areas - this is what Stage 4 expects
         self.log.info("Saving field soil areas for Stage 4 compatibility...")
         self._save_stage_output("field_soil_areas", "field_soil_intersections")
-    
+
     def _get_input_area_reference(self) -> Dict[str, Any]:
         """Get reference area statistics from input data for validation."""
-        return getattr(self, '_input_area_reference', None)
-    
+        return getattr(self, "_input_area_reference", None)
+
     def _get_main_output_table(self) -> str:
         """Get the name of the main output table for area validation."""
         return "field_soil_areas"
-    
+
     def _should_validate_areas(self) -> bool:
         """DISABLE validation for Stage 1 Soil Types - testing override mechanism."""
         self.log.info("🔍 DEBUG: _should_validate_areas called for Stage 1 Soil Types - DISABLING")
         return False
-    
+
     def _validate_stage_areas(self) -> None:
         """
         Custom validation for Stage 1: Field-Soil Intersections.
-        
+
         Standard validation fails because Stage 1 creates multiple records per field
         (one per soil intersection). We need to validate:
         1. Sum of intersection areas ≤ Sum of distinct field areas (incomplete soil coverage)
         2. Number of distinct fields = Input field count
         """
         self.log.info("🔍 DEBUG: Using CUSTOM Stage 1 SOIL validation (not base class validation)")
-        
+
         if not self._should_validate_areas() or not self.area_validator:
             return
-            
+
         input_reference = self._get_input_area_reference()
         if not input_reference:
             self.log.info("⚠️ Stage 1 validation skipped: missing input reference")
             return
-            
+
         try:
             # Get validation statistics from output table
             stats = self.conn.execute("""
@@ -377,55 +352,78 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 FROM field_soil_areas
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()
-            
+
             total_intersection_area = stats[0] or 0
             distinct_field_count = stats[1] or 0
             total_records = stats[2] or 0
             fields_with_soil_data = stats[3] or 0
-            
+
             # Validation 1: Field count preservation
             field_count_diff = distinct_field_count - input_reference["field_count"]
             field_count_valid = field_count_diff == 0
-            
+
             # Validation 2: Area coverage (intersection areas should be ≤ input areas)
             # Soil data may not provide 100% field coverage due to data gaps
             area_difference = total_intersection_area - input_reference["total_area"]
-            area_difference_pct = (area_difference / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
-            
+            area_difference_pct = (
+                (area_difference / input_reference["total_area"]) * 100
+                if input_reference["total_area"] > 0
+                else 0
+            )
+
             # Use higher tolerance (30%) and expect area reduction (≤ 0%)
             # Soil coverage is often incomplete compared to property coverage
             stage1_tolerance = 30.0  # Higher tolerance for soil data gaps
             area_valid = area_difference_pct <= 0 and abs(area_difference_pct) <= stage1_tolerance
-            
+
             # Overall validation result
             validation_passed = field_count_valid and area_valid
-            
+
             # Calculate coverage statistics
-            soil_coverage_pct = (total_intersection_area / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
-            
+            soil_coverage_pct = (
+                (total_intersection_area / input_reference["total_area"]) * 100
+                if input_reference["total_area"] > 0
+                else 0
+            )
+
             # Log results
             if validation_passed:
-                self.log.info(f"✅ Stage 1 validation PASSED (within {stage1_tolerance}% tolerance):")  
+                self.log.info(
+                    f"✅ Stage 1 validation PASSED (within {stage1_tolerance}% tolerance):"
+                )
             else:
-                self.log.error(f"❌ Stage 1 validation FAILED (exceeds {stage1_tolerance}% tolerance):")
-                
-            self.log.info(f"📊 Field Count - Input: {input_reference['field_count']:,}, Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})")
+                self.log.error(
+                    f"❌ Stage 1 validation FAILED (exceeds {stage1_tolerance}% tolerance):"
+                )
+
+            self.log.info(
+                f"📊 Field Count - Input: {input_reference['field_count']:,}, Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})"
+            )
             self.log.info(f"📊 Field Distribution - {fields_with_soil_data:,} with soil data")
             self.log.info(f"📊 Area Coverage - Input: {input_reference['total_area']:,.0f} m²")
-            self.log.info(f"📊              - Soil intersections: {total_intersection_area:,.0f} m² ({soil_coverage_pct:.1f}% coverage)")
-            self.log.info(f"📊              - Total effective: {total_intersection_area:,.0f} m² ({area_difference_pct:+.3f}%)")
-            self.log.info(f"📊 Soil Coverage Gap: {input_reference['total_area'] - total_intersection_area:,.0f} m² ({100 - soil_coverage_pct:.1f}%) expected due to soil data gaps")
-            self.log.info(f"📊 Record Creation - {total_records:,} field×soil records (~{total_records/distinct_field_count:.1f} soil types per field)")
-            
+            self.log.info(
+                f"📊              - Soil intersections: {total_intersection_area:,.0f} m² ({soil_coverage_pct:.1f}% coverage)"
+            )
+            self.log.info(
+                f"📊              - Total effective: {total_intersection_area:,.0f} m² ({area_difference_pct:+.3f}%)"
+            )
+            self.log.info(
+                f"📊 Soil Coverage Gap: {input_reference['total_area'] - total_intersection_area:,.0f} m² ({100 - soil_coverage_pct:.1f}%) expected due to soil data gaps"
+            )
+            self.log.info(
+                f"📊 Record Creation - {total_records:,} field×soil records (~{total_records / distinct_field_count:.1f} soil types per field)"
+            )
+
             # Handle validation failure
             if not validation_passed:
                 error_msg = f"Stage 1 validation failed - Field count valid: {field_count_valid}, Area valid: {area_valid}"
                 if self.validation_config.fail_on_validation_error:
                     from ..area_validation import ValidationException
+
                     raise ValidationException(error_msg)
                 else:
                     self.log.warning(f"⚠️ {error_msg} but continuing")
-                    
+
         except Exception as e:
             error_msg = f"❌ Stage 1 validation error: {str(e)}"
             if self.validation_config.fail_on_validation_error:

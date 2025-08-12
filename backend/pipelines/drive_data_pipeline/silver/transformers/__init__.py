@@ -4,6 +4,7 @@ from .advanced_pdf_transformer import AdvancedPDFTransformer
 from .base import BaseTransformer, TransformResult
 from .excel_transformer import ExcelTransformer
 from .pdf_transformer import PDFTransformer
+from .work_permits_transformer import WorkPermitsTransformer
 
 __all__ = [
     "BaseTransformer",
@@ -11,4 +12,5 @@ __all__ = [
     "ExcelTransformer",
     "PDFTransformer",
     "AdvancedPDFTransformer",
-] 
+    "WorkPermitsTransformer",
+]

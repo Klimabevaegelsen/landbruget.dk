@@ -44,17 +44,56 @@ def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
     """Get DuckDB connection with gcsfs registered (6x faster than HTTPFS)."""
     conn = duckdb.connect()
 
-    # Register gcsfs filesystem for direct gs:// URL access
-    try:
-        from fsspec import filesystem
+    # Try native HMAC first (fastest), fallback to gcsfs
+    if _setup_native_gcs_auth(conn):
+        logger.info("✅ DuckDB configured with native GCS HMAC authentication")
+    else:
+        # Fallback to gcsfs integration
+        try:
+            from fsspec import filesystem
 
-        fs = filesystem("gs")
-        conn.register_filesystem(fs)
-        logger.info("✅ DuckDB configured with gcsfs integration")
-    except Exception as e:
-        logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
+            fs = filesystem("gs")
+            conn.register_filesystem(fs)
+            logger.info("✅ DuckDB configured with gcsfs integration (fallback)")
+        except Exception as e:
+            logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
 
     return conn
+
+
+def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
+    """
+    Setup native GCS HMAC authentication if credentials are available.
+
+    Returns:
+        True if native authentication was configured successfully, False otherwise.
+    """
+    try:
+        # Install and load httpfs extension
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+
+        # Check for HMAC credentials
+        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+        if gcs_access_key and gcs_secret_key:
+            # Create persistent GCS secret for native access
+            conn.execute(f"""
+                CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
+                    TYPE GCS,
+                    KEY_ID '{gcs_access_key}',
+                    SECRET '{gcs_secret_key}'
+                );
+            """)
+            return True
+        else:
+            logger.info("ℹ️  GCS HMAC credentials not found, using gcsfs fallback")
+            return False
+
+    except Exception as e:
+        logger.warning(f"Could not setup native GCS authentication: {e}")
+        return False
 
 
 class ResourceMonitor:
@@ -67,7 +106,7 @@ class ResourceMonitor:
     def check_resources(self, operation_name: str) -> dict:
         """Check current resource usage with GitHub Actions compatibility."""
         import os
-        
+
         # GITHUB ACTIONS FIX: Skip resource monitoring entirely in CI environment
         if os.getenv("GITHUB_ACTIONS") == "true":
             return {
@@ -76,7 +115,7 @@ class ResourceMonitor:
                 "memory_percent": 0.0,
                 "disk_percent": 0.0,
             }
-        
+
         # Normal resource monitoring for local/non-CI environments
         import psutil
 
@@ -134,6 +173,7 @@ class GCSDataAccess:
             self.log.info("✅ GCSDataAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
+        self._native_gcs_available = self._check_native_gcs_support()
 
     def _configure_duckdb(self):
         """
@@ -166,6 +206,28 @@ class GCSDataAccess:
         except Exception as e:
             logger.warning(f"DuckDB configuration warning: {e}")
 
+    def _check_native_gcs_support(self) -> bool:
+        """Check if native GCS access is available."""
+        try:
+            # Check if httpfs extension is loaded
+            result = self.duckdb_conn.execute(
+                "SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs'"
+            ).fetchall()
+            if not result:
+                return False
+
+            # Check if GCS secret exists
+            try:
+                secrets = self.duckdb_conn.execute("SELECT name FROM duckdb_secrets()").fetchall()
+                return any("gcs" in s[0].lower() for s in secrets)
+            except Exception:
+                # Some DuckDB versions don't support listing secrets
+                return bool(os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"))
+
+        except Exception as e:
+            self.log.debug(f"Native GCS check failed: {e}")
+            return False
+
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""
         try:
@@ -173,12 +235,12 @@ class GCSDataAccess:
             file_size_gb = file_info["size"] / (1024**3)
 
             # Conservative limit: 8 GB (leave room for DuckDB processing)
-            MAX_FILE_SIZE_GB = 8
+            max_file_size_gb = 8
 
-            if file_size_gb > MAX_FILE_SIZE_GB:
+            if file_size_gb > max_file_size_gb:
                 raise ValueError(
                     f"File {gcs_path} is {file_size_gb:.1f} GB, "
-                    f"exceeds runner limit of {MAX_FILE_SIZE_GB} GB. "
+                    f"exceeds runner limit of {max_file_size_gb} GB. "
                     f"Consider using chunked processing or larger runners."
                 )
             return True
@@ -194,7 +256,7 @@ class GCSDataAccess:
             temp_file = None
             try:
                 # Check available space before download
-                free_space = self.monitor.check_resources("pre_download")["disk_gb"]
+                self.monitor.check_resources("pre_download")["disk_gb"]
 
                 # Check file size constraints
                 self.check_file_size_limits(gcs_path)
@@ -373,6 +435,127 @@ class GCSDataAccess:
 
         self.monitor.check_resources("post_gcs_to_gcs")
         self.log.info(f"✅ Processed {input_gcs_path} → {output_gcs_path} with zero  conversions")
+
+    def query_parquet_native(
+        self, gcs_path: str, query: str = "SELECT *", table_name: str = "native_result"
+    ) -> str:
+        """
+        ✅ ULTIMATE PERFORMANCE: Query GCS parquet directly using native DuckDB HMAC access.
+
+        This bypasses all temporary files and streams directly from GCS.
+        Falls back to current method if native access is unavailable.
+
+        Args:
+            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            query: SQL query to execute
+            table_name: Name for the result table
+
+        Returns:
+            Table name containing the results
+        """
+        if self._native_gcs_available:
+            self.log.info(f"🚀 Using native GCS access for {gcs_path}")
+            self.monitor.check_resources("start_native_query")
+
+            try:
+                # Direct native access - no temp files!
+                # Handle different query patterns properly
+                if query.strip().upper().startswith("SELECT"):
+                    # Parse SELECT query to extract WHERE clause if present
+                    query_upper = query.upper()
+                    if "FROM" in query_upper:
+                        # Complete SELECT with FROM - replace the FROM source
+                        full_query = f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            {query.replace("FROM read_parquet", f"FROM read_parquet('{gcs_path}')")}
+                        """
+                    elif "WHERE" in query_upper:
+                        # SELECT with WHERE but no FROM - split and reassemble
+                        where_start = query_upper.find("WHERE")
+                        select_part = query[:where_start].strip()
+                        where_part = query[where_start:].strip()
+                        full_query = f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            {select_part} FROM read_parquet('{gcs_path}')
+                            {where_part}
+                        """
+                    else:
+                        # Simple SELECT with no WHERE or FROM
+                        full_query = f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            {query} FROM read_parquet('{gcs_path}')
+                        """
+                else:
+                    # WHERE clause or other fragment - build full SELECT
+                    where_clause = (
+                        query if query.strip() and query.strip().upper() != "SELECT *" else ""
+                    )
+                    full_query = f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{gcs_path}')
+                        {where_clause}
+                    """
+                self.duckdb_conn.execute(full_query)
+
+                # Log success
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                self.log.info(f"✅ Native query created table {table_name} with {count:,} rows")
+                self.monitor.check_resources("post_native_query")
+                return table_name
+
+            except Exception as e:
+                self.log.warning(f"Native GCS access failed, falling back to temp file method: {e}")
+                # Fall through to existing method
+
+        # Fallback to existing temp file method
+        return self.query_parquet_direct(gcs_path, query, table_name)
+
+    def export_to_gcs_native(self, table_name: str, gcs_path: str, **parquet_options) -> bool:
+        """
+        ✅ ULTIMATE PERFORMANCE: Export table directly to GCS using native DuckDB HMAC access.
+
+        This bypasses all temporary files and streams directly to GCS.
+        Falls back to current method if native access is unavailable.
+
+        Args:
+            table_name: Name of the table to export
+            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            **parquet_options: Parquet export options
+
+        Returns:
+            True if native export was used, False if fallback was used
+        """
+        if self._native_gcs_available:
+            self.log.info(f"🚀 Using native GCS export to {gcs_path}")
+            self.monitor.check_resources("start_native_export")
+
+            try:
+                # Build COPY options
+                copy_options = ["FORMAT PARQUET"]
+                compression = parquet_options.get("compression", "zstd")
+                copy_options.append(f"COMPRESSION {compression}")
+
+                if "row_group_size" in parquet_options:
+                    copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+
+                options_str = ", ".join(copy_options)
+
+                # Direct native export - no temp files!
+                self.duckdb_conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
+
+                # Log success
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                self.log.info(f"✅ Native export saved {count:,} rows to {gcs_path}")
+                self.monitor.check_resources("post_native_export")
+                return True
+
+            except Exception as e:
+                self.log.warning(f"Native GCS export failed, falling back to temp file method: {e}")
+                # Fall through to existing method
+
+        # Fallback to existing method
+        self.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+        return False
 
     def query_multiple_direct(
         self, gcs_pattern: str, table_name: str = "combined_table", query: str = "SELECT *"
@@ -672,7 +855,7 @@ class GCSDataAccess:
                 # Get file info including timestamp
                 file_info = self.fs.info(file_path)
                 mtime = file_info.get("mtime", 0)
-                
+
                 # Handle different mtime types from gcsfs
                 if isinstance(mtime, datetime.datetime):
                     # mtime is already a datetime object
@@ -683,7 +866,7 @@ class GCSDataAccess:
                 else:
                     # No valid timestamp available
                     timestamp = datetime.datetime.now()
-                    
+
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")

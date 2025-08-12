@@ -298,7 +298,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # ✅ MIGRATION: Handle DuckDB table name (string) from bronze layer
         if isinstance(raw_data, str):
             # raw_data is a DuckDB table name from bronze layer
-            raw_df_table = raw_data
             # Get row count to check if empty
             row_count = self.conn.execute(f"SELECT COUNT(*) FROM {raw_data}").fetchone()[0]
             if row_count == 0:

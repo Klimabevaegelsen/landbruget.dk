@@ -193,9 +193,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             "SELECT project_id, (unnest(ST_Dump(geometry))).geom as geom",
         )
 
-        # Wetlands
+        # Wetlands - now using dissolved version with preserved peat percentages
         self._load_dataset(
-            "wetlands", self.config.wetlands_dataset, "SELECT wetland_id, geometry as geom"
+            "wetlands",
+            self.config.wetlands_dataset,
+            "SELECT wetland_id, toerv_pct, geometry as geom",
         )
 
         # Properties (for later chunked processing)

@@ -502,8 +502,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
             # Create spatial table with wetland IDs using ORIGINAL geometry (before transformation)
             # Handle overlapping peat percentages by prioritizing higher percentages
-            self.log.info("Handling overlapping peat percentage areas - prioritizing higher percentages...")
-            
+            self.log.info(
+                "Handling overlapping peat percentage areas - prioritizing higher percentages..."
+            )
+
             # First, create a staging table with all wetlands
             conn.execute(f"""
                 CREATE TABLE wetlands_staging AS
@@ -515,11 +517,15 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     geometry
                 FROM {input_table_name}
             """)
-            
+
             # Create index to improve spatial query performance
-            conn.execute("CREATE INDEX idx_wetlands_staging_geometry ON wetlands_staging USING RTREE (geometry)")
-            
-            # Handle peat percentage overlaps: >12% takes priority over 6-12%
+            conn.execute(
+                "CREATE INDEX idx_wetlands_staging_geometry ON wetlands_staging USING RTREE (geometry)"
+            )
+
+            # Handle peat percentage overlaps using SPATIAL_JOIN operator (PR #545)
+            # Strategy: Exclude overlapping 6-12% areas entirely, keep >12% priority
+
             # Step 1: Keep all >12% areas unchanged
             conn.execute("""
                 CREATE TABLE wetlands_high_peat AS
@@ -527,29 +533,20 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM wetlands_staging
                 WHERE toerv_pct = '>12'
             """)
-            
-            # Step 2: For 6-12% areas, remove overlaps with >12% areas using ST_Difference
+
+            # Step 2: Keep only 6-12% areas that DON'T overlap with >12% areas
+            # Uses ST_Intersects in JOIN to trigger optimized SPATIAL_JOIN operator
             conn.execute("""
                 CREATE TABLE wetlands_medium_peat AS
-                SELECT 
-                    ws.temp_id,
-                    ws.id,
-                    ws.gridcode,
-                    ws.toerv_pct,
-                    CASE 
-                        WHEN high_peat_union.geometry IS NOT NULL THEN
-                            ST_Difference(ws.geometry, high_peat_union.geometry)
-                        ELSE
-                            ws.geometry
-                    END as geometry
+                SELECT ws.temp_id, ws.id, ws.gridcode, ws.toerv_pct, ws.geometry
                 FROM wetlands_staging ws
-                LEFT JOIN (
-                    SELECT ST_Union_Agg(geometry) as geometry
-                    FROM wetlands_high_peat
-                ) high_peat_union ON ST_Intersects(ws.geometry, high_peat_union.geometry)
                 WHERE ws.toerv_pct = '6-12'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM wetlands_high_peat hp 
+                      WHERE ST_Intersects(ws.geometry, hp.geometry)
+                  )
             """)
-            
+
             # Step 3: Keep all other peat percentage areas unchanged
             conn.execute("""
                 CREATE TABLE wetlands_other_peat AS
@@ -557,8 +554,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 FROM wetlands_staging
                 WHERE toerv_pct NOT IN ('>12', '6-12')
             """)
-            
-            # Step 4: Combine all areas and filter out empty geometries from ST_Difference operations
+
+            # Step 4: Combine all non-overlapping areas (no complex geometry filtering needed)
             conn.execute("""
                 CREATE TABLE wetlands_spatial AS
                 SELECT 
@@ -571,29 +568,34 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_high_peat
                     UNION ALL
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_medium_peat
-                    WHERE NOT ST_IsEmpty(geometry) AND ST_Area(geometry) > 1  -- Keep areas > 1 m²
                     UNION ALL
                     SELECT id, gridcode, toerv_pct, geometry FROM wetlands_other_peat
                 ) combined_wetlands
             """)
-            
+
             # Clean up temporary tables
             conn.execute("DROP TABLE wetlands_staging")
             conn.execute("DROP TABLE wetlands_high_peat")
-            conn.execute("DROP TABLE wetlands_medium_peat")  
+            conn.execute("DROP TABLE wetlands_medium_peat")
             conn.execute("DROP TABLE wetlands_other_peat")
-            
+
             # Log the overlap resolution results
             original_count = conn.execute(f"SELECT COUNT(*) FROM {input_table_name}").fetchone()[0]
             processed_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial").fetchone()[0]
-            high_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'").fetchone()[0]
-            medium_peat_count = conn.execute("SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'").fetchone()[0]
-            
-            self.log.info(f"✅ Peat overlap resolution completed:")
+            high_peat_count = conn.execute(
+                "SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '>12'"
+            ).fetchone()[0]
+            medium_peat_count = conn.execute(
+                "SELECT COUNT(*) FROM wetlands_spatial WHERE toerv_pct = '6-12'"
+            ).fetchone()[0]
+
+            self.log.info(
+                "✅ Peat overlap resolution completed using SPATIAL_JOIN optimization (PR #545):"
+            )
             self.log.info(f"   Original features: {original_count:,}")
             self.log.info(f"   Processed features: {processed_count:,}")
             self.log.info(f"   >12% peat areas: {high_peat_count:,}")
-            self.log.info(f"   6-12% peat areas after deduplication: {medium_peat_count:,}")
+            self.log.info(f"   6-12% peat areas (non-overlapping): {medium_peat_count:,}")
 
             # ✅ DuckDB-spatial optimization: No explicit indexing needed
             # DuckDB spatial extension automatically creates temporary spatial indexes
@@ -754,8 +756,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         CREATE TABLE wetlands_dissolved_temp (
                             wetland_id INTEGER,
                             final_group_id INTEGER,
-                            merged_count INTEGER,
-                            geometry GEOMETRY
+                            geometry GEOMETRY,
+                            dominant_toerv_pct VARCHAR
                         )
                     """)
 
@@ -772,8 +774,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                             SELECT 
                                 ROW_NUMBER() OVER () + {offset} as wetland_id,
                                 final_group_id,
-                                COUNT(*) as merged_count,
-                                ST_Union_Agg(ws.geometry) as geometry
+                                ST_Union_Agg(ws.geometry) as geometry,
+                                -- Select dominant peat percentage with >12% priority
+                                CASE 
+                                    WHEN bool_or(ws.toerv_pct = '>12') THEN '>12'
+                                    WHEN bool_or(ws.toerv_pct = '6-12') THEN '6-12'
+                                    ELSE mode(ws.toerv_pct)  -- Most frequent for other values
+                                END as dominant_toerv_pct
                             FROM wetland_groups wg
                             JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
                             WHERE final_group_id >= {offset + 1} AND final_group_id <= {batch_end}
@@ -787,8 +794,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         SELECT 
                             ROW_NUMBER() OVER () as wetland_id,
                             final_group_id,
-                            COUNT(*) as merged_count,
-                            ST_Union_Agg(ws.geometry) as geometry
+                            ST_Union_Agg(ws.geometry) as geometry,
+                            -- Select dominant peat percentage with >12% priority
+                            CASE 
+                                WHEN bool_or(ws.toerv_pct = '>12') THEN '>12'
+                                WHEN bool_or(ws.toerv_pct = '6-12') THEN '6-12'
+                                ELSE mode(ws.toerv_pct)  -- Most frequent for other values
+                            END as dominant_toerv_pct
                         FROM wetland_groups wg
                         JOIN wetlands_spatial ws ON wg.wetland_id = ws.wetland_id
                         GROUP BY final_group_id
@@ -802,19 +814,22 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     SELECT 
                         wetland_id,
                         wetland_id as final_group_id,
-                        1 as merged_count,
-                        geometry
+                        geometry,
+                        toerv_pct as dominant_toerv_pct
                     FROM wetlands_spatial
                 """)
 
-            # Create final dissolved table
+            # Create final dissolved table WITH PEAT PERCENTAGE PRESERVATION
             dissolved_table_name = f"{dataset}_dissolved"
             conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
+
+            # Create final dissolved table - just wetland_id, geometry, and toerv_pct
             conn.execute(f"""
                 CREATE TABLE {dissolved_table_name} AS
                 SELECT 
                     wetland_id,
-                    geometry
+                    geometry,
+                    dominant_toerv_pct as toerv_pct
                 FROM wetlands_dissolved_temp
                 ORDER BY wetland_id
             """)
@@ -838,7 +853,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             self.log.error(f"Error during DuckDB-spatial dissolve operation: {str(e)}")
             raise e
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[dict[str, Any]]:
         """
         Run the wetlands silver layer processing pipeline.
 
@@ -855,7 +870,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         The method handles error conditions at each step and logs progress.
 
         Returns:
-            None
+            dict[str, Any]: Success information including dataset name, timestamps, and status
+            None: If processing failed
 
         Note:
             This is the main entry point for the silver layer processing of wetlands data.
@@ -873,7 +889,12 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
                     # Create table directly without  conversion
                     conn.execute(
-                        "CREATE OR REPLACE TABLE temp_raw_data (payload VARCHAR, source VARCHAR, created_at TIMESTAMP, updated_at TIMESTAMP)"
+                        """CREATE OR REPLACE TABLE temp_raw_data (
+                            payload VARCHAR, 
+                            source VARCHAR, 
+                            created_at TIMESTAMP, 
+                            updated_at TIMESTAMP
+                        )"""
                     )
 
                     # Insert data directly into table
@@ -889,14 +910,14 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                     self.log.error(
                         f"Expected list of XML strings from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
                 raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
                 if raw_data is None:
                     self.log.error("Failed to read raw data")
-                    return
+                    return None
 
             self.log.info("Read raw data successfully")
 
@@ -911,7 +932,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             table_name = self._process_xml_data(processing_input)
             if table_name is None:
                 self.log.error("Failed to process raw data")
-                return
+                return None
             self.log.info("Processed raw data successfully")
 
             # Note: Dissolved table is created within _process_xml_data before coordinate transformation
@@ -926,3 +947,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 "silver",
             )
             self.log.info("Saved processed data successfully")
+
+            # Return success information for the main app
+            return {
+                "dataset": self.config.dataset,
+                "processed_at": self.conn.execute("SELECT current_timestamp")
+                .fetchone()[0]
+                .isoformat(),
+                "status": "completed",
+                "tables_created": [self.config.dataset, f"{self.config.dataset}_dissolved"],
+            }
