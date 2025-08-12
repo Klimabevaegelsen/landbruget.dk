@@ -64,6 +64,7 @@ class DMIBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True)
 
+
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
 
@@ -152,6 +153,7 @@ class DMIApiClient:
                 "end_time": end_time.isoformat(),
             }
 
+
 class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for DMI climate data.
@@ -173,7 +175,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         Initialize the DMIBronze source.
 
         Args:
-            config (DMIBronzeConfig): Configuration for the data source        """
+            config (DMIBronzeConfig): Configuration for the data source"""
         super().__init__(config)
         self.api_client = DMIApiClient(config)
 
@@ -318,7 +320,9 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
             # Calculate time range
             start_time, end_time = self._calculate_time_range()
             years_span = end_time.year - start_time.year + 1
-            self.log.info(f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)")
+            self.log.info(
+                f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)"
+            )
 
             # Create semaphore to limit concurrent requests
             semaphore = asyncio.Semaphore(self.config.max_concurrent_fetches)
@@ -331,7 +335,9 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             # Fetch data for all parameters concurrently
             async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=600, connect=60, sock_read=300)  # Increased timeout for larger monthly datasets
+                timeout=aiohttp.ClientTimeout(
+                    total=600, connect=60, sock_read=300
+                )  # Increased timeout for larger monthly datasets
             ) as session:
                 tasks = [
                     fetch_with_semaphore(session, parameter_id)

@@ -176,7 +176,7 @@ async def _fetch_spf_su_for_herd(
 
                             json_response = json.loads(response_text)
                             logger.warning(f"  Parsed JSON response: {json_response}")
-                        except:
+                        except json.JSONDecodeError:
                             logger.warning("  Response is not valid JSON")
                     elif _fetch_spf_su_for_herd.error_counts[status_code] == 4:
                         logger.warning(

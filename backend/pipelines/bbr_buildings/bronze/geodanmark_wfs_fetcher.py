@@ -24,7 +24,7 @@ from config import Settings
 class GeoDanmarkWFSFetcher:
     """Fetches sample data from GeoDanmark WFS for building cross-reference."""
 
-    def __init__(self, settings: Settings, logger: logging.Logger):
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
         """
         Initialize the GeoDanmark WFS fetcher.
 
@@ -70,7 +70,9 @@ class GeoDanmarkWFSFetcher:
 
         self.logger.info("Using authenticated access to GeoDanmark WFS")
 
-    def fetch_samples(self, output_dir: Path, max_features: int = 1000, return_data: bool = False):
+    def fetch_samples(
+        self, output_dir: Path, max_features: int = 1000, return_data: bool = False
+    ) -> None:
         """
         Fetch sample data from GeoDanmark WFS.
 
@@ -440,7 +442,7 @@ class GeoDanmarkWFSFetcher:
                 if feature_count > 0:
                     # Create placeholder features to indicate successful geometry fetch
                     features = []
-                    for i in range(feature_count):
+                    for _i in range(feature_count):
                         features.append(
                             {
                                 "type": "Feature",

@@ -84,9 +84,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             JOIN soil_types_full s ON ST_Intersects(f.geometry, s.geometry)
         """)
 
-        intersecting_count = self.conn.execute(
-            "SELECT COUNT(*) FROM soil_types_intersecting"
-        ).fetchone()[0]
+        self.conn.execute("SELECT COUNT(*) FROM soil_types_intersecting").fetchone()[0]
 
         # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
         self.log.info("Adding unique IDs to filtered soil types polygons...")

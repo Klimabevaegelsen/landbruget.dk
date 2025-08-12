@@ -108,9 +108,7 @@ class H3DataLoader:
             self.log.warning(
                 f"No unified format files found for {dataset} {year}, trying Y+1 pattern format"
             )
-            y_plus_1_pattern = (
-                f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
-            )
+            y_plus_1_pattern = f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
             files = self.gcs_access.list_files(y_plus_1_pattern)
 
             if files:
@@ -148,7 +146,9 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        pesticide_path = (
+            f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        )
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)

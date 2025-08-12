@@ -10,6 +10,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInt
 
 logger = logging.getLogger(__name__)
 
+
 class CadastralSilverConfig(BaseJobConfig):
     """Configuration for the Cadastral Silver source."""
 
@@ -23,6 +24,7 @@ class CadastralSilverConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
+
 
 class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
     """Cadastral Silver source."""

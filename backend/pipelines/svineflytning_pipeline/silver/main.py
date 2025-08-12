@@ -32,7 +32,7 @@ def get_latest_bronze_data_path() -> Optional[str]:
 
         # List all bronze svineflytning directories
         prefix = "bronze/svineflytning/"
-        blobs = list(bucket.list_blobs(prefix=prefix, delimiter="/"))
+        list(bucket.list_blobs(prefix=prefix, delimiter="/"))
 
         # Get all directory timestamps
         directories = []

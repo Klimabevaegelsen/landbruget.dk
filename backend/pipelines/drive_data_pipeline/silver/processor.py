@@ -28,7 +28,7 @@ class SilverProcessor:
         metadata_manager: MetadataManager,
         schema_dir: Path | None = None,
         progress_callback: Callable[[int, bool], None] | None = None,
-    ):
+    ) -> None:
         """Initialize the Silver processor.
 
         Args:
@@ -59,7 +59,7 @@ class SilverProcessor:
 
         # Initialize schema manager if schema_dir is provided
         self.schema_manager = SchemaManager(schema_dir=schema_dir)
-        
+
         # Store the silver run path for later access
         self.silver_run_path = None
 
@@ -125,7 +125,7 @@ class SilverProcessor:
 
             # Extract data from bronze_data structure
             file_data = bronze_data.get("data", {})
-            bronze_metadata = bronze_data.get("metadata", {})
+            bronze_data.get("metadata", {})
 
             logger.info(f"Found {len(file_data)} files in Bronze data")
 
@@ -135,9 +135,9 @@ class SilverProcessor:
             processed_count = 0
 
             # Process each file from memory
-            for file_key, file_info in file_data.items():
+            for _file_key, file_info in file_data.items():
                 # Apply filters
-                file_metadata_dict = file_info.get("metadata", {})
+                file_info.get("metadata", {})
 
                 # Filter by file type if specified
                 if supported_file_types:
@@ -277,7 +277,7 @@ class SilverProcessor:
                 # Local storage - use recursive glob through storage manager
                 import os
 
-                for root, dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
+                for root, _dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
                     for file in files:
                         if file.endswith(".metadata.json"):
                             file_path = Path(root) / file
@@ -353,7 +353,7 @@ class SilverProcessor:
             file_content = file_info["content"]
             metadata_dict = file_info["metadata"]
             original_filename = file_info["original_filename"]
-            mime_type = file_info.get("mime_type", "")
+            file_info.get("mime_type", "")
 
             # Convert metadata dict to FileMetadata object
             from ..bronze.metadata import FileMetadata
@@ -370,26 +370,30 @@ class SilverProcessor:
             # Select transformer based on content type and file specifics (same logic as _process_file)
             transformer = None
             file_path = Path(original_filename)  # Create Path object for specialized transformers
-            
+
             # First, check if specialized transformers can handle this file
             for transformer_name, potential_transformer in self.transformers.items():
-                if hasattr(potential_transformer, 'can_handle'):
+                if hasattr(potential_transformer, "can_handle"):
                     # Convert metadata to dict for transformer
-                    metadata_dict_for_check = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    metadata_dict_for_check = (
+                        metadata.dict() if hasattr(metadata, "dict") else metadata.__dict__
+                    )
                     if potential_transformer.can_handle(file_path, metadata_dict_for_check):
                         transformer = potential_transformer
                         logger.info(f"Using specialized transformer: {transformer_name}")
                         break
-            
+
             # If no specialized transformer found, use content type mapping
             if not transformer:
                 content_type = metadata.content_type
                 if not content_type or content_type not in self.transformers:
-                    logger.warning(f"Unsupported content type: {content_type} for {original_filename}")
+                    logger.warning(
+                        f"Unsupported content type: {content_type} for {original_filename}"
+                    )
                     return False
                 transformer = self.transformers[content_type]
                 logger.info(f"Using content type transformer: {content_type}")
-            
+
             if not transformer:
                 logger.error("No suitable transformer found")
                 return False
@@ -501,13 +505,13 @@ class SilverProcessor:
                         df = transformer.conn.execute(f"SELECT * FROM {table_name}").df()
                         parquet_table_name = f"temp_parquet_{int(time.time())}"
                         self.parquet_manager.register_dataframe(df, parquet_table_name)
-                        
+
                         # Use the parquet manager to save the table (handles both local and GCS)
                         self.parquet_manager.save_table_to_parquet(parquet_table_name, output_path)
-                        
+
                         # Clean up the temporary table
                         self.parquet_manager.drop_table(parquet_table_name)
-                        
+
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
@@ -602,17 +606,19 @@ class SilverProcessor:
 
             # Select transformer based on content type and file specifics
             transformer = None
-            
+
             # First, check if specialized transformers can handle this file
             for transformer_name, potential_transformer in self.transformers.items():
-                if hasattr(potential_transformer, 'can_handle'):
+                if hasattr(potential_transformer, "can_handle"):
                     # Convert metadata to dict for transformer
-                    metadata_dict = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    metadata_dict = (
+                        metadata.dict() if hasattr(metadata, "dict") else metadata.__dict__
+                    )
                     if potential_transformer.can_handle(file_path, metadata_dict):
                         transformer = potential_transformer
                         logger.info(f"Using specialized transformer: {transformer_name}")
                         break
-            
+
             # If no specialized transformer found, use content type mapping
             if not transformer:
                 if not metadata.content_type or metadata.content_type not in self.transformers:
@@ -620,7 +626,7 @@ class SilverProcessor:
                     return False
                 transformer = self.transformers[metadata.content_type]
                 logger.info(f"Using content type transformer: {metadata.content_type}")
-            
+
             if not transformer:
                 logger.error("No suitable transformer found")
                 return False

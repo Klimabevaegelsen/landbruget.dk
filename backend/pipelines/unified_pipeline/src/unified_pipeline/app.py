@@ -7,6 +7,9 @@ data pipeline application. It orchestrates different data processing stages
 """
 
 import asyncio
+import importlib.util
+import os
+import sys
 
 import click
 from dotenv import load_dotenv
@@ -34,28 +37,29 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
-# Import legacy monolithic CVR enrichment from the specific .py file
-# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
-import sys
-import importlib.util
-import os
-
-# Get the path to the specific cvr_enrichment.py file
-cvr_enrichment_file = os.path.join(os.path.dirname(__file__), 'gold', 'cvr_enrichment.py')
-spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
-cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cvr_enrichment_legacy)
-
-CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
-CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 # Import new modular CVR enrichment steps from the package directory
+from unified_pipeline.gold.cvr_enrichment.address_geocoding import (
+    AddressGeocoding,
+    AddressGeocodingConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.company_fetching import (
+    CompanyFetching,
+    CompanyFetchingConfig,
+)
 from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
-from unified_pipeline.gold.cvr_enrichment.company_fetching import CompanyFetching, CompanyFetchingConfig
-from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import PNumberFetching, PNumberFetchingConfig
-from unified_pipeline.gold.cvr_enrichment.financial_documents import FinancialDocuments, FinancialDocumentsConfig
-from unified_pipeline.gold.cvr_enrichment.address_geocoding import AddressGeocoding, AddressGeocodingConfig
-from unified_pipeline.gold.cvr_enrichment.data_consolidation import DataConsolidation, DataConsolidationConfig
+from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
+    DataConsolidation,
+    DataConsolidationConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.financial_documents import (
+    FinancialDocuments,
+    FinancialDocumentsConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
+    PNumberFetching,
+    PNumberFetchingConfig,
+)
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -63,6 +67,10 @@ from unified_pipeline.gold.field_area_analysis import (
 from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.pesticide_compliance import (
+    PesticideComplianceGold,
+    PesticideComplianceGoldConfig,
 )
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
@@ -72,21 +80,17 @@ from unified_pipeline.gold.pesticide_proximity import (
     PesticideProximityGold,
     PesticideProximityGoldConfig,
 )
-from unified_pipeline.gold.pesticide_compliance import (
-    PesticideComplianceGold,
-    PesticideComplianceGoldConfig,
-)
-from unified_pipeline.gold.worker_safety import (
-    WorkerSafetyGold,
-    WorkerSafetyGoldConfig,
+from unified_pipeline.gold.property_cadastral_merge import (
+    PropertyCadastralMergeGold,
+    PropertyCadastralMergeGoldConfig,
 )
 from unified_pipeline.gold.work_permits import (
     WorkPermitsGold,
     WorkPermitsGoldConfig,
 )
-from unified_pipeline.gold.property_cadastral_merge import (
-    PropertyCadastralMergeGold,
-    PropertyCadastralMergeGoldConfig,
+from unified_pipeline.gold.worker_safety import (
+    WorkerSafetyGold,
+    WorkerSafetyGoldConfig,
 )
 from unified_pipeline.model import cli
 from unified_pipeline.silver.agricultural_fields import (
@@ -111,6 +115,17 @@ from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfi
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
+
+# Import legacy monolithic CVR enrichment from the specific .py file
+# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
+# Get the path to the specific cvr_enrichment.py file
+cvr_enrichment_file = os.path.join(os.path.dirname(__file__), "gold", "cvr_enrichment.py")
+spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
+cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cvr_enrichment_legacy)
+
+CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
+CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 
 async def execute_pipeline_jobs(
@@ -147,17 +162,19 @@ async def execute_pipeline_jobs(
         # Create config instance and pass CLI config for FVM WFS filtering
         config_instance = config_cls()
         print(f"🚨 APP: Created config instance: {config_instance}")
-        
+
         if hasattr(config_instance, "apply_cli_filters"):
             print(f"🚨 APP: Applying CLI filters to {config_cls.__name__}")
             config_instance.apply_cli_filters(cli_config)
-            print(f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}")
+            print(
+                f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
+            )
         else:
             print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
         print(f"🚨 APP: Creating instance of {job_cls.__name__}")
         instance = job_cls(config=config_instance)
-        print(f"🚨 APP: Instance created successfully")
+        print("🚨 APP: Instance created successfully")
         job_successful = False
 
         try:
@@ -185,15 +202,17 @@ async def execute_pipeline_jobs(
 
             elif issubclass(job_cls, SilverJobInterface):
                 # Check if this is an enrichment-only job
-                if stage == cli.Stage.enrichment and hasattr(instance, 'run_enrichment_only'):
+                if stage == cli.Stage.enrichment and hasattr(instance, "run_enrichment_only"):
                     # Enrichment stage - run only enrichment functions
                     result = await instance.run_enrichment_only()
                     stage_description = "enrichment-only"
                 else:
                     # Silver stage - pass in-memory data if available and collect results
                     result = await instance.run(bronze_data=bronze_data)
-                    stage_description = f"{'in-memory' if bronze_data is not None else 'storage'} data"
-                
+                    stage_description = (
+                        f"{'in-memory' if bronze_data is not None else 'storage'} data"
+                    )
+
                 if result is not None:
                     job_successful = True
                     # Collect silver data for gold stage
@@ -225,7 +244,9 @@ async def execute_pipeline_jobs(
             elif issubclass(job_cls, GoldJobInterface):
                 # Gold stage - pass collected silver data
                 print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
-                print(f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}")
+                print(
+                    f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}"
+                )
                 await instance.run(silver_data=silver_data)
                 print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
                 # Gold jobs don't return data, so we consider them successful if they don't raise an exception
@@ -279,11 +300,11 @@ def execute(cli_config: cli.CliConfig) -> int:
     """
     # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
     import os
-    import sys
+
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     print(f"🚨 APP EXECUTE: Initializing logger with level: {log_level}")
     sys.stdout.flush()  # Force flush for GitHub Actions
-    
+
     # Force reset the singleton logger to ensure LOG_LEVEL is respected
     Logger.LOG = None  # Reset singleton to force recreation with correct level
     log = Logger.get_logger(log_level)
@@ -434,7 +455,6 @@ def execute(cli_config: cli.CliConfig) -> int:
                 # and fetches CVR register data for enrichment
                 (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
-            
             # New modular pipeline steps
             cli.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
             cli.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
@@ -488,7 +508,7 @@ def execute(cli_config: cli.CliConfig) -> int:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
         print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
     except KeyError:
-        print(f"🚨 APP: KeyError - source/stage combination not found in pipeline_map")
+        print("🚨 APP: KeyError - source/stage combination not found in pipeline_map")
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing

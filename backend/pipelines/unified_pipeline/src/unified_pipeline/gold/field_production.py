@@ -208,7 +208,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                         self.log.debug(f"Dropped temp table: {table_name}")
-                    except:
+                    except Exception:
                         pass
 
             # 2. Force immediate checkpoint and vacuum
@@ -273,7 +273,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                         self.log.debug(f"Emergency dropped: {table_name}")
-                    except:
+                    except Exception:
                         pass
 
             # 2. Force immediate memory release
@@ -291,7 +291,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     shutil.rmtree(temp_dir)
                     os.makedirs(temp_dir, exist_ok=True)
                     self.log.info("   Emergency: Cleared all temp files")
-                except:
+                except Exception:
                     pass
 
             self.log.warning("🚨 Emergency cleanup completed")
@@ -403,12 +403,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     matching_tables = [t[0] for t in all_tables if t[0].startswith(pattern_prefix)]
                     for table in matching_tables:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
             else:
                 try:
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
-                except:
+                except Exception:
                     pass
 
     def _force_memory_cleanup(self):
@@ -927,7 +927,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             for table in cleanup_tables:
                 try:
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
             return 0
 

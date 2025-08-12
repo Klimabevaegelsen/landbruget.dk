@@ -66,10 +66,10 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         else:
             logger.info(f"⚠️ Silver directory does not exist: {silver_path}")
             local_parquet_files = []
-        
+
         files_to_process = []
         source_description = ""
-        
+
         if local_parquet_files:
             logger.info(f"✅ Found {len(local_parquet_files)} local parquet files from current run")
             files_to_process = [(str(f), "local") for f in local_parquet_files]
@@ -77,27 +77,31 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         else:
             # Strategy 2: Fallback to downloading recent files from GCS
             logger.info("🔍 No local parquet files found, searching GCS for recent files")
-            
+
             try:
                 gcs_access = GCSDataAccess()
                 bucket = "landbrugsdata-raw-data"
-                
+
                 # Find parquet files in GCS silver directory with pattern matching
                 silver_pattern = f"gs://{bucket}/silver/*/*/*.parquet"
                 parquet_files = gcs_access.list_files(silver_pattern)
-                
+
                 # Filter to only recent files (within reasonable timeframe of pipeline run)
                 pipeline_date = pipeline_start_time.strftime("%Y%m%d")
                 recent_files = [f for f in parquet_files if pipeline_date in f]
-                
+
                 if not recent_files:
                     # Fallback to most recent files if no files from today
-                    logger.warning(f"⚠️ No files found for date {pipeline_date}, using most recent files")
+                    logger.warning(
+                        f"⚠️ No files found for date {pipeline_date}, using most recent files"
+                    )
                     recent_files = sorted(parquet_files, reverse=True)[:20]  # Most recent 20 files
-                    
-                files_to_process = [(f, "gcs") for f in recent_files[:20]]  # Limit to avoid excessive processing
+
+                files_to_process = [
+                    (f, "gcs") for f in recent_files[:20]
+                ]  # Limit to avoid excessive processing
                 source_description = f"GCS files (filtered for {pipeline_date})"
-                
+
             except Exception as e:
                 logger.error(f"❌ Could not access GCS files: {e}")
                 return
@@ -109,6 +113,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         logger.info(f"📂 Processing {len(files_to_process)} files from {source_description}")
 
         import duckdb
+
         conn = duckdb.connect()
         all_cvr_numbers = []
 
@@ -121,8 +126,10 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         for i, (file_path, source) in enumerate(files_to_process):
             try:
                 table_name = f"drive_table_{i + 1}"
-                file_display_name = Path(file_path).name if source == "local" else file_path.split("/")[-1]
-                
+                file_display_name = (
+                    Path(file_path).name if source == "local" else file_path.split("/")[-1]
+                )
+
                 if source == "gcs":
                     # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
                     try:
@@ -149,7 +156,9 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
 
                 if cvr_numbers:
                     all_cvr_numbers.extend(cvr_numbers)
-                    logger.info(f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})")
+                    logger.info(
+                        f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})"
+                    )
                 else:
                     logger.debug(f"   • {file_display_name}: No CVR numbers found ({source})")
 
@@ -163,7 +172,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
             # Initialize GCS access for saving if not already done
             if gcs_access is None:
                 gcs_access = GCSDataAccess()
-                
+
             timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
             gcs_path = save_pipeline_cvr_numbers(
@@ -185,7 +194,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
 class ProgressTracker:
     """Tracks progress of pipeline operations and provides reporting capabilities."""
 
-    def __init__(self, quiet: bool = False, verbose: bool = False):
+    def __init__(self, quiet: bool = False, verbose: bool = False) -> None:
         """Initialize the progress tracker.
 
         Args:
@@ -208,7 +217,7 @@ class ProgressTracker:
         }
         self.logger = get_logger()
 
-    def start_bronze_operation(self, total_files: int):
+    def start_bronze_operation(self, total_files: int) -> None:
         """Start tracking a bronze layer operation.
 
         Args:
@@ -219,7 +228,7 @@ class ProgressTracker:
             print(f"Starting Bronze layer processing: {total_files} files identified")
         self.logger.info(f"Bronze layer processing started: {total_files} files")
 
-    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0):
+    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0) -> None:
         """Update bronze layer progress.
 
         Args:
@@ -247,7 +256,7 @@ class ProgressTracker:
                     f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
                 )
 
-    def start_silver_operation(self, total_files: int):
+    def start_silver_operation(self, total_files: int) -> None:
         """Start tracking a silver layer operation.
 
         Args:
@@ -258,7 +267,7 @@ class ProgressTracker:
             print(f"Starting Silver layer processing: {total_files} files to transform")
         self.logger.info(f"Silver layer processing started: {total_files} files")
 
-    def update_silver_progress(self, file_count: int, success: bool):
+    def update_silver_progress(self, file_count: int, success: bool) -> None:
         """Update silver layer progress.
 
         Args:
@@ -284,7 +293,7 @@ class ProgressTracker:
                     f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
                 )
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         """Print a summary of the pipeline run."""
         if self.quiet:
             return
@@ -420,7 +429,7 @@ def main() -> int:
             # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
-            def collect_files(folder):
+            def collect_files(folder) -> None:
                 all_files.extend(folder.files)
                 for subfolder in folder.subfolders:
                     collect_files(subfolder)
@@ -495,7 +504,7 @@ def main() -> int:
                 # Apply filtering if specified
                 if file_types or subfolders:
                     filtered_count = 0
-                    for file_key, file_info in file_data.items():
+                    for _file_key, file_info in file_data.items():
                         # Filter by file type if specified
                         if file_types:
                             file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")
@@ -633,7 +642,7 @@ def main() -> int:
                 except ImportError as e:
                     import warnings
 
-                    warnings.warn(f"Schema documentation not available: {e}")
+                    warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
                     SchemaDocumentationManager = None
 
                 conn = duckdb.connect()
@@ -693,12 +702,18 @@ def main() -> int:
         if not args.bronze_only and CVR_COLLECTION_AVAILABLE:
             # Use the actual silver run path from the processor if available
             actual_silver_path = Path(settings.silver_path)
-            if 'silver_processor' in locals() and hasattr(silver_processor, 'silver_run_path') and silver_processor.silver_run_path:
+            if (
+                "silver_processor" in locals()
+                and hasattr(silver_processor, "silver_run_path")
+                and silver_processor.silver_run_path
+            ):
                 actual_silver_path = storage_manager.base_dir / silver_processor.silver_run_path
-                logger.info(f"Using actual silver run path for CVR extraction: {actual_silver_path}")
+                logger.info(
+                    f"Using actual silver run path for CVR extraction: {actual_silver_path}"
+                )
             else:
                 logger.info(f"Using base silver path for CVR extraction: {actual_silver_path}")
-            
+
             _save_discovered_cvr_numbers(
                 silver_path=actual_silver_path,
                 pipeline_start_time=pipeline_start_time,

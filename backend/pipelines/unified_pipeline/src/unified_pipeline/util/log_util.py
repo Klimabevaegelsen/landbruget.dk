@@ -16,6 +16,7 @@ from typing import Optional
 import loguru
 from simple_singleton import Singleton
 
+
 class LogLevel(Enum):
     """
     Enumeration of standard log levels used throughout the application.
@@ -40,6 +41,7 @@ class LogLevel(Enum):
     ERROR = "ERROR"
     FATAL = "FATAL"
     OFF = "OFF"
+
 
 class Logger(metaclass=Singleton):
     """

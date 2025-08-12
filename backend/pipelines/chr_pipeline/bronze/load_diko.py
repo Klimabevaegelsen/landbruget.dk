@@ -2,7 +2,6 @@
 
 import json
 import logging
-import uuid
 from typing import Any, Dict, Optional
 
 from zeep import Client
@@ -11,12 +10,11 @@ from zeep.helpers import serialize_object
 # Import the exporter and auth
 from .auth import create_diko_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_diko")
 
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # Valid species codes for DIKO
 VALID_DIKO_SPECIES = {
@@ -27,18 +25,6 @@ VALID_DIKO_SPECIES = {
 }
 
 # --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_diko") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Note: Consider moving this to a shared utility module later
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
 
 
 # --- Generic SOAP Fetcher ---
@@ -79,7 +65,7 @@ def load_diko_flytninger(client: Client, username: str, herd_number: int, specie
     # Input requires GLRCHRWSInfoInbound and Request{BesaetningsNummer, DyreArtKode}
     # Ensure parameters are strings based on successful calls in other modules
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_diko_flytninger"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_diko_flytninger"),
         "Request": {
             "BesaetningsNummer": str(herd_number),
             "DyreArtKode": str(species_code),

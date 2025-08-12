@@ -32,7 +32,6 @@ else:
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-
 # Import the new refactored modules
 from h3_pfas_exposure.gold import (
     run_combined_analysis,
@@ -91,7 +90,7 @@ async def run_pipeline(
     Returns:
         True if successful, False otherwise
     """
-    pipeline_start_time = datetime.now()
+    datetime.now()
     logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
     try:
